@@ -18,7 +18,7 @@ use geoengine_datatypes::raster::{
     Grid, GridIdx2D, GridIndexAccess, GridShapeAccess, GridSize, Pixel, RasterTile2D,
 };
 use ndarray::{Array2, Array4};
-use ort::{IntoTensorElementType, PrimitiveTensorElementType};
+use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 
@@ -46,7 +46,11 @@ impl RasterOperator for Onnx {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let source = self.sources.initialize_sources(path, context).await?.raster;
+        let source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?
+            .raster;
 
         let in_descriptor = source.result_descriptor();
 
@@ -111,6 +115,7 @@ impl RasterOperator for Onnx {
 
         Ok(Box::new(InitializedOnnx {
             name,
+            path,
             result_descriptor: out_descriptor,
             source,
             model_metadata,
@@ -122,6 +127,7 @@ impl RasterOperator for Onnx {
 
 pub struct InitializedOnnx {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     model_metadata: MlModelMetadata,
@@ -152,6 +158,14 @@ impl InitializedRasterOperator for InitializedOnnx {
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn name(&self) -> &'static str {
+        Onnx::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
+    }
 }
 
 pub(crate) struct OnnxProcessor<TIn, TOut> {
@@ -181,19 +195,19 @@ impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
-    ort::Value: std::convert::TryFrom<
+    ort::value::Value: std::convert::TryFrom<
         ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
     >,
-    ort::Value: std::convert::TryFrom<
+    ort::value::Value: std::convert::TryFrom<
         ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
     >,
-    ort::Error: From<
-        <ort::Value as std::convert::TryFrom<
+    ort::Error: std::convert::From<
+        <ort::value::Value as std::convert::TryFrom<
             ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
         >>::Error,
     >,
     ort::Error: From<
-        <ort::Value as std::convert::TryFrom<
+        <ort::value::Value as std::convert::TryFrom<
             ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
         >>::Error,
     >,
@@ -211,7 +225,7 @@ where
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         // TODO: re-use session accross queries?
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .context(Ort)?
             .commit_from_file(&self.model_metadata.file_path)
             .context(Ort)
@@ -399,9 +413,9 @@ mod tests {
 
     #[test]
     fn ort() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -424,9 +438,9 @@ mod tests {
 
     #[test]
     fn ort_dynamic() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -462,9 +476,9 @@ mod tests {
 
     #[test]
     fn regression() {
-        let session = ort::Session::builder()
+        let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_regression.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_regression.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -614,7 +628,7 @@ mod tests {
         };
         exe_ctx.ml_models.insert(
             model_name,
-            load_model_metadata(test_data!("pro/ml/onnx/test_classification.onnx")).unwrap(),
+            load_model_metadata(test_data!("ml/onnx/test_classification.onnx")).unwrap(),
         );
 
         let query_rect = RasterQueryRectangle {
@@ -822,7 +836,7 @@ mod tests {
         };
         exe_ctx.ml_models.insert(
             model_name,
-            load_model_metadata(test_data!("pro/ml/onnx/test_regression.onnx")).unwrap(),
+            load_model_metadata(test_data!("ml/onnx/test_regression.onnx")).unwrap(),
         );
 
         let query_rect = RasterQueryRectangle {

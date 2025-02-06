@@ -2,15 +2,16 @@ use crate::api::handlers::tasks::TaskResponse;
 use crate::api::model::datatypes::{BandSelection, DataId, TimeInterval};
 use crate::api::model::responses::IdResponse;
 use crate::api::ogc::util::{parse_bbox, parse_time};
+use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
-use crate::util::config::get_config_element;
 use crate::util::parsing::{
     parse_band_selection, parse_spatial_partition, parse_spatial_resolution,
 };
+use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
@@ -23,7 +24,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_operators::call_on_typed_operator;
 use geoengine_operators::engine::{
-    ExecutionContext, OperatorData, TypedOperator, TypedResultDescriptor, WorkflowOperatorPath,
+    ExecutionContext, OperatorData, TypedResultDescriptor, WorkflowOperatorPath,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -31,6 +32,7 @@ use std::collections::HashMap;
 use std::io::{Cursor, Write};
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
 use zip::{write::SimpleFileOptions, ZipWriter};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
@@ -125,24 +127,7 @@ async fn register_workflow_handler<C: ApplicationContext>(
 
     let workflow = workflow.into_inner();
 
-    // ensure the workflow is valid by initializing it
-    let execution_context = ctx.execution_context()?;
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
-
-    match workflow.clone().operator {
-        TypedOperator::Vector(o) => {
-            o.initialize(workflow_operator_path_root, &execution_context)
-                .await?;
-        }
-        TypedOperator::Raster(o) => {
-            o.initialize(workflow_operator_path_root, &execution_context)
-                .await?;
-        }
-        TypedOperator::Plot(o) => {
-            o.initialize(workflow_operator_path_root, &execution_context)
-                .await?;
-        }
-    }
+    validate_workflow(&workflow, &ctx.execution_context()?).await?;
 
     let id = ctx.db().register_workflow(workflow).await?;
     Ok(web::Json(IdResponse::from(id)))
@@ -456,10 +441,11 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
     let id = id.into_inner();
     let workflow = ctx.db().load_workflow(&id).await?;
     let compression_num_threads =
-        get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
+        get_config_element::<crate::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
+        id,
         workflow,
         ctx,
         info.into_inner(),
@@ -529,7 +515,8 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
+    let workflow_id = id.into_inner();
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow
         .operator
@@ -553,7 +540,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
-        ctx.query_context()?,
+        ctx.query_context(workflow_id.0, Uuid::new_v4())?,
     )
     .await?;
 
@@ -612,7 +599,8 @@ async fn vector_stream_websocket<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let ctx = app_ctx.session_context(session);
 
-    let workflow = ctx.db().load_workflow(&id.into_inner()).await?;
+    let workflow_id = id.into_inner();
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow
         .operator
@@ -636,7 +624,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
-        ctx.query_context()?,
+        ctx.query_context(workflow_id.0, Uuid::new_v4())?,
     )
     .await?;
 
@@ -668,13 +656,16 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::config::get_config_element;
+    use crate::contexts::PostgresContext;
+    use crate::contexts::Session;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::{DatasetName, RasterDatasetFromWorkflowResult};
     use crate::ge_context;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
-    use crate::util::config::get_config_element;
+    use crate::users::UserAuth;
+    use crate::util::tests::admin_login;
     use crate::util::tests::{
         add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
         read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
@@ -718,9 +709,9 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockPointSource {
@@ -790,9 +781,9 @@ mod tests {
 
     #[ge_context::test]
     async fn register_invalid_body(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         // insert workflow
         let req = test::TestRequest::post()
@@ -814,9 +805,9 @@ mod tests {
 
     #[ge_context::test]
     async fn register_missing_fields(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let workflow = json!({});
 
@@ -841,9 +832,10 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> (Workflow, ServiceResponse) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let (workflow, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -907,9 +899,9 @@ mod tests {
 
     #[ge_context::test]
     async fn load_not_exist(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let session_id = ctx.session().id();
+        let session_id = session.id();
 
         let req = test::TestRequest::get()
             .uri("/workflow/1")
@@ -923,9 +915,10 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -992,9 +985,10 @@ mod tests {
 
     #[ge_context::test]
     async fn raster_metadata(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: MockRasterSource::<u8> {
@@ -1064,7 +1058,8 @@ mod tests {
 
     #[ge_context::test]
     async fn metadata_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let workflow = Workflow {
             operator: MockFeatureCollectionSource::single(
@@ -1102,9 +1097,10 @@ mod tests {
 
     #[ge_context::test]
     async fn plot_metadata(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -1144,9 +1140,10 @@ mod tests {
 
     #[ge_context::test]
     async fn provenance(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
         let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
         let workflow = Workflow {
@@ -1191,7 +1188,8 @@ mod tests {
 
     #[ge_context::test]
     async fn it_does_not_register_invalid_workflow(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
         let session_id = ctx.session().id();
 
         let workflow = json!({
@@ -1245,7 +1243,10 @@ mod tests {
             serde_json::from_slice(&bytes).unwrap()
         }
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
@@ -1260,14 +1261,7 @@ mod tests {
             ),
         };
 
-        let workflow_id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
-            .db()
-            .register_workflow(workflow)
-            .await
-            .unwrap();
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
 
         // create dataset from workflow
         let req = test::TestRequest::get()
@@ -1362,9 +1356,10 @@ mod tests {
     #[ge_context::test(tiling_spec = "dataset_from_workflow_task_success_tiling_spec")]
     #[allow(clippy::too_many_lines)]
     async fn dataset_from_workflow_task_success(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
@@ -1453,7 +1448,7 @@ mod tests {
             .await
             .unwrap();
 
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4()).unwrap();
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
             time_interval: TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
@@ -1472,7 +1467,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326(),
             },
             GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                compression_num_threads: get_config_element::<crate::config::Gdal>()
                     .unwrap()
                     .compression_num_threads,
                 as_cog: false,

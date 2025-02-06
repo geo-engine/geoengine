@@ -452,7 +452,8 @@ fn capabilities_check(search_params: &SearchParameters) -> Result<()> {
 mod tests {
     use super::*;
     use crate::{
-        contexts::{PostgresContext, PostgresDb, SessionContext, SimpleApplicationContext},
+        contexts::SessionContext,
+        contexts::{PostgresContext, PostgresDb, PostgresSessionContext},
         datasets::{storage::DatasetStore, AddDataset},
         ge_context,
         layers::storage::LayerProviderDb,
@@ -472,10 +473,10 @@ mod tests {
     };
     use tokio_postgres::NoTls;
 
-    #[ge_context::test]
+    #[ge_context::test(user = "admin")]
     #[allow(clippy::too_many_lines)]
-    async fn it_searches(app_ctx: PostgresContext<NoTls>) {
-        let db = app_ctx.default_session_context().await.unwrap().db();
+    async fn it_searches(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+        let db = ctx.db();
 
         let provider = DatasetLayerListingProviderDefinition {
             id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
@@ -591,9 +592,9 @@ mod tests {
             .is_err());
     }
 
-    #[ge_context::test]
-    async fn it_autocompletes(app_ctx: PostgresContext<NoTls>) {
-        let db = app_ctx.default_session_context().await.unwrap().db();
+    #[ge_context::test(user = "admin")]
+    async fn it_autocompletes(ctx: PostgresSessionContext<NoTls>) {
+        let db = ctx.db();
 
         let provider = DatasetLayerListingProviderDefinition {
             id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),

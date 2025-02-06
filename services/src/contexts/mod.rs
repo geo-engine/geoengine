@@ -1,58 +1,56 @@
 use crate::api::model::services::Volume;
+use crate::config::{get_config_element, Cache, QuotaTrackingMode};
 use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
 use crate::layers::listing::LayerCollectionProvider;
 use crate::layers::storage::{LayerDb, LayerProviderDb};
 use crate::machine_learning::MlModelDb;
+use crate::permissions::PermissionDb;
 use crate::tasks::{TaskContext, TaskManager};
+use crate::users::{OidcManager, RoleDb, UserAuth, UserDb};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId, NamedData};
+use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::{
     ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
     InitializedVectorOperator, MetaData, MetaDataProvider, QueryAbortRegistration,
     QueryAbortTrigger, QueryContext, RasterResultDescriptor, VectorResultDescriptor,
-    WorkflowOperatorPath,
 };
-use geoengine_operators::meta::quota::{QuotaChecker, QuotaTracking};
+use geoengine_operators::meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking};
+use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
 use rayon::ThreadPool;
 use std::str::FromStr;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use uuid::Uuid;
 
 pub use migrations::{
-    initialize_database, migrate_database, migration_0000_initial::Migration0000Initial,
-    CurrentSchemaMigration, DatabaseVersion, Migration, Migration0001RasterStacks,
-    Migration0002DatasetListingProvider, Migration0003GbifConfig,
-    Migration0004DatasetListingProviderPrio, Migration0005GbifColumnSelection,
-    Migration0006EbvProvider, Migration0007OwnerRole, Migration0008BandNames,
-    Migration0009OidcTokens, Migration0010S2StacTimeBuffers, Migration0011RemoveXgb,
-    Migration0012MlModelDb, Migration0013CopernicusProvider, Migration0014MultibandColorizer,
+    initialize_database, migrate_database, CurrentSchemaMigration, DatabaseVersion, Migration,
     MigrationResult,
 };
-pub use postgres::{PostgresContext, PostgresDb, PostgresSessionContext};
-pub use session::{MockableSession, Session, SessionId, SimpleSession};
-pub use simple_context::SimpleApplicationContext;
+pub use postgres::PostgresDb;
+pub use postgres::{PostgresContext, PostgresSessionContext};
+pub use session::{Session, SessionId};
 
 mod db_types;
 pub(crate) mod migrations;
 mod postgres;
 mod session;
-mod simple_context;
 
 pub type Db<T> = Arc<RwLock<T>>;
 
 /// The application context bundles shared resources.
 /// It is passed to API handlers and allows creating a session context that provides access to resources.
 #[async_trait]
-pub trait ApplicationContext: 'static + Send + Sync + Clone {
+pub trait ApplicationContext: 'static + Send + Sync + Clone + UserAuth {
     type SessionContext: SessionContext;
     type Session: Session + Clone;
 
@@ -61,6 +59,8 @@ pub trait ApplicationContext: 'static + Send + Sync + Clone {
 
     /// Load a session by its id
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session>;
+
+    fn oidc_manager(&self) -> &OidcManager;
 }
 
 /// The session context bundles resources that are specific to a session.
@@ -80,7 +80,8 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
     fn tasks(&self) -> Self::TaskManager;
 
     /// Create a new query context for executing queries on processors
-    fn query_context(&self) -> Result<Self::QueryContext>;
+    // TODO: assign computation id inside SessionContext or let it be provided from outside?
+    fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext>;
 
     /// Create a new execution context initializing operators
     fn execution_context(&self) -> Result<Self::ExecutionContext>;
@@ -94,15 +95,18 @@ pub trait SessionContext: 'static + Send + Sync + Clone {
 
 /// The trait for accessing all resources
 pub trait GeoEngineDb:
-    DatasetDb
+    std::fmt::Debug
+    + DatasetDb
+    + LayerCollectionProvider
     + LayerDb
     + LayerProviderDb
-    + LayerCollectionProvider
-    + ProjectDb
-    + WorkflowRegistry
-    + NetCdfCfProviderDb
     + MlModelDb
-    + std::fmt::Debug
+    + NetCdfCfProviderDb
+    + PermissionDb
+    + ProjectDb
+    + RoleDb
+    + UserDb
+    + WorkflowRegistry
 {
 }
 
@@ -184,7 +188,7 @@ impl QueryContext for QueryContextImpl {
 
 pub struct ExecutionContextImpl<D>
 where
-    D: DatasetDb + LayerProviderDb + MlModelDb,
+    D: DatasetDb + LayerProviderDb,
 {
     db: D,
     thread_pool: Arc<ThreadPool>,
@@ -193,7 +197,7 @@ where
 
 impl<D> ExecutionContextImpl<D>
 where
-    D: DatasetDb + LayerProviderDb + MlModelDb,
+    D: DatasetDb + LayerProviderDb,
 {
     pub fn new(
         db: D,
@@ -232,34 +236,56 @@ where
     fn wrap_initialized_raster_operator(
         &self,
         op: Box<dyn geoengine_operators::engine::InitializedRasterOperator>,
-        _span: CreateSpan,
-        _path: WorkflowOperatorPath,
+        span: CreateSpan,
     ) -> Box<dyn geoengine_operators::engine::InitializedRasterOperator> {
-        op
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span))
+            as Box<dyn geoengine_operators::engine::InitializedRasterOperator>;
+
+        if get_config_element::<Cache>()
+            .expect(
+                "Cache config should be present because it is part of the Settings-default.toml",
+            )
+            .enabled
+        {
+            return Box::new(InitializedCacheOperator::new(wrapped));
+        }
+
+        wrapped
     }
 
     fn wrap_initialized_vector_operator(
         &self,
         op: Box<dyn InitializedVectorOperator>,
-        _span: CreateSpan,
-        _path: WorkflowOperatorPath,
+        span: CreateSpan,
     ) -> Box<dyn InitializedVectorOperator> {
-        op
+        let wrapped = Box::new(InitializedOperatorWrapper::new(op, span))
+            as Box<dyn InitializedVectorOperator>;
+
+        if get_config_element::<Cache>()
+            .expect(
+                "Cache config should be present because it is part of the Settings-default.toml",
+            )
+            .enabled
+        {
+            return Box::new(InitializedCacheOperator::new(wrapped));
+        }
+
+        wrapped
     }
 
     fn wrap_initialized_plot_operator(
         &self,
         op: Box<dyn InitializedPlotOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator> {
+        // as plots do not produce a stream of results, we have nothing to count for now
         op
     }
 
     async fn resolve_named_data(
         &self,
-        data: &NamedData,
-    ) -> Result<DataId, geoengine_operators::error::Error> {
+        data: &geoengine_datatypes::dataset::NamedData,
+    ) -> Result<geoengine_datatypes::dataset::DataId, geoengine_operators::error::Error> {
         if let Some(provider) = &data.provider {
             // TODO: resolve provider name to provider id
             let provider_id = DataProviderId::from_str(provider)?;
@@ -323,8 +349,7 @@ where
             MockDatasetDataSourceLoadingInfo,
             VectorResultDescriptor,
             VectorQueryRectangle,
-        > + LayerProviderDb
-        + MlModelDb,
+        > + LayerProviderDb,
 {
     async fn meta_data(
         &self,
@@ -368,8 +393,7 @@ impl<D> MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRe
 where
     D: DatasetDb
         + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-        + LayerProviderDb
-        + MlModelDb,
+        + LayerProviderDb,
 {
     async fn meta_data(
         &self,
@@ -407,8 +431,7 @@ impl<D> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRec
 where
     D: DatasetDb
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb
-        + MlModelDb,
+        + LayerProviderDb,
 {
     async fn meta_data(
         &self,
@@ -436,5 +459,42 @@ where
                     .await
             }
         }
+    }
+}
+
+pub struct QuotaCheckerImpl<U: UserDb> {
+    pub(crate) user_db: U,
+}
+
+#[async_trait]
+impl<U: UserDb> QuotaCheck for QuotaCheckerImpl<U> {
+    async fn ensure_quota_available(&self) -> geoengine_operators::util::Result<()> {
+        // TODO: cache the result, s.th. other operators in the same workflow can re-use it
+        let quota_check_enabled = crate::config::get_config_element::<crate::config::Quota>()
+            .map_err(
+                |e| geoengine_operators::error::Error::CreatingProcessorFailed {
+                    source: Box::new(e),
+                },
+            )?
+            .mode
+            == QuotaTrackingMode::Check;
+
+        if !quota_check_enabled {
+            return Ok(());
+        }
+
+        let quota_available = self.user_db.quota_available().await.map_err(|e| {
+            geoengine_operators::error::Error::CreatingProcessorFailed {
+                source: Box::new(e),
+            }
+        })?;
+
+        if quota_available <= 0 {
+            return Err(geoengine_operators::error::Error::CreatingProcessorFailed {
+                source: Box::new(crate::quota::QuotaError::QuotaExhausted),
+            });
+        }
+
+        Ok(())
     }
 }

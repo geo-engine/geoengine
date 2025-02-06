@@ -813,6 +813,8 @@ impl RasterOperator for GdalSource {
 
         let op = InitializedGdalSourceOperator {
             name: CanonicOperatorName::from(&self),
+            path,
+            data: self.params.data.to_string(),
             result_descriptor: meta_data.result_descriptor().await?,
             meta_data,
             tiling_specification: context.tiling_specification(),
@@ -826,6 +828,8 @@ impl RasterOperator for GdalSource {
 
 pub struct InitializedGdalSourceOperator {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
+    data: String,
     pub meta_data: GdalMetaData,
     pub result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
@@ -921,6 +925,18 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        GdalSource::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
+    }
+
+    fn data(&self) -> Option<String> {
+        Some(self.data.clone())
     }
 }
 

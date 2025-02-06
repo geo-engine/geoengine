@@ -1,16 +1,19 @@
 mod error;
 mod in_memory;
 mod time_estimation;
+mod users;
 pub mod util;
+
+pub use error::TaskError;
+pub use in_memory::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
+pub use users::{TypedTaskManagerBackend, UserTaskManager};
 
 use self::time_estimation::TimeEstimation;
 use crate::identifier;
-use crate::{error::Result, util::config::get_config_element};
-pub use error::TaskError;
+use crate::{config::get_config_element, error::Result};
 use futures::channel::oneshot;
 use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::{error::ErrorSource, util::AsAnyArc};
-pub use in_memory::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
 use serde::{Deserialize, Serialize, Serializer};
 use std::borrow::Cow;
 use std::{fmt, sync::Arc};
@@ -427,7 +430,7 @@ impl Default for TaskListOptions {
 }
 
 fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
-    let limit = get_config_element::<crate::util::config::TaskManager>()
+    let limit = get_config_element::<crate::config::TaskManager>()
         .expect("should exist because it is defined in the default config")
         .list_limit;
     if value <= limit {
@@ -440,7 +443,7 @@ fn validate_list_limit(value: u32) -> Result<(), ValidationError> {
 }
 
 fn task_list_limit_default() -> u32 {
-    get_config_element::<crate::util::config::TaskManager>()
+    get_config_element::<crate::config::TaskManager>()
         .map(|config| config.list_default_limit)
         .unwrap_or(1)
 }

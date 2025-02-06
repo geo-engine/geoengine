@@ -1,15 +1,20 @@
-use super::handlers;
-use super::handlers::plots::WrappedPlotOutput;
-use super::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
-use super::handlers::tasks::{TaskAbortOptions, TaskResponse};
-use super::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use super::handlers::wfs::{CollectionType, GeoJson};
-use super::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
-use super::model::responses::{ErrorResponse, PngResponse, ZipResponse};
+use crate::api::handlers;
+use crate::api::handlers::datasets::VolumeFileLayersResponse;
+use crate::api::handlers::permissions::{
+    PermissionListOptions, PermissionListing, PermissionRequest, Resource,
+};
+use crate::api::handlers::plots::WrappedPlotOutput;
+use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
+use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
+use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
+use crate::api::handlers::users::AddRole;
+use crate::api::handlers::users::{Quota, UpdateQuota, UsageSummaryGranularity};
+use crate::api::handlers::wfs::{CollectionType, GeoJson};
+use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
     AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
     ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
-    DataProviderId, DatasetId, DateTimeParseFormat, ExternalDataId, FeatureDataType,
+    DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId, FeatureDataType,
     GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement, MultiLineString,
     MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle,
     RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
@@ -28,34 +33,45 @@ use crate::api::model::operators::{
     UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
+use crate::api::model::responses::ml_models::MlModelNameResponse;
 use crate::api::model::responses::{
-    BadRequestQueryResponse, IdResponse, PayloadTooLargeResponse, UnauthorizedAdminResponse,
-    UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse, PngResponse,
+    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    ZipResponse,
 };
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
     Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
 };
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
-use crate::contexts::{SessionId, SimpleSession};
+use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
 use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
-    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
+    UpdateLayerCollection,
 };
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
+use crate::machine_learning::name::MlModelName;
+use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
+use crate::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
     ProjectId, ProjectLayer, ProjectListing, ProjectUpdateToken, ProjectVersion, ProjectVersionId,
     RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
+use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
 use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
+use crate::users::{
+    AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
+    UserSession,
+};
 use crate::util::{
     apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
     server::ServerInfo,
@@ -69,28 +85,78 @@ use utoipa::{Modify, OpenApi};
     paths(
         crate::util::server::available_handler,
         crate::util::server::server_info_handler,
+        handlers::datasets::auto_create_dataset_handler,
+        handlers::datasets::create_dataset_handler,
+        handlers::datasets::delete_dataset_handler,
+        handlers::datasets::get_dataset_handler,
+        handlers::datasets::get_loading_info_handler,
+        handlers::datasets::list_datasets_handler,
+        handlers::datasets::list_volume_file_layers_handler,
+        handlers::datasets::list_volumes_handler,
+        handlers::datasets::suggest_meta_data_handler,
+        handlers::datasets::update_dataset_handler,
+        handlers::datasets::update_dataset_provenance_handler,
+        handlers::datasets::update_dataset_symbology_handler,
+        handlers::datasets::update_loading_info_handler,
+        handlers::layers::add_collection,
+        handlers::layers::add_existing_collection_to_collection,
+        handlers::layers::add_existing_layer_to_collection,
+        handlers::layers::add_layer,
+        handlers::layers::autocomplete_handler,
         handlers::layers::layer_handler,
+        handlers::layers::layer_to_dataset,
         handlers::layers::layer_to_workflow_id_handler,
         handlers::layers::list_collection_handler,
         handlers::layers::list_root_collections_handler,
-        handlers::layers::search_handler,
-        handlers::layers::autocomplete_handler,
         handlers::layers::provider_capabilities_handler,
-        handlers::layers::add_layer,
-        handlers::layers::add_collection,
+        handlers::layers::remove_collection_from_collection,
         handlers::layers::remove_collection,
         handlers::layers::remove_layer_from_collection,
-        handlers::layers::add_existing_layer_to_collection,
-        handlers::layers::add_existing_collection_to_collection,
-        handlers::layers::remove_collection_from_collection,
-        handlers::layers::layer_to_dataset,
-        handlers::session::anonymous_handler,
-        handlers::session::session_handler,
-        handlers::session::session_project_handler,
-        handlers::session::session_view_handler,
+        handlers::layers::remove_layer,
+        handlers::layers::search_handler,
+        handlers::layers::update_collection,
+        handlers::layers::update_layer,
+        handlers::machine_learning::add_ml_model,
+        handlers::machine_learning::get_ml_model,
+        handlers::machine_learning::list_ml_models,
+        handlers::permissions::add_permission_handler,
+        handlers::permissions::get_resource_permissions_handler,
+        handlers::permissions::remove_permission_handler,
+        handlers::plots::get_plot_handler,
+        handlers::projects::create_project_handler,
+        handlers::projects::delete_project_handler,
+        handlers::projects::list_projects_handler,
+        handlers::projects::load_project_latest_handler,
+        handlers::projects::load_project_version_handler,
+        handlers::projects::project_versions_handler,
+        handlers::projects::update_project_handler,
+        handlers::spatial_references::get_spatial_reference_specification_handler,
         handlers::tasks::abort_handler,
         handlers::tasks::list_handler,
         handlers::tasks::status_handler,
+        handlers::upload::list_upload_file_layers_handler,
+        handlers::upload::list_upload_files_handler,
+        handlers::upload::upload_handler,
+        handlers::users::add_role_handler,
+        handlers::users::anonymous_handler,
+        handlers::users::assign_role_handler,
+        handlers::users::computation_quota_handler,
+        handlers::users::computations_quota_handler,
+        handlers::users::data_usage_handler,
+        handlers::users::data_usage_summary_handler,
+        handlers::users::get_role_by_name_handler,
+        handlers::users::get_role_descriptions,
+        handlers::users::get_user_quota_handler,
+        handlers::users::login_handler,
+        handlers::users::logout_handler,
+        handlers::users::oidc_init,
+        handlers::users::oidc_login,
+        handlers::users::quota_handler,
+        handlers::users::register_user_handler,
+        handlers::users::remove_role_handler,
+        handlers::users::revoke_role_handler,
+        handlers::users::session_handler,
+        handlers::users::update_user_quota_handler,
         handlers::wcs::wcs_capabilities_handler,
         handlers::wcs::wcs_describe_coverage_handler,
         handlers::wcs::wcs_get_coverage_handler,
@@ -100,36 +166,12 @@ use utoipa::{Modify, OpenApi};
         handlers::wms::wms_legend_graphic_handler,
         handlers::wms::wms_map_handler,
         handlers::workflows::dataset_from_workflow_handler,
+        handlers::workflows::get_workflow_all_metadata_zip_handler,
         handlers::workflows::get_workflow_metadata_handler,
         handlers::workflows::get_workflow_provenance_handler,
         handlers::workflows::load_workflow_handler,
         handlers::workflows::raster_stream_websocket,
         handlers::workflows::register_workflow_handler,
-        handlers::workflows::get_workflow_all_metadata_zip_handler,
-        handlers::datasets::delete_dataset_handler,
-        handlers::datasets::list_datasets_handler,
-        handlers::datasets::list_volumes_handler,
-        handlers::datasets::get_dataset_handler,
-        handlers::datasets::update_dataset_handler,
-        handlers::datasets::create_dataset_handler,
-        handlers::datasets::auto_create_dataset_handler,
-        handlers::datasets::suggest_meta_data_handler,
-        handlers::datasets::get_loading_info_handler,
-        handlers::datasets::update_loading_info_handler,
-        handlers::datasets::update_dataset_symbology_handler,
-        handlers::datasets::update_dataset_provenance_handler,
-        handlers::spatial_references::get_spatial_reference_specification_handler,
-        handlers::plots::get_plot_handler,
-        handlers::projects::list_projects_handler,
-        handlers::projects::project_versions_handler,
-        handlers::projects::load_project_latest_handler,
-        handlers::projects::create_project_handler,
-        handlers::projects::update_project_handler,
-        handlers::projects::delete_project_handler,
-        handlers::projects::load_project_version_handler,
-        handlers::upload::list_upload_files_handler,
-        handlers::upload::list_upload_file_layers_handler,
-        handlers::upload::upload_handler
     ),
     components(
         responses(
@@ -140,16 +182,31 @@ use utoipa::{Modify, OpenApi};
             IdResponse::<LayerId>,
             IdResponse::<LayerCollectionId>,
             IdResponse::<ProjectId>,
+            IdResponse::<RoleId>,
             DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
             PngResponse,
-            ZipResponse
+            ZipResponse,
+            AuthCodeRequestURL
         ),
         schemas(
             ErrorResponse,
-            SimpleSession,
+            UserSession,
+            UserCredentials,
+            UserRegistration,
+            DateTime,
+            UserInfo,
+            Quota,
+            UpdateQuota,
+            ComputationQuota,
+            OperatorQuota,
+            DataUsage,
+            DataUsageSummary,
+            UsageSummaryGranularity,
+            AuthCodeResponse,
+            AuthCodeRequestURL,
 
             DataId,
             DataProviderId,
@@ -159,9 +216,11 @@ use utoipa::{Modify, OpenApi};
             ExternalDataId,
             LayerId,
             ProjectId,
+            RoleId,
             SessionId,
             TaskId,
             UploadId,
+            UserId,
             WorkflowId,
             ProviderLayerId,
             ProviderLayerCollectionId,
@@ -225,6 +284,8 @@ use utoipa::{Modify, OpenApi};
             CollectionItem,
             AddLayer,
             AddLayerCollection,
+            UpdateLayer,
+            UpdateLayerCollection,
             SearchCapabilities,
             ProviderCapabilities,
             SearchTypes,
@@ -280,6 +341,8 @@ use utoipa::{Modify, OpenApi};
 
             UploadFilesResponse,
             UploadFileLayersResponse,
+            VolumeFileLayersResponse,
+
             CreateDataset,
             UpdateDataset,
             AutoCreateDataset,
@@ -296,7 +359,6 @@ use utoipa::{Modify, OpenApi};
             GdalDatasetParameters,
             TimeStep,
             GdalSourceTimePlaceholder,
-            GdalDatasetParameters,
             GdalLoadingInfoTemporalSlice,
             FileNotFoundHandling,
             GdalDatasetGeoTransform,
@@ -336,19 +398,34 @@ use utoipa::{Modify, OpenApi};
             WrappedPlotOutput,
 
             CreateProject,
-            ProjectListing,
-            UpdateProject,
-            PlotUpdate,
-            LayerUpdate,
             Project,
-            ProjectUpdateToken,
+            UpdateProject,
+            ProjectListing,
+            ProjectVersion,
+            LayerUpdate,
             PlotUpdate,
+            ProjectUpdateToken,
+            Plot,
             ProjectLayer,
             LayerVisibility,
-            Plot,
-            ProjectVersion,
             RasterStreamWebsocketResultType,
             CacheTtlSeconds,
+
+            PermissionRequest,
+            Resource,
+            ResourceId,
+            Permission,
+            PermissionListing,
+            PermissionListOptions,
+            AddRole,
+            RoleDescription,
+            Role,
+
+            MlModel,
+            MlModelId,
+            MlModelName,
+            MlModelMetadata,
+            MlModelNameResponse
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
@@ -404,9 +481,9 @@ impl Modify for ApiDocInfo {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::PostgresContext;
     use crate::ge_context;
     use crate::util::tests::send_test_request;
+    use crate::{contexts::PostgresContext, util::openapi_examples::can_run_examples};
     use tokio_postgres::NoTls;
 
     #[test]
@@ -415,12 +492,7 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn can_run_examples(app_ctx: PostgresContext<NoTls>) {
-        crate::util::openapi_examples::can_run_examples(
-            app_ctx,
-            ApiDoc::openapi(),
-            send_test_request,
-        )
-        .await;
+    async fn it_can_run_examples(app_ctx: PostgresContext<NoTls>) {
+        can_run_examples(app_ctx, ApiDoc::openapi(), send_test_request).await;
     }
 }

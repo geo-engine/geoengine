@@ -192,20 +192,20 @@ where
 mod tests {
     use super::*;
     use crate::{
+        config::get_config_element,
+        contexts::PostgresDb,
         contexts::{
-            migrations::{
-                all_migrations, migration_0000_initial::Migration0000Initial,
-                CurrentSchemaMigration,
-            },
-            PostgresDb,
+            migrations::{all_migrations, CurrentSchemaMigration, Migration0015LogQuota},
+            SessionId,
         },
+        permissions::RoleId,
         projects::{ProjectDb, ProjectListOptions},
-        util::config::get_config_element,
+        users::{UserId, UserInfo, UserSession},
+        util::postgres::DatabaseConnectionConfig,
         workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
     };
     use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
-    use geoengine_datatypes::test_data;
-    use std::str::FromStr;
+    use geoengine_datatypes::{primitives::DateTime, test_data};
     use tokio_postgres::NoTls;
 
     #[tokio::test]
@@ -215,11 +215,11 @@ mod tests {
         #[async_trait]
         impl Migration for TestMigration {
             fn prev_version(&self) -> Option<DatabaseVersion> {
-                Some("0000_initial".to_string())
+                Some(Migration0015LogQuota.version())
             }
 
             fn version(&self) -> DatabaseVersion {
-                "0001_mock".to_string()
+                "0016_mock".to_string()
             }
 
             async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
@@ -240,11 +240,11 @@ mod tests {
         #[async_trait]
         impl Migration for FollowUpMigration {
             fn prev_version(&self) -> Option<DatabaseVersion> {
-                Some("0001_mock".to_string())
+                Some(TestMigration.version())
             }
 
             fn version(&self) -> DatabaseVersion {
-                "0002_follow_up".to_string()
+                "0017_follow_up".to_string()
             }
 
             async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
@@ -256,13 +256,14 @@ mod tests {
         }
 
         let migrations: Vec<Box<dyn Migration>> = vec![
-            Box::new(Migration0000Initial),
+            Box::new(Migration0015LogQuota),
             Box::new(TestMigration),
             Box::new(FollowUpMigration),
         ];
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -285,8 +286,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_performs_all_migrations() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -299,8 +301,9 @@ mod tests {
 
     #[tokio::test]
     async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
 
@@ -322,15 +325,16 @@ mod tests {
         // Then, it migrates the database to the newest version.
         // Finally, it tries to load the test data again via the Db implementations.
 
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let pg_mgr = PostgresConnectionManager::new(postgres_config.try_into()?, NoTls);
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let db_config = DatabaseConnectionConfig::from(postgres_config);
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
 
         let pool = Pool::builder().max_size(1).build(pg_mgr).await?;
 
         let mut conn = pool.get().await?;
 
         // initial schema
-        migrate_database(&mut conn, &[Box::new(Migration0000Initial)]).await?;
+        migrate_database(&mut conn, &all_migrations()[0..1]).await?;
 
         // insert test data on initial schema
         let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;
@@ -343,7 +347,22 @@ mod tests {
         drop(conn);
 
         // create `PostgresDb` on migrated database and test methods
-        let db = PostgresDb::new(pool.clone());
+        let db = PostgresDb::new(
+            pool.clone(),
+            UserSession {
+                id: SessionId::from_u128(0xe11c7674_7ca5_4e07_840c_260835d3fc8d),
+                user: UserInfo {
+                    id: UserId::from_u128(0xb589a590_9c0c_4b55_9aa2_d178a5f42a78),
+                    email: Some("foobar@example.org".to_string()),
+                    real_name: Some("Foo Bar".to_string()),
+                },
+                created: DateTime::new_utc(2023, 1, 1, 0, 0, 0),
+                valid_until: DateTime::new_utc(9999, 1, 1, 0, 0, 0),
+                project: None,
+                view: None,
+                roles: vec![RoleId::from_u128(0xb589a590_9c0c_4b55_9aa2_d178a5f42a78)],
+            },
+        );
 
         let projects = db
             .list_projects(ProjectListOptions {
@@ -356,9 +375,11 @@ mod tests {
 
         assert!(!projects.is_empty());
 
-        db.load_workflow(&WorkflowId::from_str("38ddfc17-016e-4910-8adf-b1af36a8590c").unwrap())
-            .await
-            .unwrap();
+        db.load_workflow(&WorkflowId::from_u128(
+            0x38ddfc17_016e_4910_8adf_b1af36a8590c,
+        ))
+        .await
+        .unwrap();
 
         // TODO: test more methods and more Dbs
 

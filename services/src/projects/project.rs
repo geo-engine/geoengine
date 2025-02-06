@@ -1,8 +1,8 @@
+use crate::config::get_config_element;
+use crate::config::ProjectService;
 use crate::error::Result;
 use crate::identifier;
 use crate::projects::error::ProjectDbError;
-use crate::util::config::get_config_element;
-use crate::util::config::ProjectService;
 use crate::workflows::workflow::WorkflowId;
 use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use geoengine_datatypes::primitives::DateTime;

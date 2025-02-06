@@ -4,19 +4,19 @@ CREATE TABLE abcd_datasets (
     dataset_path text NOT NULL,
     dataset_landing_page text NOT NULL,
     dataset_provider text NOT NULL,
-    "ac33b09f59554c61c14db1c2ae1a635cb06c8436" text,
+    "ac33b09f59554c61c14db1c2ae1a635cb06c8436" text, -- noqa: RF06
     "8fdde5ff4759fdaa7c55fb172e68527671a2240a" text,
-    "c6b8d2982cdf2e80fa6882734630ec735e9ea05d" text,
-    "b680a531f806d3a31ff486fdad601956d30eff39" text,
+    "c6b8d2982cdf2e80fa6882734630ec735e9ea05d" text, -- noqa: RF06
+    "b680a531f806d3a31ff486fdad601956d30eff39" text, -- noqa: RF06
     "0a58413cb55a2ddefa3aa83de465fb5d58e4f1df" text,
     "9848409ccf22cbd3b5aeebfe6592677478304a64" text,
     "9df7aa344cb18001c7c4f173a700f72904bb64af" text,
-    "e814cff84791402aef987219e408c6957c076e5a" text,
+    "e814cff84791402aef987219e408c6957c076e5a" text, -- noqa: RF06
     "118bb6a92bc934803314ce2711baca3d8232e4dc" text,
     "3375d84219d930ef640032f6993fee32b38e843d" text,
-    "abbd35a33f3fef7e2e96e1be66daf8bbe26c17f5" text,
+    "abbd35a33f3fef7e2e96e1be66daf8bbe26c17f5" text, -- noqa: RF06
     "5a3c23f17987c03c35912805398b491cbfe03751" text,
-    "b7f24b1e9e8926c974387814a38d936aacf0aac8" text
+    "b7f24b1e9e8926c974387814a38d936aacf0aac8" text -- noqa: RF06
 );
 
 INSERT INTO abcd_datasets

@@ -8,10 +8,7 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 build = "build.rs"
-
-[features]
-# This compiles Geo Engine Pro
-pro = ["geoengine-macros/pro"]
+default-run = "geoengine-server"
 
 [dependencies]
 actix = { workspace = true }
@@ -23,21 +20,24 @@ actix-web = { workspace = true }
 actix-web-actors = { workspace = true }
 actix-web-httpauth = { workspace = true }
 aes-gcm = { workspace = true }
+anyhow.workspace = true
 aruna-rust-api = { workspace = true }
+assert-json-diff = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bb8-postgres = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+clap_derive.workspace = true
+clap.workspace = true
 config = { workspace = true }
-derive_builder = { workspace = true }
+convert_case = { workspace = true }
 erased-serde = { workspace = true }
 flexi_logger = { workspace = true }
 float-cmp = { workspace = true }
 futures = { workspace = true }
 futures-util = { workspace = true }
 gdal = { workspace = true }
-gdal-sys = { workspace = true }
 geo = { workspace = true }
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-macros = { path = "../macros" }
@@ -46,13 +46,13 @@ geojson = { workspace = true }
 itertools = { workspace = true }
 log = { workspace = true }
 mime = { workspace = true }
+num-traits = { workspace = true }
 oauth2 = { workspace = true }
 openidconnect = { workspace = true }
 opentelemetry = { workspace = true }
-opentelemetry-otlp = { workspace = true }
 opentelemetry_sdk = { workspace = true }
+opentelemetry-otlp = { workspace = true }
 ordered-float = { workspace = true }
-num-traits = { workspace = true }
 pbkdf2 = { workspace = true }
 postgres-types = { workspace = true }
 proj = { workspace = true }
@@ -65,31 +65,26 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = { workspace = true }
 serde_with = { workspace = true }
+sha2 = { workspace = true }
 snafu = { workspace = true }
 stac = { workspace = true }
-stream-cancel = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
-tonic = { workspace = true}
+tonic = { workspace = true }
 tracing = { workspace = true }
 tracing-actix-web = { workspace = true }
 tracing-opentelemetry = { workspace = true }
-tracing-subscriber = { workspace = true}
-typetag = { workspace = true }
-url = { workspace = true}
-utoipa = { workspace = true}
+tracing-subscriber = { workspace = true }
+url = { workspace = true }
+utoipa = { workspace = true }
 utoipa-swagger-ui = { workspace = true }
-uuid = { workspace = true} 
+uuid = { workspace = true }
 validator = { workspace = true }
 walkdir = { workspace = true }
 zip = { workspace = true }
-assert-json-diff = { workspace = true }
-sha2 = { workspace = true }
-convert_case = { workspace = true }
-serde_path_to_error = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 nix = { version = "0.29", features = ["socket"] }
@@ -111,7 +106,6 @@ vergen-gitcl = { workspace = true, features = ["build"] }
 [[bench]]
 name = "quota_check"
 harness = false
-required-features = ["pro"]
 
 [lints]
 workspace = true

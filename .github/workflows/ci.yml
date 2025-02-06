@@ -28,7 +28,7 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04
-        features: ["--all-features"]
+        features: [""]
         build: [""]
 
     steps:
@@ -57,7 +57,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
           echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
       - name: Install SQLFluff
-        run: pip install sqlfluff==2.3.5
+        run: pip install sqlfluff==3.3.0
       - name: Init rustup toolchain
         run: rustup show # enough to initialize the toolchain
       - name: setup rust build cache
@@ -93,11 +93,16 @@ jobs:
       - name: Check with Rustfmt
         run: cargo fmt --all -- --check
       - name: Check with Clippy
-        run: cargo clippy --all-targets ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
+        run: cargo clippy --all-targets --locked ${{ matrix.features }} ${{ matrix.build }} -- -D warnings
       - name: Check with SQLFluff
         run: sqlfluff lint
+      - name: Verify for expression dependencies workspace
+        run: |
+          rustup toolchain install nightly
+          chmod +x ./.scripts/check-expression-deps.rs
+          ./.scripts/check-expression-deps.rs
       - name: Run tests
-        run: cargo test ${{ matrix.features }} ${{ matrix.build }} --verbose
+        run: cargo test --locked ${{ matrix.features }} ${{ matrix.build }} --verbose
 
   build:
     runs-on: ${{matrix.os}}
@@ -106,7 +111,7 @@ jobs:
       matrix:
         os:
           - ubuntu-22.04
-        features: ["--all-features"]
+        features: [""]
         build: ["", "--release"]
 
     steps:
@@ -158,4 +163,4 @@ jobs:
           # Default: "false"
           #cache-on-failure: ""
       - name: Build
-        run: cargo build ${{ matrix.features }} ${{ matrix.build }} --verbose
+        run: cargo build --locked ${{ matrix.features }} ${{ matrix.build }} --verbose

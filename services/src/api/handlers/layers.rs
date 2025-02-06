@@ -1,5 +1,6 @@
 use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::responses::IdResponse;
+use crate::config::get_config_element;
 use crate::contexts::ApplicationContext;
 use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
 use crate::error::Error::NotImplemented;
@@ -12,8 +13,8 @@ use crate::layers::listing::{
     LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchParameters,
 };
 use crate::layers::storage::{LayerDb, LayerProviderDb, LayerProviderListingOptions};
-use crate::util::config::get_config_element;
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
+use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
@@ -780,6 +781,8 @@ async fn layer_to_dataset<C: ApplicationContext>(
         }
     };
 
+    let workflow_id = db.register_workflow(layer.workflow.clone()).await?;
+
     let execution_context = ctx.execution_context()?;
 
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
@@ -825,10 +828,11 @@ async fn layer_to_dataset<C: ApplicationContext>(
     };
 
     let compression_num_threads =
-        get_config_element::<crate::util::config::Gdal>()?.compression_num_threads;
+        get_config_element::<crate::config::Gdal>()?.compression_num_threads;
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("layer {item}"),
+        workflow_id,
         layer.workflow,
         ctx,
         from_workflow,
@@ -862,15 +866,13 @@ async fn add_layer<C: ApplicationContext>(
     request: web::Json<AddLayer>,
 ) -> Result<web::Json<IdResponse<LayerId>>> {
     let request = request.into_inner();
-
     let add_layer = request;
 
-    let id = app_ctx
-        .session_context(session)
-        .db()
-        .add_layer(add_layer, &collection)
-        .await?
-        .into();
+    let ctx = app_ctx.session_context(session);
+
+    validate_workflow(&add_layer.workflow, &ctx.execution_context()?).await?;
+
+    let id = ctx.db().add_layer(add_layer, &collection).await?.into();
 
     Ok(web::Json(IdResponse { id }))
 }
@@ -900,11 +902,11 @@ async fn update_layer<C: ApplicationContext>(
     let layer = layer.into_inner().into();
     let request = request.into_inner();
 
-    app_ctx
-        .session_context(session)
-        .db()
-        .update_layer(&layer, request)
-        .await?;
+    let ctx = app_ctx.session_context(session);
+
+    validate_workflow(&request.workflow, &ctx.execution_context()?).await?;
+
+    ctx.db().update_layer(&layer, request).await?;
 
     Ok(HttpResponse::Ok().finish())
 }
@@ -1182,20 +1184,21 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{SessionId, SimpleApplicationContext, SimpleSession};
+    use crate::config::get_config_element;
+    use crate::contexts::PostgresContext;
+    use crate::contexts::SessionId;
     use crate::datasets::RasterDatasetFromWorkflowResult;
     use crate::ge_context;
     use crate::layers::layer::Layer;
     use crate::layers::storage::INTERNAL_PROVIDER_ID;
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
-    use crate::util::config::get_config_element;
-    use crate::util::tests::{read_body_string, TestDataUploads};
-    use crate::{
-        contexts::{PostgresContext, Session},
-        util::tests::send_test_request,
-        workflows::workflow::Workflow,
+    use crate::users::{UserAuth, UserSession};
+    use crate::util::tests::admin_login;
+    use crate::util::tests::{
+        read_body_string, send_test_request, MockQueryContext, TestDataUploads,
     };
+    use crate::{contexts::Session, workflows::workflow::Workflow};
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
@@ -1227,9 +1230,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_add_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1278,9 +1282,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_add_existing_layer_to_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1340,9 +1345,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_add_layer_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1367,9 +1373,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_update_layer_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let collection_id = ctx
             .db()
@@ -1407,9 +1414,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_update_layer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let add_layer = AddLayer {
             name: "Foo".to_string(),
@@ -1445,7 +1453,7 @@ mod tests {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
+                            points: vec![Coordinate2D::new(4., 5.); 3],
                         },
                     }
                     .boxed(),
@@ -1459,22 +1467,106 @@ mod tests {
         let req = test::TestRequest::put()
             .uri(&format!("/layerDb/layers/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_json(serde_json::json!(update_layer));
+            .set_json(serde_json::json!(update_layer.clone()));
         let response = send_test_request(req, app_ctx.clone()).await;
 
         assert!(response.status().is_success(), "{response:?}");
 
         let result = ctx.db().load_layer(&layer_id).await.unwrap();
 
-        assert_eq!(result.name, "Foo new");
-        assert_eq!(result.description, "Bar new");
+        assert_eq!(result.name, update_layer.name);
+        assert_eq!(result.description, update_layer.description);
+        assert_eq!(result.workflow, update_layer.workflow);
+        assert_eq!(result.symbology, update_layer.symbology);
+        assert_eq!(result.metadata, update_layer.metadata);
+        assert_eq!(result.properties, update_layer.properties);
+    }
+
+    #[ge_context::test]
+    async fn it_checks_for_workflow_validity(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
+
+        let invalid_workflow_layer = serde_json::json!({
+            "name": "Foo",
+            "description": "Bar",
+            "workflow":{
+                "type": "Raster",
+                "operator": {
+                    "type": "GdalSource",
+                    "params": {
+                    "data": "example"
+                    }
+                }
+            }
+        });
+        let req = test::TestRequest::post()
+            .uri(&format!("/layerDb/collections/{collection_id}/layers"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(invalid_workflow_layer.clone());
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        ErrorResponse::assert(
+            response,
+            400,
+            "UnknownDatasetName",
+            "Dataset name 'example' does not exist",
+        )
+        .await;
+
+        let add_layer = AddLayer {
+            name: "Foo".to_string(),
+            description: "Bar".to_string(),
+            properties: Default::default(),
+            workflow: Workflow {
+                operator: TypedOperator::Vector(
+                    MockPointSource {
+                        params: MockPointSourceParams {
+                            points: vec![Coordinate2D::new(1., 2.); 3],
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+            metadata: Default::default(),
+        };
+
+        let layer_id = ctx
+            .db()
+            .add_layer(
+                add_layer.clone(),
+                &ctx.db().get_root_layer_collection_id().await.unwrap(),
+            )
+            .await
+            .unwrap();
+
+        let req = test::TestRequest::put()
+            .uri(&format!("/layerDb/layers/{layer_id}"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .set_json(invalid_workflow_layer);
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        ErrorResponse::assert(
+            response,
+            400,
+            "UnknownDatasetName",
+            "Dataset name 'example' does not exist",
+        )
+        .await;
     }
 
     #[ge_context::test]
     async fn test_remove_layer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let add_layer = AddLayer {
             name: "Foo".to_string(),
@@ -1518,9 +1610,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_add_existing_collection_to_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1570,9 +1663,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_remove_layer_from_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1633,9 +1727,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_remove_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1676,9 +1771,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_remove_collection_from_collection(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1721,7 +1817,9 @@ mod tests {
 
     #[ge_context::test]
     async fn test_search_capabilities(app_ctx: PostgresContext<NoTls>) {
-        let session_id = app_ctx.default_session_id().await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let req = test::TestRequest::get()
             .uri(&format!("/layers/{INTERNAL_PROVIDER_ID}/capabilities",))
@@ -1733,9 +1831,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_search(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1751,9 +1850,10 @@ mod tests {
 
     #[ge_context::test]
     async fn test_search_autocomplete(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
-        let session_id = app_ctx.default_session_id().await;
+        let session_id = session.id();
 
         let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1883,7 +1983,8 @@ mod tests {
         }
 
         async fn create_layer_in_context(&self, app_ctx: &PostgresContext<NoTls>) -> Layer {
-            let ctx = app_ctx.default_session_context().await.unwrap();
+            let session = admin_login(app_ctx).await;
+            let ctx = app_ctx.session_context(session.clone());
 
             let root_collection_id = ctx.db().get_root_layer_collection_id().await.unwrap();
 
@@ -1920,8 +2021,8 @@ mod tests {
         }
     }
 
-    async fn send_dataset_creation_test_request<C: SimpleApplicationContext>(
-        app_ctx: &C,
+    async fn send_dataset_creation_test_request(
+        app_ctx: PostgresContext<NoTls>,
         layer: Layer,
         session_id: SessionId,
     ) -> ServiceResponse {
@@ -1936,12 +2037,12 @@ mod tests {
         send_test_request(req, app_ctx.clone()).await
     }
 
-    async fn create_dataset_request_with_result_success<C: SimpleApplicationContext>(
-        ctx: &C,
+    async fn create_dataset_request_with_result_success(
+        ctx: PostgresContext<NoTls>,
         layer: Layer,
-        session: SimpleSession,
+        session: UserSession,
     ) -> RasterDatasetFromWorkflowResult {
-        let res = send_dataset_creation_test_request(ctx, layer, session.id()).await;
+        let res = send_dataset_creation_test_request(ctx.clone(), layer, session.id()).await;
         assert_eq!(res.status(), 200, "{:?}", res.response());
 
         let task_response =
@@ -1974,7 +2075,7 @@ mod tests {
         query_rectangle: RasterQueryRectangle,
     ) -> geoengine_operators::util::Result<Vec<Vec<u8>>> {
         let exe_ctx = ctx.execution_context().unwrap();
-        let query_ctx = ctx.query_context().unwrap();
+        let query_ctx = ctx.mock_query_context().unwrap();
 
         let initialized_operator = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1995,7 +2096,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326(),
             },
             GdalGeoTiffOptions {
-                compression_num_threads: get_config_element::<crate::util::config::Gdal>()
+                compression_num_threads: get_config_element::<crate::config::Gdal>()
                     .unwrap()
                     .compression_num_threads,
                 as_cog: true,
@@ -2012,12 +2113,12 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
         mock_source: MockRasterWorkflowLayerDescription,
     ) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
         let response =
-            create_dataset_request_with_result_success(&app_ctx, layer, ctx.session().clone())
-                .await;
+            create_dataset_request_with_result_success(app_ctx, layer, ctx.session().clone()).await;
 
         // automatically deletes uploads on drop
         let _test_uploads = TestDataUploads {
@@ -2085,11 +2186,13 @@ mod tests {
     async fn test_raster_layer_to_dataset_no_time_interval(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(false, true, true, 0);
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = admin_login(&app_ctx).await;
+
+        let session_id = session.id();
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let res = send_dataset_creation_test_request(app_ctx, layer, session_id).await;
 
         ErrorResponse::assert(
             res,
@@ -2109,11 +2212,13 @@ mod tests {
     async fn test_raster_layer_to_dataset_no_bounding_box(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, false, true, 0);
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = admin_login(&app_ctx).await;
+
+        let session_id = session.id();
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let res = send_dataset_creation_test_request(app_ctx, layer, session_id).await;
 
         ErrorResponse::assert(
             res,
@@ -2135,11 +2240,13 @@ mod tests {
     async fn test_raster_layer_to_dataset_no_spatial_resolution(app_ctx: PostgresContext<NoTls>) {
         let mock_source = MockRasterWorkflowLayerDescription::new(true, true, false, 0);
 
-        let session_id = app_ctx.default_session_id().await;
+        let session = admin_login(&app_ctx).await;
+
+        let session_id = session.id();
 
         let layer = mock_source.create_layer_in_context(&app_ctx).await;
 
-        let res = send_dataset_creation_test_request(&app_ctx, layer, session_id).await;
+        let res = send_dataset_creation_test_request(app_ctx, layer, session_id).await;
 
         ErrorResponse::assert(
             res,

@@ -8,12 +8,9 @@ use super::{
     NetCdfCf4DDatasetId, NetCdfCf4DProviderError, NetCdfEntity, NetCdfGroup, NetCdfOverview,
     Result,
 };
-use crate::{
-    contexts::PostgresDb,
-    layers::{
-        layer::{Layer, LayerCollection, LayerCollectionListOptions, ProviderLayerId},
-        listing::LayerCollectionId,
-    },
+use crate::layers::{
+    layer::{Layer, LayerCollection, LayerCollectionListOptions, ProviderLayerId},
+    listing::LayerCollectionId,
 };
 use async_trait::async_trait;
 use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
@@ -88,56 +85,8 @@ pub trait NetCdfCfProviderDb: Send + Sync {
         T: ?Sized + tokio_postgres::ToStatement + Sync;
 }
 
-/// Gets a connection from the pool
-macro_rules! get_connection {
-    ($connection:expr) => {{
-        use geoengine_datatypes::error::BoxedResultExt;
-        $connection
-            .get()
-            .await
-            .boxed_context(crate::datasets::external::netcdfcf::error::DatabaseConnection)?
-    }};
-}
-pub(crate) use get_connection;
-
-/// Starts a read-only snapshot-isolated transaction for a multiple read
-macro_rules! readonly_transaction {
-    ($connection:expr) => {{
-        use geoengine_datatypes::error::BoxedResultExt;
-        $connection
-            .build_transaction()
-            .read_only(true)
-            .deferrable(true) // get snapshot isolation
-            .start()
-            .await
-            .boxed_context(crate::datasets::external::netcdfcf::error::DatabaseTransaction)?
-    }};
-}
-pub(crate) use readonly_transaction;
-
-/// Starts a deferred write transaction
-macro_rules! deferred_write_transaction {
-    ($connection:expr) => {{
-        use geoengine_datatypes::error::BoxedResultExt;
-
-        let transaction = $connection
-            .transaction()
-            .await
-            .boxed_context(crate::datasets::external::netcdfcf::error::DatabaseTransaction)?;
-
-        // check constraints at the end to speed up insertions
-        transaction
-            .batch_execute("SET CONSTRAINTS ALL DEFERRED")
-            .await
-            .boxed_context(crate::datasets::external::netcdfcf::error::UnexpectedExecution)?;
-
-        transaction
-    }};
-}
-pub(crate) use deferred_write_transaction;
-
 #[async_trait]
-impl<Tls> NetCdfCfProviderDb for PostgresDb<Tls>
+impl<Tls> NetCdfCfProviderDb for crate::contexts::PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -249,6 +198,54 @@ where
         transaction.commit().await
     }
 }
+
+/// Gets a connection from the pool
+macro_rules! get_connection {
+    ($connection:expr) => {{
+        use geoengine_datatypes::error::BoxedResultExt;
+        $connection
+            .get()
+            .await
+            .boxed_context(crate::datasets::external::netcdfcf::error::DatabaseConnection)?
+    }};
+}
+pub(crate) use get_connection;
+
+/// Starts a read-only snapshot-isolated transaction for a multiple read
+macro_rules! readonly_transaction {
+    ($connection:expr) => {{
+        use geoengine_datatypes::error::BoxedResultExt;
+        $connection
+            .build_transaction()
+            .read_only(true)
+            .deferrable(true) // get snapshot isolation
+            .start()
+            .await
+            .boxed_context(crate::datasets::external::netcdfcf::error::DatabaseTransaction)?
+    }};
+}
+pub(crate) use readonly_transaction;
+
+/// Starts a deferred write transaction
+macro_rules! deferred_write_transaction {
+    ($connection:expr) => {{
+        use geoengine_datatypes::error::BoxedResultExt;
+
+        let transaction = $connection
+            .transaction()
+            .await
+            .boxed_context(crate::datasets::external::netcdfcf::error::DatabaseTransaction)?;
+
+        // check constraints at the end to speed up insertions
+        transaction
+            .batch_execute("SET CONSTRAINTS ALL DEFERRED")
+            .await
+            .boxed_context(crate::datasets::external::netcdfcf::error::UnexpectedExecution)?;
+
+        transaction
+    }};
+}
+pub(crate) use deferred_write_transaction;
 
 pub(crate) async fn lock_overview<Tls>(
     connection: PooledConnection<'_, PostgresConnectionManager<Tls>>,
@@ -1178,15 +1175,16 @@ impl<D: NetCdfCfProviderDb + 'static + std::fmt::Debug> Drop for InProgressFlag<
 mod tests {
     use super::*;
     use crate::{
-        contexts::{PostgresContext, SessionContext, SimpleApplicationContext},
+        contexts::SessionContext,
+        contexts::{PostgresContext, PostgresSessionContext},
         datasets::external::netcdfcf::{EBV_PROVIDER_ID, NETCDF_CF_PROVIDER_ID},
         ge_context,
     };
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
-    async fn it_locks(app_ctx: PostgresContext<NoTls>) {
-        let db = Arc::new(app_ctx.default_session_context().await.unwrap().db());
+    async fn it_locks(_app_ctx: PostgresContext<NoTls>, ctx: PostgresSessionContext<NoTls>) {
+        let db = Arc::new(ctx.db());
 
         // lock the overview
         let flag = InProgressFlag::create(db.clone(), NETCDF_CF_PROVIDER_ID, "file_name".into())

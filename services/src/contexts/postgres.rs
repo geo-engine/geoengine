@@ -1,59 +1,67 @@
-use super::migrations::{all_migrations, CurrentSchemaMigration, MigrationResult};
-use super::{initialize_database, ExecutionContextImpl, Session, SimpleApplicationContext};
-use crate::api::cli::{add_datasets_from_directory, add_providers_from_directory};
+use self::migrations::all_migrations;
 use crate::api::model::services::Volume;
-use crate::contexts::{ApplicationContext, QueryContextImpl, SessionId, SimpleSession};
+use crate::config::{get_config_element, Cache, Oidc, Quota};
+use crate::contexts::{
+    initialize_database, migrations, ApplicationContext, CurrentSchemaMigration, MigrationResult,
+    QueryContextImpl, SessionId,
+};
+use crate::contexts::{ExecutionContextImpl, QuotaCheckerImpl};
 use crate::contexts::{GeoEngineDb, SessionContext};
 use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
 use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::{
-    add_layer_collections_from_directory, add_layers_from_directory,
+    add_datasets_from_directory, add_layer_collections_from_directory, add_layers_from_directory,
+    add_providers_from_directory,
 };
-use crate::projects::{ProjectId, STRectangle};
-use crate::tasks::{SimpleTaskManager, SimpleTaskManagerBackend, SimpleTaskManagerContext};
-use crate::util::config;
-use crate::util::config::get_config_element;
+use crate::machine_learning::error::MachineLearningError;
+use crate::machine_learning::name::MlModelName;
+use crate::quota::{initialize_quota_tracking, QuotaTrackingFactory};
+use crate::tasks::SimpleTaskManagerContext;
+use crate::tasks::{TypedTaskManagerBackend, UserTaskManager};
+use crate::users::OidcManager;
+use crate::users::{UserAuth, UserSession};
 use async_trait::async_trait;
 use bb8_postgres::{
     bb8::Pool,
     bb8::PooledConnection,
-    tokio_postgres::{error::SqlState, tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
+    tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
     PostgresConnectionManager,
 };
 use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
+use geoengine_operators::meta::quota::QuotaChecker;
 use geoengine_operators::util::create_rayon_thread_pool;
 use log::info;
 use rayon::ThreadPool;
-use snafu::ensure;
+use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
+use tokio_postgres::error::SqlState;
+use uuid::Uuid;
 
-// TODO: distinguish user-facing errors from system-facing error messages
+// TODO: do not report postgres error details to user
 
-/// A context with references to Postgres backends of the database.
+/// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
 #[derive(Clone)]
 pub struct PostgresContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    default_session_id: SessionId,
     thread_pool: Arc<ThreadPool>,
     exe_ctx_tiling_spec: TilingSpecification,
     query_ctx_chunk_size: ChunkByteSize,
-    task_manager: Arc<SimpleTaskManagerBackend>,
-    pool: Pool<PostgresConnectionManager<Tls>>,
+    task_manager: Arc<TypedTaskManagerBackend>,
+    oidc_manager: OidcManager,
+    quota: QuotaTrackingFactory,
+    pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
-}
-
-enum DatabaseStatus {
-    Unitialized,
-    InitializedClearDatabase,
-    InitializedKeepDatabase,
+    tile_cache: Arc<SharedCache>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -68,34 +76,76 @@ where
         tls: Tls,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
-        volumes: Volumes,
+        quota_config: Quota,
+        oidc_db: OidcManager,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        let created_schema = Self::create_database(pool.get().await?).await?;
 
-        let session = if created_schema {
-            let session = SimpleSession::default();
-            Self::create_default_session(pool.get().await?, session.id()).await?;
-            session
-        } else {
-            Self::load_default_session(pool.get().await?).await?
-        };
+        Self::create_pro_database(pool.get().await?).await?;
+
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
 
         Ok(PostgresContext {
-            default_session_id: session.id(),
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            oidc_manager: oidc_db,
+            quota,
             pool,
-            volumes,
+            volumes: Default::default(),
+            tile_cache: Arc::new(SharedCache::test_default()),
+        })
+    }
+
+    #[allow(clippy::missing_panics_doc)]
+    pub async fn new_with_oidc(
+        config: Config,
+        tls: Tls,
+        oidc_db: OidcManager,
+        cache_config: Cache,
+        quota_config: Quota,
+    ) -> Result<Self> {
+        let pg_mgr = PostgresConnectionManager::new(config, tls);
+
+        let pool = Pool::builder().build(pg_mgr).await?;
+
+        Self::create_pro_database(pool.get().await?).await?;
+
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
+
+        Ok(PostgresContext {
+            task_manager: Default::default(),
+            thread_pool: create_rayon_thread_pool(0),
+            exe_ctx_tiling_spec: TestDefault::test_default(),
+            query_ctx_chunk_size: TestDefault::test_default(),
+            oidc_manager: oidc_db,
+            quota,
+            pool,
+            volumes: Default::default(),
+            tile_cache: Arc::new(
+                SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
+                    .expect("tile cache creation should work because the config is valid"),
+            ),
         })
     }
 
     // TODO: check if the datasets exist already and don't output warnings when skipping them
-    #[allow(clippy::too_many_arguments)]
+    #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
     pub async fn new_with_data(
         config: Config,
         tls: Tls,
@@ -105,45 +155,97 @@ where
         layer_collection_defs_path: PathBuf,
         exe_ctx_tiling_spec: TilingSpecification,
         query_ctx_chunk_size: ChunkByteSize,
+        oidc_config: Oidc,
+        cache_config: Cache,
+        quota_config: Quota,
     ) -> Result<Self> {
         let pg_mgr = PostgresConnectionManager::new(config, tls);
 
         let pool = Pool::builder().build(pg_mgr).await?;
-        let created_schema = Self::create_database(pool.get().await?).await?;
 
-        let session = if created_schema {
-            let session = SimpleSession::default();
-            Self::create_default_session(pool.get().await?, session.id()).await?;
-            session
-        } else {
-            Self::load_default_session(pool.get().await?).await?
-        };
+        let created_schema = Self::create_pro_database(pool.get().await?).await?;
+
+        let db = PostgresDb::new(pool.clone(), UserSession::admin_session());
+        let quota = initialize_quota_tracking(
+            quota_config.mode,
+            db,
+            quota_config.increment_quota_buffer_size,
+            quota_config.increment_quota_buffer_timeout_seconds,
+        );
 
         let app_ctx = PostgresContext {
-            default_session_id: session.id(),
             task_manager: Default::default(),
             thread_pool: create_rayon_thread_pool(0),
             exe_ctx_tiling_spec,
             query_ctx_chunk_size,
+            oidc_manager: OidcManager::from(oidc_config),
+            quota,
             pool,
             volumes: Default::default(),
+            tile_cache: Arc::new(
+                SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
+                    .expect("tile cache creation should work because the config is valid"),
+            ),
         };
 
         if created_schema {
             info!("Populating database with initial data...");
 
-            let ctx = app_ctx.session_context(session);
+            let mut db = app_ctx.session_context(UserSession::admin_session()).db();
 
-            let mut db = ctx.db();
             add_layers_from_directory(&mut db, layer_defs_path).await;
             add_layer_collections_from_directory(&mut db, layer_collection_defs_path).await;
 
             add_datasets_from_directory(&mut db, dataset_defs_path).await;
 
-            add_providers_from_directory(&mut db, provider_defs_path).await;
+            add_providers_from_directory(&mut db, provider_defs_path.clone()).await;
         }
 
         Ok(app_ctx)
+    }
+
+    #[allow(clippy::too_many_lines)]
+    /// Creates the database schema. Returns true if the schema was created, false if it already existed.
+    pub(crate) async fn create_pro_database(
+        mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<bool> {
+        Self::maybe_clear_database(&conn).await?;
+
+        let migration = initialize_database(
+            &mut conn,
+            Box::new(CurrentSchemaMigration),
+            &all_migrations(),
+        )
+        .await?;
+
+        Ok(migration == MigrationResult::CreatedDatabase)
+    }
+
+    /// Clears the database if the Settings demand and the database properties allows it.
+    pub(crate) async fn maybe_clear_database(
+        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<()> {
+        let postgres_config = get_config_element::<crate::config::Postgres>()?;
+        let database_status = Self::check_schema_status(conn).await?;
+        let schema_name = postgres_config.schema;
+
+        match database_status {
+            DatabaseStatus::InitializedClearDatabase
+                if postgres_config.clear_database_on_start && schema_name != "pg_temp" =>
+            {
+                info!("Clearing schema {}.", schema_name);
+                conn.batch_execute(&format!("DROP SCHEMA {schema_name} CASCADE;"))
+                    .await?;
+            }
+            DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
+                return Err(Error::ClearDatabaseOnStartupNotAllowed)
+            }
+            DatabaseStatus::InitializedClearDatabase
+            | DatabaseStatus::InitializedKeepDatabase
+            | DatabaseStatus::Unitialized => (),
+        };
+
+        Ok(())
     }
 
     async fn check_schema_status(
@@ -173,120 +275,12 @@ where
             Ok(DatabaseStatus::InitializedKeepDatabase)
         }
     }
-
-    /// Clears the database if the Settings demand and the database properties allows it.
-    pub(crate) async fn maybe_clear_database(
-        conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<()> {
-        let postgres_config = get_config_element::<crate::util::config::Postgres>()?;
-        let database_status = Self::check_schema_status(conn).await?;
-        let schema_name = postgres_config.schema;
-
-        match database_status {
-            DatabaseStatus::InitializedClearDatabase
-                if postgres_config.clear_database_on_start && schema_name != "pg_temp" =>
-            {
-                info!("Clearing schema {}.", schema_name);
-                conn.batch_execute(&format!("DROP SCHEMA {schema_name} CASCADE;"))
-                    .await?;
-            }
-            DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
-                return Err(Error::ClearDatabaseOnStartupNotAllowed)
-            }
-            DatabaseStatus::InitializedClearDatabase
-            | DatabaseStatus::InitializedKeepDatabase
-            | DatabaseStatus::Unitialized => (),
-        };
-
-        Ok(())
-    }
-
-    /// Creates the database schema. Returns true if the schema was created, false if it already existed.
-    pub(crate) async fn create_database(
-        mut conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<bool> {
-        Self::maybe_clear_database(&conn).await?;
-
-        let migration = initialize_database(
-            &mut conn,
-            Box::new(CurrentSchemaMigration),
-            &all_migrations(),
-        )
-        .await?;
-
-        Ok(migration == MigrationResult::CreatedDatabase)
-    }
-
-    async fn create_default_session(
-        conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-        session_id: SessionId,
-    ) -> Result<()> {
-        let stmt = conn
-            .prepare("INSERT INTO sessions (id, project_id, view) VALUES ($1, NULL ,NULL);")
-            .await?;
-
-        conn.execute(&stmt, &[&session_id]).await?;
-
-        Ok(())
-    }
-    async fn load_default_session(
-        conn: PooledConnection<'_, PostgresConnectionManager<Tls>>,
-    ) -> Result<SimpleSession> {
-        let stmt = conn
-            .prepare("SELECT id, project_id, view FROM sessions LIMIT 1;")
-            .await?;
-
-        let row = conn.query_one(&stmt, &[]).await?;
-
-        Ok(SimpleSession::new(row.get(0), row.get(1), row.get(2)))
-    }
 }
 
-#[async_trait]
-impl<Tls> SimpleApplicationContext for PostgresContext<Tls>
-where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
-    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
-    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
-    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
-{
-    async fn default_session_id(&self) -> SessionId {
-        self.default_session_id
-    }
-
-    async fn default_session(&self) -> Result<SimpleSession> {
-        Self::load_default_session(self.pool.get().await?).await
-    }
-
-    async fn update_default_session_project(&self, project: ProjectId) -> Result<()> {
-        let conn = self.pool.get().await?;
-
-        let stmt = conn
-            .prepare("UPDATE sessions SET project_id = $1 WHERE id = $2;")
-            .await?;
-
-        conn.execute(&stmt, &[&project, &self.default_session_id])
-            .await?;
-
-        Ok(())
-    }
-
-    async fn update_default_session_view(&self, view: STRectangle) -> Result<()> {
-        let conn = self.pool.get().await?;
-
-        let stmt = conn
-            .prepare("UPDATE sessions SET view = $1 WHERE id = $2;")
-            .await?;
-
-        conn.execute(&stmt, &[&view, &self.default_session_id])
-            .await?;
-
-        Ok(())
-    }
-
-    async fn default_session_context(&self) -> Result<Self::SessionContext> {
-        Ok(self.session_context(self.session_by_id(self.default_session_id).await?))
-    }
+enum DatabaseStatus {
+    Unitialized,
+    InitializedClearDatabase,
+    InitializedKeepDatabase,
 }
 
 #[async_trait]
@@ -298,7 +292,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     type SessionContext = PostgresSessionContext<Tls>;
-    type Session = SimpleSession;
+    type Session = UserSession;
 
     fn session_context(&self, session: Self::Session) -> Self::SessionContext {
         PostgresSessionContext {
@@ -308,39 +302,26 @@ where
     }
 
     async fn session_by_id(&self, session_id: SessionId) -> Result<Self::Session> {
-        let mut conn = self.pool.get().await?;
-
-        let tx = conn.build_transaction().start().await?;
-
-        let stmt = tx
-            .prepare(
-                "
-            SELECT           
-                project_id,
-                view
-            FROM sessions
-            WHERE id = $1;",
-            )
-            .await?;
-
-        let row = tx
-            .query_one(&stmt, &[&session_id])
+        self.user_session_by_id(session_id)
             .await
-            .map_err(|_error| error::Error::InvalidSession)?;
+            .map_err(Box::new)
+            .context(error::Unauthorized)
+    }
 
-        Ok(SimpleSession::new(session_id, row.get(0), row.get(1)))
+    fn oidc_manager(&self) -> &OidcManager {
+        &self.oidc_manager
     }
 }
 
 #[derive(Clone)]
 pub struct PostgresSessionContext<Tls>
 where
-    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    session: SimpleSession,
+    session: UserSession,
     context: PostgresContext<Tls>,
 }
 
@@ -352,26 +333,35 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    type Session = SimpleSession;
+    type Session = UserSession;
     type GeoEngineDB = PostgresDb<Tls>;
 
     type TaskContext = SimpleTaskManagerContext;
-    type TaskManager = SimpleTaskManager; // this does not persist across restarts
+    type TaskManager = UserTaskManager; // this does not persist across restarts
     type QueryContext = QueryContextImpl;
     type ExecutionContext = ExecutionContextImpl<Self::GeoEngineDB>;
 
     fn db(&self) -> Self::GeoEngineDB {
-        PostgresDb::new(self.context.pool.clone())
+        PostgresDb::new(self.context.pool.clone(), self.session.clone())
     }
 
     fn tasks(&self) -> Self::TaskManager {
-        SimpleTaskManager::new(self.context.task_manager.clone())
+        UserTaskManager::new(self.context.task_manager.clone(), self.session.clone())
     }
 
-    fn query_context(&self) -> Result<Self::QueryContext> {
-        Ok(QueryContextImpl::new(
+    fn query_context(&self, workflow: Uuid, computation: Uuid) -> Result<Self::QueryContext> {
+        // TODO: load config only once
+
+        Ok(QueryContextImpl::new_with_extensions(
             self.context.query_ctx_chunk_size,
             self.context.thread_pool.clone(),
+            Some(self.context.tile_cache.clone()),
+            Some(
+                self.context
+                    .quota
+                    .create_quota_tracking(&self.session, workflow, computation),
+            ),
+            Some(Box::new(QuotaCheckerImpl { user_db: self.db() }) as QuotaChecker),
         ))
     }
 
@@ -391,7 +381,11 @@ where
             .iter()
             .map(|v| Volume {
                 name: v.name.0.clone(),
-                path: Some(v.path.to_string_lossy().to_string()),
+                path: if self.session.is_admin() {
+                    Some(v.path.to_string_lossy().to_string())
+                } else {
+                    None
+                },
             })
             .collect())
     }
@@ -410,6 +404,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     pub(crate) conn_pool: Pool<PostgresConnectionManager<Tls>>,
+    pub(crate) session: UserSession,
 }
 
 impl<Tls> PostgresDb<Tls>
@@ -419,17 +414,38 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>) -> Self {
-        Self { conn_pool }
+    pub fn new(conn_pool: Pool<PostgresConnectionManager<Tls>>, session: UserSession) -> Self {
+        Self { conn_pool, session }
     }
 
-    /// Check whether the namespace of the given dataset is allowed for insertion
-    pub(crate) fn check_namespace(id: &DatasetName) -> Result<()> {
-        // due to a lack of users, etc., we only allow one namespace for now
-        if id.namespace.is_none() {
+    /// Check whether the namepsace of the given dataset is allowed for insertion
+    pub(crate) fn check_dataset_namespace(&self, id: &DatasetName) -> Result<()> {
+        let is_ok = match &id.namespace {
+            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
+            None => self.session.is_admin(),
+        };
+
+        if is_ok {
             Ok(())
         } else {
             Err(Error::InvalidDatasetIdNamespace)
+        }
+    }
+
+    /// Check whether the namepsace of the given model is allowed for insertion
+    pub(crate) fn check_ml_model_namespace(
+        &self,
+        name: &MlModelName,
+    ) -> Result<(), MachineLearningError> {
+        let is_ok = match &name.namespace {
+            Some(namespace) => namespace.as_str() == self.session.user.id.to_string(),
+            None => self.session.is_admin(),
+        };
+
+        if is_ok {
+            Ok(())
+        } else {
+            Err(MachineLearningError::InvalidModelNamespace { name: name.clone() })
         }
     }
 }
@@ -443,39 +459,12 @@ where
 {
 }
 
-impl TryFrom<config::Postgres> for Config {
-    type Error = Error;
-
-    fn try_from(db_config: config::Postgres) -> Result<Self> {
-        ensure!(
-            db_config.schema != "public",
-            crate::error::InvalidDatabaseSchema
-        );
-
-        let mut pg_config = Config::new();
-        pg_config
-            .user(&db_config.user)
-            .password(&db_config.password)
-            .host(&db_config.host)
-            .dbname(&db_config.database)
-            .port(db_config.port)
-            // fix schema by providing `search_path` option
-            .options(format!("-c search_path={}", db_config.schema));
-        Ok(pg_config)
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::datasets::external::aruna::ArunaDataProviderDefinition;
-    use crate::datasets::external::gbif::{GbifDataProvider, GbifDataProviderDefinition};
-    use crate::datasets::external::gfbio_abcd::GfbioAbcdDataProviderDefinition;
-    use crate::datasets::external::gfbio_collections::GfbioCollectionsDataProviderDefinition;
-    use crate::datasets::external::netcdfcf::{
-        EbvPortalDataProviderDefinition, NetCdfCfDataProviderDefinition,
-    };
-    use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
+    use crate::api::model::datatypes::RasterDataType as ApiRasterDataType;
+    use crate::config::QuotaTrackingMode;
+    use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
     use crate::datasets::listing::{DatasetProvider, Provenance};
     use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
@@ -484,10 +473,9 @@ mod tests {
     use crate::datasets::{AddDataset, DatasetIdAndName};
     use crate::ge_context;
     use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
-    use crate::layers::external::TypedDataProviderDefinition;
     use crate::layers::layer::{
         AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
-        LayerCollectionListing, LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
+        LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
     };
     use crate::layers::listing::{
         LayerCollectionId, LayerCollectionProvider, SearchParameters, SearchType,
@@ -496,82 +484,165 @@ mod tests {
         LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
         INTERNAL_PROVIDER_ID,
     };
+    use crate::machine_learning::{MlModel, MlModelDb, MlModelIdAndName, MlModelMetadata};
+    use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
     use crate::projects::{
-        ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LineSymbology,
-        LoadVersion, NumberParam, OrderBy, Plot, PlotUpdate, PointSymbology, PolygonSymbology,
-        ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, RasterSymbology,
-        STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+        CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
+        ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
+        UpdateProject,
     };
-    use crate::util::encryption::U96;
-    use crate::util::postgres::{assert_sql_type, DatabaseConnectionConfig};
-    use crate::util::tests::register_ndvi_workflow_helper;
+    use crate::users::{OidcTokens, SessionTokenStore};
+    use crate::users::{RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration};
+    use crate::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
+    use crate::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
-    use aes_gcm::aead::generic_array::arr;
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
-    use geoengine_datatypes::operations::image::{
-        Breakpoint, Colorizer, RasterColorizer, RgbParams, RgbaColor,
-    };
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, ClassificationMeasurement, ColumnSelection, ContinuousMeasurement,
-        Coordinate2D, DateTimeParseFormat, FeatureDataType, MultiLineString, MultiPoint,
-        MultiPolygon, NoGeometry, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
-        TimeGranularity, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
+        BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
+        RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
+        TimeStep, VectorQueryRectangle,
     };
-    use geoengine_datatypes::primitives::{CacheTtlSeconds, Measurement};
-    use geoengine_datatypes::raster::{
-        RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    };
+    use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
+    use geoengine_datatypes::raster::RasterDataType;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::test_data;
-    use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::util::{NotNanF64, StringPair};
+    use geoengine_datatypes::util::Identifier;
     use geoengine_operators::engine::{
         MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-        PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
-        StaticMetaData, TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
-        VectorResultDescriptor,
+        RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
+        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
-    use geoengine_operators::mock::{
-        MockDatasetDataSourceLoadingInfo, MockPointSource, MockPointSourceParams,
-    };
+    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{
         CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
-        GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalMetaDataList,
-        GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf,
-        GdalRetryOptions, GdalSourceTimePlaceholder, OgrSourceColumnSpec, OgrSourceDataset,
+        GdalDatasetParameters, GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular,
+        GdalMetaDataStatic, GdalMetadataNetCdfCf, OgrSourceColumnSpec, OgrSourceDataset,
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
-        TimeReference, UnixTimeStampType,
     };
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
-    use ordered_float::NotNan;
+    use httptest::Server;
+    use oauth2::{AccessToken, RefreshToken};
+    use openidconnect::SubjectIdentifier;
     use serde_json::json;
-    use std::marker::PhantomData;
     use std::str::FromStr;
-    use tokio_postgres::config::Host;
 
     #[ge_context::test]
     async fn test(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        anonymous(&app_ctx).await;
+
+        let _user_id = user_reg_login(&app_ctx).await;
+
+        let session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".into(),
+                password: "secret123".into(),
+            })
+            .await
+            .unwrap();
 
         create_projects(&app_ctx, &session).await;
 
         let projects = list_projects(&app_ctx, &session).await;
 
+        set_session(&app_ctx, &projects).await;
+
         let project_id = projects[0].id;
 
         update_projects(&app_ctx, &session, project_id).await;
 
+        add_permission(&app_ctx, &session, project_id).await;
+
         delete_project(&app_ctx, &session, project_id).await;
+    }
+
+    #[ge_context::test]
+    async fn test_external(app_ctx: PostgresContext<NoTls>) {
+        anonymous(&app_ctx).await;
+
+        let session = external_user_login_twice(&app_ctx).await;
+
+        create_projects(&app_ctx, &session).await;
+
+        let projects = list_projects(&app_ctx, &session).await;
+
+        set_session_external(&app_ctx, &projects).await;
+
+        let project_id = projects[0].id;
+
+        update_projects(&app_ctx, &session, project_id).await;
+
+        add_permission(&app_ctx, &session, project_id).await;
+
+        delete_project(&app_ctx, &session, project_id).await;
+    }
+
+    fn tokens_from_duration(duration: Duration) -> OidcTokens {
+        OidcTokens {
+            access: AccessToken::new("AccessToken".to_string()),
+            refresh: None,
+            expires_in: duration,
+        }
+    }
+
+    async fn set_session(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+        let credentials = UserCredentials {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+        };
+
+        let session = app_ctx.login(credentials).await.unwrap();
+
+        set_session_in_database(app_ctx, projects, session).await;
+    }
+
+    async fn set_session_external(app_ctx: &PostgresContext<NoTls>, projects: &[ProjectListing]) {
+        let external_user_claims = UserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+
+        let session = app_ctx
+            .login_external(
+                external_user_claims,
+                tokens_from_duration(Duration::minutes(10)),
+            )
+            .await
+            .unwrap();
+
+        set_session_in_database(app_ctx, projects, session).await;
+    }
+
+    async fn set_session_in_database(
+        app_ctx: &PostgresContext<NoTls>,
+        projects: &[ProjectListing],
+        session: UserSession,
+    ) {
+        let db = app_ctx.session_context(session.clone()).db();
+
+        db.set_session_project(projects[0].id).await.unwrap();
+
+        assert_eq!(
+            app_ctx.session_by_id(session.id).await.unwrap().project,
+            Some(projects[0].id)
+        );
+
+        let rect = STRectangle::new_unchecked(SpatialReference::epsg_4326(), 0., 1., 2., 3., 1, 2);
+        db.set_session_view(rect.clone()).await.unwrap();
+        assert_eq!(
+            app_ctx.session_by_id(session.id).await.unwrap().view,
+            Some(rect)
+        );
     }
 
     async fn delete_project(
         app_ctx: &PostgresContext<NoTls>,
-        session: &SimpleSession,
+        session: &UserSession,
         project_id: ProjectId,
     ) {
         let db = app_ctx.session_context(session.clone()).db();
@@ -581,10 +652,55 @@ mod tests {
         assert!(db.load_project(project_id).await.is_err());
     }
 
+    async fn add_permission(
+        app_ctx: &PostgresContext<NoTls>,
+        session: &UserSession,
+        project_id: ProjectId,
+    ) {
+        let db = app_ctx.session_context(session.clone()).db();
+
+        assert!(db
+            .has_permission(project_id, Permission::Owner)
+            .await
+            .unwrap());
+
+        let user2 = app_ctx
+            .register_user(UserRegistration {
+                email: "user2@example.com".into(),
+                password: "12345678".into(),
+                real_name: "User2".into(),
+            })
+            .await
+            .unwrap();
+
+        let session2 = app_ctx
+            .login(UserCredentials {
+                email: "user2@example.com".into(),
+                password: "12345678".into(),
+            })
+            .await
+            .unwrap();
+
+        let db2 = app_ctx.session_context(session2.clone()).db();
+        assert!(!db2
+            .has_permission(project_id, Permission::Owner)
+            .await
+            .unwrap());
+
+        db.add_permission(user2.into(), project_id, Permission::Read)
+            .await
+            .unwrap();
+
+        assert!(db2
+            .has_permission(project_id, Permission::Read)
+            .await
+            .unwrap());
+    }
+
     #[allow(clippy::too_many_lines)]
     async fn update_projects(
         app_ctx: &PostgresContext<NoTls>,
-        session: &SimpleSession,
+        session: &UserSession,
         project_id: ProjectId,
     ) {
         let db = app_ctx.session_context(session.clone()).db();
@@ -699,7 +815,7 @@ mod tests {
 
     async fn list_projects(
         app_ctx: &PostgresContext<NoTls>,
-        session: &SimpleSession,
+        session: &UserSession,
     ) -> Vec<ProjectListing> {
         let options = ProjectListOptions {
             order: OrderBy::NameDesc,
@@ -717,7 +833,7 @@ mod tests {
         projects
     }
 
-    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &SimpleSession) {
+    async fn create_projects(app_ctx: &PostgresContext<NoTls>, session: &UserSession) {
         let db = app_ctx.session_context(session.clone()).db();
 
         for i in 0..10 {
@@ -740,6 +856,105 @@ mod tests {
         }
     }
 
+    async fn user_reg_login(app_ctx: &PostgresContext<NoTls>) -> UserId {
+        let user_registration = UserRegistration {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+            real_name: "Foo Bar".into(),
+        };
+
+        let user_id = app_ctx.register_user(user_registration).await.unwrap();
+
+        let credentials = UserCredentials {
+            email: "foo@example.com".into(),
+            password: "secret123".into(),
+        };
+
+        let session = app_ctx.login(credentials).await.unwrap();
+
+        let db = app_ctx.session_context(session.clone()).db();
+
+        app_ctx.session_by_id(session.id).await.unwrap();
+
+        db.logout().await.unwrap();
+
+        assert!(app_ctx.session_by_id(session.id).await.is_err());
+
+        user_id
+    }
+
+    async fn external_user_login_twice(app_ctx: &PostgresContext<NoTls>) -> UserSession {
+        let external_user_claims = UserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+        let duration = Duration::minutes(30);
+
+        let login_result = app_ctx
+            .login_external(external_user_claims.clone(), tokens_from_duration(duration))
+            .await;
+        assert!(login_result.is_ok());
+
+        let session_1 = login_result.unwrap();
+        let user_id = session_1.user.id; //TODO: Not a deterministic test.
+
+        let db1 = app_ctx.session_context(session_1.clone()).db();
+
+        assert!(session_1.user.email.is_some());
+        assert_eq!(session_1.user.email.unwrap(), "foo@bar.de");
+        assert!(session_1.user.real_name.is_some());
+        assert_eq!(session_1.user.real_name.unwrap(), "Foo Bar");
+
+        let expected_duration = session_1.created + duration;
+        assert_eq!(session_1.valid_until, expected_duration);
+
+        assert!(app_ctx.session_by_id(session_1.id).await.is_ok());
+
+        assert!(db1.logout().await.is_ok());
+
+        assert!(app_ctx.session_by_id(session_1.id).await.is_err());
+
+        let duration = Duration::minutes(10);
+        let login_result = app_ctx
+            .login_external(external_user_claims.clone(), tokens_from_duration(duration))
+            .await;
+        assert!(login_result.is_ok());
+
+        let session_2 = login_result.unwrap();
+        let result = session_2.clone();
+
+        assert!(session_2.user.email.is_some()); //TODO: Technically, user details could change for each login. For simplicity, this is not covered yet.
+        assert_eq!(session_2.user.email.unwrap(), "foo@bar.de");
+        assert!(session_2.user.real_name.is_some());
+        assert_eq!(session_2.user.real_name.unwrap(), "Foo Bar");
+        assert_eq!(session_2.user.id, user_id);
+
+        let expected_duration = session_2.created + duration;
+        assert_eq!(session_2.valid_until, expected_duration);
+
+        assert!(app_ctx.session_by_id(session_2.id).await.is_ok());
+
+        result
+    }
+
+    async fn anonymous(app_ctx: &PostgresContext<NoTls>) {
+        let now: DateTime = chrono::offset::Utc::now().into();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let then: DateTime = chrono::offset::Utc::now().into();
+
+        assert!(session.created >= now && session.created <= then);
+        assert!(session.valid_until > session.created);
+
+        let session = app_ctx.session_by_id(session.id).await.unwrap();
+
+        let db = app_ctx.session_context(session.clone()).db();
+
+        db.logout().await.unwrap();
+
+        assert!(app_ctx.session_by_id(session.id).await.is_err());
+    }
+
     #[ge_context::test]
     async fn it_persists_workflows(app_ctx: PostgresContext<NoTls>) {
         let workflow = Workflow {
@@ -753,7 +968,7 @@ mod tests {
             ),
         };
 
-        let session = app_ctx.default_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session);
 
         let db = ctx.db();
@@ -828,9 +1043,9 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let session = app_ctx.default_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let dataset_name = DatasetName::new(None, "my_dataset");
+        let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
 
         let db = app_ctx.session_context(session.clone()).db();
         let DatasetIdAndName {
@@ -943,7 +1158,7 @@ mod tests {
             }],
         };
 
-        let session = app_ctx.default_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let db = app_ctx.session_context(session.clone()).db();
 
@@ -957,12 +1172,12 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_persists_layer_providers(app_ctx: PostgresContext<NoTls>) {
-        let db = app_ctx.default_session_context().await.unwrap().db();
+        let db = app_ctx.session_context(UserSession::admin_session()).db();
 
         let provider = NetCdfCfDataProviderDefinition {
             name: "netcdfcf".to_string(),
             description: "NetCdfCfProviderDefinition".to_string(),
-            priority: Some(21),
+            priority: Some(33),
             data: test_data!("netcdf4d/").into(),
             overviews: test_data!("netcdf4d/overviews/").into(),
             cache_ttl: CacheTtlSeconds::new(0),
@@ -985,7 +1200,7 @@ mod tests {
             LayerProviderListing {
                 id: provider_id,
                 name: "netcdfcf".to_owned(),
-                priority: 21,
+                priority: 33,
             }
         );
 
@@ -1002,13 +1217,325 @@ mod tests {
             .await
             .unwrap();
 
-        assert_eq!(datasets.items.len(), 5, "{:?}", datasets.items);
+        assert_eq!(datasets.items.len(), 5);
+    }
+
+    #[ge_context::test]
+    async fn it_lists_only_permitted_datasets(app_ctx: PostgresContext<NoTls>) {
+        let session1 = app_ctx.create_anonymous_session().await.unwrap();
+        let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let _id = db1.add_dataset(ds, meta.into()).await.unwrap();
+
+        let list1 = db1
+            .list_datasets(DatasetListOptions {
+                filter: None,
+                order: crate::datasets::listing::OrderBy::NameAsc,
+                offset: 0,
+                limit: 1,
+                tags: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(list1.len(), 1);
+
+        let list2 = db2
+            .list_datasets(DatasetListOptions {
+                filter: None,
+                order: crate::datasets::listing::OrderBy::NameAsc,
+                offset: 0,
+                limit: 1,
+                tags: None,
+            })
+            .await
+            .unwrap();
+
+        assert_eq!(list2.len(), 0);
+    }
+
+    #[ge_context::test]
+    async fn it_shows_only_permitted_provenance(app_ctx: PostgresContext<NoTls>) {
+        let session1 = app_ctx.create_anonymous_session().await.unwrap();
+        let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+
+        assert!(db1.load_provenance(&id).await.is_ok());
+
+        assert!(db2.load_provenance(&id).await.is_err());
+    }
+
+    #[ge_context::test]
+    async fn it_updates_permissions(app_ctx: PostgresContext<NoTls>) {
+        let session1 = app_ctx.create_anonymous_session().await.unwrap();
+        let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+
+        assert!(db1.load_dataset(&id).await.is_ok());
+
+        assert!(db2.load_dataset(&id).await.is_err());
+
+        db1.add_permission(session2.user.id.into(), id, Permission::Read)
+            .await
+            .unwrap();
+
+        assert!(db2.load_dataset(&id).await.is_ok());
+    }
+
+    #[ge_context::test]
+    async fn it_uses_roles_for_permissions(app_ctx: PostgresContext<NoTls>) {
+        let session1 = app_ctx.create_anonymous_session().await.unwrap();
+        let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+
+        assert!(db1.load_dataset(&id).await.is_ok());
+
+        assert!(db2.load_dataset(&id).await.is_err());
+
+        db1.add_permission(session2.user.id.into(), id, Permission::Read)
+            .await
+            .unwrap();
+
+        assert!(db2.load_dataset(&id).await.is_ok());
+    }
+
+    #[ge_context::test]
+    async fn it_secures_meta_data(app_ctx: PostgresContext<NoTls>) {
+        let session1 = app_ctx.create_anonymous_session().await.unwrap();
+        let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+
+        let descriptor = VectorResultDescriptor {
+            data_type: VectorDataType::Data,
+            spatial_reference: SpatialReferenceOption::Unreferenced,
+            columns: Default::default(),
+            time: None,
+            bbox: None,
+        };
+
+        let ds = AddDataset {
+            name: None,
+            display_name: "OgrDataset".to_string(),
+            description: "My Ogr dataset".to_string(),
+            source_operator: "OgrSource".to_string(),
+            symbology: None,
+            provenance: None,
+            tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        };
+
+        let meta = StaticMetaData {
+            loading_info: OgrSourceDataset {
+                file_name: Default::default(),
+                layer_name: String::new(),
+                data_type: None,
+                time: Default::default(),
+                default_geometry: None,
+                columns: None,
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: None,
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            },
+            result_descriptor: descriptor.clone(),
+            phantom: Default::default(),
+        };
+
+        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+
+        let meta: geoengine_operators::util::Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = db1.meta_data(&id.into()).await;
+
+        assert!(meta.is_ok());
+
+        let meta: geoengine_operators::util::Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = db2.meta_data(&id.into()).await;
+
+        assert!(meta.is_err());
+
+        db1.add_permission(session2.user.id.into(), id, Permission::Read)
+            .await
+            .unwrap();
+
+        let meta: geoengine_operators::util::Result<
+            Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        > = db2.meta_data(&id.into()).await;
+
+        assert!(meta.is_ok());
     }
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_loads_all_meta_data_types(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let db = app_ctx.session_context(session.clone()).db();
 
@@ -1181,10 +1708,36 @@ mod tests {
         assert!(meta.is_ok());
     }
 
+    #[ge_context::test]
+    async fn it_secures_uploads(app_ctx: PostgresContext<NoTls>) {
+        let session1 = app_ctx.create_anonymous_session().await.unwrap();
+        let session2 = app_ctx.create_anonymous_session().await.unwrap();
+
+        let db1 = app_ctx.session_context(session1.clone()).db();
+        let db2 = app_ctx.session_context(session2.clone()).db();
+
+        let upload_id = UploadId::new();
+
+        let upload = Upload {
+            id: upload_id,
+            files: vec![FileUpload {
+                id: FileId::new(),
+                name: "test.bin".to_owned(),
+                byte_size: 1024,
+            }],
+        };
+
+        db1.create_upload(upload).await.unwrap();
+
+        assert!(db1.load_upload(upload_id).await.is_ok());
+
+        assert!(db2.load_upload(upload_id).await.is_err());
+    }
+
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_collects_layers(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
 
@@ -1379,7 +1932,7 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_searches_layers(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
 
@@ -1723,8 +2276,514 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
+    async fn it_searches_layers_with_permissions(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_layer_db = app_ctx.session_context(admin_session).db();
+
+        let user_session = app_ctx.create_anonymous_session().await.unwrap();
+        let user_layer_db = app_ctx.session_context(user_session.clone()).db();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let root_collection_id = admin_layer_db.get_root_layer_collection_id().await.unwrap();
+
+        let layer1 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection1_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer2 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let collection2_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection2".to_string(),
+                    description: "Collection 2".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let collection3_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection3".to_string(),
+                    description: "Collection 3".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let layer3 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer3".to_string(),
+                    description: "Layer 3".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection2_id,
+            )
+            .await
+            .unwrap();
+
+        // Grant user permissions for collection1, collection2, layer1 and layer2
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                collection1_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                collection2_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                layer1.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                layer2.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        // Ensure admin sees everything we added
+        let admin_root_collection_all = admin_layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            admin_root_collection_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection3_id.clone(),
+                        },
+                        name: "Collection3".to_string(),
+                        description: "Collection 3".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f".to_string()
+                            ),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1.clone(),
+                        },
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer3.clone(),
+                        },
+                        name: "Layer3".to_string(),
+                        description: "Layer 3".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let root_collection_all = user_layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f".to_string()
+                            ),
+                        },
+                        name: "Unsorted".to_string(),
+                        description: "Unsorted Layers".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer1.clone(),
+                        },
+                        name: "Layer1".to_string(),
+                        description: "Layer 1".to_string(),
+                        properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let root_collection_filtered = user_layer_db
+            .search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "lection".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_filtered,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: root_collection_id.clone(),
+                },
+                name: "Layers".to_string(),
+                description: "All available Geo Engine layers".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection1_id.clone(),
+                        },
+                        name: "Collection1".to_string(),
+                        description: "Collection 1".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_all = user_layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_all,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            collection_id: collection2_id.clone(),
+                        },
+                        name: "Collection2".to_string(),
+                        description: "Collection 2".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: INTERNAL_PROVIDER_ID,
+                            layer_id: layer2.clone(),
+                        },
+                        name: "Layer2".to_string(),
+                        description: "Layer 2".to_string(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_fulltext = user_layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_fulltext,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer2.clone(),
+                    },
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    properties: vec![],
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_prefix = user_layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_prefix,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection1_filtered_prefix2 = user_layer_db
+            .search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Lay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_filtered_prefix2,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: INTERNAL_PROVIDER_ID,
+                    collection_id: collection1_id.clone(),
+                },
+                name: "Collection1".to_string(),
+                description: "Collection 1".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: INTERNAL_PROVIDER_ID,
+                        layer_id: layer2.clone(),
+                    },
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    properties: vec![],
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
     async fn it_autocompletes_layers(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
 
@@ -1903,8 +2962,281 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
+    async fn it_autocompletes_layers_with_permissions(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_layer_db = app_ctx.session_context(admin_session).db();
+
+        let user_session = app_ctx.create_anonymous_session().await.unwrap();
+        let user_layer_db = app_ctx.session_context(user_session.clone()).db();
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                MockPointSource {
+                    params: MockPointSourceParams {
+                        points: vec![Coordinate2D::new(1., 2.); 3],
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let root_collection_id = admin_layer_db.get_root_layer_collection_id().await.unwrap();
+
+        let layer1 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer1".to_string(),
+                    description: "Layer 1".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: [("meta".to_string(), "datum".to_string())].into(),
+                    properties: vec![("proper".to_string(), "tee".to_string()).into()],
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let collection1_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection1".to_string(),
+                    description: "Collection 1".to_string(),
+                    properties: Default::default(),
+                },
+                &root_collection_id,
+            )
+            .await
+            .unwrap();
+
+        let layer2 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer2".to_string(),
+                    description: "Layer 2".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let collection2_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection2".to_string(),
+                    description: "Collection 2".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let _collection3_id = admin_layer_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "Collection3".to_string(),
+                    description: "Collection 3".to_string(),
+                    properties: Default::default(),
+                },
+                &collection1_id,
+            )
+            .await
+            .unwrap();
+
+        let _layer3 = admin_layer_db
+            .add_layer(
+                AddLayer {
+                    name: "Layer3".to_string(),
+                    description: "Layer 3".to_string(),
+                    symbology: None,
+                    workflow: workflow.clone(),
+                    metadata: Default::default(),
+                    properties: Default::default(),
+                },
+                &collection2_id,
+            )
+            .await
+            .unwrap();
+
+        // Grant user permissions for collection1, collection2, layer1 and layer2
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                collection1_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                collection2_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                layer1.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        admin_layer_db
+            .add_permission(
+                user_session.user.id.into(),
+                layer2.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        // Ensure admin sees everything we added
+        let admin_root_collection_all = admin_layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            admin_root_collection_all,
+            vec![
+                "Collection1".to_string(),
+                "Collection2".to_string(),
+                "Collection3".to_string(),
+                "Layer1".to_string(),
+                "Layer2".to_string(),
+                "Layer3".to_string(),
+                "Unsorted".to_string(),
+            ]
+        );
+
+        let root_collection_all = user_layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_all,
+            vec![
+                "Collection1".to_string(),
+                "Collection2".to_string(),
+                "Layer1".to_string(),
+                "Layer2".to_string(),
+                "Unsorted".to_string(),
+            ]
+        );
+
+        let root_collection_filtered = user_layer_db
+            .autocomplete_search(
+                &root_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "lection".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            root_collection_filtered,
+            vec!["Collection1".to_string(), "Collection2".to_string(),]
+        );
+
+        let collection1_all = user_layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: String::new(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection1_all,
+            vec!["Collection2".to_string(), "Layer2".to_string(),]
+        );
+
+        let collection1_filtered_fulltext = user_layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_fulltext, vec!["Layer2".to_string(),]);
+
+        let collection1_filtered_prefix = user_layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "ay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_prefix, Vec::<String>::new());
+
+        let collection1_filtered_prefix2 = user_layer_db
+            .autocomplete_search(
+                &collection1_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Lay".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(collection1_filtered_prefix2, vec!["Layer2".to_string(),]);
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
     async fn it_reports_search_capabilities(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
 
@@ -1998,10 +3330,163 @@ mod tests {
         }
     }
 
+    #[ge_context::test]
+    async fn it_tracks_used_quota_in_postgres(app_ctx: PostgresContext<NoTls>) {
+        let _user = app_ctx
+            .register_user(UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+                real_name: "Foo Bar".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let admin_session = admin_login(&app_ctx).await;
+
+        let quota = initialize_quota_tracking(
+            QuotaTrackingMode::Check,
+            app_ctx.session_context(admin_session).db(),
+            0,
+            60,
+        );
+
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
+
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
+
+        let db = app_ctx.session_context(session).db();
+
+        // wait for quota to be recorded
+        let mut success = false;
+        for _ in 0..10 {
+            let used = db.quota_used().await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+            if used == 2 {
+                success = true;
+                break;
+            }
+        }
+
+        assert!(success);
+    }
+
+    #[ge_context::test]
+    async fn it_tracks_available_quota(app_ctx: PostgresContext<NoTls>) {
+        let user = app_ctx
+            .register_user(UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+                real_name: "Foo Bar".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let admin_session = admin_login(&app_ctx).await;
+
+        app_ctx
+            .session_context(admin_session.clone())
+            .db()
+            .update_quota_available_by_user(&user, 1)
+            .await
+            .unwrap();
+
+        let quota = initialize_quota_tracking(
+            QuotaTrackingMode::Check,
+            app_ctx.session_context(admin_session).db(),
+            0,
+            60,
+        );
+
+        let tracking = quota.create_quota_tracking(&session, Uuid::new_v4(), Uuid::new_v4());
+
+        tracking.mock_work_unit_done();
+        tracking.mock_work_unit_done();
+
+        let db = app_ctx.session_context(session).db();
+
+        // wait for quota to be recorded
+        let mut success = false;
+        for _ in 0..10 {
+            let available = db.quota_available().await.unwrap();
+            tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+
+            if available == -1 {
+                success = true;
+                break;
+            }
+        }
+
+        assert!(success);
+    }
+
+    #[ge_context::test]
+    async fn it_updates_quota_in_postgres(app_ctx: PostgresContext<NoTls>) {
+        let user = app_ctx
+            .register_user(UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+                real_name: "Foo Bar".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret1234".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let db = app_ctx.session_context(session.clone()).db();
+        let admin_db = app_ctx.session_context(UserSession::admin_session()).db();
+
+        assert_eq!(
+            db.quota_available().await.unwrap(),
+            crate::config::get_config_element::<crate::config::Quota>()
+                .unwrap()
+                .initial_credits
+        );
+
+        assert_eq!(
+            admin_db.quota_available_by_user(&user).await.unwrap(),
+            crate::config::get_config_element::<crate::config::Quota>()
+                .unwrap()
+                .initial_credits
+        );
+
+        admin_db
+            .update_quota_available_by_user(&user, 123)
+            .await
+            .unwrap();
+
+        assert_eq!(db.quota_available().await.unwrap(), 123);
+
+        assert_eq!(admin_db.quota_available_by_user(&user).await.unwrap(), 123);
+    }
+
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
     async fn it_removes_layer_collections(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
 
         let layer_db = app_ctx.session_context(session).db();
 
@@ -2168,7 +3653,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_removes_collections_from_collections(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
 
@@ -2249,7 +3734,7 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_removes_layers_from_collections(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
 
@@ -2314,6 +3799,8 @@ mod tests {
             )
             .await
             .unwrap();
+
+        db.load_layer(&layer_in_two_collections).await.unwrap();
 
         db.add_layer_to_collection(&layer_in_two_collections, root_collection)
             .await
@@ -2428,9 +3915,9 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let session = app_ctx.default_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
-        let dataset_name = DatasetName::new(None, "my_dataset");
+        let dataset_name = DatasetName::new(Some(session.user.id.to_string()), "my_dataset");
 
         let db = app_ctx.session_context(session.clone()).db();
         let dataset_id = db
@@ -2521,7 +4008,7 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
 
         let db = app_ctx.session_context(session).db();
         let dataset_id = db
@@ -2554,7 +4041,7 @@ mod tests {
 
     #[ge_context::test]
     async fn test_missing_layer_dataset_in_collection_listing(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = admin_login(&app_ctx).await;
         let db = app_ctx.session_context(session).db();
 
         let root_collection_id = &db.get_root_layer_collection_id().await.unwrap();
@@ -2609,8 +4096,237 @@ mod tests {
 
     #[allow(clippy::too_many_lines)]
     #[ge_context::test]
+    async fn it_restricts_layer_permissions(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+        let session1 = app_ctx.create_anonymous_session().await.unwrap();
+
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
+        let db1 = app_ctx.session_context(session1.clone()).db();
+
+        let root = admin_db.get_root_layer_collection_id().await.unwrap();
+
+        // add new collection as admin
+        let new_collection_id = admin_db
+            .add_layer_collection(
+                AddLayerCollection {
+                    name: "admin collection".to_string(),
+                    description: String::new(),
+                    properties: Default::default(),
+                },
+                &root,
+            )
+            .await
+            .unwrap();
+
+        // load as regular user, not visible
+        let collection = db1
+            .load_layer_collection(
+                &root,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await
+            .unwrap();
+        assert!(!collection.items.iter().any(|c| match c {
+            CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
+            CollectionItem::Layer(_) => false,
+        }));
+
+        // give user read permission
+        admin_db
+            .add_permission(
+                session1.user.id.into(),
+                new_collection_id.clone(),
+                Permission::Read,
+            )
+            .await
+            .unwrap();
+
+        // now visible
+        let collection = db1
+            .load_layer_collection(
+                &root,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert!(collection.items.iter().any(|c| match c {
+            CollectionItem::Collection(c) => c.id.collection_id == new_collection_id,
+            CollectionItem::Layer(_) => false,
+        }));
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
+    async fn it_handles_user_roles(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = admin_login(&app_ctx).await;
+        let user_id = app_ctx
+            .register_user(UserRegistration {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+                real_name: "Foo Bar".to_string(),
+            })
+            .await
+            .unwrap();
+
+        let admin_db = app_ctx.session_context(admin_session.clone()).db();
+
+        // create a new role
+        let role_id = admin_db.add_role("foo").await.unwrap();
+
+        let user_session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // user does not have the role yet
+
+        assert!(!user_session.roles.contains(&role_id));
+
+        //user can query their role descriptions (user role and registered user)
+        assert_eq!(user_session.roles.len(), 2);
+
+        let expected_user_role_description = RoleDescription {
+            role: Role {
+                id: RoleId::from(user_id),
+                name: "foo@example.com".to_string(),
+            },
+            individual: true,
+        };
+        let expected_registered_role_description = RoleDescription {
+            role: Role {
+                id: Role::registered_user_role_id(),
+                name: "user".to_string(),
+            },
+            individual: false,
+        };
+
+        let user_role_descriptions = app_ctx
+            .session_context(user_session.clone())
+            .db()
+            .get_role_descriptions(&user_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            vec![
+                expected_user_role_description.clone(),
+                expected_registered_role_description.clone(),
+            ],
+            user_role_descriptions
+        );
+
+        // we assign the role to the user
+        admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+        let user_session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // should be present now
+        assert!(user_session.roles.contains(&role_id));
+
+        //user can query their role descriptions (now an additional foo role)
+        let expected_foo_role_description = RoleDescription {
+            role: Role {
+                id: role_id,
+                name: "foo".to_string(),
+            },
+            individual: false,
+        };
+
+        let user_role_descriptions = app_ctx
+            .session_context(user_session.clone())
+            .db()
+            .get_role_descriptions(&user_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            vec![
+                expected_foo_role_description,
+                expected_user_role_description.clone(),
+                expected_registered_role_description.clone(),
+            ],
+            user_role_descriptions
+        );
+
+        // we revoke it
+        admin_db.revoke_role(&role_id, &user_id).await.unwrap();
+
+        let user_session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        // the role is gone now
+        assert!(!user_session.roles.contains(&role_id));
+
+        //user can query their role descriptions (user role and registered user)
+        let user_role_descriptions = app_ctx
+            .session_context(user_session.clone())
+            .db()
+            .get_role_descriptions(&user_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            vec![
+                expected_user_role_description.clone(),
+                expected_registered_role_description.clone(),
+            ],
+            user_role_descriptions
+        );
+
+        // assign it again and then delete the whole role, should not be present at user
+
+        admin_db.assign_role(&role_id, &user_id).await.unwrap();
+
+        admin_db.remove_role(&role_id).await.unwrap();
+
+        let user_session = app_ctx
+            .login(UserCredentials {
+                email: "foo@example.com".to_string(),
+                password: "secret123".to_string(),
+            })
+            .await
+            .unwrap();
+
+        assert!(!user_session.roles.contains(&role_id));
+
+        //user can query their role descriptions (user role and registered user)
+        let user_role_descriptions = app_ctx
+            .session_context(user_session.clone())
+            .db()
+            .get_role_descriptions(&user_id)
+            .await
+            .unwrap();
+        assert_eq!(
+            vec![
+                expected_user_role_description,
+                expected_registered_role_description.clone(),
+            ],
+            user_role_descriptions
+        );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[ge_context::test]
     async fn it_updates_project_layer_symbology(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
 
         let (_, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -2697,7 +4413,7 @@ mod tests {
                         "type": "singleBand",
                         "band": 0,
                         "bandColorizer": {
-                            "type": "linearGradient",
+                        "type": "linearGradient",
                             "breakpoints": [{
                                 "value": 1,
                                 "color": [0, 0, 4, 255]
@@ -2923,8 +4639,8 @@ mod tests {
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_resolves_dataset_names_to_ids(app_ctx: PostgresContext<NoTls>) {
-        let session = app_ctx.default_session().await.unwrap();
-        let db = app_ctx.session_context(session.clone()).db();
+        let admin_session = UserSession::admin_session();
+        let db = app_ctx.session_context(admin_session.clone()).db();
 
         let loading_info = OgrSourceDataset {
             file_name: PathBuf::from("test.csv"),
@@ -3004,6 +4720,32 @@ mod tests {
             .await
             .unwrap();
 
+        let DatasetIdAndName {
+            id: dataset_id2,
+            name: dataset_name2,
+        } = db
+            .add_dataset(
+                AddDataset {
+                    name: Some(DatasetName::new(
+                        Some(admin_session.user.id.to_string()),
+                        "my_dataset".to_owned(),
+                    )),
+                    display_name: "Ogr Test".to_owned(),
+                    description: "desc".to_owned(),
+                    source_operator: "OgrSource".to_owned(),
+                    symbology: None,
+                    provenance: Some(vec![Provenance {
+                        citation: "citation".to_owned(),
+                        license: "license".to_owned(),
+                        uri: "uri".to_owned(),
+                    }]),
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data,
+            )
+            .await
+            .unwrap();
+
         assert_eq!(
             db.resolve_dataset_name_to_id(&dataset_name1)
                 .await
@@ -3011,1833 +4753,175 @@ mod tests {
                 .unwrap(),
             dataset_id1
         );
+        assert_eq!(
+            db.resolve_dataset_name_to_id(&dataset_name2)
+                .await
+                .unwrap()
+                .unwrap(),
+            dataset_id2
+        );
     }
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_postgres_type_serialization(app_ctx: PostgresContext<NoTls>) {
-        let pool = app_ctx.pool.get().await.unwrap();
+    async fn it_bulk_updates_quota(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = UserSession::admin_session();
+        let db = app_ctx.session_context(admin_session.clone()).db();
 
-        assert_sql_type(&pool, "RgbaColor", [RgbaColor::new(0, 1, 2, 3)]).await;
+        let user1 = app_ctx
+            .register_user(UserRegistration {
+                email: "user1@example.com".into(),
+                password: "12345678".into(),
+                real_name: "User1".into(),
+            })
+            .await
+            .unwrap();
 
-        assert_sql_type(
-            &pool,
-            "double precision",
-            [NotNanF64::from(NotNan::<f64>::new(1.0).unwrap())],
-        )
-        .await;
+        let user2 = app_ctx
+            .register_user(UserRegistration {
+                email: "user2@example.com".into(),
+                password: "12345678".into(),
+                real_name: "User2".into(),
+            })
+            .await
+            .unwrap();
 
-        assert_sql_type(
-            &pool,
-            "Breakpoint",
-            [Breakpoint {
-                value: NotNan::<f64>::new(1.0).unwrap(),
-                color: RgbaColor::new(0, 0, 0, 0),
-            }],
-        )
-        .await;
+        // single item in bulk
+        db.bulk_increment_quota_used([(user1, 1)]).await.unwrap();
 
-        assert_sql_type(
-            &pool,
-            "Colorizer",
-            [
-                Colorizer::LinearGradient {
-                    breakpoints: vec![
-                        Breakpoint {
-                            value: NotNan::<f64>::new(-10.0).unwrap(),
-                            color: RgbaColor::new(0, 0, 0, 0),
-                        },
-                        Breakpoint {
-                            value: NotNan::<f64>::new(2.0).unwrap(),
-                            color: RgbaColor::new(255, 0, 0, 255),
-                        },
-                    ],
-                    no_data_color: RgbaColor::new(0, 10, 20, 30),
-                    over_color: RgbaColor::new(1, 2, 3, 4),
-                    under_color: RgbaColor::new(5, 6, 7, 8),
-                },
-                Colorizer::LogarithmicGradient {
-                    breakpoints: vec![
-                        Breakpoint {
-                            value: NotNan::<f64>::new(1.0).unwrap(),
-                            color: RgbaColor::new(0, 0, 0, 0),
-                        },
-                        Breakpoint {
-                            value: NotNan::<f64>::new(2.0).unwrap(),
-                            color: RgbaColor::new(255, 0, 0, 255),
-                        },
-                    ],
-                    no_data_color: RgbaColor::new(0, 10, 20, 30),
-                    over_color: RgbaColor::new(1, 2, 3, 4),
-                    under_color: RgbaColor::new(5, 6, 7, 8),
-                },
-                Colorizer::palette(
-                    [
-                        (NotNan::<f64>::new(1.0).unwrap(), RgbaColor::new(0, 0, 0, 0)),
-                        (
-                            NotNan::<f64>::new(2.0).unwrap(),
-                            RgbaColor::new(255, 0, 0, 255),
-                        ),
-                        (
-                            NotNan::<f64>::new(3.0).unwrap(),
-                            RgbaColor::new(0, 10, 20, 30),
-                        ),
-                    ]
-                    .into(),
-                    RgbaColor::new(1, 2, 3, 4),
-                    RgbaColor::new(5, 6, 7, 8),
-                )
-                .unwrap(),
-            ],
-        )
-        .await;
+        assert_eq!(db.quota_used_by_user(&user1).await.unwrap(), 1);
 
-        assert_sql_type(
-            &pool,
-            "ColorParam",
-            [
-                ColorParam::Static {
-                    color: RgbaColor::new(0, 10, 20, 30),
-                },
-                ColorParam::Derived(DerivedColor {
-                    attribute: "foobar".to_string(),
-                    colorizer: Colorizer::test_default(),
-                }),
-            ],
-        )
-        .await;
+        // multiple items in bulk
+        db.bulk_increment_quota_used([(user1, 1), (user2, 3)])
+            .await
+            .unwrap();
 
-        assert_sql_type(
-            &pool,
-            "NumberParam",
-            [
-                NumberParam::Static { value: 42 },
-                NumberParam::Derived(DerivedNumber {
-                    attribute: "foobar".to_string(),
-                    factor: 1.0,
-                    default_value: 42.,
-                }),
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "StrokeParam",
-            [StrokeParam {
-                width: NumberParam::Static { value: 42 },
-                color: ColorParam::Static {
-                    color: RgbaColor::new(0, 10, 20, 30),
-                },
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "TextSymbology",
-            [TextSymbology {
-                attribute: "attribute".to_string(),
-                fill_color: ColorParam::Static {
-                    color: RgbaColor::new(0, 10, 20, 30),
-                },
-                stroke: StrokeParam {
-                    width: NumberParam::Static { value: 42 },
-                    color: ColorParam::Static {
-                        color: RgbaColor::new(0, 10, 20, 30),
-                    },
-                },
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "RasterColorizer",
-            [RasterColorizer::SingleBand {
-                band: 0,
-                band_colorizer: Colorizer::LinearGradient {
-                    breakpoints: vec![
-                        Breakpoint {
-                            value: NotNan::<f64>::new(-10.0).unwrap(),
-                            color: RgbaColor::new(0, 0, 0, 0),
-                        },
-                        Breakpoint {
-                            value: NotNan::<f64>::new(2.0).unwrap(),
-                            color: RgbaColor::new(255, 0, 0, 255),
-                        },
-                    ],
-                    no_data_color: RgbaColor::new(0, 10, 20, 30),
-                    over_color: RgbaColor::new(1, 2, 3, 4),
-                    under_color: RgbaColor::new(5, 6, 7, 8),
-                },
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "RasterColorizer",
-            [RasterColorizer::MultiBand {
-                red_band: 0,
-                green_band: 1,
-                blue_band: 2,
-                rgb_params: RgbParams {
-                    red_min: 0.,
-                    red_max: 255.,
-                    red_scale: 1.,
-                    green_min: 0.,
-                    green_max: 255.,
-                    green_scale: 1.,
-                    blue_min: 0.,
-                    blue_max: 255.,
-                    blue_scale: 1.,
-                    no_data_color: RgbaColor::new(0, 10, 20, 30),
-                },
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "Symbology",
-            [
-                Symbology::Point(PointSymbology {
-                    fill_color: ColorParam::Static {
-                        color: RgbaColor::new(0, 10, 20, 30),
-                    },
-                    stroke: StrokeParam {
-                        width: NumberParam::Static { value: 42 },
-                        color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                    },
-                    radius: NumberParam::Static { value: 42 },
-                    text: Some(TextSymbology {
-                        attribute: "attribute".to_string(),
-                        fill_color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                        stroke: StrokeParam {
-                            width: NumberParam::Static { value: 42 },
-                            color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                        },
-                    }),
-                }),
-                Symbology::Line(LineSymbology {
-                    stroke: StrokeParam {
-                        width: NumberParam::Static { value: 42 },
-                        color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                    },
-                    text: Some(TextSymbology {
-                        attribute: "attribute".to_string(),
-                        fill_color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                        stroke: StrokeParam {
-                            width: NumberParam::Static { value: 42 },
-                            color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                        },
-                    }),
-                    auto_simplified: true,
-                }),
-                Symbology::Polygon(PolygonSymbology {
-                    fill_color: ColorParam::Static {
-                        color: RgbaColor::new(0, 10, 20, 30),
-                    },
-                    stroke: StrokeParam {
-                        width: NumberParam::Static { value: 42 },
-                        color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                    },
-                    text: Some(TextSymbology {
-                        attribute: "attribute".to_string(),
-                        fill_color: ColorParam::Static {
-                            color: RgbaColor::new(0, 10, 20, 30),
-                        },
-                        stroke: StrokeParam {
-                            width: NumberParam::Static { value: 42 },
-                            color: ColorParam::Static {
-                                color: RgbaColor::new(0, 10, 20, 30),
-                            },
-                        },
-                    }),
-                    auto_simplified: true,
-                }),
-                Symbology::Raster(RasterSymbology {
-                    opacity: 1.0,
-                    raster_colorizer: RasterColorizer::SingleBand {
-                        band: 0,
-                        band_colorizer: Colorizer::LinearGradient {
-                            breakpoints: vec![
-                                Breakpoint {
-                                    value: NotNan::<f64>::new(-10.0).unwrap(),
-                                    color: RgbaColor::new(0, 0, 0, 0),
-                                },
-                                Breakpoint {
-                                    value: NotNan::<f64>::new(2.0).unwrap(),
-                                    color: RgbaColor::new(255, 0, 0, 255),
-                                },
-                            ],
-                            no_data_color: RgbaColor::new(0, 10, 20, 30),
-                            over_color: RgbaColor::new(1, 2, 3, 4),
-                            under_color: RgbaColor::new(5, 6, 7, 8),
-                        },
-                    },
-                }),
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "RasterDataType",
-            [
-                RasterDataType::U8,
-                RasterDataType::U16,
-                RasterDataType::U32,
-                RasterDataType::U64,
-                RasterDataType::I8,
-                RasterDataType::I16,
-                RasterDataType::I32,
-                RasterDataType::I64,
-                RasterDataType::F32,
-                RasterDataType::F64,
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "Measurement",
-            [
-                Measurement::Unitless,
-                Measurement::Continuous(ContinuousMeasurement {
-                    measurement: "Temperature".to_string(),
-                    unit: Some("°C".to_string()),
-                }),
-                Measurement::Classification(ClassificationMeasurement {
-                    measurement: "Color".to_string(),
-                    classes: [(1, "Grayscale".to_string()), (2, "Colorful".to_string())].into(),
-                }),
-            ],
-        )
-        .await;
-
-        assert_sql_type(&pool, "Coordinate2D", [Coordinate2D::new(0.0f64, 1.)]).await;
-
-        assert_sql_type(
-            &pool,
-            "SpatialPartition2D",
-            [
-                SpatialPartition2D::new(Coordinate2D::new(0.0f64, 1.), Coordinate2D::new(2., 0.5))
-                    .unwrap(),
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "BoundingBox2D",
-            [
-                BoundingBox2D::new(Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0))
-                    .unwrap(),
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "SpatialResolution",
-            [SpatialResolution { x: 1.2, y: 2.3 }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "VectorDataType",
-            [
-                VectorDataType::Data,
-                VectorDataType::MultiPoint,
-                VectorDataType::MultiLineString,
-                VectorDataType::MultiPolygon,
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "FeatureDataType",
-            [
-                FeatureDataType::Category,
-                FeatureDataType::Int,
-                FeatureDataType::Float,
-                FeatureDataType::Text,
-                FeatureDataType::Bool,
-                FeatureDataType::DateTime,
-            ],
-        )
-        .await;
-
-        assert_sql_type(&pool, "TimeInterval", [TimeInterval::default()]).await;
-
-        assert_sql_type(
-            &pool,
-            "SpatialReference",
-            [
-                SpatialReferenceOption::Unreferenced,
-                SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "PlotResultDescriptor",
-            [PlotResultDescriptor {
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                time: None,
-                bbox: None,
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "VectorResultDescriptor",
-            [VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReferenceOption::SpatialReference(
-                    SpatialReference::epsg_4326(),
-                ),
-                columns: [(
-                    "foo".to_string(),
-                    VectorColumnInfo {
-                        data_type: FeatureDataType::Int,
-                        measurement: Measurement::Unitless,
-                    },
-                )]
-                .into(),
-                time: Some(TimeInterval::default()),
-                bbox: Some(
-                    BoundingBox2D::new(Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0))
-                        .unwrap(),
-                ),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "RasterResultDescriptor",
-            [RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReferenceOption::SpatialReference(
-                    SpatialReference::epsg_4326(),
-                ),
-                time: Some(TimeInterval::default()),
-                bbox: Some(
-                    SpatialPartition2D::new(
-                        Coordinate2D::new(0.0f64, 1.),
-                        Coordinate2D::new(2., 0.5),
-                    )
-                    .unwrap(),
-                ),
-                resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
-                bands: RasterBandDescriptors::new_single_band(),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "ResultDescriptor",
-            [
-                TypedResultDescriptor::Vector(VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReferenceOption::SpatialReference(
-                        SpatialReference::epsg_4326(),
-                    ),
-                    columns: [(
-                        "foo".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    )]
-                    .into(),
-                    time: Some(TimeInterval::default()),
-                    bbox: Some(
-                        BoundingBox2D::new(
-                            Coordinate2D::new(0.0f64, 0.5),
-                            Coordinate2D::new(2., 1.0),
-                        )
-                        .unwrap(),
-                    ),
-                }),
-                TypedResultDescriptor::Raster(RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReferenceOption::SpatialReference(
-                        SpatialReference::epsg_4326(),
-                    ),
-                    time: Some(TimeInterval::default()),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution { x: 1.2, y: 2.3 }),
-                    bands: RasterBandDescriptors::new_single_band(),
-                }),
-                TypedResultDescriptor::Plot(PlotResultDescriptor {
-                    spatial_reference: SpatialReferenceOption::Unreferenced,
-                    time: None,
-                    bbox: None,
-                }),
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "MockDatasetDataSourceLoadingInfo",
-            [MockDatasetDataSourceLoadingInfo {
-                points: vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "OgrSourceTimeFormat",
-            [
-                OgrSourceTimeFormat::Auto,
-                OgrSourceTimeFormat::Custom {
-                    custom_format: geoengine_datatypes::primitives::DateTimeParseFormat::custom(
-                        "%Y-%m-%dT%H:%M:%S%.3fZ".to_string(),
-                    ),
-                },
-                OgrSourceTimeFormat::UnixTimeStamp {
-                    timestamp_type: UnixTimeStampType::EpochSeconds,
-                    fmt: geoengine_datatypes::primitives::DateTimeParseFormat::unix(),
-                },
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "OgrSourceDurationSpec",
-            [
-                OgrSourceDurationSpec::Infinite,
-                OgrSourceDurationSpec::Zero,
-                OgrSourceDurationSpec::Value(TimeStep {
-                    granularity: TimeGranularity::Millis,
-                    step: 1000,
-                }),
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "OgrSourceDatasetTimeType",
-            [
-                OgrSourceDatasetTimeType::None,
-                OgrSourceDatasetTimeType::Start {
-                    start_field: "start".to_string(),
-                    start_format: OgrSourceTimeFormat::Auto,
-                    duration: OgrSourceDurationSpec::Zero,
-                },
-                OgrSourceDatasetTimeType::StartEnd {
-                    start_field: "start".to_string(),
-                    start_format: OgrSourceTimeFormat::Auto,
-                    end_field: "end".to_string(),
-                    end_format: OgrSourceTimeFormat::Auto,
-                },
-                OgrSourceDatasetTimeType::StartDuration {
-                    start_field: "start".to_string(),
-                    start_format: OgrSourceTimeFormat::Auto,
-                    duration_field: "duration".to_string(),
-                },
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "FormatSpecifics",
-            [FormatSpecifics::Csv {
-                header: CsvHeader::Yes,
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "OgrSourceColumnSpec",
-            [OgrSourceColumnSpec {
-                format_specifics: Some(FormatSpecifics::Csv {
-                    header: CsvHeader::Auto,
-                }),
-                x: "x".to_string(),
-                y: Some("y".to_string()),
-                int: vec!["int".to_string()],
-                float: vec!["float".to_string()],
-                text: vec!["text".to_string()],
-                bool: vec!["bool".to_string()],
-                datetime: vec!["datetime".to_string()],
-                rename: Some(
-                    [
-                        ("xx".to_string(), "xx_renamed".to_string()),
-                        ("yx".to_string(), "yy_renamed".to_string()),
-                    ]
-                    .into(),
-                ),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "point[]",
-            [MultiPoint::new(vec![
-                Coordinate2D::new(0.0f64, 0.5),
-                Coordinate2D::new(2., 1.0),
-            ])
-            .unwrap()],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "path[]",
-            [MultiLineString::new(vec![
-                vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-            ])
-            .unwrap()],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "\"Polygon\"[]",
-            [MultiPolygon::new(vec![
-                vec![
-                    vec![
-                        Coordinate2D::new(0.0f64, 0.5),
-                        Coordinate2D::new(2., 1.0),
-                        Coordinate2D::new(2., 1.0),
-                        Coordinate2D::new(0.0f64, 0.5),
-                    ],
-                    vec![
-                        Coordinate2D::new(0.0f64, 0.5),
-                        Coordinate2D::new(2., 1.0),
-                        Coordinate2D::new(2., 1.0),
-                        Coordinate2D::new(0.0f64, 0.5),
-                    ],
-                ],
-                vec![
-                    vec![
-                        Coordinate2D::new(0.0f64, 0.5),
-                        Coordinate2D::new(2., 1.0),
-                        Coordinate2D::new(2., 1.0),
-                        Coordinate2D::new(0.0f64, 0.5),
-                    ],
-                    vec![
-                        Coordinate2D::new(0.0f64, 0.5),
-                        Coordinate2D::new(2., 1.0),
-                        Coordinate2D::new(2., 1.0),
-                        Coordinate2D::new(0.0f64, 0.5),
-                    ],
-                ],
-            ])
-            .unwrap()],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "TypedGeometry",
-            [
-                TypedGeometry::Data(NoGeometry),
-                TypedGeometry::MultiPoint(
-                    MultiPoint::new(vec![
-                        Coordinate2D::new(0.0f64, 0.5),
-                        Coordinate2D::new(2., 1.0),
-                    ])
-                    .unwrap(),
-                ),
-                TypedGeometry::MultiLineString(
-                    MultiLineString::new(vec![
-                        vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                        vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                    ])
-                    .unwrap(),
-                ),
-                TypedGeometry::MultiPolygon(
-                    MultiPolygon::new(vec![
-                        vec![
-                            vec![
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                                Coordinate2D::new(2., 1.0),
-                                Coordinate2D::new(0.0f64, 0.5),
-                            ],
-                            vec![
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                                Coordinate2D::new(2., 1.0),
-                                Coordinate2D::new(0.0f64, 0.5),
-                            ],
-                        ],
-                        vec![
-                            vec![
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                                Coordinate2D::new(2., 1.0),
-                                Coordinate2D::new(0.0f64, 0.5),
-                            ],
-                            vec![
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                                Coordinate2D::new(2., 1.0),
-                                Coordinate2D::new(0.0f64, 0.5),
-                            ],
-                        ],
-                    ])
-                    .unwrap(),
-                ),
-            ],
-        )
-        .await;
-
-        assert_sql_type(&pool, "int", [CacheTtlSeconds::new(100)]).await;
-
-        assert_sql_type(
-            &pool,
-            "OgrSourceDataset",
-            [OgrSourceDataset {
-                file_name: "test".into(),
-                layer_name: "test".to_string(),
-                data_type: Some(VectorDataType::MultiPoint),
-                time: OgrSourceDatasetTimeType::Start {
-                    start_field: "start".to_string(),
-                    start_format: OgrSourceTimeFormat::Auto,
-                    duration: OgrSourceDurationSpec::Zero,
-                },
-                default_geometry: Some(TypedGeometry::MultiPoint(
-                    MultiPoint::new(vec![
-                        Coordinate2D::new(0.0f64, 0.5),
-                        Coordinate2D::new(2., 1.0),
-                    ])
-                    .unwrap(),
-                )),
-                columns: Some(OgrSourceColumnSpec {
-                    format_specifics: Some(FormatSpecifics::Csv {
-                        header: CsvHeader::Auto,
-                    }),
-                    x: "x".to_string(),
-                    y: Some("y".to_string()),
-                    int: vec!["int".to_string()],
-                    float: vec!["float".to_string()],
-                    text: vec!["text".to_string()],
-                    bool: vec!["bool".to_string()],
-                    datetime: vec!["datetime".to_string()],
-                    rename: Some(
-                        [
-                            ("xx".to_string(), "xx_renamed".to_string()),
-                            ("yx".to_string(), "yy_renamed".to_string()),
-                        ]
-                        .into(),
-                    ),
-                }),
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: true,
-                on_error: OgrSourceErrorSpec::Abort,
-                sql_query: None,
-                attribute_query: Some("foo = 'bar'".to_string()),
-                cache_ttl: CacheTtlSeconds::new(5),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "MockMetaData",
-            [StaticMetaData::<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            > {
-                loading_info: MockDatasetDataSourceLoadingInfo {
-                    points: vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                },
-                result_descriptor: VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReferenceOption::SpatialReference(
-                        SpatialReference::epsg_4326(),
-                    ),
-                    columns: [(
-                        "foo".to_string(),
-                        VectorColumnInfo {
-                            data_type: FeatureDataType::Int,
-                            measurement: Measurement::Unitless,
-                        },
-                    )]
-                    .into(),
-                    time: Some(TimeInterval::default()),
-                    bbox: Some(
-                        BoundingBox2D::new(
-                            Coordinate2D::new(0.0f64, 0.5),
-                            Coordinate2D::new(2., 1.0),
-                        )
-                        .unwrap(),
-                    ),
-                },
-                phantom: PhantomData,
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "OgrMetaData",
-            [
-                StaticMetaData::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle> {
-                    loading_info: OgrSourceDataset {
-                        file_name: "test".into(),
-                        layer_name: "test".to_string(),
-                        data_type: Some(VectorDataType::MultiPoint),
-                        time: OgrSourceDatasetTimeType::Start {
-                            start_field: "start".to_string(),
-                            start_format: OgrSourceTimeFormat::Auto,
-                            duration: OgrSourceDurationSpec::Zero,
-                        },
-                        default_geometry: Some(TypedGeometry::MultiPoint(
-                            MultiPoint::new(vec![
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                            ])
-                            .unwrap(),
-                        )),
-                        columns: Some(OgrSourceColumnSpec {
-                            format_specifics: Some(FormatSpecifics::Csv {
-                                header: CsvHeader::Auto,
-                            }),
-                            x: "x".to_string(),
-                            y: Some("y".to_string()),
-                            int: vec!["int".to_string()],
-                            float: vec!["float".to_string()],
-                            text: vec!["text".to_string()],
-                            bool: vec!["bool".to_string()],
-                            datetime: vec!["datetime".to_string()],
-                            rename: Some(
-                                [
-                                    ("xx".to_string(), "xx_renamed".to_string()),
-                                    ("yx".to_string(), "yy_renamed".to_string()),
-                                ]
-                                .into(),
-                            ),
-                        }),
-                        force_ogr_time_filter: false,
-                        force_ogr_spatial_filter: true,
-                        on_error: OgrSourceErrorSpec::Abort,
-                        sql_query: None,
-                        attribute_query: Some("foo = 'bar'".to_string()),
-                        cache_ttl: CacheTtlSeconds::new(5),
-                    },
-                    result_descriptor: VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReferenceOption::SpatialReference(
-                            SpatialReference::epsg_4326(),
-                        ),
-                        columns: [(
-                            "foo".to_string(),
-                            VectorColumnInfo {
-                                data_type: FeatureDataType::Int,
-                                measurement: Measurement::Unitless,
-                            },
-                        )]
-                        .into(),
-                        time: Some(TimeInterval::default()),
-                        bbox: Some(
-                            BoundingBox2D::new(
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                            )
-                            .unwrap(),
-                        ),
-                    },
-                    phantom: PhantomData,
-                },
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "GdalDatasetGeoTransform",
-            [GdalDatasetGeoTransform {
-                origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                x_pixel_size: 1.0,
-                y_pixel_size: 2.0,
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "FileNotFoundHandling",
-            [FileNotFoundHandling::NoData, FileNotFoundHandling::Error],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "GdalMetadataMapping",
-            [GdalMetadataMapping {
-                source_key: RasterPropertiesKey {
-                    domain: None,
-                    key: "foo".to_string(),
-                },
-                target_key: RasterPropertiesKey {
-                    domain: Some("bar".to_string()),
-                    key: "foo".to_string(),
-                },
-                target_type: RasterPropertiesEntryType::String,
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "StringPair",
-            [StringPair::from(("foo".to_string(), "bar".to_string()))],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "GdalDatasetParameters",
-            [GdalDatasetParameters {
-                file_path: "text".into(),
-                rasterband_channel: 1,
-                geo_transform: GdalDatasetGeoTransform {
-                    origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                    x_pixel_size: 1.0,
-                    y_pixel_size: 2.0,
-                },
-                width: 42,
-                height: 23,
-                file_not_found_handling: FileNotFoundHandling::NoData,
-                no_data_value: Some(42.0),
-                properties_mapping: Some(vec![GdalMetadataMapping {
-                    source_key: RasterPropertiesKey {
-                        domain: None,
-                        key: "foo".to_string(),
-                    },
-                    target_key: RasterPropertiesKey {
-                        domain: Some("bar".to_string()),
-                        key: "foo".to_string(),
-                    },
-                    target_type: RasterPropertiesEntryType::String,
-                }]),
-                gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                allow_alphaband_as_mask: false,
-                retry: Some(GdalRetryOptions { max_retries: 3 }),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "GdalMetaDataRegular",
-            [GdalMetaDataRegular {
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeInterval::new_unchecked(0, 1).into(),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution::zero_point_one()),
-                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                        "band".into(),
-                        Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "Temperature".to_string(),
-                            unit: Some("°C".to_string()),
-                        }),
-                    )])
-                    .unwrap(),
-                },
-                params: GdalDatasetParameters {
-                    file_path: "text".into(),
-                    rasterband_channel: 1,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                        x_pixel_size: 1.0,
-                        y_pixel_size: 2.0,
-                    },
-                    width: 42,
-                    height: 23,
-                    file_not_found_handling: FileNotFoundHandling::NoData,
-                    no_data_value: Some(42.0),
-                    properties_mapping: Some(vec![GdalMetadataMapping {
-                        source_key: RasterPropertiesKey {
-                            domain: None,
-                            key: "foo".to_string(),
-                        },
-                        target_key: RasterPropertiesKey {
-                            domain: Some("bar".to_string()),
-                            key: "foo".to_string(),
-                        },
-                        target_type: RasterPropertiesEntryType::String,
-                    }]),
-                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                    gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                    allow_alphaband_as_mask: false,
-                    retry: Some(GdalRetryOptions { max_retries: 3 }),
-                },
-                time_placeholders: [(
-                    "foo".to_string(),
-                    GdalSourceTimePlaceholder {
-                        format: geoengine_datatypes::primitives::DateTimeParseFormat::unix(),
-                        reference: TimeReference::Start,
-                    },
-                )]
-                .into(),
-                data_time: TimeInterval::new_unchecked(0, 1),
-                step: TimeStep {
-                    granularity: TimeGranularity::Millis,
-                    step: 1,
-                },
-                cache_ttl: CacheTtlSeconds::max(),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "GdalMetaDataStatic",
-            [GdalMetaDataStatic {
-                time: Some(TimeInterval::new_unchecked(0, 1)),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeInterval::new_unchecked(0, 1).into(),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution::zero_point_one()),
-                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                        "band".into(),
-                        Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "Temperature".to_string(),
-                            unit: Some("°C".to_string()),
-                        }),
-                    )])
-                    .unwrap(),
-                },
-                params: GdalDatasetParameters {
-                    file_path: "text".into(),
-                    rasterband_channel: 1,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                        x_pixel_size: 1.0,
-                        y_pixel_size: 2.0,
-                    },
-                    width: 42,
-                    height: 23,
-                    file_not_found_handling: FileNotFoundHandling::NoData,
-                    no_data_value: Some(42.0),
-                    properties_mapping: Some(vec![GdalMetadataMapping {
-                        source_key: RasterPropertiesKey {
-                            domain: None,
-                            key: "foo".to_string(),
-                        },
-                        target_key: RasterPropertiesKey {
-                            domain: Some("bar".to_string()),
-                            key: "foo".to_string(),
-                        },
-                        target_type: RasterPropertiesEntryType::String,
-                    }]),
-                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                    gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                    allow_alphaband_as_mask: false,
-                    retry: Some(GdalRetryOptions { max_retries: 3 }),
-                },
-                cache_ttl: CacheTtlSeconds::max(),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "GdalMetadataNetCdfCf",
-            [GdalMetadataNetCdfCf {
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeInterval::new_unchecked(0, 1).into(),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution::zero_point_one()),
-                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                        "band".into(),
-                        Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "Temperature".to_string(),
-                            unit: Some("°C".to_string()),
-                        }),
-                    )])
-                    .unwrap(),
-                },
-                params: GdalDatasetParameters {
-                    file_path: "text".into(),
-                    rasterband_channel: 1,
-                    geo_transform: GdalDatasetGeoTransform {
-                        origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                        x_pixel_size: 1.0,
-                        y_pixel_size: 2.0,
-                    },
-                    width: 42,
-                    height: 23,
-                    file_not_found_handling: FileNotFoundHandling::NoData,
-                    no_data_value: Some(42.0),
-                    properties_mapping: Some(vec![GdalMetadataMapping {
-                        source_key: RasterPropertiesKey {
-                            domain: None,
-                            key: "foo".to_string(),
-                        },
-                        target_key: RasterPropertiesKey {
-                            domain: Some("bar".to_string()),
-                            key: "foo".to_string(),
-                        },
-                        target_type: RasterPropertiesEntryType::String,
-                    }]),
-                    gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                    gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                    allow_alphaband_as_mask: false,
-                    retry: Some(GdalRetryOptions { max_retries: 3 }),
-                },
-                start: TimeInstance::from_millis(0).unwrap(),
-                end: TimeInstance::from_millis(1000).unwrap(),
-                cache_ttl: CacheTtlSeconds::max(),
-                step: TimeStep {
-                    granularity: TimeGranularity::Millis,
-                    step: 1,
-                },
-                band_offset: 3,
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "GdalMetaDataList",
-            [GdalMetaDataList {
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeInterval::new_unchecked(0, 1).into(),
-                    bbox: Some(
-                        SpatialPartition2D::new(
-                            Coordinate2D::new(0.0f64, 1.),
-                            Coordinate2D::new(2., 0.5),
-                        )
-                        .unwrap(),
-                    ),
-                    resolution: Some(SpatialResolution::zero_point_one()),
-                    bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                        "band".into(),
-                        Measurement::Continuous(ContinuousMeasurement {
-                            measurement: "Temperature".to_string(),
-                            unit: Some("°C".to_string()),
-                        }),
-                    )])
-                    .unwrap(),
-                },
-                params: vec![GdalLoadingInfoTemporalSlice {
-                    time: TimeInterval::new_unchecked(0, 1),
-                    params: Some(GdalDatasetParameters {
-                        file_path: "text".into(),
-                        rasterband_channel: 1,
-                        geo_transform: GdalDatasetGeoTransform {
-                            origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                            x_pixel_size: 1.0,
-                            y_pixel_size: 2.0,
-                        },
-                        width: 42,
-                        height: 23,
-                        file_not_found_handling: FileNotFoundHandling::NoData,
-                        no_data_value: Some(42.0),
-                        properties_mapping: Some(vec![GdalMetadataMapping {
-                            source_key: RasterPropertiesKey {
-                                domain: None,
-                                key: "foo".to_string(),
-                            },
-                            target_key: RasterPropertiesKey {
-                                domain: Some("bar".to_string()),
-                                key: "foo".to_string(),
-                            },
-                            target_type: RasterPropertiesEntryType::String,
-                        }]),
-                        gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                        gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                        allow_alphaband_as_mask: false,
-                        retry: Some(GdalRetryOptions { max_retries: 3 }),
-                    }),
-                    cache_ttl: CacheTtlSeconds::max(),
-                }],
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "MetaDataDefinition",
-            [
-                MetaDataDefinition::MockMetaData(StaticMetaData::<
-                    MockDatasetDataSourceLoadingInfo,
-                    VectorResultDescriptor,
-                    VectorQueryRectangle,
-                > {
-                    loading_info: MockDatasetDataSourceLoadingInfo {
-                        points: vec![Coordinate2D::new(0.0f64, 0.5), Coordinate2D::new(2., 1.0)],
-                    },
-                    result_descriptor: VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReferenceOption::SpatialReference(
-                            SpatialReference::epsg_4326(),
-                        ),
-                        columns: [(
-                            "foo".to_string(),
-                            VectorColumnInfo {
-                                data_type: FeatureDataType::Int,
-                                measurement: Measurement::Unitless,
-                            },
-                        )]
-                        .into(),
-                        time: Some(TimeInterval::default()),
-                        bbox: Some(
-                            BoundingBox2D::new(
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                            )
-                            .unwrap(),
-                        ),
-                    },
-                    phantom: PhantomData,
-                }),
-                MetaDataDefinition::OgrMetaData(StaticMetaData::<
-                    OgrSourceDataset,
-                    VectorResultDescriptor,
-                    VectorQueryRectangle,
-                > {
-                    loading_info: OgrSourceDataset {
-                        file_name: "test".into(),
-                        layer_name: "test".to_string(),
-                        data_type: Some(VectorDataType::MultiPoint),
-                        time: OgrSourceDatasetTimeType::Start {
-                            start_field: "start".to_string(),
-                            start_format: OgrSourceTimeFormat::Auto,
-                            duration: OgrSourceDurationSpec::Zero,
-                        },
-                        default_geometry: Some(TypedGeometry::MultiPoint(
-                            MultiPoint::new(vec![
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                            ])
-                            .unwrap(),
-                        )),
-                        columns: Some(OgrSourceColumnSpec {
-                            format_specifics: Some(FormatSpecifics::Csv {
-                                header: CsvHeader::Auto,
-                            }),
-                            x: "x".to_string(),
-                            y: Some("y".to_string()),
-                            int: vec!["int".to_string()],
-                            float: vec!["float".to_string()],
-                            text: vec!["text".to_string()],
-                            bool: vec!["bool".to_string()],
-                            datetime: vec!["datetime".to_string()],
-                            rename: Some(
-                                [
-                                    ("xx".to_string(), "xx_renamed".to_string()),
-                                    ("yx".to_string(), "yy_renamed".to_string()),
-                                ]
-                                .into(),
-                            ),
-                        }),
-                        force_ogr_time_filter: false,
-                        force_ogr_spatial_filter: true,
-                        on_error: OgrSourceErrorSpec::Abort,
-                        sql_query: None,
-                        attribute_query: Some("foo = 'bar'".to_string()),
-                        cache_ttl: CacheTtlSeconds::new(5),
-                    },
-                    result_descriptor: VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReferenceOption::SpatialReference(
-                            SpatialReference::epsg_4326(),
-                        ),
-                        columns: [(
-                            "foo".to_string(),
-                            VectorColumnInfo {
-                                data_type: FeatureDataType::Int,
-                                measurement: Measurement::Unitless,
-                            },
-                        )]
-                        .into(),
-                        time: Some(TimeInterval::default()),
-                        bbox: Some(
-                            BoundingBox2D::new(
-                                Coordinate2D::new(0.0f64, 0.5),
-                                Coordinate2D::new(2., 1.0),
-                            )
-                            .unwrap(),
-                        ),
-                    },
-                    phantom: PhantomData,
-                }),
-                MetaDataDefinition::GdalMetaDataRegular(GdalMetaDataRegular {
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: TimeInterval::new_unchecked(0, 1).into(),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution::zero_point_one()),
-                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                            "band".into(),
-                            Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "Temperature".to_string(),
-                                unit: Some("°C".to_string()),
-                            }),
-                        )])
-                        .unwrap(),
-                    },
-                    params: GdalDatasetParameters {
-                        file_path: "text".into(),
-                        rasterband_channel: 1,
-                        geo_transform: GdalDatasetGeoTransform {
-                            origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                            x_pixel_size: 1.0,
-                            y_pixel_size: 2.0,
-                        },
-                        width: 42,
-                        height: 23,
-                        file_not_found_handling: FileNotFoundHandling::NoData,
-                        no_data_value: Some(42.0),
-                        properties_mapping: Some(vec![GdalMetadataMapping {
-                            source_key: RasterPropertiesKey {
-                                domain: None,
-                                key: "foo".to_string(),
-                            },
-                            target_key: RasterPropertiesKey {
-                                domain: Some("bar".to_string()),
-                                key: "foo".to_string(),
-                            },
-                            target_type: RasterPropertiesEntryType::String,
-                        }]),
-                        gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                        gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                        allow_alphaband_as_mask: false,
-                        retry: Some(GdalRetryOptions { max_retries: 3 }),
-                    },
-                    time_placeholders: [(
-                        "foo".to_string(),
-                        GdalSourceTimePlaceholder {
-                            format: DateTimeParseFormat::unix(),
-                            reference: TimeReference::Start,
-                        },
-                    )]
-                    .into(),
-                    data_time: TimeInterval::new_unchecked(0, 1),
-                    step: TimeStep {
-                        granularity: TimeGranularity::Millis,
-                        step: 1,
-                    },
-                    cache_ttl: CacheTtlSeconds::max(),
-                }),
-                MetaDataDefinition::GdalStatic(GdalMetaDataStatic {
-                    time: Some(TimeInterval::new_unchecked(0, 1)),
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: TimeInterval::new_unchecked(0, 1).into(),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution::zero_point_one()),
-                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                            "band".into(),
-                            Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "Temperature".to_string(),
-                                unit: Some("°C".to_string()),
-                            }),
-                        )])
-                        .unwrap(),
-                    },
-                    params: GdalDatasetParameters {
-                        file_path: "text".into(),
-                        rasterband_channel: 1,
-                        geo_transform: GdalDatasetGeoTransform {
-                            origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                            x_pixel_size: 1.0,
-                            y_pixel_size: 2.0,
-                        },
-                        width: 42,
-                        height: 23,
-                        file_not_found_handling: FileNotFoundHandling::NoData,
-                        no_data_value: Some(42.0),
-                        properties_mapping: Some(vec![GdalMetadataMapping {
-                            source_key: RasterPropertiesKey {
-                                domain: None,
-                                key: "foo".to_string(),
-                            },
-                            target_key: RasterPropertiesKey {
-                                domain: Some("bar".to_string()),
-                                key: "foo".to_string(),
-                            },
-                            target_type: RasterPropertiesEntryType::String,
-                        }]),
-                        gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                        gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                        allow_alphaband_as_mask: false,
-                        retry: Some(GdalRetryOptions { max_retries: 3 }),
-                    },
-                    cache_ttl: CacheTtlSeconds::max(),
-                }),
-                MetaDataDefinition::GdalMetadataNetCdfCf(GdalMetadataNetCdfCf {
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: TimeInterval::new_unchecked(0, 1).into(),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution::zero_point_one()),
-                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                            "band".into(),
-                            Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "Temperature".to_string(),
-                                unit: Some("°C".to_string()),
-                            }),
-                        )])
-                        .unwrap(),
-                    },
-                    params: GdalDatasetParameters {
-                        file_path: "text".into(),
-                        rasterband_channel: 1,
-                        geo_transform: GdalDatasetGeoTransform {
-                            origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                            x_pixel_size: 1.0,
-                            y_pixel_size: 2.0,
-                        },
-                        width: 42,
-                        height: 23,
-                        file_not_found_handling: FileNotFoundHandling::NoData,
-                        no_data_value: Some(42.0),
-                        properties_mapping: Some(vec![GdalMetadataMapping {
-                            source_key: RasterPropertiesKey {
-                                domain: None,
-                                key: "foo".to_string(),
-                            },
-                            target_key: RasterPropertiesKey {
-                                domain: Some("bar".to_string()),
-                                key: "foo".to_string(),
-                            },
-                            target_type: RasterPropertiesEntryType::String,
-                        }]),
-                        gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                        gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                        allow_alphaband_as_mask: false,
-                        retry: Some(GdalRetryOptions { max_retries: 3 }),
-                    },
-                    start: TimeInstance::from_millis(0).unwrap(),
-                    end: TimeInstance::from_millis(1000).unwrap(),
-                    cache_ttl: CacheTtlSeconds::max(),
-                    step: TimeStep {
-                        granularity: TimeGranularity::Millis,
-                        step: 1,
-                    },
-                    band_offset: 3,
-                }),
-                MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U8,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: TimeInterval::new_unchecked(0, 1).into(),
-                        bbox: Some(
-                            SpatialPartition2D::new(
-                                Coordinate2D::new(0.0f64, 1.),
-                                Coordinate2D::new(2., 0.5),
-                            )
-                            .unwrap(),
-                        ),
-                        resolution: Some(SpatialResolution::zero_point_one()),
-                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                            "band".into(),
-                            Measurement::Continuous(ContinuousMeasurement {
-                                measurement: "Temperature".to_string(),
-                                unit: Some("°C".to_string()),
-                            }),
-                        )])
-                        .unwrap(),
-                    },
-                    params: vec![GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new_unchecked(0, 1),
-                        params: Some(GdalDatasetParameters {
-                            file_path: "text".into(),
-                            rasterband_channel: 1,
-                            geo_transform: GdalDatasetGeoTransform {
-                                origin_coordinate: Coordinate2D::new(0.0f64, 0.5),
-                                x_pixel_size: 1.0,
-                                y_pixel_size: 2.0,
-                            },
-                            width: 42,
-                            height: 23,
-                            file_not_found_handling: FileNotFoundHandling::NoData,
-                            no_data_value: Some(42.0),
-                            properties_mapping: Some(vec![GdalMetadataMapping {
-                                source_key: RasterPropertiesKey {
-                                    domain: None,
-                                    key: "foo".to_string(),
-                                },
-                                target_key: RasterPropertiesKey {
-                                    domain: Some("bar".to_string()),
-                                    key: "foo".to_string(),
-                                },
-                                target_type: RasterPropertiesEntryType::String,
-                            }]),
-                            gdal_open_options: Some(vec!["foo".to_string(), "bar".to_string()]),
-                            gdal_config_options: Some(vec![("foo".to_string(), "bar".to_string())]),
-                            allow_alphaband_as_mask: false,
-                            retry: None,
-                        }),
-                        cache_ttl: CacheTtlSeconds::max(),
-                    }],
-                }),
-            ],
-        )
-        .await;
-
-        assert_sql_type(
-            &pool,
-            "bytea",
-            [U96::from(
-                arr![u8; 13, 227, 191, 247, 123, 193, 214, 165, 185, 37, 101, 24],
-            )],
-        )
-        .await;
-
-        test_data_provider_definition_types(&pool).await;
+        assert_eq!(db.quota_used_by_user(&user1).await.unwrap(), 2);
+        assert_eq!(db.quota_used_by_user(&user2).await.unwrap(), 3);
     }
 
-    #[test]
-    fn test_postgres_config_translation() {
-        let host = "localhost";
-        let port = 8095;
-        let ge_default = "geoengine";
-        let schema = "geoengine";
-
-        let db_config = config::Postgres {
-            host: host.to_string(),
-            port,
-            database: ge_default.to_string(),
-            schema: schema.to_string(),
-            user: ge_default.to_string(),
-            password: ge_default.to_string(),
-            clear_database_on_start: false,
+    async fn it_handles_oidc_tokens(app_ctx: PostgresContext<NoTls>) {
+        let external_user_claims = UserClaims {
+            external_id: SubjectIdentifier::new("Foo bar Id".into()),
+            email: "foo@bar.de".into(),
+            real_name: "Foo Bar".into(),
+        };
+        let tokens = OidcTokens {
+            access: AccessToken::new("FIRST_ACCESS_TOKEN".into()),
+            refresh: Some(RefreshToken::new("FIRST_REFRESH_TOKEN".into())),
+            expires_in: Duration::seconds(2),
         };
 
-        let pg_config = Config::try_from(db_config).unwrap();
+        let login_result = app_ctx
+            .login_external(external_user_claims.clone(), tokens)
+            .await;
+        assert!(login_result.is_ok());
 
-        assert_eq!(ge_default, pg_config.get_user().unwrap());
+        let session_id = login_result.unwrap().id;
+
+        let access_token = app_ctx.get_access_token(session_id).await.unwrap();
+
         assert_eq!(
-            <str as AsRef<[u8]>>::as_ref(ge_default).to_vec(),
-            pg_config.get_password().unwrap()
+            "FIRST_ACCESS_TOKEN".to_string(),
+            access_token.secret().to_owned()
         );
-        assert_eq!(ge_default, pg_config.get_dbname().unwrap());
+
+        //Access token duration oidc_login_refresh is 2 sec, i.e., session times out after 2 sec.
+        tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+
+        let access_token = app_ctx.get_access_token(session_id).await.unwrap();
+
         assert_eq!(
-            &format!("-c search_path={schema}"),
-            pg_config.get_options().unwrap()
+            "SECOND_ACCESS_TOKEN".to_string(),
+            access_token.secret().to_owned()
         );
-        assert_eq!(vec![Host::Tcp(host.to_string())], pg_config.get_hosts());
-        assert_eq!(vec![port], pg_config.get_ports());
     }
 
+    pub fn oidc_only_refresh() -> (Server, impl Fn() -> OidcManager) {
+        let mock_refresh_server_config = MockRefreshServerConfig {
+            expected_discoveries: 1,
+            token_duration: std::time::Duration::from_secs(2),
+            creates_first_token: false,
+            first_access_token: "FIRST_ACCESS_TOKEN".to_string(),
+            first_refresh_token: "FIRST_REFRESH_TOKEN".to_string(),
+            second_access_token: "SECOND_ACCESS_TOKEN".to_string(),
+            second_refresh_token: "SECOND_REFRESH_TOKEN".to_string(),
+            client_side_password: None,
+        };
+
+        let (server, oidc_manager) = mock_refresh_server(mock_refresh_server_config);
+
+        (server, move || {
+            OidcManager::from_oidc_with_static_tokens(oidc_manager.clone())
+        })
+    }
+
+    #[ge_context::test(oidc_db = "oidc_only_refresh")]
+    async fn it_handles_oidc_tokens_without_encryption(app_ctx: PostgresContext<NoTls>) {
+        it_handles_oidc_tokens(app_ctx).await;
+    }
+
+    pub fn oidc_only_refresh_with_encryption() -> (Server, impl Fn() -> OidcManager) {
+        let mock_refresh_server_config = MockRefreshServerConfig {
+            expected_discoveries: 1,
+            token_duration: std::time::Duration::from_secs(2),
+            creates_first_token: false,
+            first_access_token: "FIRST_ACCESS_TOKEN".to_string(),
+            first_refresh_token: "FIRST_REFRESH_TOKEN".to_string(),
+            second_access_token: "SECOND_ACCESS_TOKEN".to_string(),
+            second_refresh_token: "SECOND_REFRESH_TOKEN".to_string(),
+            client_side_password: Some("password123".to_string()),
+        };
+
+        let (server, oidc_manager) = mock_refresh_server(mock_refresh_server_config);
+
+        (server, move || {
+            OidcManager::from_oidc_with_static_tokens(oidc_manager.clone())
+        })
+    }
+
+    #[ge_context::test(oidc_db = "oidc_only_refresh_with_encryption")]
+    async fn it_handles_oidc_tokens_with_encryption(app_ctx: PostgresContext<NoTls>) {
+        it_handles_oidc_tokens(app_ctx).await;
+    }
+
+    #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn test_data_provider_definition_types(
-        pool: &PooledConnection<'_, PostgresConnectionManager<tokio_postgres::NoTls>>,
-    ) {
-        assert_sql_type(
-            pool,
-            "ArunaDataProviderDefinition",
-            [ArunaDataProviderDefinition {
-                id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0").unwrap(),
-                name: "NFDI".to_string(),
-                description: "NFDI".to_string(),
-                priority: Some(33),
-                api_url: "http://test".to_string(),
-                project_id: "project".to_string(),
-                api_token: "api_token".to_string(),
-                filter_label: "filter".to_string(),
-                cache_ttl: CacheTtlSeconds::new(0),
-            }],
-        )
-        .await;
+    async fn it_resolves_ml_model_names_to_ids(app_ctx: PostgresContext<NoTls>) {
+        let admin_session = UserSession::admin_session();
+        let db = app_ctx.session_context(admin_session.clone()).db();
 
-        assert_sql_type(
-            pool,
-            "GbifDataProviderDefinition",
-            [GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GFBio".to_string(),
-                priority: None,
-                db_config: DatabaseConnectionConfig {
-                    host: "testhost".to_string(),
-                    port: 1234,
-                    database: "testdb".to_string(),
-                    schema: "testschema".to_string(),
-                    user: "testuser".to_string(),
-                    password: "testpass".to_string(),
-                },
-                cache_ttl: CacheTtlSeconds::new(0),
-                autocomplete_timeout: 3,
-                columns: GbifDataProvider::all_columns(),
-            }],
-        )
-        .await;
+        let upload_id = UploadId::new();
+        let upload = Upload {
+            id: upload_id,
+            files: vec![],
+        };
+        db.create_upload(upload).await.unwrap();
 
-        assert_sql_type(
-            pool,
-            "GfbioAbcdDataProviderDefinition",
-            [GfbioAbcdDataProviderDefinition {
-                name: "GFbio".to_string(),
-                description: "GFBio".to_string(),
-                priority: None,
-                db_config: DatabaseConnectionConfig {
-                    host: "testhost".to_string(),
-                    port: 1234,
-                    database: "testdb".to_string(),
-                    schema: "testschema".to_string(),
-                    user: "testuser".to_string(),
-                    password: "testpass".to_string(),
-                },
-                cache_ttl: CacheTtlSeconds::new(0),
-            }],
-        )
-        .await;
+        let model = MlModel {
+            description: "No real model here".to_owned(),
+            display_name: "my unreal model".to_owned(),
+            metadata: MlModelMetadata {
+                file_name: "myUnrealmodel.onnx".to_owned(),
+                input_type: ApiRasterDataType::F32,
+                num_input_bands: 17,
+                output_type: ApiRasterDataType::F64,
+            },
+            name: MlModelName::new(None, "myUnrealModel"),
+            upload: upload_id,
+        };
 
-        assert_sql_type(
-            pool,
-            "GfbioCollectionsDataProviderDefinition",
-            [GfbioCollectionsDataProviderDefinition {
-                name: "GFbio".to_string(),
-                description: "GFBio".to_string(),
-                priority: None,
-                collection_api_url: "http://testhost".try_into().unwrap(),
-                collection_api_auth_token: "token".to_string(),
-                abcd_db_config: DatabaseConnectionConfig {
-                    host: "testhost".to_string(),
-                    port: 1234,
-                    database: "testdb".to_string(),
-                    schema: "testschema".to_string(),
-                    user: "testuser".to_string(),
-                    password: "testpass".to_string(),
-                },
-                pangaea_url: "http://panaea".try_into().unwrap(),
-                cache_ttl: CacheTtlSeconds::new(0),
-            }],
-        )
-        .await;
+        let MlModelIdAndName {
+            id: model_id,
+            name: model_name,
+        } = db.add_model(model).await.unwrap();
 
-        assert_sql_type(pool, "\"PropertyType\"[]", [Vec::<Property>::new()]).await;
-
-        assert_sql_type(
-            pool,
-            "EbvPortalDataProviderDefinition",
-            [EbvPortalDataProviderDefinition {
-                name: "ebv".to_string(),
-                description: "EBV".to_string(),
-                priority: None,
-                data: "a_path".into(),
-                base_url: "http://base".try_into().unwrap(),
-                overviews: "another_path".into(),
-                cache_ttl: CacheTtlSeconds::new(0),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            pool,
-            "NetCdfCfDataProviderDefinition",
-            [NetCdfCfDataProviderDefinition {
-                name: "netcdfcf".to_string(),
-                description: "netcdfcf".to_string(),
-                priority: Some(33),
-                data: "a_path".into(),
-                overviews: "another_path".into(),
-                cache_ttl: CacheTtlSeconds::new(0),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            pool,
-            "PangaeaDataProviderDefinition",
-            [PangaeaDataProviderDefinition {
-                name: "pangaea".to_string(),
-                description: "pangaea".to_string(),
-                priority: None,
-                base_url: "http://base".try_into().unwrap(),
-                cache_ttl: CacheTtlSeconds::new(0),
-            }],
-        )
-        .await;
-
-        assert_sql_type(
-            pool,
-            "DataProviderDefinition",
-            [
-                TypedDataProviderDefinition::ArunaDataProviderDefinition(
-                    ArunaDataProviderDefinition {
-                        id: DataProviderId::from_str("86a7f7ce-1bab-4ce9-a32b-172c0f958ee0")
-                            .unwrap(),
-                        name: "NFDI".to_string(),
-                        description: "NFDI".to_string(),
-                        priority: Some(33),
-                        api_url: "http://test".to_string(),
-                        project_id: "project".to_string(),
-                        api_token: "api_token".to_string(),
-                        filter_label: "filter".to_string(),
-                        cache_ttl: CacheTtlSeconds::new(0),
-                    },
-                ),
-                TypedDataProviderDefinition::GbifDataProviderDefinition(
-                    GbifDataProviderDefinition {
-                        name: "GBIF".to_string(),
-                        description: "GFBio".to_string(),
-                        priority: None,
-                        db_config: DatabaseConnectionConfig {
-                            host: "testhost".to_string(),
-                            port: 1234,
-                            database: "testdb".to_string(),
-                            schema: "testschema".to_string(),
-                            user: "testuser".to_string(),
-                            password: "testpass".to_string(),
-                        },
-                        cache_ttl: CacheTtlSeconds::new(0),
-                        autocomplete_timeout: 3,
-                        columns: GbifDataProvider::all_columns(),
-                    },
-                ),
-                TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
-                    GfbioAbcdDataProviderDefinition {
-                        name: "GFbio".to_string(),
-                        description: "GFBio".to_string(),
-                        priority: None,
-                        db_config: DatabaseConnectionConfig {
-                            host: "testhost".to_string(),
-                            port: 1234,
-                            database: "testdb".to_string(),
-                            schema: "testschema".to_string(),
-                            user: "testuser".to_string(),
-                            password: "testpass".to_string(),
-                        },
-                        cache_ttl: CacheTtlSeconds::new(0),
-                    },
-                ),
-                TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
-                    GfbioCollectionsDataProviderDefinition {
-                        name: "GFbio".to_string(),
-                        description: "GFBio".to_string(),
-                        priority: None,
-                        collection_api_url: "http://testhost".try_into().unwrap(),
-                        collection_api_auth_token: "token".to_string(),
-                        abcd_db_config: DatabaseConnectionConfig {
-                            host: "testhost".to_string(),
-                            port: 1234,
-                            database: "testdb".to_string(),
-                            schema: "testschema".to_string(),
-                            user: "testuser".to_string(),
-                            password: "testpass".to_string(),
-                        },
-                        pangaea_url: "http://panaea".try_into().unwrap(),
-                        cache_ttl: CacheTtlSeconds::new(0),
-                    },
-                ),
-                TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
-                    EbvPortalDataProviderDefinition {
-                        name: "ebv".to_string(),
-                        description: "ebv".to_string(),
-                        priority: Some(33),
-                        data: "a_path".into(),
-                        base_url: "http://base".try_into().unwrap(),
-                        overviews: "another_path".into(),
-                        cache_ttl: CacheTtlSeconds::new(0),
-                    },
-                ),
-                TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
-                    NetCdfCfDataProviderDefinition {
-                        name: "netcdfcf".to_string(),
-                        description: "netcdfcf".to_string(),
-                        priority: Some(33),
-                        data: "a_path".into(),
-                        overviews: "another_path".into(),
-                        cache_ttl: CacheTtlSeconds::new(0),
-                    },
-                ),
-                TypedDataProviderDefinition::PangaeaDataProviderDefinition(
-                    PangaeaDataProviderDefinition {
-                        name: "pangaea".to_string(),
-                        description: "pangaea".to_string(),
-                        priority: None,
-                        base_url: "http://base".try_into().unwrap(),
-                        cache_ttl: CacheTtlSeconds::new(0),
-                    },
-                ),
-            ],
-        )
-        .await;
+        assert_eq!(
+            db.resolve_model_name_to_id(&model_name)
+                .await
+                .unwrap()
+                .unwrap(),
+            model_id
+        );
     }
 }

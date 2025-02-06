@@ -6,11 +6,11 @@ use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
 use crate::api::ogc::wms::request::{
     GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
 };
+use crate::config;
+use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::config;
-use crate::util::config::get_config_element;
 use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
@@ -21,12 +21,9 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_operators::engine::{
-    CanonicOperatorName, ExecutionContext, ResultDescriptor, SingleRasterOrVectorSource,
-    WorkflowOperatorPath,
+    RasterOperator, ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
 };
-use geoengine_operators::processing::{
-    InitializedRasterReprojection, Reprojection, ReprojectionParams,
-};
+use geoengine_operators::processing::{Reprojection, ReprojectionParams};
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::{
     call_on_generic_raster_processor, util::raster_stream_to_png::raster_stream_to_png_bytes,
@@ -35,6 +32,7 @@ use reqwest::Url;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use uuid::Uuid;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -223,7 +221,7 @@ where
 }
 
 fn wms_url(workflow: WorkflowId) -> Result<Url> {
-    let web_config = crate::util::config::get_config_element::<crate::util::config::Web>()?;
+    let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
     ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
@@ -279,10 +277,8 @@ async fn wms_map_handler<C: ApplicationContext>(
 
         let ctx = app_ctx.session_context(session);
 
-        let workflow = ctx
-            .db()
-            .load_workflow(&WorkflowId::from_str(&request.layers)?)
-            .await?;
+        let workflow_id = WorkflowId::from_str(&request.layers)?;
+        let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
         let operator = workflow.operator.get_raster()?;
 
@@ -326,14 +322,25 @@ async fn wms_map_handler<C: ApplicationContext>(
                 sources: SingleRasterOrVectorSource {
                     source: RasterOrVectorOperator::Raster(operator),
                 },
-            };
+            }
+            .boxed();
 
-            let irp = InitializedRasterReprojection::try_new_with_input(
-                CanonicOperatorName::from(&reprojected_workflow),
-                reprojection_params,
-                initialized,
-                execution_context.tiling_specification(),
-            )?;
+            let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+            // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
+
+            // In order to check whether we need to inject a reprojection, we first need to initialize the
+            // original workflow. Then we can check the result projection. Previously, we then just wrapped
+            // the initialized workflow with an initialized reprojection. IMHO this is wrong because
+            // initialization propagates the workflow path down the children and appends a new segment for
+            // each level. So we can't re-use an already initialized workflow, because all the workflow path/
+            // operator names will be wrong. That's why I now build a new workflow with a reprojection and
+            // perform a full initialization. I only added the TODO because we did some optimization here
+            // which broke at some point when the workflow operator paths were introduced but no one noticed.
+
+            let irp = reprojected_workflow
+                .initialize(workflow_operator_path_root, &execution_context)
+                .await?;
 
             Box::new(irp)
         };
@@ -365,7 +372,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             attributes,
         };
 
-        let query_ctx = ctx.query_context()?;
+        let query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
 
         call_on_generic_raster_processor!(
             processor,
@@ -475,15 +482,17 @@ mod tests {
 
     use super::*;
     use crate::api::model::responses::ErrorResponse;
-    use crate::contexts::{PostgresContext, Session, SimpleApplicationContext};
+    use crate::contexts::PostgresContext;
+    use crate::contexts::Session;
     use crate::datasets::listing::DatasetProvider;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::DatasetName;
     use crate::ge_context;
+    use crate::users::UserAuth;
+    use crate::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::util::tests::{
-        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
-        register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
-        send_test_request,
+        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper_with_cache_ttl,
+        register_ne2_multiband_workflow, send_test_request, MockQueryContext,
     };
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
@@ -492,6 +501,8 @@ mod tests {
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
     use geoengine_datatypes::primitives::CacheTtlSeconds;
     use geoengine_datatypes::raster::{GridShape2D, RasterDataType, TilingSpecification};
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::assert_image_equals;
     use geoengine_operators::engine::{
         ExecutionContext, RasterQueryProcessor, RasterResultDescriptor,
     };
@@ -508,8 +519,9 @@ mod tests {
         path: Option<&str>,
     ) -> ServiceResponse {
         let path = path.map(ToString::to_string);
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let session_id = session.id();
 
         let req = actix_web::test::TestRequest::default()
             .method(method)
@@ -565,8 +577,10 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
         method: Method,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -619,7 +633,8 @@ mod tests {
     // The result should be similar to the GDAL output of this command: gdalwarp -tr 1 1 -r near -srcnodata 0 -dstnodata 0  MOD13A2_M_NDVI_2014-01-01.TIFF MOD13A2_M_NDVI_2014-01-01_360_180_near_0.TIFF
     #[ge_context::test]
     async fn png_from_stream_non_full(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
         let exe_ctx = ctx.execution_context().unwrap();
 
         let gdal_source = GdalSourceProcessor::<u8> {
@@ -647,7 +662,7 @@ mod tests {
                 spatial_resolution: SpatialResolution::new_unchecked(1.0, 1.0),
                 attributes: BandSelection::first(),
             },
-            ctx.query_context().unwrap(),
+            ctx.mock_query_context().unwrap(),
             360,
             180,
             None,
@@ -657,12 +672,9 @@ mod tests {
         .await
         .unwrap();
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "raster_small.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, test_data!("wms/raster_small.png"));
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/raster_small.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("wms/raster_small.png"), &image_bytes);
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
@@ -678,7 +690,8 @@ mod tests {
         method: Method,
         path: Option<&str>,
     ) -> ServiceResponse {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -714,16 +727,14 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/get_map.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/get_map.png"), &image_bytes);
     }
 
     #[ge_context::test]
     async fn get_map_ndvi(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -741,16 +752,14 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_ndvi.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/get_map_ndvi.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/get_map_ndvi.png"), &image_bytes);
     }
 
     ///Actix uses serde_urlencoded inside web::Query which does not support this
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn get_map_uppercase(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -765,10 +774,7 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/get_map.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/get_map.png"), &image_bytes);
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
@@ -799,7 +805,8 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn get_map_colorizer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -856,15 +863,13 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/get_map_colorizer.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/get_map_colorizer.png"), &image_bytes);
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn it_supports_multiband_colorizer(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -921,17 +926,15 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "ne2_rgb_colorizer.png");
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/ne2_rgb_colorizer.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/ne2_rgb_colorizer.png"), &image_bytes);
     }
 
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn it_supports_multiband_colorizer_with_less_then_3_bands(
         app_ctx: PostgresContext<NoTls>,
     ) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
 
@@ -993,16 +996,14 @@ mod tests {
         //         .unwrap(),
         // );
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/wms/ne2_rgb_colorizer_gray.png") as &[u8],
-            image_bytes
-        );
+        assert_image_equals(test_data!("wms/ne2_rgb_colorizer_gray.png"), &image_bytes);
     }
 
     #[ge_context::test]
     async fn it_zoomes_very_far(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1060,8 +1061,9 @@ mod tests {
 
     #[ge_context::test]
     async fn default_error(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1130,8 +1132,9 @@ mod tests {
 
     #[ge_context::test]
     async fn json_error(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1189,8 +1192,9 @@ mod tests {
 
     #[ge_context::test]
     async fn it_sets_cache_control_header_no_cache(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) = register_ndvi_workflow_helper(&app_ctx).await;
 
@@ -1212,8 +1216,9 @@ mod tests {
 
     #[ge_context::test]
     async fn it_sets_cache_control_header_with_cache(app_ctx: PostgresContext<NoTls>) {
-        let ctx = app_ctx.default_session_context().await.unwrap();
-        let session_id = ctx.session().id();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let (_, id) =
             register_ndvi_workflow_helper_with_cache_ttl(&app_ctx, CacheTtlSeconds::new(60)).await;

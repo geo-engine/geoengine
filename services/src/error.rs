@@ -216,7 +216,6 @@ pub enum Error {
 
     UploadFieldMissingFileName,
     UnknownUploadId,
-    UnknownModelId,
     PathIsNotAFile,
     #[snafu(display("Failed loading multipart body: {reason}"))]
     Multipart {
@@ -430,10 +429,9 @@ pub enum Error {
         spatial_reference_string: String,
     },
 
-    #[cfg(feature = "pro")]
     #[snafu(context(false), display("OidcError: {}", source))]
     Oidc {
-        source: crate::pro::users::OidcError,
+        source: crate::users::OidcError,
     },
 
     #[snafu(display(
@@ -511,6 +509,26 @@ pub enum Error {
     #[snafu(display("Cannot access path of volume with name {}", volume_name))]
     CannotAccessVolumePath {
         volume_name: String,
+    },
+
+    #[snafu(display("Unknown resource name {} of kind {}", name, kind))]
+    UnknownResource {
+        kind: String,
+        name: String,
+    },
+
+    #[snafu(display("MachineLearning error: {}", source))]
+    MachineLearning {
+        // TODO: make `source: MachineLearningError`, once pro features is removed
+        source: Box<dyn ErrorSource>,
+    },
+
+    DatasetName {
+        source: crate::datasets::DatasetNameError,
+    },
+
+    MlModelName {
+        source: geoengine_datatypes::machine_learning::MlModelNameError,
     },
 }
 
@@ -610,5 +628,17 @@ impl From<tokio::task::JoinError> for Error {
 impl From<ordered_float::FloatIsNan> for Error {
     fn from(source: FloatIsNan) -> Self {
         Error::InvalidNotNanFloatKey { source }
+    }
+}
+
+impl From<crate::datasets::DatasetNameError> for Error {
+    fn from(source: crate::datasets::DatasetNameError) -> Self {
+        Error::DatasetName { source }
+    }
+}
+
+impl From<geoengine_datatypes::machine_learning::MlModelNameError> for Error {
+    fn from(source: geoengine_datatypes::machine_learning::MlModelNameError) -> Self {
+        Error::MlModelName { source }
     }
 }
