@@ -938,7 +938,7 @@ CREATE TABLE ebv_provider_loading_infos (
 CREATE TYPE "TensorShape3D" AS (
     x OID,
     y OID,
-    attributes OID
+    bands OID
 );
 
 CREATE TYPE "MlModelMetadata" AS (

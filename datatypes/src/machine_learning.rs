@@ -1,6 +1,6 @@
 use crate::{
     dataset::{is_invalid_name_char, SYSTEM_NAMESPACE},
-    raster::{GridShape2D, GridShape3D, GridSize, RasterDataType},
+    raster::{GridShape2D, GridSize, RasterDataType},
 };
 use serde::{de::Visitor, Deserialize, Serialize};
 use snafu::Snafu;
@@ -140,49 +140,33 @@ impl Visitor<'_> for MlModelNameDeserializeVisitor {
 pub struct TensorShape3D {
     pub y: u32,
     pub x: u32,
-    pub attributes: u32, // TODO: named attributes?
-}
-
-impl From<TensorShape3D> for GridShape3D {
-    fn from(value: TensorShape3D) -> Self {
-        GridShape3D::new(value.axis_size())
-    }
-}
-
-impl GridSize for TensorShape3D {
-    type ShapeArray = [usize; 3];
-
-    const NDIM: usize = 3;
-
-    fn axis_size(&self) -> Self::ShapeArray {
-        [
-            self.attributes as usize,
-            self.axis_size_y(),
-            self.axis_size_x(),
-        ]
-    }
-
-    fn axis_size_x(&self) -> usize {
-        self.x as usize
-    }
-
-    fn axis_size_y(&self) -> usize {
-        self.y as usize
-    }
-
-    fn number_of_elements(&self) -> usize {
-        self.attributes as usize * self.axis_size_y() * self.axis_size_x()
-    }
+    pub bands: u32, // TODO: named attributes?
 }
 
 impl TensorShape3D {
-    pub fn new_y_x_attr(y: u32, x: u32, attributes: u32) -> Self {
-        Self { y, x, attributes }
+    pub fn new_y_x_bands(y: u32, x: u32, bands: u32) -> Self {
+        Self { y, x, bands }
+    }
+
+    pub fn new_single_pixel_bands(bands: u32) -> Self {
+        Self { y: 1, x: 1, bands }
+    }
+
+    pub fn new_single_pixel_single_band() -> Self {
+        Self::new_single_pixel_bands(1)
+    }
+
+    pub fn axis_size_y(&self) -> u32 {
+        self.y
+    }
+
+    pub fn axis_size_x(&self) -> u32 {
+        self.x
     }
 
     pub fn yx_matches_tile_shape(&self, tile_shape: &GridShape2D) -> bool {
-        self.axis_size_x() == tile_shape.axis_size_x()
-            && self.axis_size_y() == tile_shape.axis_size_y()
+        self.axis_size_x() as usize == tile_shape.axis_size_x()
+            && self.axis_size_y() as usize == tile_shape.axis_size_y()
     }
 }
 
@@ -199,11 +183,11 @@ pub struct MlModelMetadata {
 
 impl MlModelMetadata {
     pub fn num_input_bands(&self) -> u32 {
-        self.input_shape.attributes
+        self.input_shape.bands
     }
 
     pub fn mun_output_bands(&self) -> u32 {
-        self.output_shape.attributes
+        self.output_shape.bands
     }
 
     pub fn input_is_single_pixel(&self) -> bool {

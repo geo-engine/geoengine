@@ -6,16 +6,16 @@ use crate::error::Result;
 use super::database_migration::{DatabaseVersion, Migration};
 
 /// This migration adds tensor shape to `MlModel` input and output
-pub struct Migration0015MlModelTensorShape;
+pub struct Migration0017MlModelTensorShape;
 
 #[async_trait]
-impl Migration for Migration0015MlModelTensorShape {
+impl Migration for Migration0017MlModelTensorShape {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some("0014_multiband_colorizer".into())
+        Some("0016_merge_providers".into())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0015_ml_model_tensor_shape".into()
+        "0017_ml_model_tensor_shape".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
@@ -24,7 +24,7 @@ impl Migration for Migration0015MlModelTensorShape {
                 CREATE TYPE "TensorShape3D" AS (
                     x OID,
                     y OID,
-                    attributes OID
+                    bands OID
                 );
 
                 ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE input_shape "TensorShape3D";
