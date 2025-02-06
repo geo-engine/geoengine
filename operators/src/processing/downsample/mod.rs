@@ -245,8 +245,6 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
         // target resolution must be coarser than input
         debug_assert!(input_resolution < target_resolution);
 
-        dbg!(input_resolution);
-
         // snap the input resolution to an overview level
         let mut snapped_input_resolution = input_resolution;
 

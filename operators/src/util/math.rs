@@ -15,6 +15,11 @@ where
     (a & b) + ((a ^ b) >> 1)
 }
 
+/// Check if a number is a power of two.
+pub fn is_power_of_two(n: u32) -> bool {
+    n > 0 && (n & (n - 1)) == 0
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -27,5 +32,17 @@ mod tests {
         );
 
         assert_eq!(average_floor(i64::MIN, i64::MAX), -1);
+    }
+
+    #[test]
+    fn it_checks_power_of_two() {
+        assert!(is_power_of_two(1));
+        assert!(is_power_of_two(2));
+        assert!(is_power_of_two(4));
+        assert!(is_power_of_two(8));
+        assert!(is_power_of_two(16));
+
+        assert!(!is_power_of_two(3));
+        assert!(!is_power_of_two(5));
     }
 }

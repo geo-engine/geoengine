@@ -2586,7 +2586,6 @@ mod tests {
                             (180., 90.).into(),
                         ),
                         TimeInterval::default(),
-                        
                          ColumnSelection::all(),
                     ))
                     .await
@@ -3061,14 +3060,13 @@ mod tests {
                     vec![],
                 );
 
-                let query_rectangle = VectorQueryRectangle::with_bounds( 
+                let query_rectangle = VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new(
                         (-61.065_22, 14.775_33).into(),
                         (-61.065_22, 14.775_33).into(),
                     )
                     .unwrap(),
-                     TimeInterval::default(),
-                    
+                    TimeInterval::default(),
                     ColumnSelection::all(),
                 );
                 let ctx = MockQueryContext::test_default();
@@ -3182,13 +3180,13 @@ mod tests {
                     vec![],
                 );
 
-                let query_rectangle = VectorQueryRectangle::with_bounds( 
+                let query_rectangle = VectorQueryRectangle::with_bounds(
                     BoundingBox2D::new(
                         (-61.065_22, 14.775_33).into(),
                         (-61.065_22, 14.775_33).into(),
                     )
                     .unwrap(),
-                    TimeInterval::default(),                    
+                    TimeInterval::default(),
                     ColumnSelection::all(),
                 );
                 let ctx = MockQueryContext::test_default();
@@ -3295,10 +3293,9 @@ mod tests {
                 );
 
                 let query_rectangle = VectorQueryRectangle::with_bounds(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new_instant(1_517_011_200_000).unwrap(),
-                     ColumnSelection::all(),
+                    ColumnSelection::all(),
                 );
                 let ctx = MockQueryContext::test_default();
 
@@ -3339,10 +3336,8 @@ mod tests {
                 }
 
                 let query_rectangle = VectorQueryRectangle::with_bounds(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new_instant(1_517_443_200_000).unwrap(),
-                    
                     ColumnSelection::all(),
                 );
                 let ctx = MockQueryContext::test_default();
@@ -3436,8 +3431,7 @@ mod tests {
                 );
 
                 let query_rectangle = VectorQueryRectangle::with_bounds(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new(
                         TimeInstance::from_millis_unchecked(1_517_011_200_000),
                         TimeInstance::from_millis_unchecked(1_517_443_200_000),
@@ -3484,14 +3478,13 @@ mod tests {
                 }
 
                 let query_rectangle = VectorQueryRectangle::with_bounds(
-                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                     TimeInterval::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::new(
                         TimeInstance::from_millis_unchecked(1_517_011_200_000),
                         TimeInstance::from_millis_unchecked(1_517_443_200_001),
                     )
                     .unwrap(),
-                     ColumnSelection::all(),
+                    ColumnSelection::all(),
                 );
                 let ctx = MockQueryContext::test_default();
 

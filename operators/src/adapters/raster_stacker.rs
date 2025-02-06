@@ -1552,8 +1552,9 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-            GeoTransform::test_default(),
-            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap()),
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: vec![RasterBandDescriptor::new(
                 "mrs2 band2".to_string(),
                 Measurement::Unitless,
@@ -1567,8 +1568,9 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: None,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
-            GeoTransform::test_default(),
-            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap()),
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
             bands: vec![
                 RasterBandDescriptor::new("mrs3 band1".to_string(), Measurement::Unitless),
                 RasterBandDescriptor::new("mrs3 band2".to_string(), Measurement::Unitless),

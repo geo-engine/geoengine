@@ -1,4 +1,4 @@
-use geoengine_datatypes::primitives::SpatialResolution;
+use geoengine_datatypes::{error::ErrorSource, primitives::SpatialResolution};
 use snafu::{ensure, Snafu};
 
 use crate::engine::InitializedRasterOperator;
@@ -20,6 +20,9 @@ pub enum OptimizationError {
         oveview_level: u32,
     },
     OptimizationNotYetImplementedForOperator,
+    ProjectionOptimizationFailed {
+        source: Box<dyn ErrorSource>,
+    },
 }
 
 // TODO: move `optimize` method from `RasterOperator` to `OptimizableOperator`
@@ -57,21 +60,26 @@ impl<T> OptimizableOperator for T where T: InitializedRasterOperator {}
 mod tests {
     use geoengine_datatypes::{
         raster::{RasterDataType, RenameBands},
+        spatial_reference::{SpatialReference, SpatialReferenceAuthority},
         util::test::TestDefault,
     };
 
     use crate::{
         engine::{
-            MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
-            WorkflowOperatorPath,
+            MockExecutionContext, MultipleRasterSources, RasterOperator,
+            SingleRasterOrVectorSource, SingleRasterSource, WorkflowOperatorPath,
         },
         processing::{
-            Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
-            Expression, ExpressionParams, Interpolation, InterpolationMethod, InterpolationParams,
-            InterpolationResolution, RasterStacker, RasterStackerParams,
+            DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
+            DownsamplingResolution, Expression, ExpressionParams, Interpolation,
+            InterpolationMethod, InterpolationParams, InterpolationResolution, RasterStacker,
+            RasterStackerParams, Reprojection, ReprojectionParams,
         },
         source::{GdalSource, GdalSourceParameters},
-        util::gdal::{add_ndvi_dataset, add_ndvi_downscaled_3x_dataset},
+        util::{
+            gdal::{add_ndvi_dataset, add_ndvi_downscaled_3x_dataset},
+            input::RasterOrVectorOperator,
+        },
     };
 
     use super::*;
@@ -653,6 +661,144 @@ mod tests {
                 .spatial_grid
                 .spatial_resolution(),
             SpatialResolution::new(0.6, 0.6).unwrap()
+        );
+    }
+
+    #[tokio::test]
+    async fn it_optimizes_reprojection() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let workflow = Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    3857,
+                ),
+                derive_out_spec: DeriveOutRasterSpecsSource::default(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+        }
+        .boxed();
+
+        let workflow_initialized = workflow
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let expected_resolution = 14255.015508816849;
+
+        assert_eq!(
+            workflow_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(expected_resolution, expected_resolution).unwrap()
+        );
+
+        let optimize_resolution = expected_resolution * 2.0;
+
+        let workflow_optimized = workflow_initialized
+            .optimize(SpatialResolution::new(optimize_resolution, optimize_resolution).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&workflow_optimized).unwrap();
+
+        // require an interpolation in addition to the reprojection
+        // TODO: should we instead load the source in higher resolution and downsample?
+        //       or: we could make an exception that the reprojection may not have to produce the exact resolution, but how would we choose the correct resolution for the top level operator then?
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "interpolation": "nearestNeighbor",
+                    "outputOriginReference": null,
+                    "outputResolution": {
+                        "type": "resolution",
+                        "x": 28510.031017633697,
+                        "y": 28510.031017633697
+                    }
+                },
+                "sources": {
+                    "raster": {
+                        "params": {
+                            "deriveOutSpec": "projectionBounds",
+                            "targetSpatialReference": "EPSG:3857"
+                        },
+                        "sources": {
+                            "source": {
+                                "params": {
+                                    "data": "ndvi",
+                                    "overviewLevel": 2
+                                },
+                                "type": "GdalSource"
+                            }
+                        },
+                        "type": "Reprojection"
+                    }
+                },
+                "type": "Interpolation"
+            })
+        );
+
+        let gdal_optimized_initialized = workflow_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            gdal_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(optimize_resolution, optimize_resolution).unwrap()
+        );
+
+        // check that the reprojection was necessary
+        let workflow = Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    3857,
+                ),
+                derive_out_spec: DeriveOutRasterSpecsSource::default(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(
+                    GdalSource {
+                        params: GdalSourceParameters {
+                            data: ndvi_id.clone(),
+                            overview_level: Some(2),
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+        }
+        .boxed();
+
+        let workflow_initialized = workflow
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert!(
+            workflow_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution()
+                > SpatialResolution::new(optimize_resolution, optimize_resolution).unwrap()
         );
     }
 }

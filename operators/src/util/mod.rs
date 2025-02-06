@@ -1,5 +1,4 @@
 mod async_util;
-pub mod test;
 pub mod gdal;
 pub mod input;
 pub mod math;
@@ -13,6 +12,7 @@ pub mod stream_zip;
 pub mod string_token;
 pub mod sunpos;
 mod temporary_gdal_thread_local_config_options;
+pub mod test;
 mod wrap_with_projection_and_resample;
 
 use crate::error::Error;

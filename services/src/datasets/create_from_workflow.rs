@@ -83,7 +83,6 @@ impl RasterDatasetFromWorkflowParams {
             error::ResolutionMissmatch,
         );
 
-
         let grid_bounds = result_descriptor
             .spatial_grid_descriptor()
             .tiling_grid_definition(tiling_spec)
@@ -94,7 +93,7 @@ impl RasterDatasetFromWorkflowParams {
             geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
                 grid_bounds,
                 query.time_interval.into(),
-                BandSelection::first_n(result_descriptor.bands.len() as u32 ), 
+                BandSelection::first_n(result_descriptor.bands.len() as u32),
             );
 
         Ok(Self {
@@ -136,9 +135,7 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
     async fn process(&self) -> error::Result<RasterDatasetFromWorkflowResult> {
         let result_descriptor = self.initialized_operator.result_descriptor();
 
-        let processor = self
-            .initialized_operator
-            .query_processor()?;
+        let processor = self.initialized_operator.query_processor()?;
 
         let query_rect: &geoengine_datatypes::primitives::QueryRectangle<
             geoengine_datatypes::primitives::SpatialGridQueryRectangle,
@@ -169,11 +166,8 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
             },
             tile_limit,
             Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
-            
         ).await)?
             .map_err(crate::error::Error::from)?;
-
-
 
         // create the dataset
         let dataset = create_dataset(
@@ -320,10 +314,12 @@ async fn create_dataset<C: SessionContext>(
     // TODO: this is not ow it is intended to work with the spatial grid descriptor. The source should propably not need that defined in its params since it can be derived from the dataset!
     let dataset_source_descriptor_spatial_grid = match result_descriptor_bounds {
         geoengine_operators::engine::SpatialGridDescriptor::Derived(d) => d,
-        geoengine_operators::engine::SpatialGridDescriptor::Source(s) => s
+        geoengine_operators::engine::SpatialGridDescriptor::Source(s) => s,
     };
 
-    let dataset_spatial_grid = geoengine_operators::engine::SpatialGridDescriptor::new_source(dataset_source_descriptor_spatial_grid);
+    let dataset_spatial_grid = geoengine_operators::engine::SpatialGridDescriptor::new_source(
+        dataset_source_descriptor_spatial_grid,
+    );
 
     let result_descriptor = RasterResultDescriptor {
         data_type: origin_result_descriptor.data_type,
