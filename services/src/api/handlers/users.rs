@@ -915,6 +915,8 @@ mod tests {
     use tokio_postgres::NoTls;
     use uuid::Uuid;
 
+    const DUMMY_REDIRECT_URI: &str = "http://dummy.redirect-uri.com";
+
     async fn register_test_helper(
         app_ctx: PostgresContext<NoTls>,
         method: Method,
@@ -1405,7 +1407,7 @@ mod tests {
     async fn oidc_init_test_helper(method: Method, ctx: PostgresContext<NoTls>) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
-            .uri("/oidcInit")
+            .uri(&format!("/oidcInit?redirectUri={DUMMY_REDIRECT_URI}"))
             .append_header((header::CONTENT_LENGTH, 0));
         send_test_request(req, ctx).await
     }
@@ -1417,7 +1419,7 @@ mod tests {
     ) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
-            .uri("/oidcLogin")
+            .uri(&format!("/oidcLogin?redirectUri={DUMMY_REDIRECT_URI}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&auth_code_response);
         send_test_request(req, ctx).await
@@ -1520,7 +1522,7 @@ mod tests {
 
         let request = app_ctx
             .oidc_manager()
-            .get_client()
+            .get_client_with_redirect_uri(DUMMY_REDIRECT_URI.to_string())
             .await
             .unwrap()
             .generate_request()
@@ -1590,7 +1592,7 @@ mod tests {
 
         let request = app_ctx
             .oidc_manager()
-            .get_client()
+            .get_client_with_redirect_uri(DUMMY_REDIRECT_URI.to_string())
             .await
             .unwrap()
             .generate_request()
@@ -1711,7 +1713,7 @@ mod tests {
 
         let request = app_ctx
             .oidc_manager()
-            .get_client()
+            .get_client_with_redirect_uri(DUMMY_REDIRECT_URI.to_string())
             .await
             .unwrap()
             .generate_request()
@@ -1776,7 +1778,7 @@ mod tests {
 
         let request = app_ctx
             .oidc_manager()
-            .get_client()
+            .get_client_with_redirect_uri(DUMMY_REDIRECT_URI.to_string())
             .await
             .unwrap()
             .generate_request()
