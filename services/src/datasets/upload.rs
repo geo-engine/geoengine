@@ -21,9 +21,10 @@ pub trait AdjustFilePath {
     fn adjust_file_path(&self, file_path: &Path) -> Result<PathBuf>;
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 pub struct Volume {
     pub name: VolumeName,
+    #[schema(value_type  = String)]
     pub path: PathBuf,
 }
 

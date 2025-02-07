@@ -6,7 +6,7 @@ use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetF
 use crate::error::Error::NotImplemented;
 use crate::error::{Error, Result};
 use crate::layers::layer::{
-    AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId, UpdateLayer, UpdateLayerCollection,
 };
 use crate::layers::listing::{

@@ -13,7 +13,7 @@ use std::{
     fmt::{Debug, Formatter},
     str::FromStr,
 };
-use utoipa::ToSchema;
+use utoipa::{PartialSchema, ToSchema};
 
 identifier!(DataProviderId);
 
@@ -213,15 +213,16 @@ impl From<&NamedData> for geoengine_datatypes::dataset::NamedData {
     }
 }
 
-impl<'a> ToSchema<'a> for NamedData {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "NamedData",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
+impl PartialSchema for NamedData {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
     }
 }
+
+impl ToSchema for NamedData {}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, ToSql, FromSql)]
 pub struct LayerId(pub String); // TODO: differentiate between internal layer ids (UUID) and external layer ids (String)
@@ -734,12 +735,28 @@ impl From<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
 }
 
 /// An object that composes the date and a timestamp with time zone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToSchema)]
-pub struct DateTime {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DateTimeString {
     datetime: chrono::DateTime<chrono::Utc>,
 }
 
-impl FromStr for DateTime {
+// TODO: use derive ToSchema when OpenAPI derive does not break
+impl PartialSchema for DateTimeString {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
+    }
+}
+
+impl ToSchema for DateTimeString {
+    // fn name() -> Cow<'static, str> {
+    //     "DateTime2".into()
+    // }
+}
+
+impl FromStr for DateTimeString {
     type Err = geoengine_datatypes::primitives::DateTimeError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
@@ -753,7 +770,7 @@ impl FromStr for DateTime {
     }
 }
 
-impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
+impl From<chrono::DateTime<chrono::FixedOffset>> for DateTimeString {
     fn from(datetime: chrono::DateTime<chrono::FixedOffset>) -> Self {
         Self {
             datetime: datetime.into(),
@@ -761,7 +778,7 @@ impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
     }
 }
 
-impl From<geoengine_datatypes::primitives::DateTime> for DateTime {
+impl From<geoengine_datatypes::primitives::DateTime> for DateTimeString {
     fn from(datetime: geoengine_datatypes::primitives::DateTime) -> Self {
         Self {
             datetime: datetime.into(),
@@ -961,16 +978,20 @@ impl From<SpatialPartition2D> for geoengine_datatypes::primitives::SpatialPartit
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[aliases(
-    VectorQueryRectangle = QueryRectangle<BoundingBox2D>,
-    RasterQueryRectangle = QueryRectangle<SpatialPartition2D>,
-    PlotQueryRectangle = QueryRectangle<BoundingBox2D>)
-]
+// #[aliases( // TODO: find solution?
+//     VectorQueryRectangle = QueryRectangle<BoundingBox2D>,
+//     RasterQueryRectangle = QueryRectangle<SpatialPartition2D>,
+//     PlotQueryRectangle = QueryRectangle<BoundingBox2D>)
+// ]
 pub struct QueryRectangle<SpatialBounds> {
     pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
+
+pub type RasterQueryRectangle = QueryRectangle<SpatialPartition2D>;
+pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D>;
+pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D>;
 
 impl
     From<
@@ -1063,7 +1084,7 @@ impl FromStr for TimeInstance {
     type Err = geoengine_datatypes::primitives::DateTimeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let date_time = DateTime::from_str(s)?;
+        let date_time = DateTimeString::from_str(s)?;
         Ok(date_time.into())
     }
 }
@@ -1080,14 +1101,14 @@ impl From<TimeInstance> for geoengine_datatypes::primitives::TimeInstance {
     }
 }
 
-impl From<DateTime> for TimeInstance {
-    fn from(datetime: DateTime) -> Self {
+impl From<DateTimeString> for TimeInstance {
+    fn from(datetime: DateTimeString) -> Self {
         Self::from(&datetime)
     }
 }
 
-impl From<&DateTime> for TimeInstance {
-    fn from(datetime: &DateTime) -> Self {
+impl From<&DateTimeString> for TimeInstance {
+    fn from(datetime: &DateTimeString) -> Self {
         geoengine_datatypes::primitives::TimeInstance::from_millis_unchecked(
             datetime.datetime.timestamp_millis(),
         )
@@ -1347,20 +1368,19 @@ impl From<ResamplingMethod> for geoengine_datatypes::util::gdal::ResamplingMetho
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct RgbaColor(pub [u8; 4]);
 
-// manual implementation utoipa generates an integer field
-impl<'a> ToSchema<'a> for RgbaColor {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "RgbaColor",
-            ArrayBuilder::new()
-                .items(ObjectBuilder::new().schema_type(SchemaType::Integer))
-                .min_items(Some(4))
-                .max_items(Some(4))
-                .into(),
-        )
+impl PartialSchema for RgbaColor {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, SchemaType, Type};
+        ArrayBuilder::new()
+            .items(ObjectBuilder::new().schema_type(SchemaType::Type(Type::Integer)))
+            .min_items(Some(4))
+            .max_items(Some(4))
+            .into()
     }
 }
+
+// manual implementation utoipa generates an integer field
+impl ToSchema for RgbaColor {}
 
 impl From<geoengine_datatypes::operations::image::RgbaColor> for RgbaColor {
     fn from(color: geoengine_datatypes::operations::image::RgbaColor) -> Self {
@@ -1427,21 +1447,20 @@ impl<'a> FromSql<'a> for NotNanF64 {
     }
 }
 
-// manual implementation because of NotNan
-impl<'a> ToSchema<'a> for Breakpoint {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "Breakpoint",
-            ObjectBuilder::new()
-                .property("value", Object::with_type(SchemaType::Number))
-                .property("color", Ref::from_schema_name("RgbaColor"))
-                .required("value")
-                .required("color")
-                .into(),
-        )
+impl PartialSchema for Breakpoint {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{Object, ObjectBuilder, Ref, SchemaType, Type};
+        ObjectBuilder::new()
+            .property("value", Object::with_type(SchemaType::Type(Type::Number)))
+            .property("color", Ref::from_schema_name("RgbaColor"))
+            .required("value")
+            .required("color")
+            .into()
     }
 }
+
+// manual implementation because of NotNan
+impl ToSchema for Breakpoint {}
 
 impl From<geoengine_datatypes::operations::image::Breakpoint> for Breakpoint {
     fn from(breakpoint: geoengine_datatypes::operations::image::Breakpoint) -> Self {
@@ -1744,6 +1763,7 @@ impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterCol
 /// It is assumed that is has at least one and at most 256 entries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
+#[schema(value_type = HashMap<f64, RgbaColor>)]
 pub struct Palette(pub HashMap<NotNan<f64>, RgbaColor>);
 
 impl From<geoengine_datatypes::operations::image::Palette> for Palette {
@@ -1854,15 +1874,16 @@ pub struct DateTimeParseFormat {
     has_time: bool,
 }
 
-impl<'a> ToSchema<'a> for DateTimeParseFormat {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "DateTimeParseFormat",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
+impl PartialSchema for DateTimeParseFormat {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
     }
 }
+
+impl ToSchema for DateTimeParseFormat {}
 
 impl<'de> Deserialize<'de> for DateTimeParseFormat {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -2015,28 +2036,27 @@ pub struct StringPair((String, String));
 pub type GdalConfigOption = StringPair;
 pub type AxisLabels = StringPair;
 
-impl<'a> ToSchema<'a> for StringPair {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "StringPair",
-            ArrayBuilder::new()
-                .items(Object::with_type(SchemaType::String))
-                .min_items(Some(2))
-                .max_items(Some(2))
-                .into(),
-        )
+impl PartialSchema for StringPair {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ArrayBuilder, Object, SchemaType, Type};
+        ArrayBuilder::new()
+            .items(Object::with_type(SchemaType::Type(Type::String)))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
     }
+}
 
-    fn aliases() -> Vec<(&'a str, utoipa::openapi::Schema)> {
-        let utoipa::openapi::RefOr::T(unpacked_schema) = Self::schema().1 else {
-            unreachable!()
-        };
-        vec![
-            ("GdalConfigOption", unpacked_schema.clone()),
-            ("AxisLabels", unpacked_schema),
-        ]
-    }
+impl ToSchema for StringPair {
+    // fn aliases() -> Vec<(&'a str, utoipa::openapi::Schema)> { // TODO: how to do this?
+    //     let utoipa::openapi::RefOr::T(unpacked_schema) = Self::schema().1 else {
+    //         unreachable!()
+    //     };
+    //     vec![
+    //         ("GdalConfigOption", unpacked_schema.clone()),
+    //         ("AxisLabels", unpacked_schema),
+    //     ]
+    // }
 }
 
 impl From<(String, String)> for StringPair {

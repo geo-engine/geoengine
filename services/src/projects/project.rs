@@ -20,6 +20,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::{convert::TryInto, fmt::Debug};
+use utoipa::PartialSchema;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -36,6 +37,7 @@ pub struct Project {
     pub layers: Vec<ProjectLayer>,
     pub plots: Vec<Plot>,
     pub bounds: STRectangle,
+    #[schema(value_type = crate::api::model::datatypes::TimeStep)]
     pub time_step: TimeStep,
 }
 
@@ -147,7 +149,9 @@ impl Project {
 pub struct STRectangle {
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
+    #[schema(value_type = crate::api::model::datatypes::BoundingBox2D)]
     pub bounding_box: BoundingBox2D,
+    #[schema(value_type = crate::api::model::datatypes::TimeInterval)]
     pub time_interval: TimeInterval,
 }
 
@@ -258,6 +262,7 @@ pub enum Symbology {
 #[serde(rename_all = "camelCase")]
 pub struct RasterSymbology {
     pub opacity: f64,
+    #[schema(value_type = crate::api::model::datatypes::RasterColorizer)]
     pub raster_colorizer: RasterColorizer,
 }
 
@@ -356,13 +361,17 @@ impl Eq for DerivedNumber {}
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum ColorParam {
-    Static { color: RgbaColor },
+    Static {
+        #[schema(value_type = crate::api::model::datatypes::RgbaColor)]
+        color: RgbaColor,
+    },
     Derived(DerivedColor),
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
 pub struct DerivedColor {
     pub attribute: String,
+    #[schema(value_type = crate::api::model::datatypes::Colorizer)]
     pub colorizer: Colorizer,
 }
 
@@ -387,7 +396,7 @@ pub struct Plot {
     pub name: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 pub enum OrderBy {
     DateAsc,
     DateDesc,
@@ -457,6 +466,7 @@ pub struct CreateProject {
     #[validate(length(min = 1))]
     pub description: String,
     pub bounds: STRectangle,
+    #[schema(value_type = Option<crate::api::model::datatypes::TimeStep>)]
     pub time_step: Option<TimeStep>,
 }
 
@@ -505,6 +515,7 @@ pub struct UpdateProject {
     pub layers: Option<Vec<LayerUpdate>>,
     pub plots: Option<Vec<PlotUpdate>>,
     pub bounds: Option<STRectangle>,
+    #[schema(value_type = Option<crate::api::model::datatypes::TimeStep>)]
     pub time_step: Option<TimeStep>,
 }
 
@@ -524,42 +535,44 @@ string_token!(Delete, "delete");
 
 // use common schema for `Delete` and `NoUpdate`
 // TODO: maybe revert when https://github.com/OpenAPITools/openapi-generator/issues/14831 is fixed
-impl<'a> ToSchema<'a> for Delete {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "ProjectUpdateToken",
-            ObjectBuilder::new()
-                .schema_type(SchemaType::String)
-                .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
-                .into(),
-        )
+impl ToSchema for Delete {
+    fn name() -> Cow<'static, str> {
+        "ProjectUpdateToken".into()
     }
 }
 
-impl<'a> ToSchema<'a> for LayerUpdate {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "LayerUpdate",
-            OneOfBuilder::new()
-                .item(Ref::from_schema_name("ProjectUpdateToken"))
-                .item(Ref::from_schema_name("ProjectLayer"))
-                .into(),
-        )
+impl PartialSchema for Delete {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{SchemaType, Type};
+        use utoipa::openapi::ObjectBuilder;
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
+            .into()
     }
 }
 
-impl<'a> ToSchema<'a> for PlotUpdate {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+impl ToSchema for LayerUpdate {}
+
+impl PartialSchema for LayerUpdate {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
         use utoipa::openapi::*;
-        (
-            "PlotUpdate",
-            OneOfBuilder::new()
-                .item(Ref::from_schema_name("ProjectUpdateToken"))
-                .item(Ref::from_schema_name("Plot"))
-                .into(),
-        )
+        OneOfBuilder::new()
+            .item(Ref::from_schema_name("ProjectUpdateToken"))
+            .item(Ref::from_schema_name("ProjectLayer"))
+            .into()
+    }
+}
+
+impl ToSchema for PlotUpdate {}
+
+impl PartialSchema for PlotUpdate {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::*;
+        OneOfBuilder::new()
+            .item(Ref::from_schema_name("ProjectUpdateToken"))
+            .item(Ref::from_schema_name("Plot"))
+            .into()
     }
 }
 
