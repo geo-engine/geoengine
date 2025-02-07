@@ -12,7 +12,15 @@ use crate::api::handlers::users::{Quota, UpdateQuota, UsageSummaryGranularity};
 use crate::api::handlers::wfs::{CollectionType, GeoJson};
 use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
-    AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TensorShape3D, TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle
+    AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
+    ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
+    DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId, FeatureDataType,
+    GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement, MultiLineString,
+    MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle,
+    RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
+    SpatialResolution, StringPair, TensorShape3D, TimeGranularity, TimeInstance, TimeInterval,
+    TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
