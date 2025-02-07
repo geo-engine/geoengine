@@ -356,7 +356,6 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 
     let tiling_spec = execution_context.tiling_specification();
 
-    // TODO: add resample push down!
     let wrapped =
         geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
             operator,
@@ -367,7 +366,9 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             request_resolution,
             request_spatial_ref,
             tiling_spec,
-        )?;
+            &execution_context,
+        )
+        .await?;
 
     let query_tiling_pixel_grid = wrapped
         .result_descriptor

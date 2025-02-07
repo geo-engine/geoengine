@@ -1,0 +1,32 @@
+###
+
+# @name anonymousSession
+POST http://localhost:3030/api/anonymous
+Content-Type: application/json
+
+### 
+
+# @name workflow
+POST http://localhost:3030/api/workflow
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "type": "Raster",
+  "operator": {
+    "type": "GdalSource",
+    "params": {
+      "data": "ndvi"
+    }
+  }
+}
+
+###
+
+GET http://localhost:3030/api/wcs/{{workflow.response.body.$.id}}?SERVICE=WCS&REQUEST=DescribeCoverage&VERSION=1.1.1&IDENTIFIERS={{workflow.response.body.$.id}}&FORMAT=text/xml&crs=urn:ogc:def:crs:EPSG::4326
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+GET http://localhost:3030/api/wcs/{{workflow.response.body.$.id}}?SERVICE=WCS&REQUEST=GetCoverage&VERSION=1.1.1&IDENTIFIER={{workflow.response.body.$.id}}&FORMAT=image/tiff&CRS=urn:ogc:def:crs:EPSG::4326&BOUNDINGBOX=20,-10,80,50&GRIDCS=urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS&GRIDTYPE=urn:ogc:def:method:WCS:1.1:2dSimpleGrid&GRIDORIGIN=80,-10&GRIDOFFSETS=0.7,0.7&TIME=2014-01-01T00:00:00.0Z&NODATAVALUE=0.0
+Authorization: Bearer {{anonymousSession.response.body.$.id}}

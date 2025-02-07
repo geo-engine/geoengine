@@ -10,30 +10,40 @@ use crate::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
         InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
         RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterOrVectorSource,
-        TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
-        VectorResultDescriptor, WorkflowOperatorPath,
+        SingleRasterSource, SpatialGridDescriptor, TypedRasterQueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+        WorkflowOperatorPath,
     },
     error::{self, Error},
-    util::Result,
+    optimization::{OptimizableOperator, OptimizationError, ProjectionOptimizationFailed},
+    processing::{
+        Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
+        Interpolation, InterpolationMethod, InterpolationParams, InterpolationResolution,
+    },
+    source,
+    util::{input::RasterOrVectorOperator, math::is_power_of_two, Result},
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{stream, StreamExt};
 use geoengine_datatypes::{
     collections::FeatureCollection,
+    error::BoxedResultExt,
     operations::reproject::{
-        reproject_spatial_query, CoordinateProjection, CoordinateProjector, Reproject,
-        ReprojectClipped,
+        reproject_spatial_query, suggest_output_spatial_grid_like_gdal,
+        suggest_output_spatial_grid_like_gdal_helper, suggest_pixel_size_like_gdal_helper,
+        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
     },
     primitives::{
         BandSelection, ColumnSelection, Geometry, RasterQueryRectangle,
         RasterSpatialQueryRectangle, SpatialGridQueryRectangle, SpatialPartition2D,
-        VectorQueryRectangle, VectorSpatialQueryRectangle,
+        SpatialResolution, VectorQueryRectangle, VectorSpatialQueryRectangle,
     },
     raster::{Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
     util::arrow::ArrowTyped,
 };
+use ort::session::input;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -75,6 +85,7 @@ pub struct InitializedVectorReprojection {
 pub struct InitializedRasterReprojection<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
     result_descriptor: RasterResultDescriptor,
+    params: ReprojectionParams,
     source: O,
     state: TileReprojectionSubqueryGridInfo,
     source_srs: SpatialReference,
@@ -133,35 +144,15 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         tiling_spec: TilingSpecification,
     ) -> Result<Self> {
         let in_desc: RasterResultDescriptor = source_raster_operator.result_descriptor().clone();
-
         let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
             .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
 
-        // calculate the intersection of input and output srs in both coordinate systems
-        let proj_from_to =
-            CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
-
-        let out_spatial_grid = match params.derive_out_spec {
-            DeriveOutRasterSpecsSource::DataBounds => in_desc
-                .spatial_grid_descriptor()
-                .reproject_clipped(&proj_from_to)?,
-            DeriveOutRasterSpecsSource::ProjectionBounds => {
-                let in_srs_area: SpatialPartition2D = in_srs.area_of_use_projected()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
-                let target_proj_total_grid = in_desc
-                    .spatial_grid_descriptor()
-                    .spatial_bounds_to_compatible_spatial_grid(in_srs_area)
-                    .reproject_clipped(&proj_from_to)?;
-                // jetzt grid mit origin (tl) auf grid vom dataset. dann umprojeziren. Dann intersection mit boundingbox in dataset
-                let spatial_bounds_proj =
-                    in_desc.spatial_bounds().reproject_clipped(&proj_from_to)?;
-                target_proj_total_grid.and_then(|x| {
-                    spatial_bounds_proj.map(|spb| x.spatial_bounds_to_compatible_spatial_grid(spb))
-                })
-            }
-        };
-
-        // Operator will return an error when there is no intersection between data and output projection bounds!
-        let out_spatial_grid = out_spatial_grid.ok_or(error::Error::ReprojectionFailed)?; // TODO: better error!
+        let out_spatial_grid = compute_output_spatial_grid(
+            *in_desc.spatial_grid_descriptor(),
+            in_desc.spatial_bounds(),
+            in_srs,
+            params,
+        )?;
 
         let out_desc = RasterResultDescriptor {
             spatial_reference: params.target_spatial_reference.into(),
@@ -183,6 +174,7 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
 
         Ok(InitializedRasterReprojection {
             name,
+            params,
             result_descriptor: out_desc,
             source: source_raster_operator,
             state,
@@ -190,6 +182,34 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
             target_srs: params.target_spatial_reference,
         })
     }
+}
+
+fn compute_output_spatial_grid(
+    in_spatial_grid_descriptor: SpatialGridDescriptor,
+    in_spatial_bounds: SpatialPartition2D,
+    in_srs: SpatialReference,
+    params: ReprojectionParams,
+) -> Result<SpatialGridDescriptor> {
+    let proj_from_to =
+        CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+    let out_spatial_grid = match params.derive_out_spec {
+        DeriveOutRasterSpecsSource::DataBounds => {
+            in_spatial_grid_descriptor.reproject_clipped(&proj_from_to)?
+        }
+        DeriveOutRasterSpecsSource::ProjectionBounds => {
+            let in_srs_area: SpatialPartition2D = in_srs.area_of_use_projected()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
+            let target_proj_total_grid = in_spatial_grid_descriptor
+                .spatial_bounds_to_compatible_spatial_grid(in_srs_area)
+                .reproject_clipped(&proj_from_to)?;
+            // jetzt grid mit origin (tl) auf grid vom dataset. dann umprojeziren. Dann intersection mit boundingbox in dataset
+            let spatial_bounds_proj = in_spatial_bounds.reproject_clipped(&proj_from_to)?;
+            target_proj_total_grid.and_then(|x| {
+                spatial_bounds_proj.map(|spb| x.spatial_bounds_to_compatible_spatial_grid(spb))
+            })
+        }
+    };
+    let out_spatial_grid = out_spatial_grid.ok_or(error::Error::ReprojectionFailed)?;
+    Ok(out_spatial_grid)
 }
 
 #[typetag::serde]
@@ -546,6 +566,106 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        // adjust input resolution relative to change in target resolution
+        // idea: optimization of reprojection snaps from one overview level to another, so do the same in the source
+        // if the result does not match, we need to interpolate or resample the result to match the target resolution
+
+        // TODO: validate the quality of this approach, especially if the output resolution is actually the target resolution
+
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let current_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+
+        let output_overview_level_factor =
+            (target_resolution.x / current_resolution.x).round() as u32;
+        // must be the same in x and y
+        debug_assert_eq!(
+            output_overview_level_factor,
+            (target_resolution.y / current_resolution.y).round() as u32
+        );
+        // must be a power of 2
+        debug_assert!(is_power_of_two(output_overview_level_factor));
+
+        let input_descriptor = self.source.result_descriptor();
+
+        let input_resolution = input_descriptor.spatial_grid.spatial_resolution();
+        let scaled_input_resolution = input_resolution * output_overview_level_factor as f64;
+
+        let source_optimized = self.source.optimize(scaled_input_resolution)?;
+
+        // given the input resolution, derive_out_spec, input and output spatial reference, calculate the output spatial grid
+        // TODO: instead of repeating the logic here, we could attach the result descriptor to the result of the `optimize` method
+        let optimized_spatial_grid_descriptor = input_descriptor
+            .spatial_grid_descriptor()
+            .with_changed_resolution(scaled_input_resolution);
+
+        // TODO: check if these are the correct bounds
+        let optimized_spatial_bounds = optimized_spatial_grid_descriptor.spatial_partition();
+
+        let output_spatial_grid = compute_output_spatial_grid(
+            optimized_spatial_grid_descriptor,
+            optimized_spatial_bounds,
+            self.source_srs,
+            self.params,
+        )
+        .boxed_context(ProjectionOptimizationFailed)?;
+
+        let output_spatial_resolution = output_spatial_grid.spatial_resolution();
+        println!(
+            "output_spatial_resolution: {:?}, target_resolution: {:?}",
+            output_spatial_resolution, target_resolution
+        );
+
+        let optimized_reprojection = Box::new(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: self.target_srs,
+                derive_out_spec: self.params.derive_out_spec,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(source_optimized),
+            },
+        });
+
+        if output_spatial_resolution == target_resolution {
+            return Ok(optimized_reprojection);
+        }
+
+        // depending on the reprojection, the reprojection of the optimized input might not perfectly match the target resolution, so we may need to fix it
+
+        if output_spatial_resolution > target_resolution {
+            // reprojected raster is too coarse, we need to interpolate
+            // TODO: in this case we could (should?) also decrease the `scaled_input_resolution` to the previous overview level to get a finer result
+            return Ok(Interpolation {
+                params: InterpolationParams {
+                    interpolation: InterpolationMethod::NearestNeighbor,
+                    output_resolution: InterpolationResolution::Resolution(target_resolution),
+                    output_origin_reference: None,
+                },
+                sources: SingleRasterSource {
+                    raster: optimized_reprojection,
+                },
+            }
+            .boxed());
+        }
+
+        // reprojected raster is too fine, we need to downsample
+        Ok(Downsampling {
+            params: DownsamplingParams {
+                sampling_method: DownsamplingMethod::NearestNeighbor,
+                output_resolution: DownsamplingResolution::Resolution(target_resolution),
+                output_origin_reference: None,
+            },
+            sources: SingleRasterSource {
+                raster: optimized_reprojection,
+            },
+        }
+        .boxed())
     }
 }
 

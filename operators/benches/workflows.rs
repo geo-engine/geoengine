@@ -368,12 +368,14 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
     );
 
     let _qrects = [("World in 72000x36000 pixels", qrect)];
-    let _tiling_specs = [TilingSpecification::new([512, 512].into()),
+    let _tiling_specs = [
+        TilingSpecification::new([512, 512].into()),
         TilingSpecification::new([1024, 1024].into()),
         TilingSpecification::new([2048, 2048].into()),
         TilingSpecification::new([4096, 4096].into()),
         TilingSpecification::new([9000, 9000].into()),
-        TilingSpecification::new([18000, 18000].into())];
+        TilingSpecification::new([18000, 18000].into()),
+    ];
 
     #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(

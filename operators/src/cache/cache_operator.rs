@@ -90,6 +90,14 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
     fn canonic_name(&self) -> CanonicOperatorName {
         self.source.canonic_name()
     }
+
+    fn optimize(
+        &self,
+        resolution: geoengine_datatypes::primitives::SpatialResolution,
+    ) -> Result<Box<dyn crate::engine::RasterOperator>, crate::optimization::OptimizationError>
+    {
+        self.source.optimize(resolution)
+    }
 }
 
 impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedVectorOperator>> {

@@ -5,6 +5,7 @@ use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::gdal_source::reader::ReaderState;
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
@@ -31,11 +32,11 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::RasterSpatialQueryRectangle;
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use geoengine_datatypes::primitives::{find_next_best_overview_level, BandSelection, CacheHint};
 use geoengine_datatypes::primitives::{
     Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, TimeInstance,
 };
+use geoengine_datatypes::primitives::{RasterSpatialQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::TileInformation;
 use geoengine_datatypes::raster::{
     ChangeGridBounds, EmptyGrid, GeoTransform, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
@@ -857,6 +858,7 @@ impl RasterOperator for GdalSource {
             name: CanonicOperatorName::from(&self),
             result_descriptor: res,
             meta_data,
+            data_name: self.params.data,
             overview_level: self.params.overview_level.unwrap_or(0),
             tiling_specification: context.tiling_specification(),
         };
@@ -867,11 +869,13 @@ impl RasterOperator for GdalSource {
     span_fn!(GdalSource);
 }
 
+#[derive(Clone)]
 pub struct InitializedGdalSourceOperator {
-    name: CanonicOperatorName,
+    pub name: CanonicOperatorName,
     pub meta_data: GdalMetaData,
     pub result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
+    pub data_name: NamedData,
     // the overview level to use. 0 means the highest resolution
     pub overview_level: u32,
 }
@@ -973,6 +977,40 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        // TODO: handle cases where the original workflow explicitly loads overviews in the source
+        ensure!(
+            self.overview_level == 0,
+            SourcesMustNotUseOverviews {
+                data: self.data_name.to_string(),
+                oveview_level: self.overview_level
+            }
+        );
+
+        // as overview level is always 0 for now, the result descriptor contains the native resolution
+        // TODO: when allowing to optimize upon overview levels, compute the native resolution first
+        let native_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+
+        // TODO: get available overviews levels from the dataset metadata (not available yet) and only load these.
+        //       Then, we might have to prepend a Resampling operator to match the target resolution.
+        //       For now, we just load the overview level regardless and let gdal handle the resamṕling.
+        let next_best_overview_level =
+            find_next_best_overview_level(native_resolution, target_resolution);
+
+        Ok(GdalSource {
+            params: GdalSourceParameters {
+                data: self.data_name.clone(),
+                overview_level: Some(next_best_overview_level),
+            },
+        }
+        .boxed())
     }
 }
 
