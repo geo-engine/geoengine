@@ -2123,3 +2123,45 @@ impl<'a> FromSql<'a> for CacheTtlSeconds {
         <i32 as FromSql>::accepts(ty)
     }
 }
+
+/// A struct describing tensor shape for `MlModelMetadata`
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+pub struct TensorShape3D {
+    pub y: u32,
+    pub x: u32,
+    pub bands: u32, // TODO: named attributes?
+}
+
+impl TensorShape3D {
+    pub fn new_y_x_attr(y: u32, x: u32, bands: u32) -> Self {
+        Self { y, x, bands }
+    }
+
+    pub fn new_single_pixel_bands(bands: u32) -> Self {
+        Self { y: 1, x: 1, bands }
+    }
+
+    pub fn new_single_pixel_single_band() -> Self {
+        Self::new_single_pixel_bands(1)
+    }
+}
+
+impl From<geoengine_datatypes::machine_learning::TensorShape3D> for TensorShape3D {
+    fn from(value: geoengine_datatypes::machine_learning::TensorShape3D) -> Self {
+        Self {
+            y: value.y,
+            x: value.x,
+            bands: value.bands,
+        }
+    }
+}
+
+impl From<TensorShape3D> for geoengine_datatypes::machine_learning::TensorShape3D {
+    fn from(value: TensorShape3D) -> Self {
+        Self {
+            y: value.y,
+            x: value.x,
+            bands: value.bands,
+        }
+    }
+}

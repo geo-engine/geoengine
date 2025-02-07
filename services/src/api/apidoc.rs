@@ -19,8 +19,8 @@ use crate::api::model::datatypes::{
     MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle,
     RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
     RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
-    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType, VectorQueryRectangle,
+    SpatialResolution, StringPair, TensorShape3D, TimeGranularity, TimeInstance, TimeInterval,
+    TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -425,7 +425,8 @@ use utoipa::{Modify, OpenApi};
             MlModelId,
             MlModelName,
             MlModelMetadata,
-            MlModelNameResponse
+            MlModelNameResponse,
+            TensorShape3D,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
