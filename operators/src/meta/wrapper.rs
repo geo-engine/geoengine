@@ -1,15 +1,16 @@
 use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    QueryContext, QueryProcessor, RasterOperator, RasterResultDescriptor, ResultDescriptor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
     WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle};
+use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle, SpatialResolution};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{span, Level};
 
@@ -85,6 +86,13 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.source.canonic_name()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.source.optimize(resolution)
     }
 }
 

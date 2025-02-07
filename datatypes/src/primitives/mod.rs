@@ -47,7 +47,9 @@ pub use query_rectangle::{
 pub use spatial_partition::{
     partitions_extent, AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned,
 };
-pub use spatial_resolution::{find_next_best_overview_level, SpatialResolution};
+pub use spatial_resolution::{
+    find_next_best_overview_level, find_next_best_overview_level_resolution, SpatialResolution,
+};
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_instance::TimeInstance;
 pub use time_interval::{time_interval_extent, TimeInterval};

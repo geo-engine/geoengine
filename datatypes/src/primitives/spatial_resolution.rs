@@ -125,7 +125,7 @@ impl PartialOrd for SpatialResolution {
 }
 
 /// finds the coarsest overview level that is still at least as fine as the required resolution
-// TODO: add option to only use available overview levels.
+// TODO: add option to only use overview levels available for a given gdal dataset.
 pub fn find_next_best_overview_level(
     native_resolution: SpatialResolution,
     target_resolution: SpatialResolution,
@@ -143,6 +143,20 @@ pub fn find_next_best_overview_level(
     }
 
     current_overview_level
+}
+
+/// Scale up the given resolution to the next best overview level resolution, i.e., a resolution that is a power of 2 and still finer than the target
+pub fn find_next_best_overview_level_resolution(
+    mut current_resolution: SpatialResolution,
+    target_resolution: SpatialResolution,
+) -> SpatialResolution {
+    debug_assert!(current_resolution < target_resolution);
+
+    while current_resolution * 2.0 <= target_resolution {
+        current_resolution = current_resolution * 2.0;
+    }
+
+    current_resolution
 }
 
 #[cfg(test)]

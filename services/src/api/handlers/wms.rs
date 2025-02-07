@@ -323,7 +323,9 @@ async fn wms_map_handler<C: ApplicationContext>(
                 Some(request_resolution),
                 request_spatial_ref.into(),
                 tiling_spec,
-            )?;
+                &execution_context,
+            )
+            .await?;
         // TODO: add a resammple operator for downsampling AND resample push down!
 
         let initialized = wrapped.initialized_operator;
