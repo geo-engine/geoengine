@@ -150,7 +150,7 @@ pub fn find_next_best_overview_level_resolution(
     mut current_resolution: SpatialResolution,
     target_resolution: SpatialResolution,
 ) -> SpatialResolution {
-    debug_assert!(current_resolution < target_resolution);
+    debug_assert!(current_resolution <= target_resolution);
 
     while current_resolution * 2.0 <= target_resolution {
         current_resolution = current_resolution * 2.0;

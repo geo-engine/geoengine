@@ -801,4 +801,8 @@ mod tests {
                 > SpatialResolution::new(optimize_resolution, optimize_resolution).unwrap()
         );
     }
+
+    // TODO: a test with raster and vector data that pushes the resoltion down through the vector operator
+    // idea: - Rasterization(?)
+    //       - RasterVectorJoin, outputs a vector, but the raster shall be optimized
 }

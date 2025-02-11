@@ -130,16 +130,17 @@ impl WrapWithProjectionAndResample {
             target_spatial_grid
         };
 
-        let res = if self
+        if self
             .result_descriptor
             .spatial_grid_descriptor()
             .is_compatible_grid(&target_spatial_grid)
         {
             // TODO: resample if origin is not allgned to query? (maybe n
-            self
+            return Ok(self);
         }
+
         // Query resolution is smaller than workflow => compute on full resolution and append interpolation to decrease resolution
-        else if target_spatial_grid.spatial_resolution().x <= rd_resolution.x
+        if target_spatial_grid.spatial_resolution().x <= rd_resolution.x
             && target_spatial_grid.spatial_resolution().y <= rd_resolution.y
         //TODO: we should allow to use the "interpolation" as long as the fraction is > 0.5. This would require to keep 4 tiles which seems to be fine. The edge case of resampling with same resolution should also use the interpolation since bilieaner woudl make sense here?
         {
@@ -183,12 +184,12 @@ impl WrapWithProjectionAndResample {
                 tiling_spec,
             )?;
             let rd = iip.result_descriptor().clone();
-            Self::new(iop.boxed(), iip.boxed(), rd)
+            return Ok(Self::new(iop.boxed(), iip.boxed(), rd));
         } else {
             // Query resolution is larger than workflow => compute on overview level and append downsampling to increase resolution
 
             log::debug!(
-                "Query res: {:?}, workflow res: {:?} --> injecting downsampling",
+                "Query res: {:?}, workflow res: {:?} --> optimize workflow and push-down downsampling",
                 target_spatial_resolution,
                 rd_resolution
             );
@@ -198,13 +199,30 @@ impl WrapWithProjectionAndResample {
                 target_spatial_grid.spatial_resolution(),
             );
 
-            debug_assert!(snapped_resolution < target_spatial_grid.spatial_resolution());
+            debug_assert!(snapped_resolution <= target_spatial_grid.spatial_resolution());
 
             let optimized_operator = self
                 .initialized_operator
                 .optimize(snapped_resolution)
                 .context(Optimization)?;
 
+            if snapped_resolution == target_spatial_grid.spatial_resolution() {
+                // target resolution is an overview level, so we can use the optimized operator directly
+                let initialized_raster_operator = optimized_operator
+                    .clone()
+                    .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                    .await?;
+
+                let rd: RasterResultDescriptor =
+                    initialized_raster_operator.result_descriptor().clone();
+                return Ok(Self::new(
+                    optimized_operator,
+                    initialized_raster_operator,
+                    rd,
+                ));
+            }
+
+            // target resolution is not an overview level, so we need to downsample the optimized operator
             let downsample_params = DownsamplingParams {
                 sampling_method: DownsamplingMethod::NearestNeighbor,
                 output_resolution: DownsamplingResolution::Resolution(
@@ -218,17 +236,14 @@ impl WrapWithProjectionAndResample {
             }
             .boxed();
 
-            println!("downsampling operator: {:?}", dop);
-
             let ido = dop
                 .clone()
                 .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
                 .await?;
 
             let rd = ido.result_descriptor().clone();
-            Self::new(dop, ido.boxed(), rd)
+            return Ok(Self::new(dop, ido.boxed(), rd));
         };
-        Ok(res)
     }
 
     pub async fn wrap_with_projection_and_resample(
