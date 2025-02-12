@@ -1018,6 +1018,7 @@ mod tests {
         .boxed();
 
         let raster_vector_join_initialized = raster_vector_join
+            .clone()
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
@@ -1074,5 +1075,54 @@ mod tests {
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .is_ok());
+
+        // check case where output is finer than input
+        let raster_vector_join_optimized = raster_vector_join_initialized
+            .optimize(SpatialResolution::new(0.05, 0.05).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&raster_vector_join_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "featureAggregation": "first",
+                    "featureAggregationIgnoreNoData": false,
+                    "names": {
+                        "type": "default"
+                    },
+                    "temporalAggregation": "none",
+                    "temporalAggregationIgnoreNoData": false
+                },
+                "sources": {
+                    "rasters": [
+                        {
+                            "params": {
+                                "data": "ndvi",
+                                "overviewLevel": 0
+                            },
+                            "type": "GdalSource"
+                        },
+                        {
+                            "params": {
+                                "data": "ndvi_downscaled_3x",
+                                "overviewLevel": 0
+                            },
+                            "type": "GdalSource"
+                        }
+                    ],
+                    "vector": {
+                        "params": {
+                            "attributeFilters": null,
+                            "attributeProjection": null,
+                            "data": "ne_10m_ports"
+                        },
+                        "type": "OgrSource"
+                    }
+                },
+                "type": "RasterVectorJoin"
+            })
+        );
     }
 }

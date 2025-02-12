@@ -5,15 +5,14 @@ use crate::engine::{
 use crate::error::{self, Optimization};
 use crate::processing::{
     DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
-    DownsamplingResolution, InitializedDownsampling, InitializedInterpolation,
-    InitializedRasterReprojection, Interpolation, InterpolationMethod, InterpolationParams,
-    InterpolationResolution, Reprojection, ReprojectionParams,
+    DownsamplingResolution, InitializedInterpolation, InitializedRasterReprojection, Interpolation,
+    InterpolationMethod, InterpolationParams, InterpolationResolution, Reprojection,
+    ReprojectionParams,
 };
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
 use geoengine_datatypes::primitives::{
-    find_next_best_overview_level, find_next_best_overview_level_resolution, Coordinate2D,
-    SpatialResolution,
+    find_next_best_overview_level_resolution, Coordinate2D, SpatialResolution,
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
