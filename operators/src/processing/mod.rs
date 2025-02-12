@@ -58,6 +58,7 @@ pub use raster_vector_join::{
     ColumnNames, FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams,
     TemporalAggregationMethod,
 };
+pub use rasterization::{Rasterization, RasterizationParams};
 pub use reprojection::{
     DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
     Reprojection, ReprojectionParams,

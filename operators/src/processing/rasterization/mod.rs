@@ -7,6 +7,7 @@ use crate::engine::{
     TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
+use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::util;
 use crate::util::spawn_blocking;
 use async_trait::async_trait;
@@ -14,8 +15,9 @@ use futures::stream::BoxStream;
 use futures::{stream, StreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
-    SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
+    find_next_best_overview_level_resolution, AxisAlignedRectangle, BoundingBox2D, Coordinate2D,
+    RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
@@ -38,9 +40,9 @@ impl OperatorName for Rasterization {
 #[serde(rename_all = "camelCase")]
 pub struct RasterizationParams {
     /// The size of grid cells, interpreted depending on the chosen grid size mode
-    spatial_resolution: SpatialResolution,
+    pub spatial_resolution: SpatialResolution,
     /// The origin coordinate which aligns the grid bounds
-    origin_coordinate: Coordinate2D,
+    pub origin_coordinate: Coordinate2D,
 }
 
 #[typetag::serde]
@@ -55,7 +57,7 @@ impl RasterOperator for Rasterization {
 
         let initialized_source = self.sources.initialize_sources(path, context).await?;
         let vector_source = initialized_source.vector;
-        let in_desc = vector_source.result_descriptor();
+        let in_desc = dbg!(vector_source.result_descriptor());
 
         let tiling_specification = context.tiling_specification();
 
@@ -125,6 +127,39 @@ impl InitializedRasterOperator for InitializedGridRasterization {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let rasterization_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+
+        let spatial_resolution = if target_resolution <= rasterization_resolution {
+            // target resolution is finer than the rasterization resolution, no need to change the resolution
+            rasterization_resolution
+        } else {
+            self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+            // TODO: use `target_resolution` here? Due to the `ensure_resolution_is_compatible_for_optimization` call we know that the target resolution is a multiple of the rasterization resolution
+            find_next_best_overview_level_resolution(rasterization_resolution, target_resolution)
+        };
+
+        Ok(Rasterization {
+            params: RasterizationParams {
+                spatial_resolution,
+                origin_coordinate: self
+                    .result_descriptor
+                    .spatial_grid
+                    .geo_transform()
+                    .origin_coordinate,
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?, // TODO: use `rasterization_resolution` here instead?
+            },
+        }
+        .boxed())
     }
 }
 

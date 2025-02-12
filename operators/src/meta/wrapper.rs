@@ -2,7 +2,7 @@ use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
     QueryContext, QueryProcessor, RasterOperator, RasterResultDescriptor, ResultDescriptor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
     WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
@@ -124,6 +124,13 @@ impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn Initialize
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.source.canonic_name()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        self.source.optimize(resolution)
     }
 }
 

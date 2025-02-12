@@ -145,6 +145,14 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
     fn canonic_name(&self) -> CanonicOperatorName {
         self.source.canonic_name()
     }
+
+    fn optimize(
+        &self,
+        resolution: geoengine_datatypes::primitives::SpatialResolution,
+    ) -> Result<Box<dyn crate::engine::VectorOperator>, crate::optimization::OptimizationError>
+    {
+        self.source.optimize(resolution)
+    }
 }
 
 /// A cache operator that caches the results of its source operator

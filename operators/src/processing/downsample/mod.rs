@@ -12,7 +12,9 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
-use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
+use geoengine_datatypes::primitives::{
+    find_next_best_overview_level_resolution, BandSelection, CacheHint, Coordinate2D,
+};
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution, TimeInstance,
     TimeInterval,
@@ -245,14 +247,8 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
         // target resolution must be coarser than input
         debug_assert!(input_resolution < target_resolution);
 
-        // snap the input resolution to an overview level
-        let mut snapped_input_resolution = input_resolution;
-
-        while snapped_input_resolution * 2.0 < target_resolution {
-            snapped_input_resolution = snapped_input_resolution * 2.0;
-        }
-
-        dbg!(snapped_input_resolution);
+        let snapped_input_resolution =
+            find_next_best_overview_level_resolution(input_resolution, target_resolution);
 
         let optimzed_source = self.raster_source.optimize(snapped_input_resolution)?;
 

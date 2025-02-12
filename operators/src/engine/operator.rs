@@ -152,6 +152,7 @@ pub trait InitializedRasterOperator: Send + Sync {
     /// Get a canonic representation of the operator and its sources
     fn canonic_name(&self) -> CanonicOperatorName;
 
+    /// Optimize the operator graph for a given resolution
     fn optimize(
         &self,
         _resolution: SpatialResolution,
@@ -160,6 +161,7 @@ pub trait InitializedRasterOperator: Send + Sync {
         Err(OptimizationError::OptimizationNotYetImplementedForOperator)
     }
 
+    /// optimize the operator graph and reinitialize it
     async fn optimize_and_reinitialize(
         &self,
         resolution: SpatialResolution,
@@ -192,6 +194,29 @@ pub trait InitializedVectorOperator: Send + Sync {
     /// Get a canonic representation of the operator and its sources.
     /// This only includes *logical* operators, not wrappers
     fn canonic_name(&self) -> CanonicOperatorName;
+
+    /// Optimize the operator graph for a given resolution
+    fn optimize(
+        &self,
+        _resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        // TODO: remove default implementation once all operators implement this trait
+        Err(OptimizationError::OptimizationNotYetImplementedForOperator)
+    }
+
+    // /// optimize the operator graph and reinitialize it
+    // async fn optimize_and_reinitialize(
+    //     &self,
+    //     resolution: SpatialResolution,
+    //     exe_ctx: &dyn ExecutionContext,
+    // ) -> Result<Box<dyn InitializedVectorOperator>> {
+    //     let optimized = self
+    //         .optimize(resolution)
+    //         .context(crate::error::Optimization)?;
+    //     optimized
+    //         .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+    //         .await
+    // }
 }
 
 /// A canonic name for an operator and its sources
@@ -287,6 +312,13 @@ impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.as_ref().canonic_name()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        self.as_ref().optimize(resolution)
     }
 }
 

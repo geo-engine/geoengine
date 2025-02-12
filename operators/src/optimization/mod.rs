@@ -59,23 +59,32 @@ impl<T> OptimizableOperator for T where T: InitializedRasterOperator {}
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
+        collections::VectorDataType,
+        dataset::{DataId, DatasetId, NamedData},
+        primitives::{BoundingBox2D, CacheTtlSeconds, VectorQueryRectangle},
         raster::{RasterDataType, RenameBands},
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
-        util::test::TestDefault,
+        test_data,
+        util::{test::TestDefault, Identifier},
     };
 
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterOperator,
-            SingleRasterOrVectorSource, SingleRasterSource, WorkflowOperatorPath,
+            SingleRasterOrVectorSource, SingleRasterSource, SingleVectorSource, StaticMetaData,
+            VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
         },
         processing::{
             DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
             DownsamplingResolution, Expression, ExpressionParams, Interpolation,
             InterpolationMethod, InterpolationParams, InterpolationResolution, RasterStacker,
-            RasterStackerParams, Reprojection, ReprojectionParams,
+            RasterStackerParams, Rasterization, RasterizationParams, Reprojection,
+            ReprojectionParams,
         },
-        source::{GdalSource, GdalSourceParameters},
+        source::{
+            GdalSource, GdalSourceParameters, OgrSource, OgrSourceDataset,
+            OgrSourceDatasetTimeType, OgrSourceErrorSpec, OgrSourceParameters,
+        },
         util::{
             gdal::{add_ndvi_dataset, add_ndvi_downscaled_3x_dataset},
             input::RasterOrVectorOperator,
@@ -670,7 +679,7 @@ mod tests {
 
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
-        let workflow = Reprojection {
+        let workflow: Box<dyn RasterOperator> = Box::new(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -689,8 +698,7 @@ mod tests {
                     .boxed(),
                 ),
             },
-        }
-        .boxed();
+        });
 
         let workflow_initialized = workflow
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -766,7 +774,7 @@ mod tests {
         );
 
         // check that the reprojection was necessary
-        let workflow = Reprojection {
+        let workflow: Box<dyn RasterOperator> = Box::new(Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::new(
                     SpatialReferenceAuthority::Epsg,
@@ -785,8 +793,7 @@ mod tests {
                     .boxed(),
                 ),
             },
-        }
-        .boxed();
+        });
 
         let workflow_initialized = workflow
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -805,4 +812,121 @@ mod tests {
     // TODO: a test with raster and vector data that pushes the resoltion down through the vector operator
     // idea: - Rasterization(?)
     //       - RasterVectorJoin, outputs a vector, but the raster shall be optimized
+    #[tokio::test]
+    async fn it_optimizes_rasterization() {
+        let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            id.clone(),
+            name.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!(
+                        "vector/data/ne_10m_ports/with_spatial_index/ne_10m_ports.gpkg"
+                    )
+                    .into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
+                    time: None,
+                    bbox: Some(BoundingBox2D::new_unchecked(
+                        [-171.75795, -54.809444].into(),
+                        [179.309364, 78.226111].into(),
+                    )),
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let source = OgrSource {
+            params: OgrSourceParameters {
+                data: name,
+                attribute_projection: None,
+                attribute_filters: None,
+            },
+        }
+        .boxed();
+
+        let rasterization = Rasterization {
+            params: RasterizationParams {
+                spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
+                origin_coordinate: (0., 0.).into(),
+            },
+            sources: SingleVectorSource { vector: source },
+        }
+        .boxed();
+
+        let rasterization_initialized = rasterization
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            rasterization_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.1, 0.1).unwrap()
+        );
+
+        let rasterization_optimized = rasterization_initialized
+            .optimize(SpatialResolution::new(0.8, 0.8).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&rasterization_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "originCoordinate": {
+                        "x": 0.0,
+                        "y": 0.0
+                    },
+                    "spatialResolution": {
+                        "x": 0.8,
+                        "y": 0.8
+                    }
+                },
+                "sources": {
+                    "vector": {
+                        "params": {
+                            "attributeFilters": null,
+                            "attributeProjection": null,
+                            "data": "ne_10m_ports"
+                        },
+                        "type": "OgrSource"
+                    }
+                },
+                "type": "Rasterization"
+            })
+        );
+
+        let expression_optimized_initialized = rasterization_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            expression_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.8, 0.8).unwrap()
+        );
+    }
 }
