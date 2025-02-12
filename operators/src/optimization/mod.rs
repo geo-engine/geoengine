@@ -71,15 +71,17 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterOperator,
-            SingleRasterOrVectorSource, SingleRasterSource, SingleVectorSource, StaticMetaData,
-            VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
+            SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
+            SingleVectorSource, StaticMetaData, VectorOperator, VectorResultDescriptor,
+            WorkflowOperatorPath,
         },
         processing::{
-            DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
-            DownsamplingResolution, Expression, ExpressionParams, Interpolation,
-            InterpolationMethod, InterpolationParams, InterpolationResolution, RasterStacker,
-            RasterStackerParams, Rasterization, RasterizationParams, Reprojection,
-            ReprojectionParams,
+            ColumnNames, DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod,
+            DownsamplingParams, DownsamplingResolution, Expression, ExpressionParams,
+            FeatureAggregationMethod, Interpolation, InterpolationMethod, InterpolationParams,
+            InterpolationResolution, RasterStacker, RasterStackerParams, RasterVectorJoin,
+            RasterVectorJoinParams, Rasterization, RasterizationParams, Reprojection,
+            ReprojectionParams, TemporalAggregationMethod,
         },
         source::{
             GdalSource, GdalSourceParameters, OgrSource, OgrSourceDataset,
@@ -928,5 +930,149 @@ mod tests {
                 .spatial_resolution(),
             SpatialResolution::new(0.8, 0.8).unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn it_optimizes_raster_vector_join() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+        let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
+
+        let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
+
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            id.clone(),
+            name.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!(
+                        "vector/data/ne_10m_ports/with_spatial_index/ne_10m_ports.gpkg"
+                    )
+                    .into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
+                    time: None,
+                    bbox: Some(BoundingBox2D::new_unchecked(
+                        [-171.75795, -54.809444].into(),
+                        [179.309364, 78.226111].into(),
+                    )),
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let ogr_source = OgrSource {
+            params: OgrSourceParameters {
+                data: name,
+                attribute_projection: None,
+                attribute_filters: None,
+            },
+        }
+        .boxed();
+
+        let gdal_source = GdalSource {
+            params: GdalSourceParameters {
+                data: ndvi_id.clone(),
+                overview_level: None,
+            },
+        }
+        .boxed();
+
+        let gdal_source2 = GdalSource {
+            params: GdalSourceParameters {
+                data: ndvi_downscaled_3x_id.clone(),
+                overview_level: None,
+            },
+        }
+        .boxed();
+
+        let raster_vector_join = RasterVectorJoin {
+            params: RasterVectorJoinParams {
+                names: ColumnNames::Default,
+                feature_aggregation: FeatureAggregationMethod::First,
+                feature_aggregation_ignore_no_data: false,
+                temporal_aggregation: TemporalAggregationMethod::None,
+                temporal_aggregation_ignore_no_data: false,
+            },
+            sources: SingleVectorMultipleRasterSources {
+                vector: ogr_source,
+                rasters: vec![gdal_source, gdal_source2],
+            },
+        }
+        .boxed();
+
+        let raster_vector_join_initialized = raster_vector_join
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let raster_vector_join_optimized = raster_vector_join_initialized
+            .optimize(SpatialResolution::new(0.8, 0.8).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&raster_vector_join_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "featureAggregation": "first",
+                    "featureAggregationIgnoreNoData": false,
+                    "names": {
+                        "type": "default"
+                    },
+                    "temporalAggregation": "none",
+                    "temporalAggregationIgnoreNoData": false
+                },
+                "sources": {
+                    "rasters": [
+                        {
+                            "params": {
+                                "data": "ndvi",
+                                "overviewLevel": 8
+                            },
+                            "type": "GdalSource"
+                        },
+                        {
+                            "params": {
+                                "data": "ndvi_downscaled_3x",
+                                "overviewLevel": 2
+                            },
+                            "type": "GdalSource"
+                        }
+                    ],
+                    "vector": {
+                        "params": {
+                            "attributeFilters": null,
+                            "attributeProjection": null,
+                            "data": "ne_10m_ports"
+                        },
+                        "type": "OgrSource"
+                    }
+                },
+                "type": "RasterVectorJoin"
+            })
+        );
+
+        assert!(raster_vector_join_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .is_ok());
     }
 }

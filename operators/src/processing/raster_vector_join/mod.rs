@@ -16,7 +16,7 @@ use crate::util::Result;
 use crate::processing::raster_vector_join::aggregated::RasterVectorAggregateJoinProcessor;
 use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{find_next_best_overview_level_resolution, FeatureDataType};
 use geoengine_datatypes::raster::{Pixel, RasterDataType, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -339,6 +339,34 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: geoengine_datatypes::primitives::SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, crate::optimization::OptimizationError> {
+        Ok(RasterVectorJoin {
+            params: self.state.clone(),
+            sources: SingleVectorMultipleRasterSources {
+                vector: self.vector_source.optimize(target_resolution)?,
+                rasters: self
+                    .raster_sources
+                    .iter()
+                    .map(|r| {
+                        // optimize the raster source to the next best overview level w.r.t. the target resolution
+                        let rd = r.result_descriptor();
+                        let mut res = rd.spatial_grid.spatial_resolution();
+
+                        if res < target_resolution {
+                            res = find_next_best_overview_level_resolution(res, target_resolution)
+                        }
+
+                        return r.optimize(res);
+                    })
+                    .collect::<Result<Vec<_>, crate::optimization::OptimizationError>>()?,
+            },
+        }
+        .boxed())
     }
 }
 
