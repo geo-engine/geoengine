@@ -169,7 +169,6 @@ group_abcd_units = true
 enabled = false
 issuer = ""
 client_id = ""
-redirect_uri = ""
 scopes = []
 
 [open_telemetry]
