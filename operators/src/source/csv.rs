@@ -9,7 +9,8 @@ use futures::task::{Context, Poll};
 use futures::{Stream, StreamExt};
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{
-    ColumnSelection, SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
+    ColumnSelection, SpatialBounded, SpatialResolution, VectorQueryRectangle,
+    VectorSpatialQueryRectangle,
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, OptionExt, ResultExt};
@@ -29,6 +30,7 @@ use crate::engine::{
 };
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
+use crate::optimization::OptimizationError;
 use crate::util::{safe_lock_mutex, Result};
 use async_trait::async_trait;
 use std::sync::atomic::Ordering;
@@ -205,6 +207,16 @@ impl InitializedVectorOperator for InitializedCsvSource {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        _target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(CsvSource {
+            params: self.state.clone(),
+        }
+        .boxed())
     }
 }
 

@@ -348,6 +348,7 @@ pub struct InitializedOgrSource {
     name: CanonicOperatorName,
     result_descriptor: VectorResultDescriptor,
     state: OgrSourceState,
+    params: OgrSourceParameters,
 }
 
 #[typetag::serde]
@@ -403,6 +404,7 @@ impl VectorOperator for OgrSource {
         let initialized_source = InitializedOgrSource {
             name: CanonicOperatorName::from(&self),
             result_descriptor,
+            params: self.params.clone(),
             state: OgrSourceState {
                 dataset_information: info,
                 attribute_filters: self.params.attribute_filters.unwrap_or_default(),
@@ -479,6 +481,17 @@ impl InitializedVectorOperator for InitializedOgrSource {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        _resolution: geoengine_datatypes::primitives::SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, crate::optimization::OptimizationError> {
+        // we do not optimize vector inputs, but it would be possible to, e.g., sample or simplify features here based on the resolution
+        Ok(OgrSource {
+            params: self.params.clone(),
+        }
+        .boxed())
     }
 }
 

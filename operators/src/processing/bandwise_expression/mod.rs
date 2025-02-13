@@ -6,11 +6,12 @@ use crate::engine::{
     ResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
     GridOrEmpty2D, MapElementsParallel, Pixel, RasterDataType, RasterTile2D,
 };
@@ -68,6 +69,7 @@ impl RasterOperator for BandwiseExpression {
 
         Ok(Box::new(InitializedBandwiseExpression {
             name,
+            params: self.params.clone(),
             result_descriptor,
             source,
             expression,
@@ -80,6 +82,7 @@ impl RasterOperator for BandwiseExpression {
 
 pub struct InitializedBandwiseExpression {
     name: CanonicOperatorName,
+    params: BandwiseExpressionParams,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     expression: ExpressionAst,
@@ -121,6 +124,19 @@ impl InitializedRasterOperator for InitializedBandwiseExpression {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(BandwiseExpression {
+            params: self.params.clone(),
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

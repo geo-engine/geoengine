@@ -6,13 +6,14 @@ use crate::engine::{
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
-    RasterQueryRectangle, RasterSpatialQueryRectangle,
+    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{
     MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
@@ -180,6 +181,19 @@ impl InitializedRasterOperator for InitializedRadiance {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(Radiance {
+            params: RadianceParams {},
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

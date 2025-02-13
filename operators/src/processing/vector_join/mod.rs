@@ -1,4 +1,5 @@
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::SpatialResolution;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -10,6 +11,7 @@ use crate::engine::{
     VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 
 use self::equi_data_join::EquiGeoToDataJoinProcessor;
@@ -280,6 +282,22 @@ impl InitializedVectorOperator for InitializedVectorJoin {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(VectorJoin {
+            params: VectorJoinParams {
+                join_type: self.state.join_type.clone(),
+            },
+            sources: VectorJoinSources {
+                left: self.left.optimize(target_resolution)?,
+                right: self.right.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

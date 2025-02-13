@@ -5,6 +5,7 @@ use crate::engine::{
     OperatorName, QueryContext, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -12,7 +13,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{ColumnSelection, Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{ColumnSelection, Geometry, SpatialResolution, TimeInterval};
 use geoengine_datatypes::primitives::{TimeInstance, TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use log::debug;
@@ -139,6 +140,22 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(TimeProjection {
+            params: TimeProjectionParams {
+                step: self.step.clone(),
+                step_reference: Some(self.step_reference.clone()),
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

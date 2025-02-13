@@ -3,10 +3,12 @@ use crate::engine::{
     OperatorName, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::raster::{
     CheckedMulThenAddTransformation, CheckedSubThenDivTransformation, ElementScaling,
     ScalingTransformation,
@@ -158,6 +160,24 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(RasterScaling {
+            params: RasterScalingParams {
+                slope: self.slope.clone(),
+                offset: self.offset.clone(),
+                output_measurement: Some(self.result_descriptor.bands[0].measurement.clone()),
+                scaling_mode: self.scaling_mode,
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

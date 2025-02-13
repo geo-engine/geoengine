@@ -6,6 +6,8 @@ use crate::engine::{
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
+use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -15,8 +17,8 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
-    ColumnSelection, Duration, Geometry, RasterQueryRectangle, TimeGranularity, TimeInstance,
-    TimeInterval,
+    ColumnSelection, Duration, Geometry, RasterQueryRectangle, SpatialResolution, TimeGranularity,
+    TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::primitives::{TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
@@ -175,7 +177,7 @@ impl VectorOperator for TimeShift {
 
         let init_sources = self.sources.initialize_sources(path, context).await?;
 
-        match (init_sources.source, self.params) {
+        match (init_sources.source, self.params.clone()) {
             (
                 InitializedSingleRasterOrVectorOperator::Vector(source),
                 TimeShiftParams::Relative { granularity, value },
@@ -191,6 +193,7 @@ impl VectorOperator for TimeShift {
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     name,
+                    params: self.params.clone(),
                     source,
                     result_descriptor,
                     shift,
@@ -211,6 +214,7 @@ impl VectorOperator for TimeShift {
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     name,
+                    params: self.params.clone(),
                     source,
                     result_descriptor,
                     shift,
@@ -226,6 +230,7 @@ impl VectorOperator for TimeShift {
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     name,
+                    params: self.params.clone(),
                     source,
                     result_descriptor,
                     shift,
@@ -252,7 +257,7 @@ impl RasterOperator for TimeShift {
 
         let init_sources = self.sources.initialize_sources(path, context).await?;
 
-        match (init_sources.source, self.params) {
+        match (init_sources.source, self.params.clone()) {
             (
                 InitializedSingleRasterOrVectorOperator::Raster(source),
                 TimeShiftParams::Relative { granularity, value },
@@ -268,6 +273,7 @@ impl RasterOperator for TimeShift {
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
+                    params: self.params.clone(),
                     source,
                     result_descriptor,
                     shift,
@@ -288,6 +294,7 @@ impl RasterOperator for TimeShift {
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
+                    params: self.params.clone(),
                     source,
                     result_descriptor,
                     shift,
@@ -303,6 +310,7 @@ impl RasterOperator for TimeShift {
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
+                    params: self.params.clone(),
                     source,
                     result_descriptor,
                     shift,
@@ -332,6 +340,7 @@ fn shift_result_descriptor<R: ResultDescriptor, S: TimeShiftOperation>(
 
 pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
     name: CanonicOperatorName,
+    params: TimeShiftParams,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
     shift: Shift,
@@ -339,6 +348,7 @@ pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
 
 pub struct InitializedRasterTimeShift<Shift: TimeShiftOperation> {
     name: CanonicOperatorName,
+    params: TimeShiftParams,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
     shift: Shift,
@@ -366,6 +376,18 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(Box::new(TimeShift {
+            params: self.params.clone(),
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
+            },
+        }))
+    }
 }
 
 impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
@@ -389,6 +411,18 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(Box::new(TimeShift {
+            params: self.params.clone(),
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
+            },
+        }))
     }
 }
 

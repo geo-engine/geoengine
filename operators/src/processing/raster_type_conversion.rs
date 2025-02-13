@@ -3,9 +3,11 @@ use crate::engine::{
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::{
     primitives::{BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle},
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
@@ -87,6 +89,21 @@ impl InitializedRasterOperator for InitializedRasterTypeConversionOperator {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(RasterTypeConversion {
+            params: RasterTypeConversionParams {
+                output_data_type: self.result_descriptor.data_type,
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

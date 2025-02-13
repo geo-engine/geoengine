@@ -3,15 +3,19 @@ use crate::adapters::{
 };
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, SourceOperator,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
+};
+use crate::optimization::{OptimizableOperator, OptimizationError};
+use crate::processing::{
+    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::{CacheExpiration, TimeInstance};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
     GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
     TilingSpecification,
@@ -299,6 +303,7 @@ pub struct InitializedMockRasterSource<T: Pixel> {
 impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T>
 where
     TypedRasterQueryProcessor: From<std::boxed::Box<dyn RasterQueryProcessor<RasterType = T>>>,
+    SourceOperator<MockRasterSourceParams<T>>: RasterOperator,
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
@@ -319,6 +324,35 @@ where
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: self.data.clone(),
+                result_descriptor: self.result_descriptor.clone(),
+            },
+        }
+        .boxed();
+
+        if target_resolution > self.result_descriptor.spatial_grid.spatial_resolution() {
+            return Ok(Downsampling {
+                params: DownsamplingParams {
+                    sampling_method: DownsamplingMethod::NearestNeighbor,
+                    output_resolution: DownsamplingResolution::Resolution(target_resolution),
+                    output_origin_reference: None,
+                },
+                sources: SingleRasterSource { raster: source },
+            }
+            .boxed());
+        }
+
+        Ok(source)
     }
 }
 

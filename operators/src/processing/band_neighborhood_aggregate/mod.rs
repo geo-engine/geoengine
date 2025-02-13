@@ -9,11 +9,12 @@ use crate::engine::{
     ResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{FutureExt, Stream};
-use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
     GridIdx2D, GridIndexAccess, MapElements, MapIndexedElements, RasterDataType, RasterTile2D,
 };
@@ -169,6 +170,21 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(BandNeighborhoodAggregate {
+            params: BandNeighborhoodAggregateParams {
+                aggregate: self.aggregate.clone(),
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 
