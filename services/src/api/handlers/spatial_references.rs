@@ -198,12 +198,12 @@ pub(crate) async fn get_spatial_reference_specification_handler<C: ApplicationCo
     _session: C::Session,
 ) -> Result<impl Responder> {
     let spatial_ref = SpatialReference::from_str(&srs_string)?;
-    spatial_reference_specification(&spatial_ref).map(web::Json)
+    spatial_reference_specification(spatial_ref).map(web::Json)
 }
 
 /// custom spatial references not known by proj or that shall be overriden
 fn custom_spatial_reference_specification(
-    spatial_ref: &SpatialReference,
+    spatial_ref: SpatialReference,
 ) -> Option<SpatialReferenceSpecification> {
     // TODO: provide a generic storage for custom spatial reference specifications
     match spatial_ref.srs_string().to_uppercase().as_str() {
@@ -230,21 +230,21 @@ fn custom_spatial_reference_specification(
 }
 
 pub fn spatial_reference_specification(
-    spatial_reference: &SpatialReference,
+    spatial_reference: SpatialReference,
 ) -> Result<SpatialReferenceSpecification> {
-    if let Some(sref) = custom_spatial_reference_specification(&spatial_reference) {
+    if let Some(sref) = custom_spatial_reference_specification(spatial_reference) {
         return Ok(sref);
     }
 
     let spatial_reference: geoengine_datatypes::spatial_reference::SpatialReference =
-        (*spatial_reference).into();
+        spatial_reference.into();
     let srs_string = spatial_reference.srs_string();
 
     let json = proj_json(&srs_string).ok_or_else(|| Error::UnknownSrsString {
-        srs_string: srs_string.to_owned(),
+        srs_string: srs_string.clone(),
     })?;
     let proj_string = proj_proj_string(&srs_string).ok_or_else(|| Error::UnknownSrsString {
-        srs_string: srs_string.to_owned(),
+        srs_string: srs_string.clone(),
     })?;
 
     let extent: geoengine_datatypes::primitives::BoundingBox2D =
@@ -323,7 +323,7 @@ mod tests {
     #[test]
     fn spec_webmercator() {
         let spec = spatial_reference_specification(
-            &SpatialReference::from_str("EPSG:3857").unwrap().into(),
+            SpatialReference::from_str("EPSG:3857").unwrap().into(),
         )
         .unwrap();
         assert_eq!(spec.name, "WGS 84 / Pseudo-Mercator");
@@ -354,7 +354,7 @@ mod tests {
     #[test]
     fn spec_wgs84() {
         let spec = spatial_reference_specification(
-            &SpatialReference::from_str("EPSG:4326").unwrap().into(),
+            SpatialReference::from_str("EPSG:4326").unwrap().into(),
         )
         .unwrap();
         assert_eq!(
@@ -380,7 +380,7 @@ mod tests {
     #[test]
     fn spec_utm32n() {
         let spec = spatial_reference_specification(
-            &SpatialReference::from_str("EPSG:32632").unwrap().into(),
+            SpatialReference::from_str("EPSG:32632").unwrap().into(),
         )
         .unwrap();
         assert_eq!(
@@ -404,7 +404,7 @@ mod tests {
     #[test]
     fn spec_geos() {
         let spec = spatial_reference_specification(
-            &SpatialReference::from_str("SR-ORG:81").unwrap().into(),
+            SpatialReference::from_str("SR-ORG:81").unwrap().into(),
         )
         .unwrap();
         assert_eq!(

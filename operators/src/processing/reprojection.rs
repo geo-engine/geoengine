@@ -1723,7 +1723,7 @@ mod tests {
 
         assert_eq!(
             out_spatial_grid.geo_transform.spatial_resolution(),
-            SpatialResolution::new_unchecked(14212.246793017477, 14212.246793017477)
+            SpatialResolution::new_unchecked(14_212.246_793_017_477, 14_212.246_793_017_477)
         );
 
         /*

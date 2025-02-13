@@ -222,7 +222,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     let bounds = spatial_grid_descriptor.spatial_partition();
 
     let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        match spatial_reference_specification(&spatial_reference.into())?
+        match spatial_reference_specification(spatial_reference.into())?
             .axis_order
             .ok_or(Error::AxisOrderingNotKnownForSrs {
                 srs_string: spatial_reference.srs_string(),

@@ -195,7 +195,7 @@ impl GdalDatasetParameters {
 
     /// Returns the `SpatialGridDefinition` of the Gdal dataset.
     ///
-    /// Note: This allows upside down datasets (where GeoTransform y_pixel_size is positive)!
+    /// Note: This allows upside down datasets (where `GeoTransform` `y_pixel_size` is positive)!
     ///
     /// # Panics
     /// Panics if the `GdalDatasetParameters` are faulty.

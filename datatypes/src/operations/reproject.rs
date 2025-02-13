@@ -418,7 +418,7 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
     }
 
     // Second, create a grid of coordinates project that and use the valid bounds.
-    
+
     // TODO: test if we can also use a "Haus vom Nikolaus" and get the same results.
     let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge(); // TODO: need to add one pixel at lower right.
 
@@ -449,9 +449,7 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     let proj_bbox_option: Option<BoundingBox2D> =
         reproject_spatial_grid_bounds(spatial_grid, projector)?;
 
-    let proj_bbox = if let Some(p) = proj_bbox_option {
-        p
-    } else {
+    let Some(proj_bbox) = proj_bbox_option else {
         return Err(error::Error::NoIntersectionWithTargetProjection {
             srs_in: projector.source_srs(),
             srs_out: projector.target_srs(),

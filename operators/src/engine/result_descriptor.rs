@@ -149,8 +149,7 @@ impl SpatialGridDescriptor {
 
     pub fn is_compatible_grid(&self, other: &Self) -> bool {
         let b = match other {
-            SpatialGridDescriptor::Source(s) => s,
-            SpatialGridDescriptor::Derived(m) => m,
+            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => s,
         };
 
         self.is_compatible_grid_generic(b)
@@ -162,8 +161,7 @@ impl SpatialGridDescriptor {
     ) -> TilingSpatialGridDefinition {
         // TODO: we could also store the tiling_origin_reference and then use that directly?
         let grid_def = match self {
-            SpatialGridDescriptor::Source(s) => s,
-            SpatialGridDescriptor::Derived(m) => m,
+            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => s,
         };
         TilingSpatialGridDefinition::new(*grid_def, tiling_specification)
     }
@@ -191,23 +189,24 @@ impl SpatialGridDescriptor {
 
     pub fn spatial_partition(&self) -> SpatialPartition2D {
         let grid_def = match self {
-            SpatialGridDescriptor::Source(s) => s,
-            SpatialGridDescriptor::Derived(m) => m,
+            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => s,
         };
         grid_def.spatial_partition()
     }
 
     pub fn spatial_resolution(&self) -> SpatialResolution {
         match self {
-            SpatialGridDescriptor::Source(s) => s.geo_transform().spatial_resolution(),
-            SpatialGridDescriptor::Derived(m) => m.geo_transform().spatial_resolution(),
+            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => {
+                s.geo_transform().spatial_resolution()
+            }
         }
     }
 
     pub fn grid_shape(&self) -> GridShape2D {
         let shape = match self {
-            SpatialGridDescriptor::Source(s) => s.grid_bounds().grid_shape_array(),
-            SpatialGridDescriptor::Derived(s) => s.grid_bounds().grid_shape_array(),
+            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => {
+                s.grid_bounds().grid_shape_array()
+            }
         };
         GridShape2D::new(shape)
     }

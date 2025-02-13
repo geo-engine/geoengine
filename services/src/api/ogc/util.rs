@@ -248,7 +248,7 @@ pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
     spatial_reference: SpatialReference,
 ) -> Result<A> {
     let [a, b, c, d] = values;
-    let axis_order = spatial_reference_specification(&spatial_reference.into())?
+    let axis_order = spatial_reference_specification(spatial_reference)?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
@@ -265,7 +265,7 @@ pub fn tuple_from_ogc_params(
     b: f64,
     spatial_reference: SpatialReference,
 ) -> Result<(f64, f64)> {
-    match spatial_reference_specification(&spatial_reference.into())?
+    match spatial_reference_specification(spatial_reference)?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),

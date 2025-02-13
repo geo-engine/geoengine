@@ -673,7 +673,7 @@ impl SentinelS2L2aCogsMetaData {
                 debug!(
                     "could not project zone bounds to EPSG:4326. Was: {:?}. Source: {}",
                     native_bounds, e
-                )
+                );
             })
             .ok();
 
@@ -1393,7 +1393,6 @@ mod tests {
             TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44)).unwrap(),
             BandSelection::first(),
         );
-        dbg!(&query);
         let loading_info = meta.loading_info(query).await.unwrap();
         let parts =
             if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
@@ -1502,8 +1501,6 @@ mod tests {
             .unwrap();
 
         let result = stream.collect::<Vec<_>>().await;
-
-        dbg!(&result);
 
         assert_eq!(result.len(), 1);
         assert!(result[0].is_ok());
