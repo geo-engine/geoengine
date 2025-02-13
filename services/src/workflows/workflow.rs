@@ -22,6 +22,7 @@ impl WorkflowId {
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
 pub struct Workflow {
     #[serde(flatten)]
+    #[schema(value_type = crate::api::model::operators::TypedOperator)]
     pub operator: TypedOperator,
 }
 

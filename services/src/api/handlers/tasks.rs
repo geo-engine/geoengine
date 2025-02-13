@@ -1,6 +1,6 @@
 use crate::contexts::ApplicationContext;
 use crate::error::Result;
-use crate::tasks::{TaskListOptions, TaskManager, TaskStatusWithId};
+use crate::tasks::{TaskListOptions, TaskManager, TaskStatus, TaskStatusWithId};
 use crate::util::extractors::ValidatedQuery;
 use crate::{contexts::SessionContext, tasks::TaskId};
 use actix_web::{web, FromRequest, HttpResponse, Responder};

@@ -199,6 +199,7 @@ async fn get_plot_handler<C: ApplicationContext>(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WrappedPlotOutput {
+    #[schema(value_type = crate::api::model::datatypes::PlotOutputFormat)]
     output_format: PlotOutputFormat,
     plot_type: &'static str,
     #[schema(value_type = Object)]

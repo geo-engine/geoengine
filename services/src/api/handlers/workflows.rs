@@ -169,7 +169,7 @@ async fn load_workflow_handler<C: ApplicationContext>(
     get,
     path = "/workflow/{id}/metadata",
     responses(
-        (status = 200, description = "Metadata of loaded workflow", body = TypedResultDescriptor,
+        (status = 200, description = "Metadata of loaded workflow", body = crate::api::model::operators::TypedResultDescriptor,
             example = json!({"type": "vector", "dataType": "MultiPoint", "spatialReference": "EPSG:4326", "columns": {}})
         )
     ),
@@ -461,11 +461,13 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
 #[serde(rename_all = "camelCase")]
 pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_spatial_partition")]
+    #[param(value_type = crate::api::model::datatypes::SpatialPartition2D)]
     pub spatial_bounds: SpatialPartition2D,
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
+    #[param(value_type = crate::api::model::datatypes::SpatialResolution)]
     pub spatial_resolution: SpatialResolution,
     #[serde(deserialize_with = "parse_band_selection")]
     #[param(value_type = String)]
@@ -555,11 +557,13 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 #[serde(rename_all = "camelCase")]
 pub struct VectorStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_bbox")]
+    #[param(value_type = crate::api::model::datatypes::BoundingBox2D)]
     pub spatial_bounds: BoundingBox2D,
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
+    #[param(value_type = crate::api::model::datatypes::SpatialResolution)]
     pub spatial_resolution: SpatialResolution,
     pub result_type: RasterStreamWebsocketResultType,
 }

@@ -1,7 +1,10 @@
 use crate::{
     api::model::{
         operators::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
-        responses::datasets::{errors::*, DatasetNameResponse},
+        responses::{
+            datasets::{errors::*, DatasetNameResponse},
+            ErrorResponse,
+        },
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
             MetaDataSuggestion, Provenances, UpdateDataset,
@@ -10,8 +13,8 @@ use crate::{
     config::{get_config_element, Data},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
-        listing::{DatasetListOptions, DatasetProvider},
-        storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
+        listing::{DatasetListOptions, DatasetListing, DatasetProvider},
+        storage::{AutoCreateDataset, Dataset, DatasetStore, SuggestMetaData},
         upload::{
             AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName, Volumes,
         },
@@ -28,7 +31,7 @@ use crate::{
 use actix_web::{web, FromRequest, HttpResponse, HttpResponseBuilder, Responder};
 use gdal::{
     vector::{Layer, LayerAccess, OGRFieldType},
-    Dataset, DatasetOptions,
+    DatasetOptions,
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
@@ -796,7 +799,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 
 #[allow(clippy::ref_option)]
 fn select_layer_from_dataset<'a>(
-    dataset: &'a Dataset,
+    dataset: &'a gdal::Dataset,
     layer_name: &Option<String>,
 ) -> Result<Layer<'a>> {
     if let Some(ref layer_name) = layer_name {
@@ -824,7 +827,7 @@ fn auto_detect_vector_meta_data_definition(
 
 #[allow(clippy::ref_option)]
 fn auto_detect_vector_meta_data_definition_from_dataset(
-    dataset: &Dataset,
+    dataset: &gdal::Dataset,
     main_file_path: &Path,
     layer_name: &Option<String>,
 ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
@@ -1082,7 +1085,7 @@ fn detect_vector_geometry(layer: &Layer) -> DetectedGeometry {
 }
 
 struct GdalAutoDetect {
-    dataset: Dataset,
+    dataset: gdal::Dataset,
     x: String,
     y: Option<String>,
 }
