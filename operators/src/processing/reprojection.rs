@@ -20,7 +20,6 @@ use crate::{
         Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
         Interpolation, InterpolationMethod, InterpolationParams, InterpolationResolution,
     },
-    source,
     util::{input::RasterOrVectorOperator, math::is_power_of_two, Result},
 };
 use async_trait::async_trait;
@@ -30,9 +29,8 @@ use geoengine_datatypes::{
     collections::FeatureCollection,
     error::BoxedResultExt,
     operations::reproject::{
-        reproject_spatial_query, suggest_output_spatial_grid_like_gdal,
-        suggest_output_spatial_grid_like_gdal_helper, suggest_pixel_size_like_gdal_helper,
-        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
+        reproject_spatial_query, CoordinateProjection, CoordinateProjector, Reproject,
+        ReprojectClipped,
     },
     primitives::{
         BandSelection, ColumnSelection, Geometry, RasterQueryRectangle,
@@ -43,7 +41,6 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
     util::arrow::ArrowTyped,
 };
-use ort::session::input;
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -312,6 +309,18 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        _target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        // TODO: project target resolution to source resolution and push optimization down
+        Err(
+            OptimizationError::OptimizationNotYetImplementedForOperator {
+                operator: "Reprojection (Vector)".to_string(),
+            },
+        )
     }
 }
 

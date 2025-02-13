@@ -7,8 +7,8 @@ use std::sync::Arc;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{CacheHint, SpatialResolution};
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -21,6 +21,7 @@ use crate::engine::{
 };
 use crate::engine::{OperatorData, QueryProcessor};
 use crate::error::{self, Error};
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use arrow::array::BooleanArray;
 use async_trait::async_trait;
@@ -172,6 +173,20 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(PointInPolygonFilter {
+            params: PointInPolygonFilterParams {},
+            sources: PointInPolygonFilterSource {
+                points: self.points.optimize(target_resolution)?,
+                polygons: self.polygons.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

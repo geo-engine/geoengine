@@ -5,12 +5,13 @@ use crate::engine::{
 };
 use crate::error;
 use crate::machine_learning::error::{InputBandsMismatch, InputTypeMismatch, Ort};
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
-use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
+use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
     Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
 };
@@ -82,6 +83,7 @@ impl RasterOperator for Onnx {
 
         Ok(Box::new(InitializedOnnx {
             name,
+            model_name: self.params.model,
             result_descriptor: out_descriptor,
             source,
             model_metadata,
@@ -93,6 +95,7 @@ impl RasterOperator for Onnx {
 
 pub struct InitializedOnnx {
     name: CanonicOperatorName,
+    model_name: MlModelName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     model_metadata: MlModelMetadata,
@@ -122,6 +125,21 @@ impl InitializedRasterOperator for InitializedOnnx {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(Onnx {
+            params: OnnxParams {
+                model: self.model_name.clone(),
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

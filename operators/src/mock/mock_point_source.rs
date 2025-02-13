@@ -1,4 +1,5 @@
 use crate::engine::{CanonicOperatorName, OperatorData, QueryContext};
+use crate::optimization::OptimizationError;
 use crate::{
     engine::{
         ExecutionContext, InitializedVectorOperator, OperatorName, SourceOperator,
@@ -11,7 +12,9 @@ use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{BoundingBox2D, CacheHint, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BoundingBox2D, CacheHint, SpatialResolution, VectorQueryRectangle,
+};
 use geoengine_datatypes::{
     collections::MultiPointCollection,
     primitives::{Coordinate2D, TimeInterval},
@@ -123,6 +126,7 @@ impl VectorOperator for MockPointSource {
 
         Ok(InitializedMockPointSource {
             name: CanonicOperatorName::from(&self),
+            spatial_bounds: self.params.spatial_bounds.clone(),
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: SpatialReference::epsg_4326().into(),
@@ -140,6 +144,7 @@ impl VectorOperator for MockPointSource {
 
 pub struct InitializedMockPointSource {
     name: CanonicOperatorName,
+    spatial_bounds: SpatialBoundsDerive,
     result_descriptor: VectorResultDescriptor,
     points: Vec<Coordinate2D>,
 }
@@ -161,6 +166,19 @@ impl InitializedVectorOperator for InitializedMockPointSource {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        _target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(MockPointSource {
+            params: MockPointSourceParams {
+                points: self.points.clone(),
+                spatial_bounds: self.spatial_bounds.clone(),
+            },
+        }
+        .boxed())
     }
 }
 

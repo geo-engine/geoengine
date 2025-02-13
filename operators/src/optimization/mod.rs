@@ -19,7 +19,9 @@ pub enum OptimizationError {
         data: String,
         oveview_level: u32,
     },
-    OptimizationNotYetImplementedForOperator,
+    OptimizationNotYetImplementedForOperator {
+        operator: String,
+    },
     ProjectionOptimizationFailed {
         source: Box<dyn ErrorSource>,
     },

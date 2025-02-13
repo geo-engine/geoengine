@@ -156,10 +156,7 @@ pub trait InitializedRasterOperator: Send + Sync {
     fn optimize(
         &self,
         _resolution: SpatialResolution,
-    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
-        // TODO: remove default implementation once all operators implement this trait
-        Err(OptimizationError::OptimizationNotYetImplementedForOperator)
-    }
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError>;
 
     /// optimize the operator graph and reinitialize it
     async fn optimize_and_reinitialize(
@@ -199,10 +196,7 @@ pub trait InitializedVectorOperator: Send + Sync {
     fn optimize(
         &self,
         _resolution: SpatialResolution,
-    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
-        // TODO: remove default implementation once all operators implement this trait
-        Err(OptimizationError::OptimizationNotYetImplementedForOperator)
-    }
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError>;
 
     // /// optimize the operator graph and reinitialize it
     // async fn optimize_and_reinitialize(
