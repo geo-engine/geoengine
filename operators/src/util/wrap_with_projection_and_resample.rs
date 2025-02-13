@@ -1,6 +1,6 @@
 use crate::engine::{
     CanonicOperatorName, InitializedRasterOperator, RasterOperator, RasterResultDescriptor,
-    ResultDescriptor, SingleRasterOrVectorSource,
+    ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
 };
 use crate::error;
 use crate::processing::{
@@ -80,6 +80,7 @@ impl WrapWithProjectionAndResample {
             // create the inititalized operator directly, to avoid re-initializing everything
             let irp = InitializedRasterReprojection::try_new_with_input(
                 CanonicOperatorName::from(&reprojected_workflow),
+                WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
                 reprojection_params,
                 self.initialized_operator,
                 tiling_spec,
@@ -171,6 +172,7 @@ impl WrapWithProjectionAndResample {
 
             let iip = InitializedInterpolation::new_with_source_and_params(
                 CanonicOperatorName::from(&iop),
+                WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
                 self.initialized_operator,
                 &interpolation_params,
                 tiling_spec,
@@ -198,6 +200,7 @@ impl WrapWithProjectionAndResample {
 
             let ido = InitializedDownsampling::new_with_source_and_params(
                 CanonicOperatorName::from(&dop),
+                WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
                 self.initialized_operator,
                 downsample_params,
                 tiling_spec,

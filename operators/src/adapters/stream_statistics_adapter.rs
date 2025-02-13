@@ -16,6 +16,9 @@ pub struct StreamStatisticsAdapter<S> {
     span: Span,
     quota: QuotaTracking,
     path: WorkflowOperatorPath,
+    operator_name: &'static str,
+    /// If the wrapped stream is a source, pass the value of the `data` parameter to the quota tracking
+    data: Option<String>,
 }
 
 impl<S> StreamStatisticsAdapter<S> {
@@ -24,6 +27,8 @@ impl<S> StreamStatisticsAdapter<S> {
         span: Span,
         quota: QuotaTracking,
         path: WorkflowOperatorPath,
+        operator_name: &'static str,
+        data: Option<String>,
     ) -> StreamStatisticsAdapter<S> {
         StreamStatisticsAdapter {
             stream,
@@ -32,6 +37,8 @@ impl<S> StreamStatisticsAdapter<S> {
             span,
             quota,
             path,
+            operator_name,
+            data,
         }
     }
 
@@ -76,7 +83,11 @@ where
                     empty = false,
                 );
 
-                (*this.quota).work_unit_done();
+                (*this.quota).work_unit_done(
+                    this.operator_name,
+                    this.path.clone(),
+                    this.data.clone(),
+                );
             }
             None => {
                 tracing::debug!(
@@ -100,9 +111,8 @@ mod tests {
 
     use super::*;
 
-    use crate::meta::quota::{ComputationContext, ComputationUnit, QuotaMessage};
+    use crate::meta::quota::{ComputationUnit, QuotaMessage};
     use futures::StreamExt;
-    use geoengine_datatypes::util::Identifier;
     use tokio::sync::mpsc::unbounded_channel;
     use tracing::{span, Level};
     use uuid::Uuid;
@@ -112,14 +122,17 @@ mod tests {
         let v = vec![1, 2, 3];
         let v_stream = futures::stream::iter(v);
         let (tx, mut rx) = unbounded_channel::<QuotaMessage>();
-        let issuer = Uuid::new_v4();
-        let context = ComputationContext::new();
-        let quota = QuotaTracking::new(tx, ComputationUnit { issuer, context });
+        let user = Uuid::new_v4();
+        let workflow = Uuid::new_v4();
+        let computation = Uuid::new_v4();
+        let quota = QuotaTracking::new(tx, user, workflow, computation);
         let mut v_stat_stream = StreamStatisticsAdapter::new(
             v_stream,
             span!(Level::TRACE, "test"),
             quota,
             WorkflowOperatorPath::initialize_root(),
+            "test",
+            None,
         );
 
         let one = v_stat_stream.next().await;
@@ -142,7 +155,15 @@ mod tests {
 
         assert_eq!(
             rx.recv().await.unwrap(),
-            ComputationUnit { issuer, context }.into()
+            ComputationUnit {
+                user,
+                workflow,
+                computation,
+                operator_name: "test",
+                operator_path: WorkflowOperatorPath::initialize_root(),
+                data: None,
+            }
+            .into()
         );
     }
 }

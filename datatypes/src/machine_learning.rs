@@ -1,11 +1,12 @@
-use std::path::PathBuf;
-
-use serde::{de::Visitor, Deserialize, Serialize};
-
 use crate::{
     dataset::{is_invalid_name_char, SYSTEM_NAMESPACE},
     raster::RasterDataType,
 };
+use serde::{de::Visitor, Deserialize, Serialize};
+use snafu::Snafu;
+use std::path::PathBuf;
+use std::str::FromStr;
+use strum::IntoStaticStr;
 
 const NAME_DELIMITER: char = ':';
 
@@ -13,6 +14,18 @@ const NAME_DELIMITER: char = ':';
 pub struct MlModelName {
     pub namespace: Option<String>,
     pub name: String,
+}
+
+#[derive(Snafu, IntoStaticStr, Debug)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum MlModelNameError {
+    #[snafu(display("MlModelName is empty"))]
+    IsEmpty,
+    #[snafu(display("invalid character '{invalid_char}' in named model"))]
+    InvalidCharacter { invalid_char: String },
+    #[snafu(display("ml model name must consist of at most two parts"))]
+    TooManyParts,
 }
 
 impl MlModelName {
@@ -62,9 +75,48 @@ impl<'de> Deserialize<'de> for MlModelName {
     }
 }
 
+impl FromStr for MlModelName {
+    type Err = MlModelNameError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut strings = [None, None];
+        let mut split = s.split(NAME_DELIMITER);
+
+        for (buffer, part) in strings.iter_mut().zip(&mut split) {
+            if part.is_empty() {
+                return Err(MlModelNameError::IsEmpty);
+            }
+
+            if let Some(c) = part.matches(is_invalid_name_char).next() {
+                return Err(MlModelNameError::InvalidCharacter {
+                    invalid_char: c.to_string(),
+                });
+            }
+
+            *buffer = Some(part.to_string());
+        }
+
+        if split.next().is_some() {
+            return Err(MlModelNameError::TooManyParts);
+        }
+
+        match strings {
+            [Some(namespace), Some(name)] => Ok(MlModelName {
+                namespace: MlModelName::canonicalize(namespace, SYSTEM_NAMESPACE),
+                name,
+            }),
+            [Some(name), None] => Ok(MlModelName {
+                namespace: None,
+                name,
+            }),
+            _ => Err(MlModelNameError::IsEmpty),
+        }
+    }
+}
+
 struct MlModelNameDeserializeVisitor;
 
-impl<'de> Visitor<'de> for MlModelNameDeserializeVisitor {
+impl Visitor<'_> for MlModelNameDeserializeVisitor {
     type Value = MlModelName;
 
     /// always keep in sync with [`is_allowed_name_char`]
@@ -79,36 +131,7 @@ impl<'de> Visitor<'de> for MlModelNameDeserializeVisitor {
     where
         E: serde::de::Error,
     {
-        let mut strings = [None, None];
-        let mut split = s.split(NAME_DELIMITER);
-
-        for (buffer, part) in strings.iter_mut().zip(&mut split) {
-            if part.is_empty() {
-                return Err(E::custom("empty part in named data"));
-            }
-
-            if let Some(c) = part.matches(is_invalid_name_char).next() {
-                return Err(E::custom(format!("invalid character '{c}' in named model")));
-            }
-
-            *buffer = Some(part.to_string());
-        }
-
-        if split.next().is_some() {
-            return Err(E::custom("named model must consist of at most two parts"));
-        }
-
-        match strings {
-            [Some(namespace), Some(name)] => Ok(MlModelName {
-                namespace: MlModelName::canonicalize(namespace, SYSTEM_NAMESPACE),
-                name,
-            }),
-            [Some(name), None] => Ok(MlModelName {
-                namespace: None,
-                name,
-            }),
-            _ => Err(E::custom("empty named data")),
-        }
+        MlModelName::from_str(s).map_err(|e| E::custom(e.to_string()))
     }
 }
 
@@ -121,4 +144,36 @@ pub struct MlModelMetadata {
     pub num_input_bands: u32, // number of features per sample (bands per pixel)
     pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
                                      // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ml_model_name_from_str() {
+        const ML_MODEL_NAME: &str = "myModelName";
+        let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
+        assert_eq!(mln.name, ML_MODEL_NAME);
+        assert!(mln.namespace.is_none());
+    }
+
+    #[test]
+    fn ml_model_name_from_str_prefixed() {
+        const ML_MODEL_NAME: &str = "d5328854-6190-4af9-ad69-4e74b0961ac9:myModelName";
+        let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
+        assert_eq!(mln.name, "myModelName".to_string());
+        assert_eq!(
+            mln.namespace,
+            Some("d5328854-6190-4af9-ad69-4e74b0961ac9".to_string())
+        );
+    }
+
+    #[test]
+    fn ml_model_name_from_str_system() {
+        const ML_MODEL_NAME: &str = "_:myModelName";
+        let mln = MlModelName::from_str(ML_MODEL_NAME).unwrap();
+        assert_eq!(mln.name, "myModelName".to_string());
+        assert!(mln.namespace.is_none());
+    }
 }

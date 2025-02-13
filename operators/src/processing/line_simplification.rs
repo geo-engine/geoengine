@@ -57,7 +57,10 @@ impl VectorOperator for LineSimplification {
 
         let name = CanonicOperatorName::from(&self);
 
-        let sources = self.sources.initialize_sources(path, context).await?;
+        let sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let source = sources.vector;
 
         if source.result_descriptor().data_type != VectorDataType::MultiLineString
@@ -68,6 +71,7 @@ impl VectorOperator for LineSimplification {
 
         let initialized_operator = InitializedLineSimplification {
             name,
+            path,
             result_descriptor: source.result_descriptor().clone(),
             source,
             algorithm: self.params.algorithm,
@@ -105,6 +109,7 @@ pub enum LineSimplificationAlgorithm {
 
 pub struct InitializedLineSimplification {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
     algorithm: LineSimplificationAlgorithm,
@@ -171,6 +176,14 @@ impl InitializedVectorOperator for InitializedLineSimplification {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        LineSimplification::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

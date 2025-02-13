@@ -312,7 +312,7 @@ impl<'a> OgcRequestGuard<'a> {
 
 impl Guard for OgcRequestGuard<'_> {
     fn check(&self, ctx: &GuardContext<'_>) -> bool {
-        ctx.head().uri.query().map_or(false, |q| {
+        ctx.head().uri.query().is_some_and(|q| {
             q.contains(&format!("request={}", self.request))
                 || q.contains(&format!("REQUEST={}", self.request))
         })

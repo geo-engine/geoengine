@@ -9,6 +9,9 @@ use crate::datasets::external::gfbio_collections::GfbioCollectionsDataProviderDe
 use crate::datasets::external::netcdfcf::EbvPortalDataProviderDefinition;
 use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
 use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
+use crate::datasets::external::{
+    CopernicusDataspaceDataProviderDefinition, SentinelS2L2ACogsProviderDefinition,
+};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Result;
 use async_trait::async_trait;
@@ -68,14 +71,16 @@ pub trait DataProvider: LayerCollectionProvider
 #[allow(clippy::enum_variant_names)] // TODO: think about better names
 pub enum TypedDataProviderDefinition {
     ArunaDataProviderDefinition(ArunaDataProviderDefinition),
+    CopernicusDataspaceDataProviderDefinition(CopernicusDataspaceDataProviderDefinition),
     DatasetLayerListingProviderDefinition(DatasetLayerListingProviderDefinition),
+    EbvPortalDataProviderDefinition(EbvPortalDataProviderDefinition),
+    EdrDataProviderDefinition(EdrDataProviderDefinition),
     GbifDataProviderDefinition(GbifDataProviderDefinition),
     GfbioAbcdDataProviderDefinition(GfbioAbcdDataProviderDefinition),
     GfbioCollectionsDataProviderDefinition(GfbioCollectionsDataProviderDefinition),
-    EbvPortalDataProviderDefinition(EbvPortalDataProviderDefinition),
     NetCdfCfDataProviderDefinition(NetCdfCfDataProviderDefinition),
     PangaeaDataProviderDefinition(PangaeaDataProviderDefinition),
-    EdrDataProviderDefinition(EdrDataProviderDefinition),
+    SentinelS2L2ACogsProviderDefinition(SentinelS2L2ACogsProviderDefinition),
 }
 
 impl From<ArunaDataProviderDefinition> for TypedDataProviderDefinition {
@@ -132,6 +137,12 @@ impl From<DatasetLayerListingProviderDefinition> for TypedDataProviderDefinition
     }
 }
 
+impl From<SentinelS2L2ACogsProviderDefinition> for TypedDataProviderDefinition {
+    fn from(def: SentinelS2L2ACogsProviderDefinition) -> Self {
+        Self::SentinelS2L2ACogsProviderDefinition(def)
+    }
+}
+
 impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition<D>> {
     fn from(typed: TypedDataProviderDefinition) -> Self {
         match typed {
@@ -148,6 +159,10 @@ impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderD
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::EdrDataProviderDefinition(def) => Box::new(def),
+            TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => Box::new(def),
+            TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(def) => {
+                Box::new(def)
+            }
         }
     }
 }
@@ -155,15 +170,17 @@ impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderD
 impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderDefinition {
     fn as_ref(&self) -> &(dyn DataProviderDefinition<D> + 'static) {
         match self {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => def,
-            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => def,
-            TypedDataProviderDefinition::GbifDataProviderDefinition(def) => def,
-            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => def,
-            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => def,
-            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => def,
-            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => def,
-            TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => def,
-            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => def,
+            Self::ArunaDataProviderDefinition(def) => def,
+            Self::DatasetLayerListingProviderDefinition(def) => def,
+            Self::GbifDataProviderDefinition(def) => def,
+            Self::GfbioAbcdDataProviderDefinition(def) => def,
+            Self::GfbioCollectionsDataProviderDefinition(def) => def,
+            Self::EbvPortalDataProviderDefinition(def) => def,
+            Self::NetCdfCfDataProviderDefinition(def) => def,
+            Self::PangaeaDataProviderDefinition(def) => def,
+            Self::EdrDataProviderDefinition(def) => def,
+            Self::CopernicusDataspaceDataProviderDefinition(def) => def,
+            Self::SentinelS2L2ACogsProviderDefinition(def) => def,
         }
     }
 }
@@ -172,95 +189,67 @@ impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderD
 impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
     async fn initialize(self: Box<Self>, db: D) -> Result<Box<dyn DataProvider>> {
         match *self {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
+            Self::ArunaDataProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::DatasetLayerListingProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::GbifDataProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::GfbioAbcdDataProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::GfbioCollectionsDataProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::EbvPortalDataProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::NetCdfCfDataProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::PangaeaDataProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::EdrDataProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::CopernicusDataspaceDataProviderDefinition(def) => {
                 Box::new(def).initialize(db).await
             }
-            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
-                Box::new(def).initialize(db).await
-            }
-            TypedDataProviderDefinition::GbifDataProviderDefinition(def) => {
-                Box::new(def).initialize(db).await
-            }
-            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => {
-                Box::new(def).initialize(db).await
-            }
-            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
-                Box::new(def).initialize(db).await
-            }
-            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
-                Box::new(def).initialize(db).await
-            }
-            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => {
-                Box::new(def).initialize(db).await
-            }
-            TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
-                Box::new(def).initialize(db).await
-            }
-            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
-                Box::new(def).initialize(db).await
-            }
+            Self::SentinelS2L2ACogsProviderDefinition(def) => Box::new(def).initialize(db).await,
         }
     }
 
     fn type_name(&self) -> &'static str {
         match self {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
+            Self::ArunaDataProviderDefinition(def) => DataProviderDefinition::<D>::type_name(def),
+            Self::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::type_name(def)
             }
-            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
+            Self::GbifDataProviderDefinition(def) => DataProviderDefinition::<D>::type_name(def),
+            Self::GfbioAbcdDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::type_name(def)
             }
-            TypedDataProviderDefinition::GbifDataProviderDefinition(def) => {
+            Self::GfbioCollectionsDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::type_name(def)
             }
-            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => {
+            Self::EbvPortalDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::type_name(def)
             }
-            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
+            Self::NetCdfCfDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::type_name(def)
             }
-            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::type_name(def)
-            }
-            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::type_name(def)
-            }
-            TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::type_name(def)
-            }
-            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::type_name(def)
-            }
+            Self::PangaeaDataProviderDefinition(def) => DataProviderDefinition::<D>::type_name(def),
+            Self::EdrDataProviderDefinition(def) => DataProviderDefinition::<D>::type_name(def),
+            Self::CopernicusDataspaceDataProviderDefinition(_) => "CioDataProviderDefinition",
+            Self::SentinelS2L2ACogsProviderDefinition(_) => "SentinelS2L2ACogsProviderDefinition",
         }
     }
 
     fn name(&self) -> String {
         match self {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
+            Self::ArunaDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
+            Self::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::name(def)
             }
-            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
+            Self::GbifDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
+            Self::GfbioAbcdDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
+            Self::GfbioCollectionsDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::name(def)
             }
-            TypedDataProviderDefinition::GbifDataProviderDefinition(def) => {
+            Self::EbvPortalDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
+            Self::NetCdfCfDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
+            Self::PangaeaDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
+            Self::EdrDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
+            Self::CopernicusDataspaceDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::name(def)
             }
-            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::name(def)
-            }
-            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::name(def)
-            }
-            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::name(def)
-            }
-            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::name(def)
-            }
-            TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::name(def)
-            }
-            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
+            Self::SentinelS2L2ACogsProviderDefinition(def) => {
                 DataProviderDefinition::<D>::name(def)
             }
         }
@@ -268,63 +257,49 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
 
     fn id(&self) -> DataProviderId {
         match self {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
+            Self::ArunaDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
+            Self::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::id(def)
             }
-            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
+            Self::GbifDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
+            Self::GfbioAbcdDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
+            Self::GfbioCollectionsDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::id(def)
             }
-            TypedDataProviderDefinition::GbifDataProviderDefinition(def) => {
+            Self::EbvPortalDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
+            Self::NetCdfCfDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
+            Self::PangaeaDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
+            Self::EdrDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
+            Self::CopernicusDataspaceDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::id(def)
             }
-            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::id(def)
-            }
-            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::id(def)
-            }
-            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::id(def)
-            }
-            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::id(def)
-            }
-            TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::id(def)
-            }
-            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::id(def)
-            }
+            Self::SentinelS2L2ACogsProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
         }
     }
 
     fn priority(&self) -> i16 {
         match self {
-            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
+            Self::ArunaDataProviderDefinition(def) => DataProviderDefinition::<D>::priority(def),
+            Self::DatasetLayerListingProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
-            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
+            Self::GbifDataProviderDefinition(def) => DataProviderDefinition::<D>::priority(def),
+            Self::GfbioAbcdDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
-            TypedDataProviderDefinition::GbifDataProviderDefinition(def) => {
+            Self::GfbioCollectionsDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
-            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => {
+            Self::EbvPortalDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
-            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
+            Self::NetCdfCfDataProviderDefinition(def) => DataProviderDefinition::<D>::priority(def),
+            Self::PangaeaDataProviderDefinition(def) => DataProviderDefinition::<D>::priority(def),
+            Self::EdrDataProviderDefinition(def) => DataProviderDefinition::<D>::priority(def),
+            Self::CopernicusDataspaceDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
-            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::priority(def)
-            }
-            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::priority(def)
-            }
-            TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::priority(def)
-            }
-            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
+            Self::SentinelS2L2ACogsProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
         }

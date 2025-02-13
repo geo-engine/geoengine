@@ -50,7 +50,7 @@ impl RasterOperator for RasterStacker {
 
         let raster_sources = self
             .sources
-            .initialize_sources(path, context)
+            .initialize_sources(path.clone(), context)
             .await?
             .rasters;
 
@@ -120,6 +120,7 @@ impl RasterOperator for RasterStacker {
 
         Ok(Box::new(InitializedRasterStacker {
             name,
+            path,
             result_descriptor,
             raster_sources,
             bands_per_source,
@@ -131,6 +132,7 @@ impl RasterOperator for RasterStacker {
 
 pub struct InitializedRasterStacker {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     bands_per_source: Vec<u32>,
@@ -250,6 +252,14 @@ impl InitializedRasterOperator for InitializedRasterStacker {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        RasterStacker::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

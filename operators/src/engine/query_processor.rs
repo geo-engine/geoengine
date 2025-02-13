@@ -45,6 +45,7 @@ pub trait QueryProcessor: Send + Sync {
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         self.result_descriptor().validate_query(&query)?;
 
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         Ok(Box::pin(
             ctx.abort_registration()
                 .wrap(self._query(query, ctx).await?),

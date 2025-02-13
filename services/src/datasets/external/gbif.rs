@@ -289,7 +289,7 @@ impl GbifDataProvider {
         let filters = GbifDataProvider::get_filters(path);
         let conn = self.pool.get().await?;
         let query = &format!(
-            r#"
+            "
             SELECT name, count
             FROM {schema}.{taxonrank}_stats
             WHERE name IN
@@ -301,7 +301,7 @@ impl GbifDataProvider {
             ORDER BY name
             LIMIT $1
             OFFSET $2;
-            "#,
+            ",
             schema = self.db_config.schema,
             filter = filters.iter().enumerate().fold(
                 String::new(),
@@ -355,7 +355,7 @@ impl GbifDataProvider {
             .enumerate()
             .map(|(index, rank)| {
                 format!(
-                    r#"
+                    r"
                     {union}
                     (
                         SELECT count, name, '{rank}' AS rank
@@ -363,7 +363,7 @@ impl GbifDataProvider {
                         WHERE name IN (SELECT name FROM names)
                         ORDER BY name
                     )
-                "#,
+                ",
                     schema = self.db_config.schema,
                     union = if index > 0 {
                         "UNION ALL".to_string()
@@ -376,7 +376,7 @@ impl GbifDataProvider {
             .unwrap_or_default();
         let conn = self.pool.get().await?;
         let query = &format!(
-            r#"
+            r"
             WITH names AS (
                 SELECT canonicalname AS name
                 FROM {schema}.species
@@ -389,7 +389,7 @@ impl GbifDataProvider {
             ORDER BY name, rank
             LIMIT $1
             OFFSET $2;
-            "#,
+            ",
             schema = self.db_config.schema,
             filter = filters.iter().enumerate().fold(
                 String::new(),
@@ -444,14 +444,14 @@ impl GbifDataProvider {
         let taxonrank_filter = Self::create_taxonrank_filter(&taxonranks);
         let conn = self.pool.get().await?;
         let query = &format!(
-            r#"
+            r"
             SELECT DISTINCT canonicalname
             FROM {schema}.species
             WHERE {taxonrank_filter}{filter} AND canonicalname ILIKE $3
             ORDER BY canonicalname
             LIMIT $1
             OFFSET $2;
-            "#,
+            ",
             schema = self.db_config.schema,
             filter = filters.iter().enumerate().fold(
                 String::new(),
@@ -979,7 +979,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         let stats = conn
             .query_one(
                 &format!(
-                    r#"
+                    r"
                 SELECT
                     lower(time) AS tmin,
                     upper(time) AS tmax,
@@ -988,7 +988,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
                     public.ST_YMIN(extent) AS ymin,
                     public.ST_YMAX(extent) AS ymax
                 FROM {schema}.{taxonrank}_stats
-                WHERE name = '{canonicalname}'"#,
+                WHERE name = '{canonicalname}'",
                     schema = self.db_config.schema
                 ),
                 &[],
@@ -1530,15 +1530,12 @@ impl DataProvider for GbifDataProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::PostgresContext;
+    use crate::contexts::PostgresSessionContext;
     use crate::contexts::SessionContext;
-    use crate::contexts::SimpleApplicationContext;
+    use crate::ge_context;
     use crate::layers::layer::Layer;
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
-    use crate::util::config::{get_config_element, Postgres};
-    use crate::util::tests::setup_db;
-    use crate::util::tests::tear_down_db;
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
@@ -1550,22 +1547,12 @@ mod tests {
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
-    use rand::RngCore;
     use std::collections::HashMap;
-    use std::future::Future;
     use std::{fs::File, io::Read, path::PathBuf};
-    use tokio::runtime::Handle;
-    use tokio_postgres::Config;
 
-    /// Create a schema with test tables and return the schema name
-    async fn create_test_data(db_config: &Postgres) -> String {
-        let mut pg_config = Config::new();
-        pg_config
-            .user(&db_config.user)
-            .password(&db_config.password)
-            .host(&db_config.host)
-            .dbname(&db_config.database);
-        let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
+    /// Add test data to the database
+    async fn add_test_data(db_config: &DatabaseConnectionConfig) {
+        let pg_mgr = PostgresConnectionManager::new(db_config.pg_config(), NoTls);
         let conn = pg_mgr.connect().await.unwrap();
 
         let mut sql = String::new();
@@ -1574,552 +1561,228 @@ mod tests {
             .read_to_string(&mut sql)
             .unwrap();
 
-        let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
+        let schema = db_config.schema.clone();
 
         conn.batch_execute(&format!(
-            "CREATE SCHEMA {schema};
-            CREATE EXTENSION IF NOT EXISTS postgis;
+            "CREATE EXTENSION IF NOT EXISTS postgis;
             SET SEARCH_PATH TO {schema}, public;
             {sql}"
         ))
         .await
         .unwrap();
-
-        schema
     }
 
-    /// Drop the schema created by `create_test_data`
-    async fn cleanup_test_data(db_config: &Postgres, schema: String) {
-        let mut pg_config = Config::new();
-        pg_config
-            .user(&db_config.user)
-            .password(&db_config.password)
-            .host(&db_config.host)
-            .dbname(&db_config.database);
-        let pg_mgr = PostgresConnectionManager::new(pg_config, NoTls);
-        let conn = pg_mgr.connect().await.unwrap();
-
-        conn.batch_execute(&format!("DROP SCHEMA {schema} CASCADE;"))
-            .await
-            .unwrap();
-    }
-
-    async fn with_temp_schema<F, Fut>(f: F)
-    where
-        F: FnOnce(PostgresContext<NoTls>, DatabaseConnectionConfig) -> Fut
-            + std::panic::UnwindSafe
-            + Send
-            + 'static,
-        Fut: Future<Output = ()> + Send,
-    {
-        let pg_config = get_config_element::<Postgres>().unwrap();
-        let schema = create_test_data(&pg_config).await;
-        let db_config = DatabaseConnectionConfig {
-            host: pg_config.host.clone(),
-            port: pg_config.port,
-            database: pg_config.database.clone(),
-            schema: schema.clone(),
-            user: pg_config.user.clone(),
-            password: pg_config.password.clone(),
-        };
-
-        let (_permit, ge_pg_config, ge_schema) = setup_db().await;
-
-        // catch all panics and clean up first…
-        let executed_fn = {
-            let db_config = db_config.clone();
-            let ge_pg_config = ge_pg_config.clone();
-            std::panic::catch_unwind(move || {
-                tokio::task::block_in_place(move || {
-                    Handle::current().block_on(async move {
-                        let ctx = PostgresContext::new_with_context_spec(
-                            ge_pg_config.clone(),
-                            tokio_postgres::NoTls,
-                            TestDefault::test_default(),
-                            TestDefault::test_default(),
-                            TestDefault::test_default(),
-                        )
-                        .await
-                        .unwrap();
-                        f(ctx, db_config).await;
-                    });
-                });
-            })
-        };
-
-        cleanup_test_data(&pg_config, schema).await;
-
-        tear_down_db(ge_pg_config, &ge_schema).await;
-
-        // then throw errors afterwards
-        if let Err(err) = executed_fn {
-            std::panic::resume_unwind(err);
-        }
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_select_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let root_id = provider.get_root_layer_collection_id().await.unwrap();
-
-            let collection = provider
-                .load_layer_collection(
-                    &root_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await;
-
-            let collection = collection.unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id,
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId("filter/".to_string()),
-                            },
-                            name: "Select kingdom".to_string(),
-                            description: "Refine the current filter".to_string(),
-                            properties: Default::default(),
-                        }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId("datasets/family/".to_string()),
-                            },
-                            name: "Family datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
-                        }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId("datasets/genus/".to_string()),
-                            },
-                            name: "Genus datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
-                        }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId("datasets/species/".to_string()),
-                            },
-                            name: "Species datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
-                        })
-                    ],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
+    #[ge_context::test]
+    async fn it_lists_select_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
         })
-        .await;
-    }
+        .initialize(ctx.db())
+        .await
+        .unwrap();
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_select_items_filtered() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let collection = provider
+            .load_layer_collection(
+                &root_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id,
+                },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let root_id = LayerCollectionId("select/Animalia/Chordata".to_string());
-
-            let collection = provider
-                .load_layer_collection(
-                    &root_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await;
-
-            let collection = collection.unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id,
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId(
-                                    "filter/Animalia/Chordata".to_string()
-                                ),
-                            },
-                            name: "Select class".to_string(),
-                            description: "Refine the current filter".to_string(),
-                            properties: Default::default(),
-                        }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId(
-                                    "datasets/family/Animalia/Chordata".to_string()
-                                ),
-                            },
-                            name: "Family datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
-                        }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId(
-                                    "datasets/genus/Animalia/Chordata".to_string()
-                                ),
-                            },
-                            name: "Genus datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
-                        }),
-                        CollectionItem::Collection(LayerCollectionListing {
-                            id: ProviderLayerCollectionId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                collection_id: LayerCollectionId(
-                                    "datasets/species/Animalia/Chordata".to_string()
-                                ),
-                            },
-                            name: "Species datasets".to_string(),
-                            description: "Apply the current filter".to_string(),
-                            properties: Default::default(),
-                        })
-                    ],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_correct_select_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let mut collections = vec![];
-
-            for levels in 0..7 {
-                let mut id = "select/".to_string();
-                for level in 0..levels {
-                    if level > 0 {
-                        id += "/";
-                    }
-                    id += "-";
-                }
-                let id = LayerCollectionId(id);
-
-                let collection = provider
-                    .load_layer_collection(
-                        &id,
-                        LayerCollectionListOptions {
-                            offset: 0,
-                            limit: 10,
-                        },
-                    )
-                    .await;
-
-                collections.push(
-                    collection
-                        .unwrap()
-                        .items
-                        .iter()
-                        .map(|item| item.name().to_string())
-                        .collect::<Vec<_>>(),
-                );
-            }
-
-            assert_eq!(
-                collections,
-                vec![
-                    vec![
-                        "Select kingdom",
-                        "Family datasets",
-                        "Genus datasets",
-                        "Species datasets",
-                    ],
-                    vec![
-                        "Select phylum",
-                        "Family datasets",
-                        "Genus datasets",
-                        "Species datasets",
-                    ],
-                    vec![
-                        "Select class",
-                        "Family datasets",
-                        "Genus datasets",
-                        "Species datasets",
-                    ],
-                    vec![
-                        "Select order",
-                        "Family datasets",
-                        "Genus datasets",
-                        "Species datasets",
-                    ],
-                    vec![
-                        "Select family",
-                        "Family datasets",
-                        "Genus datasets",
-                        "Species datasets",
-                    ],
-                    vec!["Select genus", "Genus datasets", "Species datasets",],
-                    vec!["Species datasets",],
-                ]
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_result_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let invalid_root_id = LayerCollectionId("datasets/families/".to_string());
-
-            let collection = provider
-                .load_layer_collection(
-                    &invalid_root_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await;
-
-            assert!(collection.is_err());
-            matches!(collection, Err(Error::InvalidPath));
-
-            let root_id = LayerCollectionId("datasets/family/".to_string());
-
-            let collection = provider
-                .load_layer_collection(
-                    &root_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await;
-
-            let collection = collection.unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id,
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![CollectionItem::Layer(LayerListing {
-                        id: ProviderLayerId {
-                            provider_id: GBIF_PROVIDER_ID,
-                            layer_id: LayerId("family/Limoniidae".to_string()),
-                        },
-                        name: "Limoniidae".to_string(),
-                        description: "3 occurrences".to_string(),
-                        properties: vec![]
-                    }),],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_result_items_filtered() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let root_id = LayerCollectionId("datasets/family/Plantae/".to_string());
-
-            let collection = provider
-                .load_layer_collection(
-                    &root_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await;
-
-            let collection = collection.unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id,
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_filter_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let layer_collection_id = LayerCollectionId("filter/".to_string());
-
-            let collection = provider
-                .load_layer_collection(
-                    &layer_collection_id,
-                    LayerCollectionListOptions {
-                        offset: 0,
-                        limit: 10,
-                    },
-                )
-                .await;
-
-            let collection = collection.unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id,
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![CollectionItem::Collection(LayerCollectionListing {
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
-                            collection_id: LayerCollectionId("select/Animalia".to_string()),
+                            collection_id: LayerCollectionId("filter/".to_string()),
                         },
-                        name: "Animalia".to_string(),
-                        description: String::new(),
+                        name: "Select kingdom".to_string(),
+                        description: "Refine the current filter".to_string(),
                         properties: Default::default(),
-                    })],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-        })
-        .await;
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("datasets/family/".to_string()),
+                        },
+                        name: "Family datasets".to_string(),
+                        description: "Apply the current filter".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("datasets/genus/".to_string()),
+                        },
+                        name: "Genus datasets".to_string(),
+                        description: "Apply the current filter".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId("datasets/species/".to_string()),
+                        },
+                        name: "Species datasets".to_string(),
+                        description: "Apply the current filter".to_string(),
+                        properties: Default::default(),
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_lists_filter_items_filtered() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
+    #[ge_context::test]
+    async fn it_lists_select_items_filtered(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let root_id = LayerCollectionId("select/Animalia/Chordata".to_string());
+
+        let collection = provider
+            .load_layer_collection(
+                &root_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id,
+                },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
+                items: vec![
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "filter/Animalia/Chordata".to_string()
+                            ),
+                        },
+                        name: "Select class".to_string(),
+                        description: "Refine the current filter".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "datasets/family/Animalia/Chordata".to_string()
+                            ),
+                        },
+                        name: "Family datasets".to_string(),
+                        description: "Apply the current filter".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "datasets/genus/Animalia/Chordata".to_string()
+                            ),
+                        },
+                        name: "Genus datasets".to_string(),
+                        description: "Apply the current filter".to_string(),
+                        properties: Default::default(),
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "datasets/species/Animalia/Chordata".to_string()
+                            ),
+                        },
+                        name: "Species datasets".to_string(),
+                        description: "Apply the current filter".to_string(),
+                        properties: Default::default(),
+                    })
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
 
-            let layer_collection_id = LayerCollectionId("filter/Plantae".to_string());
+    #[ge_context::test]
+    async fn it_lists_correct_select_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let mut collections = vec![];
+
+        for levels in 0..7 {
+            let mut id = "select/".to_string();
+            for level in 0..levels {
+                if level > 0 {
+                    id += "/";
+                }
+                id += "-";
+            }
+            let id = LayerCollectionId(id);
 
             let collection = provider
                 .load_layer_collection(
-                    &layer_collection_id,
+                    &id,
                     LayerCollectionListOptions {
                         offset: 0,
                         limit: 10,
@@ -2127,160 +1790,427 @@ mod tests {
                 )
                 .await;
 
-            let collection = collection.unwrap();
+            collections.push(
+                collection
+                    .unwrap()
+                    .items
+                    .iter()
+                    .map(|item| item.name().to_string())
+                    .collect::<Vec<_>>(),
+            );
+        }
 
-            assert_eq!(
-                collection,
-                LayerCollection {
+        assert_eq!(
+            collections,
+            vec![
+                vec![
+                    "Select kingdom",
+                    "Family datasets",
+                    "Genus datasets",
+                    "Species datasets",
+                ],
+                vec![
+                    "Select phylum",
+                    "Family datasets",
+                    "Genus datasets",
+                    "Species datasets",
+                ],
+                vec![
+                    "Select class",
+                    "Family datasets",
+                    "Genus datasets",
+                    "Species datasets",
+                ],
+                vec![
+                    "Select order",
+                    "Family datasets",
+                    "Genus datasets",
+                    "Species datasets",
+                ],
+                vec![
+                    "Select family",
+                    "Family datasets",
+                    "Genus datasets",
+                    "Species datasets",
+                ],
+                vec!["Select genus", "Genus datasets", "Species datasets",],
+                vec!["Species datasets",],
+            ]
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_lists_result_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let invalid_root_id = LayerCollectionId("datasets/families/".to_string());
+
+        let collection = provider
+            .load_layer_collection(
+                &invalid_root_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await;
+
+        assert!(collection.is_err());
+        matches!(collection, Err(Error::InvalidPath));
+
+        let root_id = LayerCollectionId("datasets/family/".to_string());
+
+        let collection = provider
+            .load_layer_collection(
+                &root_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id,
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId("family/Limoniidae".to_string()),
+                    },
+                    name: "Limoniidae".to_string(),
+                    description: "3 occurrences".to_string(),
+                    properties: vec![]
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_lists_result_items_filtered(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let root_id = LayerCollectionId("datasets/family/Plantae/".to_string());
+
+        let collection = provider
+            .load_layer_collection(
+                &root_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id,
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_lists_filter_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let layer_collection_id = LayerCollectionId("filter/".to_string());
+
+        let collection = provider
+            .load_layer_collection(
+                &layer_collection_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id,
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
                     id: ProviderLayerCollectionId {
                         provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id,
+                        collection_id: LayerCollectionId("select/Animalia".to_string()),
                     },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
+                    name: "Animalia".to_string(),
+                    description: String::new(),
+                    properties: Default::default(),
+                })],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_lists_filter_items_filtered(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
         })
-        .await;
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let layer_collection_id = LayerCollectionId("filter/Plantae".to_string());
+
+        let collection = provider
+            .load_layer_collection(
+                &layer_collection_id,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 10,
+                },
+            )
+            .await;
+
+        let collection = collection.unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id,
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
     }
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_creates_meta_data() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(
-                app_ctx: PostgresContext<NoTls>,
-                db_config: DatabaseConnectionConfig,
-            ) -> Result<(), String> {
-                let ogr_pg_string = db_config.ogr_pg_config();
+    #[ge_context::test]
+    async fn it_creates_meta_data(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let ogr_pg_string = db_config.ogr_pg_config();
 
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config: db_config.clone(),
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5,
-                    columns: GbifDataProvider::all_columns(),
-                })
-                .initialize(app_ctx.default_session_context().await.unwrap().db())
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config: db_config.clone(),
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: GbifDataProvider::all_columns(),
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                }))
                 .await
                 .map_err(|e| e.to_string())?;
 
-                let meta: Box<
-                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-                > = provider
-                    .meta_data(&DataId::External(ExternalDataId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                    }))
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let int_column = VectorColumnInfo {
+                data_type: FeatureDataType::Int,
+                measurement: Measurement::Unitless,
+            };
+            let float_column = VectorColumnInfo {
+                data_type: FeatureDataType::Float,
+                measurement: Measurement::Unitless,
+            };
+            let text_column = VectorColumnInfo {
+                data_type: FeatureDataType::Text,
+                measurement: Measurement::Unitless,
+            };
 
-                let int_column = VectorColumnInfo {
-                    data_type: FeatureDataType::Int,
-                    measurement: Measurement::Unitless,
-                };
-                let float_column = VectorColumnInfo {
-                    data_type: FeatureDataType::Float,
-                    measurement: Measurement::Unitless,
-                };
-                let text_column = VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                };
+            let expected = VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: HashMap::from([
+                    ("gbifid".to_string(), int_column.clone()),
+                    ("individualcount".to_string(), int_column.clone()),
+                    ("day".to_string(), int_column.clone()),
+                    ("month".to_string(), int_column.clone()),
+                    ("year".to_string(), int_column.clone()),
+                    ("taxonkey".to_string(), int_column.clone()),
+                    ("decimallatitude".to_string(), float_column.clone()),
+                    ("decimallongitude".to_string(), float_column.clone()),
+                    (
+                        "coordinateuncertaintyinmeters".to_string(),
+                        float_column.clone(),
+                    ),
+                    ("elevation".to_string(), float_column.clone()),
+                    ("datasetkey".to_string(), text_column.clone()),
+                    ("occurrenceid".to_string(), text_column.clone()),
+                    ("kingdom".to_string(), text_column.clone()),
+                    ("phylum".to_string(), text_column.clone()),
+                    ("class".to_string(), text_column.clone()),
+                    ("order".to_string(), text_column.clone()),
+                    ("family".to_string(), text_column.clone()),
+                    ("genus".to_string(), text_column.clone()),
+                    ("species".to_string(), text_column.clone()),
+                    ("infraspecificepithet".to_string(), text_column.clone()),
+                    ("taxonrank".to_string(), text_column.clone()),
+                    ("scientificname".to_string(), text_column.clone()),
+                    ("verbatimscientificname".to_string(), text_column.clone()),
+                    (
+                        "verbatimscientificnameauthorship".to_string(),
+                        text_column.clone(),
+                    ),
+                    ("countrycode".to_string(), text_column.clone()),
+                    ("locality".to_string(), text_column.clone()),
+                    ("stateprovince".to_string(), text_column.clone()),
+                    ("occurrencestatus".to_string(), text_column.clone()),
+                    ("publishingorgkey".to_string(), text_column.clone()),
+                    ("coordinateprecision".to_string(), text_column.clone()),
+                    ("elevationaccuracy".to_string(), text_column.clone()),
+                    ("depthaccuracy".to_string(), text_column.clone()),
+                    ("specieskey".to_string(), text_column.clone()),
+                    ("basisofrecord".to_string(), text_column.clone()),
+                    ("institutioncode".to_string(), text_column.clone()),
+                    ("collectioncode".to_string(), text_column.clone()),
+                    ("catalognumber".to_string(), text_column.clone()),
+                    ("recordnumber".to_string(), text_column.clone()),
+                    ("identifiedby".to_string(), text_column.clone()),
+                    ("dateidentified".to_string(), text_column.clone()),
+                    ("license".to_string(), text_column.clone()),
+                    ("rightsholder".to_string(), text_column.clone()),
+                    ("recordedby".to_string(), text_column.clone()),
+                    ("typestatus".to_string(), text_column.clone()),
+                    ("establishmentmeans".to_string(), text_column.clone()),
+                    ("lastinterpreted".to_string(), text_column.clone()),
+                    ("mediatype".to_string(), text_column.clone()),
+                    ("issue".to_string(), text_column.clone()),
+                ]),
+                time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
+                #[allow(clippy::excessive_precision)]
+                bbox: Some(
+                    BoundingBox2D::new(
+                        Coordinate2D::new(-61.114_469_999_999_997, 14.679_15),
+                        Coordinate2D::new(-61.065_219_999_999_997, 14.775_33),
+                    )
+                    .unwrap(),
+                ),
+            };
 
-                let expected = VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: HashMap::from([
-                        ("gbifid".to_string(), int_column.clone()),
-                        ("individualcount".to_string(), int_column.clone()),
-                        ("day".to_string(), int_column.clone()),
-                        ("month".to_string(), int_column.clone()),
-                        ("year".to_string(), int_column.clone()),
-                        ("taxonkey".to_string(), int_column.clone()),
-                        ("decimallatitude".to_string(), float_column.clone()),
-                        ("decimallongitude".to_string(), float_column.clone()),
-                        (
-                            "coordinateuncertaintyinmeters".to_string(),
-                            float_column.clone(),
-                        ),
-                        ("elevation".to_string(), float_column.clone()),
-                        ("datasetkey".to_string(), text_column.clone()),
-                        ("occurrenceid".to_string(), text_column.clone()),
-                        ("kingdom".to_string(), text_column.clone()),
-                        ("phylum".to_string(), text_column.clone()),
-                        ("class".to_string(), text_column.clone()),
-                        ("order".to_string(), text_column.clone()),
-                        ("family".to_string(), text_column.clone()),
-                        ("genus".to_string(), text_column.clone()),
-                        ("species".to_string(), text_column.clone()),
-                        ("infraspecificepithet".to_string(), text_column.clone()),
-                        ("taxonrank".to_string(), text_column.clone()),
-                        ("scientificname".to_string(), text_column.clone()),
-                        ("verbatimscientificname".to_string(), text_column.clone()),
-                        (
-                            "verbatimscientificnameauthorship".to_string(),
-                            text_column.clone(),
-                        ),
-                        ("countrycode".to_string(), text_column.clone()),
-                        ("locality".to_string(), text_column.clone()),
-                        ("stateprovince".to_string(), text_column.clone()),
-                        ("occurrencestatus".to_string(), text_column.clone()),
-                        ("publishingorgkey".to_string(), text_column.clone()),
-                        ("coordinateprecision".to_string(), text_column.clone()),
-                        ("elevationaccuracy".to_string(), text_column.clone()),
-                        ("depthaccuracy".to_string(), text_column.clone()),
-                        ("specieskey".to_string(), text_column.clone()),
-                        ("basisofrecord".to_string(), text_column.clone()),
-                        ("institutioncode".to_string(), text_column.clone()),
-                        ("collectioncode".to_string(), text_column.clone()),
-                        ("catalognumber".to_string(), text_column.clone()),
-                        ("recordnumber".to_string(), text_column.clone()),
-                        ("identifiedby".to_string(), text_column.clone()),
-                        ("dateidentified".to_string(), text_column.clone()),
-                        ("license".to_string(), text_column.clone()),
-                        ("rightsholder".to_string(), text_column.clone()),
-                        ("recordedby".to_string(), text_column.clone()),
-                        ("typestatus".to_string(), text_column.clone()),
-                        ("establishmentmeans".to_string(), text_column.clone()),
-                        ("lastinterpreted".to_string(), text_column.clone()),
-                        ("mediatype".to_string(), text_column.clone()),
-                        ("issue".to_string(), text_column.clone()),
-                    ]),
-                    time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
-                    #[allow(clippy::excessive_precision)]
-                    bbox: Some(BoundingBox2D::new(Coordinate2D::new(-61.114_469_999_999_997, 14.679_15), Coordinate2D::new(-61.065_219_999_999_997, 14.775_33)).unwrap()),
-                };
+            let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;
 
-                let result_descriptor =
-                    meta.result_descriptor().await.map_err(|e| e.to_string())?;
+            if result_descriptor != expected {
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
+            }
 
-                if result_descriptor != expected {
-                    return Err(format!("{result_descriptor:?} != {expected:?}"));
-                }
+            let mut loading_info = meta
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ))
+                .await
+                .map_err(|e| e.to_string())?;
 
-                let mut loading_info = meta
-                    .loading_info(VectorQueryRectangle::with_bounds(
-                        BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
-                        TimeInterval::default(),
-                        ColumnSelection::all(),
-                    ))
-                    .await
-                    .map_err(|e| e.to_string())?;
+            loading_info
+                .columns
+                .as_mut()
+                .ok_or_else(|| "missing columns".to_owned())?
+                .text
+                .sort();
 
-                loading_info
-                    .columns
-                    .as_mut()
-                    .ok_or_else(|| "missing columns".to_owned())?
-                    .text
-                    .sort();
-
-                let expected = OgrSourceDataset {
+            let expected = OgrSourceDataset {
                     file_name: PathBuf::from(ogr_pg_string),
                     layer_name: format!("{0}.occurrences", db_config.schema),
                     data_type: Some(VectorDataType::MultiPoint),
@@ -2367,1219 +2297,1223 @@ mod tests {
                     cache_ttl: CacheTtlSeconds::default(),
                 };
 
-                if loading_info != expected {
-                    return Err(format!("{result_descriptor:?} != {expected:?}"));
-                }
-
-                Ok(())
+            if loading_info != expected {
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
             }
 
-            let test = test(app_ctx, db_config).await;
+            Ok(())
+        }
 
-            assert!(test.is_ok());
-        })
-        .await;
+        add_test_data(&db_config).await;
+
+        let test = test(ctx, db_config).await;
+
+        assert!(test.is_ok());
     }
 
     #[allow(clippy::too_many_lines)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_creates_meta_data_for_selected_columns() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(
-                app_ctx: PostgresContext<NoTls>,
-                db_config: DatabaseConnectionConfig,
-            ) -> Result<(), String> {
-                let ogr_pg_string = db_config.ogr_pg_config();
+    #[ge_context::test]
+    async fn it_creates_meta_data_for_selected_columns(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let ogr_pg_string = db_config.ogr_pg_config();
 
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config: db_config.clone(),
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5,
-                    columns: vec![
-                        "gbifid".to_string(),
-                        "scientificname".to_string(),
-                        "elevation".to_string(),
-                        "nonexistent".to_string(),
-                    ],
-                })
-                .initialize(app_ctx.default_session_context().await.unwrap().db())
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config: db_config.clone(),
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: vec![
+                    "gbifid".to_string(),
+                    "scientificname".to_string(),
+                    "elevation".to_string(),
+                    "nonexistent".to_string(),
+                ],
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                }))
                 .await
                 .map_err(|e| e.to_string())?;
 
-                let meta: Box<
-                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-                > = provider
-                    .meta_data(&DataId::External(ExternalDataId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                    }))
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let int_column = VectorColumnInfo {
+                data_type: FeatureDataType::Int,
+                measurement: Measurement::Unitless,
+            };
+            let float_column = VectorColumnInfo {
+                data_type: FeatureDataType::Float,
+                measurement: Measurement::Unitless,
+            };
+            let text_column = VectorColumnInfo {
+                data_type: FeatureDataType::Text,
+                measurement: Measurement::Unitless,
+            };
 
-                let int_column = VectorColumnInfo {
-                    data_type: FeatureDataType::Int,
-                    measurement: Measurement::Unitless,
-                };
-                let float_column = VectorColumnInfo {
-                    data_type: FeatureDataType::Float,
-                    measurement: Measurement::Unitless,
-                };
-                let text_column = VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                };
-
-                let expected = VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: HashMap::from([
-                        ("gbifid".to_string(), int_column.clone()),
-                        ("elevation".to_string(), float_column.clone()),
-                        ("scientificname".to_string(), text_column.clone()),
-                    ]),
-                    time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
-                    #[allow(clippy::excessive_precision)]
-                    bbox: Some(BoundingBox2D::new(Coordinate2D::new(-61.114_469_999_999_997, 14.679_15), Coordinate2D::new(-61.065_219_999_999_997, 14.775_33)).unwrap()),
-                };
-
-                let result_descriptor =
-                    meta.result_descriptor().await.map_err(|e| e.to_string())?;
-
-                if result_descriptor != expected {
-                    return Err(format!("{result_descriptor:?} != {expected:?}"));
-                }
-
-                let mut loading_info = meta
-                    .loading_info(VectorQueryRectangle::with_bounds(
-                        BoundingBox2D::new_unchecked(
-                            (-180., -90.).into(),
-                            (180., 90.).into(),
-                        ),
-                         TimeInterval::default(),
-                        ColumnSelection::all(),
-                    ))
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                loading_info
-                    .columns
-                    .as_mut()
-                    .ok_or_else(|| "missing columns".to_owned())?
-                    .text
-                    .sort();
-
-                let expected = OgrSourceDataset {
-                    file_name: PathBuf::from(ogr_pg_string),
-                    layer_name: format!("{0}.occurrences", db_config.schema),
-                    data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::Start {
-                        start_field: "eventdate".to_string(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        duration: OgrSourceDurationSpec::Zero,
-                    },
-                    default_geometry: None,
-                    columns: Some(OgrSourceColumnSpec {
-                        format_specifics: None,
-                        x: String::new(),
-                        y: None,
-                        int: vec!["gbifid".to_string()],
-                        float: vec!["elevation".to_string()],
-                        text: vec!["scientificname".to_string()],
-                        bool: vec![],
-                        datetime: vec![],
-                        rename: None,
-                    }),
-                    force_ogr_time_filter: true,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: Some(format!(r#"SELECT "gbifid","scientificname","elevation", geom, eventdate FROM {}.occurrences WHERE species = 'Rhipidia willistoniana'"#, db_config.schema)),
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
-                };
-
-                if loading_info != expected {
-                    return Err(format!("{result_descriptor:?} != {expected:?}"));
-                }
-
-                Ok(())
-            }
-
-            let test = test(app_ctx, db_config).await;
-
-            assert!(test.is_ok());
-        })
-        .await;
-    }
-
-    #[allow(clippy::too_many_lines)]
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_creates_meta_data_for_lite_subset_selected_columns() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(
-                app_ctx: PostgresContext<NoTls>,
-                db_config: DatabaseConnectionConfig,
-            ) -> Result<(), String> {
-                let ogr_pg_string = db_config.ogr_pg_config();
-
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config: db_config.clone(),
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5,
-                    columns: vec![
-                        "gbifid".to_string(),
-                        "scientificname".to_string(),
-                        "nonexistent".to_string(),
-                    ],
-                })
-                    .initialize(app_ctx.default_session_context().await.unwrap().db())
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let meta: Box<
-                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-                > = provider
-                    .meta_data(&DataId::External(ExternalDataId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                    }))
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let int_column = VectorColumnInfo {
-                    data_type: FeatureDataType::Int,
-                    measurement: Measurement::Unitless,
-                };
-                let text_column = VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                };
-
-                let expected = VectorResultDescriptor {
-                    data_type: VectorDataType::MultiPoint,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    columns: HashMap::from([
-                        ("gbifid".to_string(), int_column.clone()),
-                        ("scientificname".to_string(), text_column.clone()),
-                    ]),
-                    time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
-                    #[allow(clippy::excessive_precision)]
-                    bbox: Some(BoundingBox2D::new(Coordinate2D::new(-61.114_469_999_999_997, 14.679_15), Coordinate2D::new(-61.065_219_999_999_997, 14.775_33)).unwrap()),
-                };
-
-                let result_descriptor =
-                    meta.result_descriptor().await.map_err(|e| e.to_string())?;
-
-                if result_descriptor != expected {
-                    return Err(format!("{result_descriptor:?} != {expected:?}"));
-                }
-
-                let mut loading_info = meta
-                    .loading_info(VectorQueryRectangle::with_bounds(
-                        BoundingBox2D::new_unchecked(
-                            (-180., -90.).into(),
-                            (180., 90.).into(),
-                        ),
-                        TimeInterval::default(),
-                        
-                         ColumnSelection::all(),
-                    ))
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                loading_info
-                    .columns
-                    .as_mut()
-                    .ok_or_else(|| "missing columns".to_owned())?
-                    .text
-                    .sort();
-
-                let expected = OgrSourceDataset {
-                    file_name: PathBuf::from(ogr_pg_string),
-                    layer_name: format!("{0}.occurrences_lite", db_config.schema),
-                    data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::Start {
-                        start_field: "eventdate".to_string(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        duration: OgrSourceDurationSpec::Zero,
-                    },
-                    default_geometry: None,
-                    columns: Some(OgrSourceColumnSpec {
-                        format_specifics: None,
-                        x: String::new(),
-                        y: None,
-                        int: vec!["gbifid".to_string()],
-                        float: vec![],
-                        text: vec!["scientificname".to_string()],
-                        bool: vec![],
-                        datetime: vec![],
-                        rename: None,
-                    }),
-                    force_ogr_time_filter: true,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: Some(format!(r#"SELECT "gbifid","scientificname", geom, eventdate FROM {}.occurrences_lite WHERE species = 'Rhipidia willistoniana'"#, db_config.schema)),
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
-                };
-
-                if loading_info != expected {
-                    return Err(format!("{result_descriptor:?} != {expected:?}"));
-                }
-
-                Ok(())
-            }
-
-            let test = test(app_ctx, db_config).await;
-
-            assert!(test.is_ok());
-        })
-            .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[allow(clippy::too_many_lines)]
-    async fn it_loads() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(
-                app_ctx: PostgresContext<NoTls>,
-                db_config: DatabaseConnectionConfig,
-            ) -> Result<(), String> {
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config,
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5,
-                    columns: GbifDataProvider::all_columns(),
-                })
-                .initialize(app_ctx.default_session_context().await.unwrap().db())
-                .await
-                .map_err(|e| e.to_string())?;
-
-                let meta: Box<
-                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-                > = provider
-                    .meta_data(&DataId::External(ExternalDataId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                    }))
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
-                    VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: HashMap::new(),
-                        time: None,
-                        bbox: None,
-                    },
-                    meta,
-                    vec![],
-                );
-
-                let query_rectangle = VectorQueryRectangle::with_bounds(
+            let expected = VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: HashMap::from([
+                    ("gbifid".to_string(), int_column.clone()),
+                    ("elevation".to_string(), float_column.clone()),
+                    ("scientificname".to_string(), text_column.clone()),
+                ]),
+                time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
+                #[allow(clippy::excessive_precision)]
+                bbox: Some(
                     BoundingBox2D::new(
-                        (-61.065_22, 14.775_33).into(),
-                        (-61.065_22, 14.775_33).into(),
+                        Coordinate2D::new(-61.114_469_999_999_997, 14.679_15),
+                        Coordinate2D::new(-61.065_219_999_999_997, 14.775_33),
                     )
                     .unwrap(),
+                ),
+            };
+
+            let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;
+
+            if result_descriptor != expected {
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
+            }
+
+            let mut loading_info = meta
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
-                );
-                let ctx = MockQueryContext::test_default();
-
-                let result: Vec<_> = processor
-                    .query(query_rectangle, &ctx)
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .collect()
-                    .await;
-
-                if result.len() != 1 {
-                    return Err("result.len() != 1".to_owned());
-                }
-
-                if result[0].is_err() {
-                    return Err("result[0].is_err()".to_owned());
-                }
-
-                let result = result[0].as_ref().unwrap();
-
-                let expected = MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
-                        .unwrap(),
-                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
-                    [
-                        (
-                            "gbifid".to_string(),
-                            FeatureData::NullableInt(vec![
-                                Some(4_021_925_301),
-                                Some(4_021_925_303),
-                            ]),
-                        ),
-                        (
-                            "individualcount".to_string(),
-                            FeatureData::NullableInt(vec![Some(156), Some(213)]),
-                        ),
-                        (
-                            "day".to_string(),
-                            FeatureData::NullableInt(vec![Some(27), Some(27)]),
-                        ),
-                        (
-                            "month".to_string(),
-                            FeatureData::NullableInt(vec![Some(1), Some(1)]),
-                        ),
-                        (
-                            "year".to_string(),
-                            FeatureData::NullableInt(vec![Some(2018), Some(2018)]),
-                        ),
-                        (
-                            "taxonkey".to_string(),
-                            FeatureData::NullableInt(vec![Some(5_066_840), Some(5_066_840)]),
-                        ),
-                        (
-                            "decimallatitude".to_string(),
-                            FeatureData::NullableFloat(vec![Some(14.775_33), Some(14.775_33)]),
-                        ),
-                        (
-                            "decimallongitude".to_string(),
-                            FeatureData::NullableFloat(vec![Some(-61.065_22), Some(-61.065_22)]),
-                        ),
-                        (
-                            "coordinateuncertaintyinmeters".to_string(),
-                            FeatureData::NullableFloat(vec![Some(30.0), Some(30.0)]),
-                        ),
-                        (
-                            "elevation".to_string(),
-                            FeatureData::NullableFloat(vec![None, None]),
-                        ),
-                        (
-                            "basisofrecord".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("PRESERVED_SPECIMEN".to_string()),
-                                Some("PRESERVED_SPECIMEN".to_string()),
-                            ]),
-                        ),
-                        (
-                            "catalognumber".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "class".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Insecta".to_string()),
-                                Some("Insecta".to_string()),
-                            ]),
-                        ),
-                        (
-                            "collectioncode".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "coordinateprecision".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "countrycode".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("MQ".to_string()),
-                                Some("MQ".to_string()),
-                            ]),
-                        ),
-                        (
-                            "datasetkey".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("92827b65-9987-4479-b135-7ec1bf9cf3d1".to_string()),
-                                Some("92827b65-9987-4479-b135-7ec1bf9cf3d1".to_string()),
-                            ]),
-                        ),
-                        (
-                            "dateidentified".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "depthaccuracy".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "elevationaccuracy".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "establishmentmeans".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "family".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Limoniidae".to_string()),
-                                Some("Limoniidae".to_string()),
-                            ]),
-                        ),
-                        (
-                            "genus".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Rhipidia".to_string()),
-                                Some("Rhipidia".to_string()),
-                            ]),
-                        ),
-                        (
-                            "identifiedby".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Jorge Mederos".to_string()),
-                                Some("Jorge Mederos".to_string()),
-                            ]),
-                        ),
-                        (
-                            "infraspecificepithet".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "institutioncode".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "issue".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "kingdom".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Animalia".to_string()),
-                                Some("Animalia".to_string()),
-                            ]),
-                        ),
-                        (
-                            "lastinterpreted".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("2023-01-31 08:47:46 +00:00".to_string()),
-                                Some("2023-01-31 08:47:46 +00:00".to_string()),
-                            ]),
-                        ),
-                        (
-                            "license".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("CC0_1_0".to_string()),
-                                Some("CC0_1_0".to_string()),
-                            ]),
-                        ),
-                        (
-                            "locality".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Rivière Sylvestre (Le Lorrain)".to_string()),
-                                Some("Rivière Sylvestre (Le Lorrain)".to_string()),
-                            ]),
-                        ),
-                        (
-                            "mediatype".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "occurrenceid".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Mart:tipu:13801".to_string()),
-                                Some("Mart:tipu:13803".to_string()),
-                            ]),
-                        ),
-                        (
-                            "occurrencestatus".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("PRESENT".to_string()),
-                                Some("PRESENT".to_string()),
-                            ]),
-                        ),
-                        (
-                            "order".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Diptera".to_string()),
-                                Some("Diptera".to_string()),
-                            ]),
-                        ),
-                        (
-                            "phylum".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Arthropoda".to_string()),
-                                Some("Arthropoda".to_string()),
-                            ]),
-                        ),
-                        (
-                            "publishingorgkey".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("1cd669d0-80ea-11de-a9d0-f1765f95f18b".to_string()),
-                                Some("1cd669d0-80ea-11de-a9d0-f1765f95f18b".to_string()),
-                            ]),
-                        ),
-                        (
-                            "recordedby".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Marc Pollet".to_string()),
-                                Some("Marc Pollet".to_string()),
-                            ]),
-                        ),
-                        (
-                            "recordnumber".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "rightsholder".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("dataset authors".to_string()),
-                                Some("dataset authors".to_string()),
-                            ]),
-                        ),
-                        (
-                            "scientificname".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
-                                Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
-                            ]),
-                        ),
-                        (
-                            "species".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Rhipidia willistoniana".to_string()),
-                                Some("Rhipidia willistoniana".to_string()),
-                            ]),
-                        ),
-                        (
-                            "specieskey".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("5066840".to_string()),
-                                Some("5066840".to_string()),
-                            ]),
-                        ),
-                        (
-                            "stateprovince".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Martinique".to_string()),
-                                Some("Martinique".to_string()),
-                            ]),
-                        ),
-                        (
-                            "taxonrank".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("SPECIES".to_string()),
-                                Some("SPECIES".to_string()),
-                            ]),
-                        ),
-                        (
-                            "typestatus".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                        (
-                            "verbatimscientificname".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some(
-                                    "Rhipidia (Rhipidia) willistoniana (Alexander, 1929)"
-                                        .to_string(),
-                                ),
-                                Some(
-                                    "Rhipidia (Rhipidia) willistoniana (Alexander, 1929)"
-                                        .to_string(),
-                                ),
-                            ]),
-                        ),
-                        (
-                            "verbatimscientificnameauthorship".to_string(),
-                            FeatureData::NullableText(vec![None, None]),
-                        ),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
-                )
-                .unwrap();
-
-                if !result.chunks_equal_ignoring_cache_hint(&expected) {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                Ok(())
-            }
-
-            let result = test(app_ctx, db_config).await;
-
-            assert!(result.is_ok());
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[allow(clippy::too_many_lines)]
-    async fn it_loads_for_selected_columns() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(
-                app_ctx: PostgresContext<NoTls>,
-                db_config: DatabaseConnectionConfig,
-            ) -> Result<(), String> {
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config,
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5,
-                    columns: vec![
-                        "gbifid".to_string(),
-                        "scientificname".to_string(),
-                        "elevation".to_string(),
-                        "nonexistent".to_string(),
-                    ],
-                })
-                .initialize(app_ctx.default_session_context().await.unwrap().db())
+                ))
                 .await
                 .map_err(|e| e.to_string())?;
 
-                let meta: Box<
-                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-                > = provider
-                    .meta_data(&DataId::External(ExternalDataId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                    }))
-                    .await
-                    .map_err(|e| e.to_string())?;
+            loading_info
+                .columns
+                .as_mut()
+                .ok_or_else(|| "missing columns".to_owned())?
+                .text
+                .sort();
 
-                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
-                    VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: HashMap::new(),
-                        time: None,
-                        bbox: None,
-                    },
-                    meta,
-                    vec![],
-                );
+            let expected = OgrSourceDataset {
+                file_name: PathBuf::from(ogr_pg_string),
+                layer_name: format!("{0}.occurrences", db_config.schema),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "eventdate".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
+                    x: String::new(),
+                    y: None,
+                    int: vec!["gbifid".to_string()],
+                    float: vec!["elevation".to_string()],
+                    text: vec!["scientificname".to_string()],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: true,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: Some(format!(
+                    r#"SELECT "gbifid","scientificname","elevation", geom, eventdate FROM {}.occurrences WHERE species = 'Rhipidia willistoniana'"#,
+                    db_config.schema
+                )),
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            };
 
-                let query_rectangle = VectorQueryRectangle::with_bounds( 
-                    BoundingBox2D::new(
-                        (-61.065_22, 14.775_33).into(),
-                        (-61.065_22, 14.775_33).into(),
-                    )
-                    .unwrap(),
-                     TimeInterval::default(),
-                    
-                    ColumnSelection::all(),
-                );
-                let ctx = MockQueryContext::test_default();
-
-                let result: Vec<_> = processor
-                    .query(query_rectangle, &ctx)
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .collect()
-                    .await;
-
-                if result.len() != 1 {
-                    return Err("result.len() != 1".to_owned());
-                }
-
-                if result[0].is_err() {
-                    return Err("result[0].is_err()".to_owned());
-                }
-
-                let result = result[0].as_ref().unwrap();
-
-                let expected = MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
-                        .unwrap(),
-                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
-                    [
-                        (
-                            "gbifid".to_string(),
-                            FeatureData::NullableInt(vec![
-                                Some(4_021_925_301),
-                                Some(4_021_925_303),
-                            ]),
-                        ),
-                        (
-                            "elevation".to_string(),
-                            FeatureData::NullableFloat(vec![None, None]),
-                        ),
-                        (
-                            "scientificname".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
-                                Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
-                            ]),
-                        ),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
-                )
-                .unwrap();
-
-                if !result.chunks_equal_ignoring_cache_hint(&expected) {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                Ok(())
+            if loading_info != expected {
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
             }
 
-            let result = test(app_ctx, db_config).await;
+            Ok(())
+        }
 
-            assert!(result.is_ok());
-        })
-        .await;
+        add_test_data(&db_config).await;
+
+        let test = test(ctx, db_config).await;
+
+        assert!(test.is_ok());
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
     #[allow(clippy::too_many_lines)]
-    async fn it_loads_for_lite_subset_selected_columns() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(
-                app_ctx: PostgresContext<NoTls>,
-                db_config: DatabaseConnectionConfig,
-            ) -> Result<(), String> {
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config,
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5,
-                    columns: vec![
-                        "gbifid".to_string(),
-                        "scientificname".to_string(),
-                        "nonexistent".to_string(),
-                    ],
-                })
-                .initialize(app_ctx.default_session_context().await.unwrap().db())
-                .await
-                .map_err(|e| e.to_string())?;
+    #[ge_context::test]
+    async fn it_creates_meta_data_for_lite_subset_selected_columns(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let ogr_pg_string = db_config.ogr_pg_config();
 
-                let meta: Box<
-                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-                > = provider
-                    .meta_data(&DataId::External(ExternalDataId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                    }))
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config: db_config.clone(),
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: vec![
+                    "gbifid".to_string(),
+                    "scientificname".to_string(),
+                    "nonexistent".to_string(),
+                ],
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
 
-                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
-                    VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: HashMap::new(),
-                        time: None,
-                        bbox: None,
-                    },
-                    meta,
-                    vec![],
-                );
-
-                let query_rectangle = VectorQueryRectangle::with_bounds( 
-                    BoundingBox2D::new(
-                        (-61.065_22, 14.775_33).into(),
-                        (-61.065_22, 14.775_33).into(),
-                    )
-                    .unwrap(),
-                    TimeInterval::default(),                    
-                    ColumnSelection::all(),
-                );
-                let ctx = MockQueryContext::test_default();
-
-                let result: Vec<_> = processor
-                    .query(query_rectangle, &ctx)
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .collect()
-                    .await;
-
-                if result.len() != 1 {
-                    return Err("result.len() != 1".to_owned());
-                }
-
-                if result[0].is_err() {
-                    return Err("result[0].is_err()".to_owned());
-                }
-
-                let result = result[0].as_ref().unwrap();
-
-                let expected = MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
-                        .unwrap(),
-                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
-                    [
-                        (
-                            "gbifid".to_string(),
-                            FeatureData::NullableInt(vec![
-                                Some(4_021_925_301),
-                                Some(4_021_925_303),
-                            ]),
-                        ),
-                        (
-                            "scientificname".to_string(),
-                            FeatureData::NullableText(vec![
-                                Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
-                                Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
-                            ]),
-                        ),
-                    ]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
-                )
-                .unwrap();
-
-                if !result.chunks_equal_ignoring_cache_hint(&expected) {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                Ok(())
-            }
-
-            let result = test(app_ctx, db_config).await;
-
-            assert!(result.is_ok());
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[allow(clippy::too_many_lines)]
-    async fn it_loads_for_lite_subset_selected_columns_with_time_instant_filter() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(
-                app_ctx: PostgresContext<NoTls>,
-                db_config: DatabaseConnectionConfig,
-            ) -> Result<(), String> {
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config,
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5,
-                    columns: vec!["gbifid".to_string()],
-                })
-                .initialize(app_ctx.default_session_context().await.unwrap().db())
-                .await
-                .map_err(|e| e.to_string())?;
-
-                let meta: Box<
-                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-                > = provider
-                    .meta_data(&DataId::External(ExternalDataId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                    }))
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
-                    VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: HashMap::new(),
-                        time: None,
-                        bbox: None,
-                    },
-                    meta,
-                    vec![],
-                );
-
-                let query_rectangle = VectorQueryRectangle::with_bounds(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    TimeInterval::new_instant(1_517_011_200_000).unwrap(),
-                     ColumnSelection::all(),
-                );
-                let ctx = MockQueryContext::test_default();
-
-                let result: Vec<_> = processor
-                    .query(query_rectangle, &ctx)
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .collect()
-                    .await;
-
-                if result.len() != 1 {
-                    return Err("result.len() != 1".to_owned());
-                }
-
-                if result[0].is_err() {
-                    return Err("result[0].is_err()".to_owned());
-                }
-
-                let result = result[0].as_ref().unwrap();
-
-                let expected = MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
-                        .unwrap(),
-                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
-                    [(
-                        "gbifid".to_string(),
-                        FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
-                    )]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
-                )
-                .unwrap();
-
-                if !result.chunks_equal_ignoring_cache_hint(&expected) {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                let query_rectangle = VectorQueryRectangle::with_bounds(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    TimeInterval::new_instant(1_517_443_200_000).unwrap(),
-                    
-                    ColumnSelection::all(),
-                );
-                let ctx = MockQueryContext::test_default();
-
-                let result: Vec<_> = processor
-                    .query(query_rectangle, &ctx)
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .collect()
-                    .await;
-
-                if result.len() != 1 {
-                    return Err("result.len() != 1".to_owned());
-                }
-
-                if result[0].is_err() {
-                    return Err("result[0].is_err()".to_owned());
-                }
-
-                let result = result[0].as_ref().unwrap();
-
-                let expected = MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(-61.114_47, 14.679_15)]).unwrap(),
-                    vec![TimeInterval::new_instant(1_517_443_200_000).unwrap()],
-                    [(
-                        "gbifid".to_string(),
-                        FeatureData::NullableInt(vec![Some(4_021_925_302)]),
-                    )]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
-                )
-                .unwrap();
-
-                if !result.chunks_equal_ignoring_cache_hint(&expected) {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                Ok(())
-            }
-
-            let result = test(app_ctx, db_config).await;
-
-            assert!(result.is_ok());
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[allow(clippy::too_many_lines)]
-    async fn it_loads_for_lite_subset_selected_columns_with_time_range_filter() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(
-                app_ctx: PostgresContext<NoTls>,
-                db_config: DatabaseConnectionConfig,
-            ) -> Result<(), String> {
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config,
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5,
-                    columns: vec!["gbifid".to_string()],
-                })
-                .initialize(app_ctx.default_session_context().await.unwrap().db())
-                .await
-                .map_err(|e| e.to_string())?;
-
-                let meta: Box<
-                    dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
-                > = provider
-                    .meta_data(&DataId::External(ExternalDataId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                    }))
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
-                    VectorResultDescriptor {
-                        data_type: VectorDataType::MultiPoint,
-                        spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns: HashMap::new(),
-                        time: None,
-                        bbox: None,
-                    },
-                    meta,
-                    vec![],
-                );
-
-                let query_rectangle = VectorQueryRectangle::with_bounds(
-                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    TimeInterval::new(
-                        TimeInstance::from_millis_unchecked(1_517_011_200_000),
-                        TimeInstance::from_millis_unchecked(1_517_443_200_000),
-                    )
-                    .unwrap(),
-                    ColumnSelection::all(),
-                );
-                let ctx = MockQueryContext::test_default();
-
-                let result: Vec<_> = processor
-                    .query(query_rectangle, &ctx)
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .collect()
-                    .await;
-
-                if result.len() != 1 {
-                    return Err("result.len() != 1".to_owned());
-                }
-
-                if result[0].is_err() {
-                    return Err("result[0].is_err()".to_owned());
-                }
-
-                let result = result[0].as_ref().unwrap();
-
-                let expected = MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)])
-                        .unwrap(),
-                    vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
-                    [(
-                        "gbifid".to_string(),
-                        FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
-                    )]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
-                )
-                .unwrap();
-
-                if !result.chunks_equal_ignoring_cache_hint(&expected) {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                let query_rectangle = VectorQueryRectangle::with_bounds(
-                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                     TimeInterval::new(
-                        TimeInstance::from_millis_unchecked(1_517_011_200_000),
-                        TimeInstance::from_millis_unchecked(1_517_443_200_001),
-                    )
-                    .unwrap(),
-                     ColumnSelection::all(),
-                );
-                let ctx = MockQueryContext::test_default();
-
-                let result: Vec<_> = processor
-                    .query(query_rectangle, &ctx)
-                    .await
-                    .map_err(|e| e.to_string())?
-                    .collect()
-                    .await;
-
-                if result.len() != 1 {
-                    return Err("result.len() != 1".to_owned());
-                }
-
-                if result[0].is_err() {
-                    return Err("result[0].is_err()".to_owned());
-                }
-
-                let result = result[0].as_ref().unwrap();
-
-                let expected = MultiPointCollection::from_data(
-                    MultiPoint::many(vec![
-                        (-61.065_22, 14.775_33),
-                        (-61.114_47, 14.679_15),
-                        (-61.065_22, 14.775_33),
-                    ])
-                    .unwrap(),
-                    vec![
-                        TimeInterval::new_instant(1_517_011_200_000).unwrap(),
-                        TimeInterval::new_instant(1_517_443_200_000).unwrap(),
-                        TimeInterval::new_instant(1_517_011_200_000).unwrap(),
-                    ],
-                    [(
-                        "gbifid".to_string(),
-                        FeatureData::NullableInt(vec![
-                            Some(4_021_925_301),
-                            Some(4_021_925_302),
-                            Some(4_021_925_303),
-                        ]),
-                    )]
-                    .iter()
-                    .cloned()
-                    .collect(),
-                    CacheHint::default(),
-                )
-                .unwrap();
-
-                if !result.chunks_equal_ignoring_cache_hint(&expected) {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                Ok(())
-            }
-
-            let result = test(app_ctx, db_config).await;
-
-            assert!(result.is_ok());
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_cites() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(app_ctx: PostgresContext<NoTls>, db_config: DatabaseConnectionConfig) -> Result<(), String> {
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config,
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5, columns: GbifDataProvider::all_columns()
-                })
-                    .initialize(app_ctx.default_session_context().await.unwrap().db())
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let dataset = DataId::External(ExternalDataId {
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(&DataId::External(ExternalDataId {
                     provider_id: GBIF_PROVIDER_ID,
-                    layer_id: LayerId("species/Rhipidia willistoniana".to_owned()),
-                });
+                    layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                }))
+                .await
+                .map_err(|e| e.to_string())?;
 
-                let result = provider
-                    .provenance(&dataset)
-                    .await
-                    .map_err(|e| e.to_string())?;
+            let int_column = VectorColumnInfo {
+                data_type: FeatureDataType::Int,
+                measurement: Measurement::Unitless,
+            };
+            let text_column = VectorColumnInfo {
+                data_type: FeatureDataType::Text,
+                measurement: Measurement::Unitless,
+            };
 
-                let expected = ProvenanceOutput {
+            let expected = VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: HashMap::from([
+                    ("gbifid".to_string(), int_column.clone()),
+                    ("scientificname".to_string(), text_column.clone()),
+                ]),
+                time: Some(TimeInterval::new(1_517_011_200_000, 1_517_443_200_000).unwrap()),
+                #[allow(clippy::excessive_precision)]
+                bbox: Some(
+                    BoundingBox2D::new(
+                        Coordinate2D::new(-61.114_469_999_999_997, 14.679_15),
+                        Coordinate2D::new(-61.065_219_999_999_997, 14.775_33),
+                    )
+                    .unwrap(),
+                ),
+            };
+
+            let result_descriptor = meta.result_descriptor().await.map_err(|e| e.to_string())?;
+
+            if result_descriptor != expected {
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
+            }
+
+            let mut loading_info = meta
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            loading_info
+                .columns
+                .as_mut()
+                .ok_or_else(|| "missing columns".to_owned())?
+                .text
+                .sort();
+
+            let expected = OgrSourceDataset {
+                file_name: PathBuf::from(ogr_pg_string),
+                layer_name: format!("{0}.occurrences_lite", db_config.schema),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "eventdate".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
+                    x: String::new(),
+                    y: None,
+                    int: vec!["gbifid".to_string()],
+                    float: vec![],
+                    text: vec!["scientificname".to_string()],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: true,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: Some(format!(
+                    r#"SELECT "gbifid","scientificname", geom, eventdate FROM {}.occurrences_lite WHERE species = 'Rhipidia willistoniana'"#,
+                    db_config.schema
+                )),
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            };
+
+            if loading_info != expected {
+                return Err(format!("{result_descriptor:?} != {expected:?}"));
+            }
+
+            Ok(())
+        }
+
+        add_test_data(&db_config).await;
+
+        let test = test(ctx, db_config).await;
+
+        assert!(test.is_ok());
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_loads(db_config: DatabaseConnectionConfig, ctx: PostgresSessionContext<NoTls>) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config,
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: GbifDataProvider::all_columns(),
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                }))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: HashMap::new(),
+                    time: None,
+                    bbox: None,
+                },
+                meta,
+                vec![],
+            );
+
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new(
+                    (-61.065_22, 14.775_33).into(),
+                    (-61.065_22, 14.775_33).into(),
+                )
+                .unwrap(),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            );
+
+            let ctx = MockQueryContext::test_default();
+
+            let result: Vec<_> = processor
+                .query(query_rectangle, &ctx)
+                .await
+                .map_err(|e| e.to_string())?
+                .collect()
+                .await;
+
+            if result.len() != 1 {
+                return Err("result.len() != 1".to_owned());
+            }
+
+            if result[0].is_err() {
+                return Err("result[0].is_err()".to_owned());
+            }
+
+            let result = result[0].as_ref().unwrap();
+
+            let expected = MultiPointCollection::from_data(
+                MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)]).unwrap(),
+                vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
+                [
+                    (
+                        "gbifid".to_string(),
+                        FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
+                    ),
+                    (
+                        "individualcount".to_string(),
+                        FeatureData::NullableInt(vec![Some(156), Some(213)]),
+                    ),
+                    (
+                        "day".to_string(),
+                        FeatureData::NullableInt(vec![Some(27), Some(27)]),
+                    ),
+                    (
+                        "month".to_string(),
+                        FeatureData::NullableInt(vec![Some(1), Some(1)]),
+                    ),
+                    (
+                        "year".to_string(),
+                        FeatureData::NullableInt(vec![Some(2018), Some(2018)]),
+                    ),
+                    (
+                        "taxonkey".to_string(),
+                        FeatureData::NullableInt(vec![Some(5_066_840), Some(5_066_840)]),
+                    ),
+                    (
+                        "decimallatitude".to_string(),
+                        FeatureData::NullableFloat(vec![Some(14.775_33), Some(14.775_33)]),
+                    ),
+                    (
+                        "decimallongitude".to_string(),
+                        FeatureData::NullableFloat(vec![Some(-61.065_22), Some(-61.065_22)]),
+                    ),
+                    (
+                        "coordinateuncertaintyinmeters".to_string(),
+                        FeatureData::NullableFloat(vec![Some(30.0), Some(30.0)]),
+                    ),
+                    (
+                        "elevation".to_string(),
+                        FeatureData::NullableFloat(vec![None, None]),
+                    ),
+                    (
+                        "basisofrecord".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("PRESERVED_SPECIMEN".to_string()),
+                            Some("PRESERVED_SPECIMEN".to_string()),
+                        ]),
+                    ),
+                    (
+                        "catalognumber".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "class".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Insecta".to_string()),
+                            Some("Insecta".to_string()),
+                        ]),
+                    ),
+                    (
+                        "collectioncode".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "coordinateprecision".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "countrycode".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("MQ".to_string()),
+                            Some("MQ".to_string()),
+                        ]),
+                    ),
+                    (
+                        "datasetkey".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("92827b65-9987-4479-b135-7ec1bf9cf3d1".to_string()),
+                            Some("92827b65-9987-4479-b135-7ec1bf9cf3d1".to_string()),
+                        ]),
+                    ),
+                    (
+                        "dateidentified".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "depthaccuracy".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "elevationaccuracy".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "establishmentmeans".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "family".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Limoniidae".to_string()),
+                            Some("Limoniidae".to_string()),
+                        ]),
+                    ),
+                    (
+                        "genus".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Rhipidia".to_string()),
+                            Some("Rhipidia".to_string()),
+                        ]),
+                    ),
+                    (
+                        "identifiedby".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Jorge Mederos".to_string()),
+                            Some("Jorge Mederos".to_string()),
+                        ]),
+                    ),
+                    (
+                        "infraspecificepithet".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "institutioncode".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "issue".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "kingdom".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Animalia".to_string()),
+                            Some("Animalia".to_string()),
+                        ]),
+                    ),
+                    (
+                        "lastinterpreted".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("2023-01-31 08:47:46 +00:00".to_string()),
+                            Some("2023-01-31 08:47:46 +00:00".to_string()),
+                        ]),
+                    ),
+                    (
+                        "license".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("CC0_1_0".to_string()),
+                            Some("CC0_1_0".to_string()),
+                        ]),
+                    ),
+                    (
+                        "locality".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Rivière Sylvestre (Le Lorrain)".to_string()),
+                            Some("Rivière Sylvestre (Le Lorrain)".to_string()),
+                        ]),
+                    ),
+                    (
+                        "mediatype".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "occurrenceid".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Mart:tipu:13801".to_string()),
+                            Some("Mart:tipu:13803".to_string()),
+                        ]),
+                    ),
+                    (
+                        "occurrencestatus".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("PRESENT".to_string()),
+                            Some("PRESENT".to_string()),
+                        ]),
+                    ),
+                    (
+                        "order".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Diptera".to_string()),
+                            Some("Diptera".to_string()),
+                        ]),
+                    ),
+                    (
+                        "phylum".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Arthropoda".to_string()),
+                            Some("Arthropoda".to_string()),
+                        ]),
+                    ),
+                    (
+                        "publishingorgkey".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("1cd669d0-80ea-11de-a9d0-f1765f95f18b".to_string()),
+                            Some("1cd669d0-80ea-11de-a9d0-f1765f95f18b".to_string()),
+                        ]),
+                    ),
+                    (
+                        "recordedby".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Marc Pollet".to_string()),
+                            Some("Marc Pollet".to_string()),
+                        ]),
+                    ),
+                    (
+                        "recordnumber".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "rightsholder".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("dataset authors".to_string()),
+                            Some("dataset authors".to_string()),
+                        ]),
+                    ),
+                    (
+                        "scientificname".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
+                            Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
+                        ]),
+                    ),
+                    (
+                        "species".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Rhipidia willistoniana".to_string()),
+                            Some("Rhipidia willistoniana".to_string()),
+                        ]),
+                    ),
+                    (
+                        "specieskey".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("5066840".to_string()),
+                            Some("5066840".to_string()),
+                        ]),
+                    ),
+                    (
+                        "stateprovince".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Martinique".to_string()),
+                            Some("Martinique".to_string()),
+                        ]),
+                    ),
+                    (
+                        "taxonrank".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("SPECIES".to_string()),
+                            Some("SPECIES".to_string()),
+                        ]),
+                    ),
+                    (
+                        "typestatus".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                    (
+                        "verbatimscientificname".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Rhipidia (Rhipidia) willistoniana (Alexander, 1929)".to_string()),
+                            Some("Rhipidia (Rhipidia) willistoniana (Alexander, 1929)".to_string()),
+                        ]),
+                    ),
+                    (
+                        "verbatimscientificnameauthorship".to_string(),
+                        FeatureData::NullableText(vec![None, None]),
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                return Err(format!("{result:?} != {expected:?}"));
+            }
+
+            Ok(())
+        }
+
+        add_test_data(&db_config).await;
+
+        let result = test(ctx, db_config).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_loads_for_selected_columns(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config,
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: vec![
+                    "gbifid".to_string(),
+                    "scientificname".to_string(),
+                    "elevation".to_string(),
+                    "nonexistent".to_string(),
+                ],
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                }))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: HashMap::new(),
+                    time: None,
+                    bbox: None,
+                },
+                meta,
+                vec![],
+            );
+
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new(
+                    (-61.065_22, 14.775_33).into(),
+                    (-61.065_22, 14.775_33).into(),
+                )
+                .unwrap(),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            );
+
+            let ctx = MockQueryContext::test_default();
+
+            let result: Vec<_> = processor
+                .query(query_rectangle, &ctx)
+                .await
+                .map_err(|e| e.to_string())?
+                .collect()
+                .await;
+
+            if result.len() != 1 {
+                return Err("result.len() != 1".to_owned());
+            }
+
+            if result[0].is_err() {
+                return Err("result[0].is_err()".to_owned());
+            }
+
+            let result = result[0].as_ref().unwrap();
+
+            let expected = MultiPointCollection::from_data(
+                MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)]).unwrap(),
+                vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
+                [
+                    (
+                        "gbifid".to_string(),
+                        FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
+                    ),
+                    (
+                        "elevation".to_string(),
+                        FeatureData::NullableFloat(vec![None, None]),
+                    ),
+                    (
+                        "scientificname".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
+                            Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
+                        ]),
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                return Err(format!("{result:?} != {expected:?}"));
+            }
+
+            Ok(())
+        }
+
+        add_test_data(&db_config).await;
+
+        let result = test(ctx, db_config).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_loads_for_lite_subset_selected_columns(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config,
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: vec![
+                    "gbifid".to_string(),
+                    "scientificname".to_string(),
+                    "nonexistent".to_string(),
+                ],
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                }))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: HashMap::new(),
+                    time: None,
+                    bbox: None,
+                },
+                meta,
+                vec![],
+            );
+
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new(
+                    (-61.065_22, 14.775_33).into(),
+                    (-61.065_22, 14.775_33).into(),
+                )
+                .unwrap(),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            );
+
+            let ctx = MockQueryContext::test_default();
+
+            let result: Vec<_> = processor
+                .query(query_rectangle, &ctx)
+                .await
+                .map_err(|e| e.to_string())?
+                .collect()
+                .await;
+
+            if result.len() != 1 {
+                return Err("result.len() != 1".to_owned());
+            }
+
+            if result[0].is_err() {
+                return Err("result[0].is_err()".to_owned());
+            }
+
+            let result = result[0].as_ref().unwrap();
+
+            let expected = MultiPointCollection::from_data(
+                MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)]).unwrap(),
+                vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
+                [
+                    (
+                        "gbifid".to_string(),
+                        FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
+                    ),
+                    (
+                        "scientificname".to_string(),
+                        FeatureData::NullableText(vec![
+                            Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
+                            Some("Rhipidia willistoniana (Alexander, 1929)".to_string()),
+                        ]),
+                    ),
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                return Err(format!("{result:?} != {expected:?}"));
+            }
+
+            Ok(())
+        }
+
+        add_test_data(&db_config).await;
+
+        let result = test(ctx, db_config).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_loads_for_lite_subset_selected_columns_with_time_instant_filter(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config,
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: vec!["gbifid".to_string()],
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                }))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: HashMap::new(),
+                    time: None,
+                    bbox: None,
+                },
+                meta,
+                vec![],
+            );
+
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                ColumnSelection::all(),
+            );
+
+            let ctx = MockQueryContext::test_default();
+
+            let result: Vec<_> = processor
+                .query(query_rectangle, &ctx)
+                .await
+                .map_err(|e| e.to_string())?
+                .collect()
+                .await;
+
+            if result.len() != 1 {
+                return Err("result.len() != 1".to_owned());
+            }
+
+            if result[0].is_err() {
+                return Err("result[0].is_err()".to_owned());
+            }
+
+            let result = result[0].as_ref().unwrap();
+
+            let expected = MultiPointCollection::from_data(
+                MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)]).unwrap(),
+                vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
+                [(
+                    "gbifid".to_string(),
+                    FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                return Err(format!("{result:?} != {expected:?}"));
+            }
+
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                ColumnSelection::all(),
+            );
+
+            let ctx = MockQueryContext::test_default();
+
+            let result: Vec<_> = processor
+                .query(query_rectangle, &ctx)
+                .await
+                .map_err(|e| e.to_string())?
+                .collect()
+                .await;
+
+            if result.len() != 1 {
+                return Err("result.len() != 1".to_owned());
+            }
+
+            if result[0].is_err() {
+                return Err("result[0].is_err()".to_owned());
+            }
+
+            let result = result[0].as_ref().unwrap();
+
+            let expected = MultiPointCollection::from_data(
+                MultiPoint::many(vec![(-61.114_47, 14.679_15)]).unwrap(),
+                vec![TimeInterval::new_instant(1_517_443_200_000).unwrap()],
+                [(
+                    "gbifid".to_string(),
+                    FeatureData::NullableInt(vec![Some(4_021_925_302)]),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                return Err(format!("{result:?} != {expected:?}"));
+            }
+
+            Ok(())
+        }
+
+        add_test_data(&db_config).await;
+
+        let result = test(ctx, db_config).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_loads_for_lite_subset_selected_columns_with_time_range_filter(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config,
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: vec!["gbifid".to_string()],
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let meta: Box<
+                dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+            > = provider
+                .meta_data(&DataId::External(ExternalDataId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                }))
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let processor: OgrSourceProcessor<MultiPoint> = OgrSourceProcessor::new(
+                VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: HashMap::new(),
+                    time: None,
+                    bbox: None,
+                },
+                meta,
+                vec![],
+            );
+
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::new(
+                    TimeInstance::from_millis_unchecked(1_517_011_200_000),
+                    TimeInstance::from_millis_unchecked(1_517_443_200_000),
+                )
+                .unwrap(),
+                ColumnSelection::all(),
+            );
+
+            let ctx = MockQueryContext::test_default();
+
+            let result: Vec<_> = processor
+                .query(query_rectangle, &ctx)
+                .await
+                .map_err(|e| e.to_string())?
+                .collect()
+                .await;
+
+            if result.len() != 1 {
+                return Err("result.len() != 1".to_owned());
+            }
+
+            if result[0].is_err() {
+                return Err("result[0].is_err()".to_owned());
+            }
+
+            let result = result[0].as_ref().unwrap();
+
+            let expected = MultiPointCollection::from_data(
+                MultiPoint::many(vec![(-61.065_22, 14.775_33), (-61.065_22, 14.775_33)]).unwrap(),
+                vec![TimeInterval::new_instant(1_517_011_200_000).unwrap(); 2],
+                [(
+                    "gbifid".to_string(),
+                    FeatureData::NullableInt(vec![Some(4_021_925_301), Some(4_021_925_303)]),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                return Err(format!("{result:?} != {expected:?}"));
+            }
+
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::new(
+                    TimeInstance::from_millis_unchecked(1_517_011_200_000),
+                    TimeInstance::from_millis_unchecked(1_517_443_200_001),
+                )
+                .unwrap(),
+                ColumnSelection::all(),
+            );
+
+            let ctx = MockQueryContext::test_default();
+
+            let result: Vec<_> = processor
+                .query(query_rectangle, &ctx)
+                .await
+                .map_err(|e| e.to_string())?
+                .collect()
+                .await;
+
+            if result.len() != 1 {
+                return Err("result.len() != 1".to_owned());
+            }
+
+            if result[0].is_err() {
+                return Err("result[0].is_err()".to_owned());
+            }
+
+            let result = result[0].as_ref().unwrap();
+
+            let expected = MultiPointCollection::from_data(
+                MultiPoint::many(vec![
+                    (-61.065_22, 14.775_33),
+                    (-61.114_47, 14.679_15),
+                    (-61.065_22, 14.775_33),
+                ])
+                .unwrap(),
+                vec![
+                    TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                    TimeInterval::new_instant(1_517_443_200_000).unwrap(),
+                    TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                ],
+                [(
+                    "gbifid".to_string(),
+                    FeatureData::NullableInt(vec![
+                        Some(4_021_925_301),
+                        Some(4_021_925_302),
+                        Some(4_021_925_303),
+                    ]),
+                )]
+                .iter()
+                .cloned()
+                .collect(),
+                CacheHint::default(),
+            )
+            .unwrap();
+
+            if !result.chunks_equal_ignoring_cache_hint(&expected) {
+                return Err(format!("{result:?} != {expected:?}"));
+            }
+
+            Ok(())
+        }
+
+        add_test_data(&db_config).await;
+
+        let result = test(ctx, db_config).await;
+
+        assert!(result.is_ok());
+    }
+
+    #[ge_context::test]
+    async fn it_cites(db_config: DatabaseConnectionConfig, ctx: PostgresSessionContext<NoTls>) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config,
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: GbifDataProvider::all_columns(),
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let dataset = DataId::External(ExternalDataId {
+                provider_id: GBIF_PROVIDER_ID,
+                layer_id: LayerId("species/Rhipidia willistoniana".to_owned()),
+            });
+
+            let result = provider
+                .provenance(&dataset)
+                .await
+                .map_err(|e| e.to_string())?;
+
+            let expected = ProvenanceOutput {
                     data: DataId::External(ExternalDataId {
                         provider_id: GBIF_PROVIDER_ID,
                         layer_id: LayerId("species/Rhipidia willistoniana".to_owned()),
@@ -3591,783 +3525,164 @@ mod tests {
                     }]),
                 };
 
-                if result != expected {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                Ok(())
+            if result != expected {
+                return Err(format!("{result:?} != {expected:?}"));
             }
 
-            let result = test(app_ctx, db_config).await;
+            Ok(())
+        }
 
-            assert!(result.is_ok());
-        }).await;
+        add_test_data(&db_config).await;
+
+        let result = test(ctx, db_config).await;
+
+        assert!(result.is_ok());
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_creates_layer() {
-        with_temp_schema(|app_ctx, db_config| async {
-            async fn test(app_ctx: PostgresContext<NoTls>, db_config: DatabaseConnectionConfig) -> Result<(), String> {
-                let provider = Box::new(GbifDataProviderDefinition {
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    priority: Some(12),
-                    db_config,
-                    cache_ttl: Default::default(),
-                    autocomplete_timeout: 5, columns: GbifDataProvider::all_columns()
-                })
-                .initialize(app_ctx.default_session_context().await.unwrap().db())
+    #[ge_context::test]
+    async fn it_creates_layer(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        async fn test(
+            ctx: PostgresSessionContext<NoTls>,
+            db_config: DatabaseConnectionConfig,
+        ) -> Result<(), String> {
+            let provider = Box::new(GbifDataProviderDefinition {
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                priority: Some(12),
+                db_config,
+                cache_ttl: Default::default(),
+                autocomplete_timeout: 5,
+                columns: GbifDataProvider::all_columns(),
+            })
+            .initialize(ctx.db())
+            .await
+            .map_err(|e| e.to_string())?;
+
+            let layer_id = LayerId("species/Rhipidia willistoniana".to_owned());
+
+            let result = provider
+                .load_layer(&layer_id)
                 .await
                 .map_err(|e| e.to_string())?;
 
-                let layer_id = LayerId("species/Rhipidia willistoniana".to_owned());
+            let expected = Layer {
+                id: ProviderLayerId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    layer_id: layer_id.clone(),
+                },
+                name: "Rhipidia willistoniana".to_string(),
+                description: "All occurrences with a species of Rhipidia willistoniana".to_string(),
+                workflow: Workflow {
+                    operator: TypedOperator::Vector(
+                        OgrSource {
+                            params: OgrSourceParameters {
+                                data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                    GBIF_PROVIDER_ID.to_string(),
+                                    layer_id.to_string(),
+                                ),
+                                attribute_projection: None,
+                                attribute_filters: None,
+                            },
+                        }
+                        .boxed(),
+                    ),
+                },
+                symbology: None,
+                properties: vec![],
+                metadata: Default::default(),
+            };
 
-                let result = provider
-                    .load_layer(&layer_id)
-                    .await
-                    .map_err(|e| e.to_string())?;
-
-                let expected = Layer {
-                    id: ProviderLayerId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        layer_id: layer_id.clone(),
-                    },
-                    name: "Rhipidia willistoniana".to_string(),
-                    description: "All occurrences with a species of Rhipidia willistoniana"
-                        .to_string(),
-                    workflow: Workflow {
-                        operator: TypedOperator::Vector(
-                            OgrSource {
-                                params: OgrSourceParameters {
-                                    data: geoengine_datatypes::dataset::NamedData::with_system_provider(
-                                        GBIF_PROVIDER_ID.to_string(),
-                                        layer_id.to_string(),
-                                    ),
-                                    attribute_projection: None,
-                                    attribute_filters: None,
-                                },
-                            }
-                            .boxed(),
-                        ),
-                    },
-                    symbology: None,
-                    properties: vec![],
-                    metadata: Default::default(),
-                };
-
-                if result != expected {
-                    return Err(format!("{result:?} != {expected:?}"));
-                }
-
-                Ok(())
+            if result != expected {
+                return Err(format!("{result:?} != {expected:?}"));
             }
 
-            let result = test(app_ctx, db_config).await;
+            Ok(())
+        }
 
-            assert!(result.is_ok());
-        })
-        .await;
+        add_test_data(&db_config).await;
+
+        let result = test(ctx, db_config).await;
+
+        assert!(result.is_ok());
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_performs_global_search_on_select_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
+    #[ge_context::test]
+    async fn it_performs_global_search_on_select_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "x".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
             .await
             .unwrap();
 
-            let root_id = provider.get_root_layer_collection_id().await.unwrap();
-
-            let collection = provider
-                .search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "x".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "i".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id,
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![
-                        CollectionItem::Layer(LayerListing {
-                            id: ProviderLayerId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                layer_id: LayerId("family/Limoniidae".to_string()),
-                            },
-                            name: "Limoniidae".to_string(),
-                            description: "Family, 3 occurrences".to_string(),
-                            properties: vec![]
-                        }),
-                        CollectionItem::Layer(LayerListing {
-                            id: ProviderLayerId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                layer_id: LayerId("genus/Rhipidia".to_string()),
-                            },
-                            name: "Rhipidia".to_string(),
-                            description: "Genus, 3 occurrences".to_string(),
-                            properties: vec![]
-                        }),
-                        CollectionItem::Layer(LayerListing {
-                            id: ProviderLayerId {
-                                provider_id: GBIF_PROVIDER_ID,
-                                layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
-                            },
-                            name: "Rhipidia willistoniana".to_string(),
-                            description: "Species, 3 occurrences".to_string(),
-                            properties: vec![]
-                        }),
-                    ],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_performs_global_search_autocomplete_on_select_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "i".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
             .await
             .unwrap();
 
-            let root_id = provider.get_root_layer_collection_id().await.unwrap();
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "x".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, Vec::<String>::new());
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "i".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                autocomplete_items,
-                vec![
-                    "Limoniidae".to_string(),
-                    "Rhipidia".to_string(),
-                    "Rhipidia willistoniana".to_string()
-                ]
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[allow(clippy::too_many_lines)]
-    async fn it_searches_on_filter_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id,
+                },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let layer_collection_id = LayerCollectionId("filter/".to_string());
-
-            let collection = provider
-                .search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "x".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "n".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: GBIF_PROVIDER_ID,
-                            collection_id: LayerCollectionId("select/Animalia".to_string()),
-                        },
-                        name: "Animalia".to_string(),
-                        description: String::new(),
-                        properties: Default::default(),
-                    })],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "n".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "An".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: GBIF_PROVIDER_ID,
-                            collection_id: LayerCollectionId("select/Animalia".to_string()),
-                        },
-                        name: "Animalia".to_string(),
-                        description: String::new(),
-                        properties: Default::default(),
-                    })],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_autocompletes_search_on_filter_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let layer_collection_id = LayerCollectionId("filter/".to_string());
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "x".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, Vec::<String>::new());
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "n".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, vec!["Animalia".to_string()]);
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "n".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, Vec::<String>::new());
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "An".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, vec!["Animalia".to_string()]);
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[allow(clippy::too_many_lines)]
-    async fn it_searches_on_filtered_filter_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let layer_collection_id = LayerCollectionId("filter/Animalia".to_string());
-
-            let collection = provider
-                .search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "x".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "r".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: GBIF_PROVIDER_ID,
-                            collection_id: LayerCollectionId(
-                                "select/Animalia/Arthropoda".to_string()
-                            ),
-                        },
-                        name: "Arthropoda".to_string(),
-                        description: String::new(),
-                        properties: Default::default(),
-                    })],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "r".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "Ar".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: layer_collection_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![CollectionItem::Collection(LayerCollectionListing {
-                        id: ProviderLayerCollectionId {
-                            provider_id: GBIF_PROVIDER_ID,
-                            collection_id: LayerCollectionId(
-                                "select/Animalia/Arthropoda".to_string()
-                            ),
-                        },
-                        name: "Arthropoda".to_string(),
-                        description: String::new(),
-                        properties: Default::default(),
-                    })],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_autocompletes_search_on_filtered_filter_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let layer_collection_id = LayerCollectionId("filter/Animalia".to_string());
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "x".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, Vec::<String>::new());
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "r".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, vec!["Arthropoda".to_string()]);
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "r".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, Vec::<String>::new());
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &layer_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "Ar".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, vec!["Arthropoda".to_string()]);
-        })
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    #[allow(clippy::too_many_lines)]
-    async fn it_searches_result_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
-            .await
-            .unwrap();
-
-            let root_id = LayerCollectionId("datasets/family/".to_string());
-
-            let collection = provider
-                .search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "x".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "m".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![CollectionItem::Layer(LayerListing {
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: GBIF_PROVIDER_ID,
                             layer_id: LayerId("family/Limoniidae".to_string()),
@@ -4375,157 +3690,794 @@ mod tests {
                         name: "Limoniidae".to_string(),
                         description: "Family, 3 occurrences".to_string(),
                         properties: vec![]
-                    }),],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "m".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-
-            let collection = provider
-                .search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "Lim".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(
-                collection,
-                LayerCollection {
-                    id: ProviderLayerCollectionId {
-                        provider_id: GBIF_PROVIDER_ID,
-                        collection_id: root_id.clone(),
-                    },
-                    name: "GBIF".to_string(),
-                    description: "GBIF occurrence datasets".to_string(),
-                    items: vec![CollectionItem::Layer(LayerListing {
+                    }),
+                    CollectionItem::Layer(LayerListing {
                         id: ProviderLayerId {
                             provider_id: GBIF_PROVIDER_ID,
-                            layer_id: LayerId("family/Limoniidae".to_string()),
+                            layer_id: LayerId("genus/Rhipidia".to_string()),
                         },
-                        name: "Limoniidae".to_string(),
-                        description: "Family, 3 occurrences".to_string(),
+                        name: "Rhipidia".to_string(),
+                        description: "Genus, 3 occurrences".to_string(),
                         properties: vec![]
-                    }),],
-                    entry_label: None,
-                    properties: vec![],
-                }
-            );
-        })
-        .await;
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: GBIF_PROVIDER_ID,
+                            layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
+                        },
+                        name: "Rhipidia willistoniana".to_string(),
+                        description: "Species, 3 occurrences".to_string(),
+                        properties: vec![]
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
     }
 
-    #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
-    async fn it_autocompletes_search_on_result_items() {
-        with_temp_schema(|app_ctx, db_config| async move {
-            let provider = Box::new(GbifDataProviderDefinition {
-                name: "GBIF".to_string(),
-                description: "GBIF occurrence datasets".to_string(),
-                priority: Some(12),
-                db_config,
-                cache_ttl: Default::default(),
-                autocomplete_timeout: 5,
-                columns: GbifDataProvider::all_columns(),
-            })
-            .initialize(app_ctx.default_session_context().await.unwrap().db())
+    #[ge_context::test]
+    async fn it_performs_global_search_autocomplete_on_select_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let root_id = provider.get_root_layer_collection_id().await.unwrap();
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "x".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
             .await
             .unwrap();
 
-            let root_id = LayerCollectionId("datasets/family/".to_string());
+        assert_eq!(autocomplete_items, Vec::<String>::new());
 
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "x".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "i".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
 
-            assert_eq!(autocomplete_items, Vec::<String>::new());
+        assert_eq!(
+            autocomplete_items,
+            vec![
+                "Limoniidae".to_string(),
+                "Rhipidia".to_string(),
+                "Rhipidia willistoniana".to_string()
+            ]
+        );
+    }
 
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: "m".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_on_filter_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
 
-            assert_eq!(autocomplete_items, vec!["Limoniidae".to_string()]);
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "m".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, Vec::<String>::new());
-
-            let autocomplete_items = provider
-                .autocomplete_search(
-                    &root_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: "Lim".to_string(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .unwrap();
-
-            assert_eq!(autocomplete_items, vec!["Limoniidae".to_string()]);
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
         })
-        .await;
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let layer_collection_id = LayerCollectionId("filter/".to_string());
+
+        let collection = provider
+            .search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "x".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "n".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("select/Animalia".to_string()),
+                    },
+                    name: "Animalia".to_string(),
+                    description: String::new(),
+                    properties: Default::default(),
+                })],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "n".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "An".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("select/Animalia".to_string()),
+                    },
+                    name: "Animalia".to_string(),
+                    description: String::new(),
+                    properties: Default::default(),
+                })],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_autocompletes_search_on_filter_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let layer_collection_id = LayerCollectionId("filter/".to_string());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "x".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, Vec::<String>::new());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "n".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, vec!["Animalia".to_string()]);
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "n".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, Vec::<String>::new());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "An".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, vec!["Animalia".to_string()]);
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_on_filtered_filter_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let layer_collection_id = LayerCollectionId("filter/Animalia".to_string());
+
+        let collection = provider
+            .search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "x".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "r".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("select/Animalia/Arthropoda".to_string()),
+                    },
+                    name: "Arthropoda".to_string(),
+                    description: String::new(),
+                    properties: Default::default(),
+                })],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "r".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Ar".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: layer_collection_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        collection_id: LayerCollectionId("select/Animalia/Arthropoda".to_string()),
+                    },
+                    name: "Arthropoda".to_string(),
+                    description: String::new(),
+                    properties: Default::default(),
+                })],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_autocompletes_search_on_filtered_filter_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let layer_collection_id = LayerCollectionId("filter/Animalia".to_string());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "x".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, Vec::<String>::new());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "r".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, vec!["Arthropoda".to_string()]);
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "r".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, Vec::<String>::new());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &layer_collection_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Ar".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, vec!["Arthropoda".to_string()]);
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_searches_result_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let root_id = LayerCollectionId("datasets/family/".to_string());
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "x".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "m".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId("family/Limoniidae".to_string()),
+                    },
+                    name: "Limoniidae".to_string(),
+                    description: "Family, 3 occurrences".to_string(),
+                    properties: vec![]
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "m".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+
+        let collection = provider
+            .search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Lim".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(
+            collection,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: GBIF_PROVIDER_ID,
+                    collection_id: root_id.clone(),
+                },
+                name: "GBIF".to_string(),
+                description: "GBIF occurrence datasets".to_string(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    id: ProviderLayerId {
+                        provider_id: GBIF_PROVIDER_ID,
+                        layer_id: LayerId("family/Limoniidae".to_string()),
+                    },
+                    name: "Limoniidae".to_string(),
+                    description: "Family, 3 occurrences".to_string(),
+                    properties: vec![]
+                }),],
+                entry_label: None,
+                properties: vec![],
+            }
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_autocompletes_search_on_result_items(
+        db_config: DatabaseConnectionConfig,
+        ctx: PostgresSessionContext<NoTls>,
+    ) {
+        add_test_data(&db_config).await;
+
+        let provider = Box::new(GbifDataProviderDefinition {
+            name: "GBIF".to_string(),
+            description: "GBIF occurrence datasets".to_string(),
+            priority: Some(12),
+            db_config,
+            cache_ttl: Default::default(),
+            autocomplete_timeout: 5,
+            columns: GbifDataProvider::all_columns(),
+        })
+        .initialize(ctx.db())
+        .await
+        .unwrap();
+
+        let root_id = LayerCollectionId("datasets/family/".to_string());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "x".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, Vec::<String>::new());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Fulltext,
+                    search_string: "m".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, vec!["Limoniidae".to_string()]);
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "m".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, Vec::<String>::new());
+
+        let autocomplete_items = provider
+            .autocomplete_search(
+                &root_id,
+                SearchParameters {
+                    search_type: SearchType::Prefix,
+                    search_string: "Lim".to_string(),
+                    limit: 10,
+                    offset: 0,
+                },
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(autocomplete_items, vec!["Limoniidae".to_string()]);
     }
 }

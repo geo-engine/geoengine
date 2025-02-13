@@ -78,10 +78,14 @@ impl RasterOperator for Interpolation {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let raster_source = initialized_sources.raster;
         InitializedInterpolation::new_with_source_and_params(
             name,
+            path,
             raster_source,
             &self.params,
             context.tiling_specification(),
@@ -96,6 +100,7 @@ pub struct InitializedInterpolation<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
     output_result_descriptor: RasterResultDescriptor,
     raster_source: O,
+    path: WorkflowOperatorPath,
     interpolation_method: InterpolationMethod,
     tiling_specification: TilingSpecification,
 }
@@ -103,6 +108,7 @@ pub struct InitializedInterpolation<O: InitializedRasterOperator> {
 impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
     pub fn new_with_source_and_params(
         name: CanonicOperatorName,
+        path: WorkflowOperatorPath,
         raster_source: O,
         params: &InterpolationParams,
         tiling_specification: TilingSpecification,
@@ -159,6 +165,7 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
 
         let initialized_operator = InitializedInterpolation {
             name,
+            path,
             output_result_descriptor: out_descriptor,
             raster_source,
             interpolation_method: params.interpolation,
@@ -199,6 +206,14 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Interpolation::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

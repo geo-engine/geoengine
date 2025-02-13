@@ -10,8 +10,8 @@ use geoengine_datatypes::primitives::{
     VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::{
-    GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, SpatialGridDefinition,
-    TilingSpatialGridDefinition, TilingSpecification,
+    GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
+    SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
 };
 use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::{
@@ -202,6 +202,14 @@ impl SpatialGridDescriptor {
             SpatialGridDescriptor::Source(s) => s.geo_transform().spatial_resolution(),
             SpatialGridDescriptor::Derived(m) => m.geo_transform().spatial_resolution(),
         }
+    }
+
+    pub fn grid_shape(&self) -> GridShape2D {
+        let shape = match self {
+            SpatialGridDescriptor::Source(s) => s.grid_bounds().grid_shape_array(),
+            SpatialGridDescriptor::Derived(s) => s.grid_bounds().grid_shape_array(),
+        };
+        GridShape2D::new(shape)
     }
 
     #[must_use]

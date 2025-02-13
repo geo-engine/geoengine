@@ -761,7 +761,7 @@ impl EdrExtents {
     fn has_discrete_vertical_axis(&self, discrete_vrs: &[String]) -> bool {
         self.vertical
             .as_ref()
-            .map_or(false, |val| discrete_vrs.contains(&val.vrs))
+            .is_some_and(|val| discrete_vrs.contains(&val.vrs))
     }
 }
 
@@ -1225,12 +1225,12 @@ pub enum EdrProviderError {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
-        contexts::{PostgresContext, PostgresDb, SessionContext, SimpleApplicationContext},
+        contexts::SessionContext,
+        contexts::{PostgresDb, PostgresSessionContext},
         ge_context,
     };
-
-    use super::*;
     use geoengine_datatypes::{
         dataset::ExternalDataId,
         primitives::{BandSelection, ColumnSelection},
@@ -1336,13 +1336,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_root_collection(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+    async fn it_loads_root_collection(ctx: PostgresSessionContext<NoTls>) -> Result<()> {
         let root_collection_id = LayerCollectionId("collections".to_string());
-        let datasets = load_layer_collection(
-            &root_collection_id,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await?;
+        let datasets = load_layer_collection(&root_collection_id, ctx.db()).await?;
 
         assert_eq!(
             datasets,
@@ -1419,13 +1415,11 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_raster_parameter_collection(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+    async fn it_loads_raster_parameter_collection(
+        ctx: PostgresSessionContext<NoTls>,
+    ) -> Result<()> {
         let collection_id = LayerCollectionId("collections!GFS_isobaric".to_string());
-        let datasets = load_layer_collection(
-            &collection_id,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await?;
+        let datasets = load_layer_collection(&collection_id, ctx.db()).await?;
 
         assert_eq!(
             datasets,
@@ -1456,13 +1450,9 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_loads_vector_height_collection(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+    async fn it_loads_vector_height_collection(ctx: PostgresSessionContext<NoTls>) -> Result<()> {
         let collection_id = LayerCollectionId("collections!PointsInFrance".to_string());
-        let datasets = load_layer_collection(
-            &collection_id,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await?;
+        let datasets = load_layer_collection(&collection_id, ctx.db()).await?;
 
         assert_eq!(
             datasets,
@@ -1502,25 +1492,17 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn vector_without_height_collection_invalid(app_ctx: PostgresContext<NoTls>) {
+    async fn vector_without_height_collection_invalid(ctx: PostgresSessionContext<NoTls>) {
         let collection_id = LayerCollectionId("collections!PointsInGermany".to_string());
-        let res = load_layer_collection(
-            &collection_id,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await;
+        let res = load_layer_collection(&collection_id, ctx.db()).await;
 
         assert!(res.is_err());
     }
 
     #[ge_context::test]
-    async fn it_loads_raster_height_collection(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+    async fn it_loads_raster_height_collection(ctx: PostgresSessionContext<NoTls>) -> Result<()> {
         let collection_id = LayerCollectionId("collections!GFS_isobaric!temperature".to_string());
-        let datasets = load_layer_collection(
-            &collection_id,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await?;
+        let datasets = load_layer_collection(&collection_id, ctx.db()).await?;
 
         assert_eq!(
             datasets,
@@ -1565,14 +1547,10 @@ mod tests {
 
     #[ge_context::test]
     async fn vector_with_parameter_collection_invalid(
-        app_ctx: PostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
     ) -> Result<()> {
         let collection_id = LayerCollectionId("collections!PointsInGermany!ID".to_string());
-        let res = load_layer_collection(
-            &collection_id,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await;
+        let res = load_layer_collection(&collection_id, ctx.db()).await;
 
         assert!(res.is_err());
 
@@ -1581,15 +1559,11 @@ mod tests {
 
     #[ge_context::test]
     async fn raster_with_parameter_without_height_collection_invalid(
-        app_ctx: PostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
     ) -> Result<()> {
         let collection_id =
             LayerCollectionId("collections!GFS_single-level!temperature_max-wind".to_string());
-        let res = load_layer_collection(
-            &collection_id,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await;
+        let res = load_layer_collection(&collection_id, ctx.db()).await;
 
         assert!(res.is_err());
 
@@ -1598,15 +1572,11 @@ mod tests {
 
     #[ge_context::test]
     async fn collection_with_parameter_and_height_invalid(
-        app_ctx: PostgresContext<NoTls>,
+        ctx: PostgresSessionContext<NoTls>,
     ) -> Result<()> {
         let collection_id =
             LayerCollectionId("collections!GFS_isobaric!temperature!1000".to_string());
-        let res = load_layer_collection(
-            &collection_id,
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
-        .await;
+        let res = load_layer_collection(&collection_id, ctx.db()).await;
 
         assert!(res.is_err());
 
@@ -1646,18 +1616,14 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn generate_ogr_metadata(app_ctx: PostgresContext<NoTls>) {
+    async fn generate_ogr_metadata(ctx: PostgresSessionContext<NoTls>) {
         let mut server = Server::run();
         let meta = load_metadata::<
             OgrSourceDataset,
             VectorResultDescriptor,
             VectorQueryRectangle,
             PostgresDb<NoTls>,
-        >(
-            &mut server,
-            "PointsInGermany",
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
+        >(&mut server, "PointsInGermany", ctx.db())
         .await;
         let loading_info = meta
             .loading_info(VectorQueryRectangle::with_bounds(
@@ -1728,7 +1694,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn generate_gdal_metadata(app_ctx: PostgresContext<NoTls>) {
+    async fn generate_gdal_metadata(ctx: PostgresSessionContext<NoTls>) {
         hide_gdal_errors(); //hide GTIFF_HONOUR_NEGATIVE_SCALEY warning
 
         let mut server = Server::run();
@@ -1756,11 +1722,7 @@ mod tests {
             RasterResultDescriptor,
             RasterQueryRectangle,
             PostgresDb<NoTls>,
-        >(
-            &mut server,
-            "GFS_isobaric!temperature!1000",
-            app_ctx.default_session_context().await.unwrap().db(),
-        )
+        >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
         .await;
 
         let loading_info_parts = meta

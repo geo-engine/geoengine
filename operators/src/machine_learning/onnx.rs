@@ -44,7 +44,11 @@ impl RasterOperator for Onnx {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let source = self.sources.initialize_sources(path, context).await?.raster;
+        let source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?
+            .raster;
 
         let in_descriptor = source.result_descriptor();
 
@@ -82,6 +86,7 @@ impl RasterOperator for Onnx {
 
         Ok(Box::new(InitializedOnnx {
             name,
+            path,
             result_descriptor: out_descriptor,
             source,
             model_metadata,
@@ -93,6 +98,7 @@ impl RasterOperator for Onnx {
 
 pub struct InitializedOnnx {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     model_metadata: MlModelMetadata,
@@ -122,6 +128,14 @@ impl InitializedRasterOperator for InitializedOnnx {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Onnx::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 
@@ -342,7 +356,7 @@ mod tests {
     fn ort() {
         let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -367,7 +381,7 @@ mod tests {
     fn ort_dynamic() {
         let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_classification.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -405,7 +419,7 @@ mod tests {
     fn regression() {
         let session = ort::session::Session::builder()
             .unwrap()
-            .commit_from_file(test_data!("pro/ml/onnx/test_regression.onnx"))
+            .commit_from_file(test_data!("ml/onnx/test_regression.onnx"))
             .unwrap();
 
         let input_name = &session.inputs[0].name;
@@ -559,7 +573,7 @@ mod tests {
         };
         exe_ctx.ml_models.insert(
             model_name,
-            load_model_metadata(test_data!("pro/ml/onnx/test_classification.onnx")).unwrap(),
+            load_model_metadata(test_data!("ml/onnx/test_classification.onnx")).unwrap(),
         );
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(
@@ -772,7 +786,7 @@ mod tests {
         };
         exe_ctx.ml_models.insert(
             model_name,
-            load_model_metadata(test_data!("pro/ml/onnx/test_regression.onnx")).unwrap(),
+            load_model_metadata(test_data!("ml/onnx/test_regression.onnx")).unwrap(),
         );
 
         let query_rect = RasterQueryRectangle::new_with_grid_bounds(

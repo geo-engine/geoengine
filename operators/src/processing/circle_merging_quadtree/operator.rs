@@ -101,7 +101,10 @@ impl VectorOperator for VisualPointClustering {
 
         let radius_model = LogScaledRadius::new(self.params.min_radius_px, self.params.delta_px)?;
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let vector_source = initialized_sources.vector;
 
         ensure!(
@@ -183,6 +186,7 @@ impl VectorOperator for VisualPointClustering {
 
         Ok(InitializedVisualPointClustering {
             name,
+            path,
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: in_desc.spatial_reference,
@@ -205,6 +209,7 @@ impl VectorOperator for VisualPointClustering {
 
 pub struct InitializedVisualPointClustering {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     radius_model: LogScaledRadius,
@@ -252,6 +257,14 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        VisualPointClustering::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

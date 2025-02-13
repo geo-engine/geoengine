@@ -77,6 +77,7 @@ impl OperatorName for RasterScaling {
 
 pub struct InitializedRasterScalingOperator {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     result_descriptor: RasterResultDescriptor,
@@ -94,7 +95,10 @@ impl RasterOperator for RasterScaling {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let input = self.sources.initialize_sources(path, context).await?;
+        let input = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let in_desc = input.raster.result_descriptor();
 
         let out_desc = RasterResultDescriptor {
@@ -120,6 +124,7 @@ impl RasterOperator for RasterScaling {
 
         let initialized_operator = InitializedRasterScalingOperator {
             name,
+            path,
             slope: self.params.slope,
             offset: self.params.offset,
             result_descriptor: out_desc,
@@ -158,6 +163,14 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        RasterScaling::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

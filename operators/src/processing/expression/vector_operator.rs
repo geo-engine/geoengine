@@ -100,6 +100,7 @@ pub enum OutputColumn {
 
 struct InitializedVectorExpression {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
     features: Box<dyn InitializedVectorOperator>,
     expression: Arc<LinkedExpression>,
@@ -125,7 +126,10 @@ impl VectorOperator for VectorExpression {
             })?;
         }
 
-        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         // we can reuse the result descriptor, because we only add a column later on
         let mut result_descriptor = initialized_source.vector.result_descriptor().clone();
@@ -186,6 +190,7 @@ impl VectorOperator for VectorExpression {
 
         let initialized_operator = InitializedVectorExpression {
             name,
+            path,
             result_descriptor,
             features: initialized_source.vector,
             expression,
@@ -440,6 +445,14 @@ impl InitializedVectorOperator for InitializedVectorExpression {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        VectorExpression::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 

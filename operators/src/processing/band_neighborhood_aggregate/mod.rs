@@ -91,7 +91,11 @@ impl RasterOperator for BandNeighborhoodAggregate {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let source = self.sources.initialize_sources(path, context).await?.raster;
+        let source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?
+            .raster;
 
         let in_descriptor = source.result_descriptor();
 
@@ -135,6 +139,7 @@ impl RasterOperator for BandNeighborhoodAggregate {
 
         Ok(Box::new(InitializedBandNeighborhoodAggregate {
             name,
+            path,
             result_descriptor,
             source,
             aggregate: self.params.aggregate,
@@ -146,6 +151,7 @@ impl RasterOperator for BandNeighborhoodAggregate {
 
 pub struct InitializedBandNeighborhoodAggregate {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     aggregate: NeighborhoodAggregate,
@@ -169,6 +175,14 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        BandNeighborhoodAggregate::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 }
 
@@ -658,7 +672,7 @@ impl Accu for MovingAverageAccu {
         debug_assert!(
             self.input_band_tiles
                 .front()
-                .map_or(false, |t| t.0 == first_band),
+                .is_some_and(|t| t.0 == first_band),
             "unexpected first band in queue"
         );
 

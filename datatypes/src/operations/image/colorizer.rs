@@ -551,7 +551,7 @@ pub enum ColorMapper<'c> {
 }
 
 // TODO: use Fn-trait once it is stable
-impl<'c> ColorMapper<'c> {
+impl ColorMapper<'_> {
     /// Map a raster value to a color from the colorizer
     pub fn call<T>(&self, value: T) -> RgbaColor
     where

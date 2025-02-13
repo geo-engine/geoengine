@@ -211,7 +211,7 @@ where
             )
             .map(move |accum| accum?.into_collection(column_names));
 
-        return Ok(collection_stream.boxed());
+        Ok(collection_stream.boxed())
     }
 }
 

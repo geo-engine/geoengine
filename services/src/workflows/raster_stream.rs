@@ -178,11 +178,11 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        contexts::{PostgresContext, PostgresSessionContext, SimpleApplicationContext},
-        ge_context,
-        util::tests::register_ndvi_workflow_helper,
-    };
+    use crate::contexts::PostgresContext;
+    use crate::ge_context;
+    use crate::users::UserAuth;
+    use crate::util::tests::register_ndvi_workflow_helper;
+    use crate::{contexts::ApplicationContext, contexts::PostgresSessionContext};
     use actix_http::error::PayloadError;
     use actix_web_actors::ws::WebsocketContext;
     use bytes::{Bytes, BytesMut};
@@ -195,6 +195,7 @@ mod tests {
 
     use geoengine_operators::engine::WorkflowOperatorPath;
     use tokio_postgres::NoTls;
+    use uuid::Uuid;
 
     #[ge_context::test]
     async fn test_websocket_stream(app_ctx: PostgresContext<NoTls>) {
@@ -211,9 +212,10 @@ mod tests {
             input_sender.unbounded_send(Ok(buf.into())).unwrap();
         }
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
 
-        let (workflow, _workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
+        let (workflow, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
         let workflow_root_path = WorkflowOperatorPath::initialize_root();
         let initialized_operator = workflow
@@ -233,7 +235,7 @@ mod tests {
         let handler = RasterWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
             initialized_operator,
             query_rectangle,
-            ctx.query_context().unwrap(),
+            ctx.query_context(workflow_id.0, Uuid::new_v4()).unwrap(),
         )
         .await
         .unwrap();
