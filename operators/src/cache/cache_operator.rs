@@ -98,6 +98,14 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
     fn path(&self) -> WorkflowOperatorPath {
         self.source.path()
     }
+
+    fn optimize(
+        &self,
+        resolution: geoengine_datatypes::primitives::SpatialResolution,
+    ) -> Result<Box<dyn crate::engine::RasterOperator>, crate::optimization::OptimizationError>
+    {
+        self.source.optimize(resolution)
+    }
 }
 
 impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedVectorOperator>> {
@@ -152,6 +160,14 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 
     fn path(&self) -> WorkflowOperatorPath {
         self.source.path()
+    }
+
+    fn optimize(
+        &self,
+        resolution: geoengine_datatypes::primitives::SpatialResolution,
+    ) -> Result<Box<dyn crate::engine::VectorOperator>, crate::optimization::OptimizationError>
+    {
+        self.source.optimize(resolution)
     }
 }
 
