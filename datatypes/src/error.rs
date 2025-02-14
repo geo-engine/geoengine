@@ -345,6 +345,8 @@ pub enum Error {
     DuplicateBandInQueryBandSelection,
     QueryBandSelectionMustNotBeEmpty,
 
+    TilingGeoTransformOriginCoordinateMismatch,
+    TilingGeoTransformResolutionMissmatch,
     #[snafu(display("Invalid number of suffixes, expected {} found {}", expected, found))]
     InvalidNumberOfSuffixes {
         expected: usize,
@@ -362,6 +364,11 @@ pub enum Error {
     InvalidNumberOfNewNames {
         expected: usize,
         found: usize,
+    },
+    NoIntersectionWithTargetProjection {
+        srs_in: SpatialReference,
+        srs_out: SpatialReference,
+        bounds: BoundingBox2D,
     },
 }
 

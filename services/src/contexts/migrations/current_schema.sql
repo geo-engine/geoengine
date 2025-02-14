@@ -249,13 +249,40 @@ CREATE TYPE "RasterBandDescriptor" AS (
     measurement "Measurement"
 );
 
+CREATE TYPE "GridBoundingBox2D" AS (
+    y_min bigint,
+    y_max bigint,
+    x_min bigint,
+    x_max bigint
+);
+
+CREATE TYPE "GeoTransform" AS (
+    origin_coordinate "Coordinate2D",
+    x_pixel_size double precision,
+    y_pixel_size double precision
+);
+
+CREATE TYPE "SpatialGridDefinition" as (
+    geo_transform "GeoTransform",
+    grid_bounds "GridBoundingBox2D"
+);
+
+CREATE TYPE "SpatialGridDescriptorState" as ENUM (
+    'Source',
+    'Merged'
+);
+
+CREATE TYPE "SpatialGridDescriptor" aS (
+    "state" "SpatialGridDescriptorState",
+    spatial_grid "SpatialGridDefinition"
+);
+
 CREATE TYPE "RasterResultDescriptor" AS (
     data_type "RasterDataType",
     -- SpatialReferenceOption
     spatial_reference "SpatialReference",
     "time" "TimeInterval",
-    bbox "SpatialPartition2D",
-    resolution "SpatialResolution",
+    spatial_grid "SpatialGridDescriptor",
     bands "RasterBandDescriptor" []
 );
 
@@ -768,13 +795,15 @@ CREATE TYPE "DatasetLayerListingProviderDefinition" AS (
 CREATE TYPE "StacBand" AS (
     "name" text,
     no_data_value double precision,
-    data_type "RasterDataType"
+    data_type "RasterDataType",
+    pixel_size double precision
 );
 
 CREATE TYPE "StacZone" AS (
     "name" text,
-    epsg oid
-);
+    epsg oid,
+    global_native_bounds "SpatialPartition2D"
+    );
 
 CREATE TYPE "StacApiRetries" AS (
     number_of_retries bigint,

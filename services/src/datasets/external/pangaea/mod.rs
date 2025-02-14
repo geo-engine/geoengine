@@ -273,8 +273,8 @@ mod tests {
     };
     use geoengine_datatypes::dataset::{DataId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, ColumnSelection, Coordinate2D, MultiPointAccess, SpatialResolution,
-        TimeInterval, VectorQueryRectangle,
+        BoundingBox2D, ColumnSelection, Coordinate2D, MultiPointAccess, TimeInterval,
+        VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
@@ -516,12 +516,11 @@ mod tests {
             panic!("Expected Data QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
         let ctx = MockQueryContext::test_default();
 
         let result = proc.query(query_rectangle, &ctx).await;
@@ -581,12 +580,11 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
         let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPointCollection> = proc
@@ -657,12 +655,11 @@ mod tests {
             panic!("Expected MultiPolygon QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
         let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPolygonCollection> = proc
@@ -728,12 +725,11 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
         let ctx = MockQueryContext::test_default();
 
         let result: Vec<MultiPointCollection> = proc
