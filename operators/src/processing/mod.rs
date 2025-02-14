@@ -27,6 +27,7 @@ pub use band_neighborhood_aggregate::{
 pub use circle_merging_quadtree::{
     InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
 };
+pub use column_range_filter::{ColumnRangeFilter, ColumnRangeFilterParams};
 pub use downsample::{
     Downsampling, DownsamplingError, DownsamplingMethod, DownsamplingParams,
     DownsamplingResolution, InitializedDownsampling,

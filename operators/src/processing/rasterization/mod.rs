@@ -59,7 +59,7 @@ impl RasterOperator for Rasterization {
             .initialize_sources(path.clone(), context)
             .await?;
         let vector_source = initialized_source.vector;
-        let in_desc = dbg!(vector_source.result_descriptor());
+        let in_desc = vector_source.result_descriptor();
 
         let tiling_specification = context.tiling_specification();
 
