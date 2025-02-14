@@ -513,7 +513,9 @@ mod tests {
         collections::VectorDataType,
         dataset::{DataProviderId, LayerId},
         primitives::{
-            BoundingBox2D, CacheTtlSeconds, ColumnSelection, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance, TimeInterval, TimeStep, VectorQueryRectangle
+            BoundingBox2D, CacheTtlSeconds, ColumnSelection, Coordinate2D, DateTime, Duration,
+            FeatureDataType, Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance,
+            TimeInterval, TimeStep, VectorQueryRectangle,
         },
         raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
         spatial_reference::{SpatialReference, SpatialReferenceOption},
