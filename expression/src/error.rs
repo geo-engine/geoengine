@@ -15,7 +15,7 @@ pub enum ExpressionExecutionError {
 
     #[snafu(display("Cannot build dependencies"))]
     DepsBuild {
-        /// [`cargo::util::errors::CargoResult`] has a lifetime that refers to a [`cargo::util::config::Config`].
+        /// [`cargo::util::errors::CargoResult`] has a lifetime that refers to a [`cargo::config::Config`].
         /// This is a debug print.
         debug: String,
     },
@@ -34,6 +34,9 @@ pub enum ExpressionExecutionError {
 
     #[snafu(display("Cannot load expression for execution"))]
     LinkExpression { source: libloading::Error },
+
+    #[snafu(display("Error during compilation of expression."))]
+    CompilationFailed { stderr: String, stdout: String },
 
     #[snafu(display("Unknown function in expression: {name}"))]
     LinkedFunctionNotFound {

@@ -1,20 +1,21 @@
 pub mod api;
 pub mod cli;
+pub mod config;
 pub mod contexts;
 pub mod datasets;
 pub mod error;
 pub mod layers;
 pub mod machine_learning;
+pub mod permissions;
 pub mod projects;
+pub mod quota;
 pub mod server;
 pub mod stac;
 pub mod tasks;
+pub mod users;
 #[macro_use]
 pub mod util;
 pub mod workflows;
-
-/// TODO: merge with rest of the code
-pub mod pro;
 
 pub use geoengine_datatypes::test_data;
 

@@ -86,10 +86,7 @@ impl SpatialReference {
 
     /// Return the area of use in EPSG:4326 projection
     pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
-        let proj_string = match self.proj_string() {
-            Ok(s) => s,
-            Err(e) => return Err(e),
-        };
+        let proj_string = self.proj_string()?;
 
         let proj = Proj::new(&proj_string).ok_or(error::Error::InvalidProjDefinition {
             proj_definition: proj_string.clone(),
@@ -160,7 +157,7 @@ impl Serialize for SpatialReference {
 /// Helper struct for deserializing a `SpatialReferencce`
 struct SpatialReferenceDeserializeVisitor;
 
-impl<'de> Visitor<'de> for SpatialReferenceDeserializeVisitor {
+impl Visitor<'_> for SpatialReferenceDeserializeVisitor {
     type Value = SpatialReference;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
@@ -362,7 +359,7 @@ impl From<SpatialReferenceOption> for Option<SpatialReference> {
 /// Helper struct for deserializing a `SpatialReferenceOption`
 struct SpatialReferenceOptionDeserializeVisitor;
 
-impl<'de> Visitor<'de> for SpatialReferenceOptionDeserializeVisitor {
+impl Visitor<'_> for SpatialReferenceOptionDeserializeVisitor {
     type Value = SpatialReferenceOption;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {

@@ -1,10 +1,10 @@
 use super::storage::MetaDataDefinition;
 use super::DatasetName;
 use crate::api::model::operators::TypedResultDescriptor;
+use crate::config::{get_config_element, DatasetService};
 use crate::datasets::storage::{validate_tags, Dataset};
 use crate::error::Result;
 use crate::projects::Symbology;
-use crate::util::config::{get_config_element, DatasetService};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};

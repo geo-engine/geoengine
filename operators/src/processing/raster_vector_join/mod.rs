@@ -232,6 +232,7 @@ impl VectorOperator for RasterVectorJoin {
 
         Ok(InitializedRasterVectorJoin {
             name,
+            path,
             result_descriptor,
             vector_source,
             raster_sources,
@@ -252,6 +253,7 @@ pub struct RasterInput {
 
 pub struct InitializedRasterVectorJoin {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
@@ -339,6 +341,14 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        RasterVectorJoin::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

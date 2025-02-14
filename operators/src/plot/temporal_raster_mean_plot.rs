@@ -64,7 +64,10 @@ impl PlotOperator for MeanRasterPixelValuesOverTime {
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initalized_sources = self.sources.initialize_sources(path, context).await?;
+        let initalized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let raster = initalized_sources.raster;
 
         let in_desc = raster.result_descriptor().clone();

@@ -84,6 +84,7 @@ impl WrapWithProjectionAndResample {
             // TODO: update the workflow operator path in all operators of the graph!
             let irp = InitializedRasterReprojection::try_new_with_input(
                 CanonicOperatorName::from(&reprojected_workflow),
+                WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
                 reprojection_params,
                 self.initialized_operator,
                 tiling_spec,
@@ -178,6 +179,7 @@ impl WrapWithProjectionAndResample {
             // TODO: update the workflow operator path in all operators of the graph!
             let iip = InitializedInterpolation::new_with_source_and_params(
                 CanonicOperatorName::from(&iop),
+                WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
                 self.initialized_operator,
                 &interpolation_params,
                 tiling_spec,

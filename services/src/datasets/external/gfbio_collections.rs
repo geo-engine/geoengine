@@ -429,10 +429,10 @@ impl GfbioCollectionsDataProvider {
 
         let stmt = conn
             .prepare(&format!(
-                r#"
+                "
             SELECT surrogate_key
             FROM {}.abcd_datasets
-            WHERE dataset_id = $1;"#,
+            WHERE dataset_id = $1;",
                 self.abcd_db_config.schema
             ))
             .await?;
@@ -815,7 +815,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{datasets::listing::Provenance, util::config};
+    use crate::{config, datasets::listing::Provenance};
     use bb8_postgres::bb8::ManageConnection;
     use geoengine_datatypes::{
         dataset::ExternalDataId,

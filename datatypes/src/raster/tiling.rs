@@ -283,7 +283,6 @@ mod tests {
             .coordinate_to_grid_idx_2d((12.477_743_625_640_87, 43.881_288_170_814_514).into());
 
         let grid_bounds = GridBoundingBox2D::new_unchecked(ul_idx, lr_idx);
-        dbg!(grid_bounds);
 
         let tiles = strat
             .tile_information_iterator_from_grid_bounds(grid_bounds)

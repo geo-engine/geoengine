@@ -129,7 +129,7 @@ impl OperatorName for MockDatasetDataSource {
 impl VectorOperator for MockDatasetDataSource {
     async fn _initialize(
         self: Box<Self>,
-        _path: WorkflowOperatorPath,
+        path: WorkflowOperatorPath,
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let data_id = context.resolve_named_data(&self.params.data).await?;
@@ -137,6 +137,7 @@ impl VectorOperator for MockDatasetDataSource {
 
         Ok(InitializedMockDatasetDataSource {
             name: CanonicOperatorName::from(&self),
+            path,
             data: self.params.data.clone(),
             result_descriptor: loading_info.result_descriptor().await?,
             loading_info,
@@ -155,6 +156,7 @@ impl OperatorData for MockDatasetDataSource {
 
 struct InitializedMockDatasetDataSource<R: ResultDescriptor, Q> {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     data: NamedData,
     result_descriptor: R,
     loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, R, Q>>,
@@ -179,6 +181,14 @@ impl InitializedVectorOperator
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        MockDatasetDataSource::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

@@ -296,9 +296,7 @@ where
             + self
                 .types
                 .iter()
-                .map(|(k, v)| {
-                    std::mem::size_of_val(k) + k.as_bytes().len() + std::mem::size_of_val(v)
-                })
+                .map(|(k, v)| std::mem::size_of_val(k) + k.len() + std::mem::size_of_val(v))
                 .sum::<usize>();
 
         let geometry_size =

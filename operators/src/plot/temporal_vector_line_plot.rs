@@ -54,7 +54,10 @@ impl PlotOperator for FeatureAttributeValuesOverTime {
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let source = initialized_source.vector;
         let result_descriptor = source.result_descriptor();
         let columns: &HashMap<String, VectorColumnInfo> = &result_descriptor.columns;

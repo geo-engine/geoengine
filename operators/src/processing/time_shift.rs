@@ -175,7 +175,10 @@ impl VectorOperator for TimeShift {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let init_sources = self.sources.initialize_sources(path, context).await?;
+        let init_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         match (init_sources.source, self.params.clone()) {
             (
@@ -193,6 +196,7 @@ impl VectorOperator for TimeShift {
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     name,
+                    path,
                     params: self.params.clone(),
                     source,
                     result_descriptor,
@@ -214,6 +218,7 @@ impl VectorOperator for TimeShift {
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     name,
+                    path,
                     params: self.params.clone(),
                     source,
                     result_descriptor,
@@ -230,6 +235,7 @@ impl VectorOperator for TimeShift {
 
                 Ok(Box::new(InitializedVectorTimeShift {
                     name,
+                    path,
                     params: self.params.clone(),
                     source,
                     result_descriptor,
@@ -255,7 +261,10 @@ impl RasterOperator for TimeShift {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let init_sources = self.sources.initialize_sources(path, context).await?;
+        let init_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         match (init_sources.source, self.params.clone()) {
             (
@@ -273,6 +282,7 @@ impl RasterOperator for TimeShift {
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
+                    path,
                     params: self.params.clone(),
                     source,
                     result_descriptor,
@@ -294,6 +304,7 @@ impl RasterOperator for TimeShift {
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
+                    path,
                     params: self.params.clone(),
                     source,
                     result_descriptor,
@@ -310,6 +321,7 @@ impl RasterOperator for TimeShift {
 
                 Ok(Box::new(InitializedRasterTimeShift {
                     name,
+                    path,
                     params: self.params.clone(),
                     source,
                     result_descriptor,
@@ -340,6 +352,7 @@ fn shift_result_descriptor<R: ResultDescriptor, S: TimeShiftOperation>(
 
 pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     params: TimeShiftParams,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
@@ -348,6 +361,7 @@ pub struct InitializedVectorTimeShift<Shift: TimeShiftOperation> {
 
 pub struct InitializedRasterTimeShift<Shift: TimeShiftOperation> {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     params: TimeShiftParams,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
@@ -375,6 +389,14 @@ impl<Shift: TimeShiftOperation + 'static> InitializedVectorOperator
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        TimeShift::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(
@@ -411,6 +433,14 @@ impl<Shift: TimeShiftOperation + 'static> InitializedRasterOperator
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        TimeShift::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

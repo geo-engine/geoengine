@@ -244,7 +244,7 @@ macro_rules! impl_mock_raster_source {
         impl RasterOperator for $newtype {
             async fn _initialize(
                 self: Box<Self>,
-                _path: WorkflowOperatorPath,
+                path: WorkflowOperatorPath,
                 context: &dyn crate::engine::ExecutionContext,
             ) -> Result<Box<dyn InitializedRasterOperator>> {
                 let name = CanonicOperatorName::from(&self);
@@ -266,6 +266,7 @@ macro_rules! impl_mock_raster_source {
 
                 Ok(InitializedMockRasterSource {
                     name,
+                    path,
                     result_descriptor: self.params.result_descriptor,
                     data,
                     tiling_specification,
@@ -295,6 +296,7 @@ impl_mock_raster_source!(f64);
 
 pub struct InitializedMockRasterSource<T: Pixel> {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     data: Vec<RasterTile2D<T>>,
     tiling_specification: TilingSpecification,
@@ -324,6 +326,14 @@ where
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        MockRasterSource::<u8>::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

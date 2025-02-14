@@ -1,9 +1,9 @@
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{parse_bbox, parse_time};
+use crate::config;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error;
 use crate::error::Result;
-use crate::util::config;
 use crate::util::parsing::parse_spatial_resolution;
 use crate::util::server::connection_closed;
 use crate::workflows::registry::WorkflowRegistry;
@@ -108,7 +108,8 @@ async fn get_plot_handler<C: ApplicationContext>(
     );
 
     let ctx = app_ctx.session_context(session);
-    let workflow = ctx.db().load_workflow(&WorkflowId(id.into_inner())).await?;
+    let workflow_id = WorkflowId(id.into_inner());
+    let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow.operator.get_plot()?;
 
@@ -156,7 +157,7 @@ async fn get_plot_handler<C: ApplicationContext>(
 
     let processor = initialized.query_processor()?;
 
-    let mut query_ctx = ctx.query_context()?;
+    let mut query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
 
@@ -211,8 +212,10 @@ pub struct WrappedPlotOutput {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, SimpleApplicationContext};
+    use crate::contexts::PostgresContext;
+    use crate::contexts::Session;
     use crate::ge_context;
+    use crate::users::UserAuth;
     use crate::util::tests::{
         check_allowed_http_methods, read_body_json, read_body_string, send_test_request,
     };
@@ -279,7 +282,9 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "json_tiling_spec")]
     async fn json(app_ctx: PostgresContext<NoTls>) {
-        let session_id = app_ctx.default_session_id().await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Statistics {
@@ -294,9 +299,7 @@ mod tests {
         };
 
         let id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
+            .session_context(session.clone())
             .db()
             .register_workflow(workflow)
             .await
@@ -345,7 +348,9 @@ mod tests {
 
     #[ge_context::test(tiling_spec = "json_vega_tiling_spec")]
     async fn json_vega(app_ctx: PostgresContext<NoTls>) {
-        let session_id = app_ctx.default_session_id().await;
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let session_id = session.id();
 
         let workflow = Workflow {
             operator: Histogram {
@@ -365,9 +370,7 @@ mod tests {
         };
 
         let id = app_ctx
-            .default_session_context()
-            .await
-            .unwrap()
+            .session_context(session.clone())
             .db()
             .register_workflow(workflow)
             .await
@@ -478,8 +481,10 @@ mod tests {
             app_ctx: PostgresContext<NoTls>,
             method: Method,
         ) -> ServiceResponse {
-            let ctx = app_ctx.default_session_context().await.unwrap();
-            let session_id = app_ctx.default_session_id().await;
+            let session = app_ctx.create_anonymous_session().await.unwrap();
+            let ctx = app_ctx.session_context(session.clone());
+
+            let session_id = session.id();
 
             let workflow = Workflow {
                 operator: Statistics {

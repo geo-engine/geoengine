@@ -79,9 +79,13 @@ impl RasterOperator for Downsampling {
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
-        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         InitializedDownsampling::new_with_source_and_params(
             name,
+            path,
             initialized_source.raster,
             self.params,
             context.tiling_specification(),
@@ -94,6 +98,7 @@ impl RasterOperator for Downsampling {
 
 pub struct InitializedDownsampling<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     output_result_descriptor: RasterResultDescriptor,
     raster_source: O,
     sampling_method: DownsamplingMethod,
@@ -103,6 +108,7 @@ pub struct InitializedDownsampling<O: InitializedRasterOperator> {
 impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
     pub fn new_with_source_and_params(
         name: CanonicOperatorName,
+        path: WorkflowOperatorPath,
         raster_source: O,
         params: DownsamplingParams,
         tiling_specification: TilingSpecification,
@@ -160,6 +166,7 @@ impl<O: InitializedRasterOperator> InitializedDownsampling<O> {
 
         Ok(InitializedDownsampling {
             name,
+            path,
             output_result_descriptor: out_descriptor,
             raster_source,
             sampling_method: params.sampling_method,
@@ -192,6 +199,14 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Downsampling::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

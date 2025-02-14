@@ -235,7 +235,6 @@ impl_cache_element_subtype!(MultiLineString, MultiLineString);
 impl_cache_element_subtype!(MultiPolygon, MultiPolygon);
 
 /// Our own tile stream that "owns" the data (more precisely a reference to the data)
-
 pub trait CacheElementSpatialBounds {
     fn filter_cache_element_entries(
         &self,

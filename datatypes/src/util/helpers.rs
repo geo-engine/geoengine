@@ -7,16 +7,16 @@ use rayon::iter::{
 macro_rules! assert_approx_eq {
     ($left:expr, $right:expr $(,)?) => ({
         if !$crate::util::helpers::approx_eq_floats($left, $right) {
-            panic!(r#"assertion failed: `(left == right)`
-            left: `{:?}`,
-           right: `{:?}`"#, $left, $right)
+            panic!("assertion failed: `(left == right)`
+  left: `{:?}`,
+ right: `{:?}`", $left, $right)
         }
     });
     ($left:expr, $right:expr, $($arg:tt)+) => ({
         if !$crate::util::helpers::approx_eq_floats($left, $right) {
-            panic!(r#"assertion failed: `(left == right)`
+            panic!("assertion failed: `(left == right)`
   left: `{:?}`,
- right: `{:?}`: {}"#, $left, $right,
+ right: `{:?}`: {}", $left, $right,
                            format_args!($($arg)+))
         }
     });

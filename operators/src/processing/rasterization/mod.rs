@@ -26,7 +26,6 @@ use geoengine_datatypes::raster::{
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
-
 use typetag::serde;
 
 /// An operator that rasterizes vector data
@@ -55,7 +54,10 @@ impl RasterOperator for Rasterization {
     ) -> util::Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let vector_source = initialized_source.vector;
         let in_desc = dbg!(vector_source.result_descriptor());
 
@@ -92,6 +94,7 @@ impl RasterOperator for Rasterization {
 
         Ok(InitializedGridRasterization {
             name,
+            path,
             source: vector_source,
             result_descriptor: out_desc,
             tiling_specification,
@@ -104,6 +107,7 @@ impl RasterOperator for Rasterization {
 
 pub struct InitializedGridRasterization {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
@@ -127,6 +131,14 @@ impl InitializedRasterOperator for InitializedGridRasterization {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Rasterization::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

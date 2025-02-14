@@ -1,9 +1,9 @@
 use flexi_logger::writers::{FileLogWriter, FileLogWriterHandle};
 use flexi_logger::{Age, Cleanup, Criterion, FileSpec, Naming, WriteMode};
 pub use geoengine_operators::processing::initialize_expression_dependencies;
+use geoengine_services::config;
+use geoengine_services::config::get_config_element;
 use geoengine_services::error::Result;
-use geoengine_services::util::config;
-use geoengine_services::util::config::get_config_element;
 use tracing::Subscriber;
 use tracing_subscriber::field::RecordFields;
 use tracing_subscriber::fmt::format::{DefaultFields, Writer};
@@ -52,8 +52,7 @@ pub async fn start_server() -> Result<()> {
     let registry = registry.with(file_layer);
 
     // create a telemetry layer for output to opentelemetry and add it to the registry
-    let open_telemetry_config: geoengine_services::pro::util::config::OpenTelemetry =
-        get_config_element()?;
+    let open_telemetry_config: geoengine_services::config::OpenTelemetry = get_config_element()?;
     let opentelemetry_layer = if open_telemetry_config.enabled {
         Some(open_telemetry_layer(&open_telemetry_config)?)
     } else {
@@ -68,7 +67,7 @@ pub async fn start_server() -> Result<()> {
 }
 
 fn open_telemetry_layer<S>(
-    open_telemetry_config: &geoengine_services::pro::util::config::OpenTelemetry,
+    open_telemetry_config: &geoengine_services::config::OpenTelemetry,
 ) -> Result<
     tracing_opentelemetry::OpenTelemetryLayer<
         S,
@@ -78,22 +77,24 @@ fn open_telemetry_layer<S>(
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
-    use opentelemetry::trace::TracerProvider;
+    use opentelemetry::trace::TracerProvider as _;
     use opentelemetry_otlp::WithExportConfig;
-    let exporter = opentelemetry_otlp::new_exporter()
-        .tonic()
-        .with_endpoint(open_telemetry_config.endpoint.to_string());
-    let tracer = opentelemetry_otlp::new_pipeline()
-        .tracing()
-        .with_exporter(exporter)
-        .with_trace_config(opentelemetry_sdk::trace::Config::default().with_resource(
-            opentelemetry_sdk::Resource::new(vec![opentelemetry::KeyValue::new(
-                "service.name",
-                "Geo Engine",
-            )]),
-        ))
-        .install_simple()?
-        .tracer("Geo Engine");
+    use opentelemetry_sdk::trace::Sampler;
+    use opentelemetry_sdk::trace::TracerProvider;
+    let exporter = opentelemetry_otlp::SpanExporter::builder()
+        .with_tonic()
+        .with_endpoint(open_telemetry_config.endpoint.to_string())
+        .build()?;
+    let provider = TracerProvider::builder()
+        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+        .with_sampler(Sampler::AlwaysOn)
+        .with_resource(opentelemetry_sdk::Resource::new(vec![
+            opentelemetry::KeyValue::new("service.name", "Geo Engine"),
+        ]))
+        .build();
+
+    let tracer = provider.tracer("Geo Engine");
+
     let opentelemetry = tracing_opentelemetry::layer().with_tracer(tracer);
     Ok(opentelemetry)
 }

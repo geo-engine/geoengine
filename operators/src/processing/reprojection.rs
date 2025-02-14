@@ -73,6 +73,7 @@ impl OperatorName for Reprojection {
 
 pub struct InitializedVectorReprojection {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
     source: Box<dyn InitializedVectorOperator>,
     source_srs: SpatialReference,
@@ -81,6 +82,7 @@ pub struct InitializedVectorReprojection {
 
 pub struct InitializedRasterReprojection<O: InitializedRasterOperator> {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     params: ReprojectionParams,
     source: O,
@@ -98,6 +100,7 @@ impl InitializedVectorReprojection {
     /// This function errors if the source's bounding box cannot be reprojected to the target's `SpatialReference`.
     pub fn try_new_with_input(
         name: CanonicOperatorName,
+        path: WorkflowOperatorPath,
         params: ReprojectionParams,
         source_vector_operator: Box<dyn InitializedVectorOperator>,
     ) -> Result<Self> {
@@ -125,6 +128,7 @@ impl InitializedVectorReprojection {
 
         Ok(InitializedVectorReprojection {
             name,
+            path,
             result_descriptor: out_desc,
             source: source_vector_operator,
             source_srs: in_srs,
@@ -136,6 +140,7 @@ impl InitializedVectorReprojection {
 impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
     pub fn try_new_with_input(
         name: CanonicOperatorName,
+        path: WorkflowOperatorPath,
         params: ReprojectionParams,
         source_raster_operator: O,
         tiling_spec: TilingSpecification,
@@ -171,6 +176,7 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
 
         Ok(InitializedRasterReprojection {
             name,
+            path,
             params,
             result_descriptor: out_desc,
             source: source_raster_operator,
@@ -227,10 +233,13 @@ impl VectorOperator for Reprojection {
                     found: "Raster".to_owned(),
                 })?;
 
-        let initialized_source = vector_source.initialize_sources(path, context).await?;
+        let initialized_source = vector_source
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         let initialized_operator = InitializedVectorReprojection::try_new_with_input(
             name,
+            path,
             self.params,
             initialized_source.vector,
         )?;
@@ -309,6 +318,14 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Reprojection::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(
@@ -423,10 +440,13 @@ impl RasterOperator for Reprojection {
                     found: "Vector".to_owned(),
                 })?;
 
-        let initialized_source = raster_source.initialize_sources(path, context).await?;
+        let initialized_source = raster_source
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         let initialized_operator = InitializedRasterReprojection::try_new_with_input(
             name,
+            path,
             self.params,
             initialized_source.raster,
             context.tiling_specification(),
@@ -575,6 +595,14 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Reprojection::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(
@@ -1824,7 +1852,7 @@ mod tests {
 
         assert_eq!(
             out_spatial_grid.geo_transform.spatial_resolution(),
-            SpatialResolution::new_unchecked(14212.246793017477, 14212.246793017477)
+            SpatialResolution::new_unchecked(14_212.246_793_017_477, 14_212.246_793_017_477)
         );
 
         /*

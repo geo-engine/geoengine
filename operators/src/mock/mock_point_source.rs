@@ -113,7 +113,7 @@ impl OperatorData for MockPointSource {
 impl VectorOperator for MockPointSource {
     async fn _initialize(
         self: Box<Self>,
-        _path: WorkflowOperatorPath,
+        path: WorkflowOperatorPath,
         _context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let bounds = match self.params.spatial_bounds {
@@ -126,6 +126,7 @@ impl VectorOperator for MockPointSource {
 
         Ok(InitializedMockPointSource {
             name: CanonicOperatorName::from(&self),
+            path,
             spatial_bounds: self.params.spatial_bounds.clone(),
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
@@ -144,6 +145,7 @@ impl VectorOperator for MockPointSource {
 
 pub struct InitializedMockPointSource {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     spatial_bounds: SpatialBoundsDerive,
     result_descriptor: VectorResultDescriptor,
     points: Vec<Coordinate2D>,
@@ -166,6 +168,14 @@ impl InitializedVectorOperator for InitializedMockPointSource {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        MockPointSource::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

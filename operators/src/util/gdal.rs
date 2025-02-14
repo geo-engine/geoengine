@@ -452,33 +452,8 @@ pub fn raster_descriptor_from_dataset_and_sref(
     })
 }
 
-// TODO: use https://github.com/georust/gdal/pull/271 when merged and released
 fn measurement_from_rasterband(dataset: &Dataset, band: usize) -> Result<Measurement> {
-    unsafe fn _string(raw_ptr: *const std::os::raw::c_char) -> String {
-        let c_str = std::ffi::CStr::from_ptr(raw_ptr);
-        c_str.to_string_lossy().into_owned()
-    }
-
-    unsafe fn _last_null_pointer_err(method_name: &'static str) -> gdal::errors::GdalError {
-        let last_err_msg = _string(gdal_sys::CPLGetLastErrorMsg());
-        gdal_sys::CPLErrorReset();
-        gdal::errors::GdalError::NullPointer {
-            method_name,
-            msg: last_err_msg,
-        }
-    }
-
-    let unit: String = unsafe {
-        // taken from `pub fn rasterband(&self, band_index: isize) -> Result<RasterBand>`
-        let c_band =
-            gdal_sys::GDALGetRasterBand(dataset.c_dataset(), band as isize as std::os::raw::c_int);
-        if c_band.is_null() {
-            Err(_last_null_pointer_err("GDALGetRasterBand"))?;
-        }
-
-        let str_ptr = gdal_sys::GDALGetRasterUnitType(c_band);
-        Result::<String>::Ok(_string(str_ptr))
-    }?;
+    let unit = dataset.rasterband(band)?.unit();
 
     if unit.trim().is_empty() || unit == "no unit" {
         return Ok(Measurement::Unitless);

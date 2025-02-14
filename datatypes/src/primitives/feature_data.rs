@@ -87,7 +87,7 @@ pub enum FeatureDataRef<'f> {
     DateTime(DateTimeDataRef<'f>),
 }
 
-impl<'f> FeatureDataRef<'f> {
+impl FeatureDataRef<'_> {
     /// Computes JSON value lists for data elements
     pub fn json_values(&self) -> Box<dyn Iterator<Item = serde_json::Value> + '_> {
         match self {
@@ -255,7 +255,7 @@ impl<'f> From<FloatOptionsIter<'f>> for FloatOptionsParIter<'f> {
     }
 }
 
-impl<'f> Iterator for FloatOptionsIter<'f> {
+impl Iterator for FloatOptionsIter<'_> {
     type Item = Option<f64>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -281,9 +281,9 @@ impl<'f> Iterator for FloatOptionsIter<'f> {
     }
 }
 
-impl<'f> ExactSizeIterator for FloatOptionsIter<'f> {}
+impl ExactSizeIterator for FloatOptionsIter<'_> {}
 
-impl<'f> DoubleEndedIterator for FloatOptionsIter<'f> {
+impl DoubleEndedIterator for FloatOptionsIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         match self {
             Self::Category(iter) => iter.next_back(),
@@ -296,7 +296,7 @@ impl<'f> DoubleEndedIterator for FloatOptionsIter<'f> {
     }
 }
 
-impl<'f> ParallelIterator for FloatOptionsParIter<'f> {
+impl ParallelIterator for FloatOptionsParIter<'_> {
     type Item = Option<f64>;
 
     fn drive_unindexed<C>(self, consumer: C) -> C::Result
@@ -357,7 +357,7 @@ impl<'f> Producer for FloatOptionsParIter<'f> {
     }
 }
 
-impl<'f> IndexedParallelIterator for FloatOptionsParIter<'f> {
+impl IndexedParallelIterator for FloatOptionsParIter<'_> {
     fn len(&self) -> usize {
         self.0.len()
     }
@@ -825,7 +825,7 @@ impl<'f> BoolDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
+impl Iterator for BoolDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -849,9 +849,9 @@ impl<'f> Iterator for BoolDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> ExactSizeIterator for BoolDataRefFloatOptionIter<'f> {}
+impl ExactSizeIterator for BoolDataRefFloatOptionIter<'_> {}
 
-impl<'f> DoubleEndedIterator for BoolDataRefFloatOptionIter<'f> {
+impl DoubleEndedIterator for BoolDataRefFloatOptionIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index >= self.length {
             return None;
@@ -868,7 +868,7 @@ impl<'f> DoubleEndedIterator for BoolDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> ParallelIterator for BoolDataRefFloatOptionIter<'f> {
+impl ParallelIterator for BoolDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     fn drive_unindexed<C>(self, consumer: C) -> C::Result
@@ -879,7 +879,7 @@ impl<'f> ParallelIterator for BoolDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> Producer for BoolDataRefFloatOptionIter<'f> {
+impl Producer for BoolDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     type IntoIter = Self;
@@ -908,7 +908,7 @@ impl<'f> Producer for BoolDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> IndexedParallelIterator for BoolDataRefFloatOptionIter<'f> {
+impl IndexedParallelIterator for BoolDataRefFloatOptionIter<'_> {
     fn len(&self) -> usize {
         ExactSizeIterator::len(self)
     }
@@ -1017,7 +1017,7 @@ impl<'f> DateTimeDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
+impl Iterator for DateTimeDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1041,9 +1041,9 @@ impl<'f> Iterator for DateTimeDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> ExactSizeIterator for DateTimeDataRefFloatOptionIter<'f> {}
+impl ExactSizeIterator for DateTimeDataRefFloatOptionIter<'_> {}
 
-impl<'f> DoubleEndedIterator for DateTimeDataRefFloatOptionIter<'f> {
+impl DoubleEndedIterator for DateTimeDataRefFloatOptionIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index >= self.length {
             return None;
@@ -1060,7 +1060,7 @@ impl<'f> DoubleEndedIterator for DateTimeDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> ParallelIterator for DateTimeDataRefFloatOptionIter<'f> {
+impl ParallelIterator for DateTimeDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     fn drive_unindexed<C>(self, consumer: C) -> C::Result
@@ -1071,7 +1071,7 @@ impl<'f> ParallelIterator for DateTimeDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> Producer for DateTimeDataRefFloatOptionIter<'f> {
+impl Producer for DateTimeDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     type IntoIter = Self;
@@ -1100,7 +1100,7 @@ impl<'f> Producer for DateTimeDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> IndexedParallelIterator for DateTimeDataRefFloatOptionIter<'f> {
+impl IndexedParallelIterator for DateTimeDataRefFloatOptionIter<'_> {
     fn len(&self) -> usize {
         ExactSizeIterator::len(self)
     }
@@ -1233,7 +1233,7 @@ pub struct TextDataRef<'f> {
     valid_bitmap: Option<&'f NullBuffer>,
 }
 
-impl<'f> AsRef<[u8]> for TextDataRef<'f> {
+impl AsRef<[u8]> for TextDataRef<'_> {
     fn as_ref(&self) -> &[u8] {
         self.data_buffer
     }
@@ -1346,7 +1346,7 @@ impl<'r> TextDataRefStringIter<'r> {
     }
 }
 
-impl<'r> Iterator for TextDataRefStringIter<'r> {
+impl Iterator for TextDataRefStringIter<'_> {
     type Item = String;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1380,7 +1380,7 @@ impl<'r> TextDataRefFloatOptionIter<'r> {
     }
 }
 
-impl<'r> Iterator for TextDataRefFloatOptionIter<'r> {
+impl Iterator for TextDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -1406,9 +1406,9 @@ impl<'r> Iterator for TextDataRefFloatOptionIter<'r> {
     }
 }
 
-impl<'f> ExactSizeIterator for TextDataRefFloatOptionIter<'f> {}
+impl ExactSizeIterator for TextDataRefFloatOptionIter<'_> {}
 
-impl<'f> DoubleEndedIterator for TextDataRefFloatOptionIter<'f> {
+impl DoubleEndedIterator for TextDataRefFloatOptionIter<'_> {
     fn next_back(&mut self) -> Option<Self::Item> {
         if self.index >= self.length {
             return None;
@@ -1427,7 +1427,7 @@ impl<'f> DoubleEndedIterator for TextDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> ParallelIterator for TextDataRefFloatOptionIter<'f> {
+impl ParallelIterator for TextDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     fn drive_unindexed<C>(self, consumer: C) -> C::Result
@@ -1438,7 +1438,7 @@ impl<'f> ParallelIterator for TextDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> Producer for TextDataRefFloatOptionIter<'f> {
+impl Producer for TextDataRefFloatOptionIter<'_> {
     type Item = Option<f64>;
 
     type IntoIter = Self;
@@ -1467,7 +1467,7 @@ impl<'f> Producer for TextDataRefFloatOptionIter<'f> {
     }
 }
 
-impl<'f> IndexedParallelIterator for TextDataRefFloatOptionIter<'f> {
+impl IndexedParallelIterator for TextDataRefFloatOptionIter<'_> {
     fn len(&self) -> usize {
         ExactSizeIterator::len(self)
     }

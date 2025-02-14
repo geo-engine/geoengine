@@ -114,7 +114,7 @@ where
     }
 }
 
-impl<'g, P> Reproject<P> for MultiPointRef<'g>
+impl<P> Reproject<P> for MultiPointRef<'_>
 where
     P: CoordinateProjection,
 {
@@ -154,7 +154,7 @@ where
     }
 }
 
-impl<'g, P> Reproject<P> for MultiLineStringRef<'g>
+impl<P> Reproject<P> for MultiLineStringRef<'_>
 where
     P: CoordinateProjection,
 {
@@ -188,7 +188,7 @@ where
     }
 }
 
-impl<'g, P> Reproject<P> for MultiPolygonRef<'g>
+impl<P> Reproject<P> for MultiPolygonRef<'_>
 where
     P: CoordinateProjection,
 {
@@ -449,9 +449,7 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     let proj_bbox_option: Option<BoundingBox2D> =
         reproject_spatial_grid_bounds(spatial_grid, projector)?;
 
-    let proj_bbox = if let Some(p) = proj_bbox_option {
-        p
-    } else {
+    let Some(proj_bbox) = proj_bbox_option else {
         return Err(error::Error::NoIntersectionWithTargetProjection {
             srs_in: projector.source_srs(),
             srs_out: projector.target_srs(),

@@ -1,6 +1,6 @@
 use super::{
     CreateSpan, InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
-    MockQueryContext, WorkflowOperatorPath,
+    MockQueryContext,
 };
 use crate::cache::shared_cache::SharedCache;
 use crate::engine::{
@@ -41,21 +41,18 @@ pub trait ExecutionContext: Send
         &self,
         op: Box<dyn InitializedRasterOperator>,
         span: CreateSpan,
-        path: WorkflowOperatorPath, // TODO: remove and allow operators to tell its path
     ) -> Box<dyn InitializedRasterOperator>;
 
     fn wrap_initialized_vector_operator(
         &self,
         op: Box<dyn InitializedVectorOperator>,
         span: CreateSpan,
-        path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator>;
 
     fn wrap_initialized_plot_operator(
         &self,
         op: Box<dyn InitializedPlotOperator>,
         span: CreateSpan,
-        path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator>;
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
@@ -207,7 +204,6 @@ impl ExecutionContext for MockExecutionContext {
         &self,
         op: Box<dyn InitializedRasterOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedRasterOperator> {
         op
     }
@@ -216,7 +212,6 @@ impl ExecutionContext for MockExecutionContext {
         &self,
         op: Box<dyn InitializedVectorOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator> {
         op
     }
@@ -225,7 +220,6 @@ impl ExecutionContext for MockExecutionContext {
         &self,
         op: Box<dyn InitializedPlotOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator> {
         op
     }
@@ -419,25 +413,22 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
         &self,
         op: Box<dyn InitializedRasterOperator>,
         span: CreateSpan,
-        path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedRasterOperator> {
-        InitializedOperatorWrapper::new(op, span, path).boxed()
+        InitializedOperatorWrapper::new(op, span).boxed()
     }
 
     fn wrap_initialized_vector_operator(
         &self,
         op: Box<dyn InitializedVectorOperator>,
         span: CreateSpan,
-        path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedVectorOperator> {
-        InitializedOperatorWrapper::new(op, span, path).boxed()
+        InitializedOperatorWrapper::new(op, span).boxed()
     }
 
     fn wrap_initialized_plot_operator(
         &self,
         op: Box<dyn InitializedPlotOperator>,
         _span: CreateSpan,
-        _path: WorkflowOperatorPath,
     ) -> Box<dyn InitializedPlotOperator> {
         op
     }

@@ -115,9 +115,7 @@ impl PlotOperator for Statistics {
                 }
 
                 let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-                let bbox = partitions_extent(
-                    in_descriptors.iter().map(|d| Some(d.spatial_bounds())), // Fixme: remove Some() when ...
-                );
+                let bbox = partitions_extent(in_descriptors.iter().map(|d| d.spatial_bounds()));
 
                 let initialized_operator = InitializedStatistics::new(
                     name,

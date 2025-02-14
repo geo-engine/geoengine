@@ -1,9 +1,9 @@
 use crate::{
-    error::{self, ExpressionExecutionError},
+    error::{self, CompilationFailed, Compiler, ExpressionExecutionError},
     ExpressionAst, ExpressionDependencies,
 };
 use libloading::{library_filename, Library, Symbol};
-use snafu::ResultExt;
+use snafu::{ensure, ResultExt};
 use std::{
     borrow::Cow,
     fs::File,
@@ -50,8 +50,7 @@ impl LinkedExpression {
         let input_filename = create_source_code_file(library_folder.path(), &code)
             .context(error::CannotGenerateSourceCodeFile)?;
 
-        let library_filename = compile_file(library_folder.path(), &input_filename, dependencies)
-            .context(error::Compiler)?;
+        let library_filename = compile_file(library_folder.path(), &input_filename, dependencies)?;
 
         let library = unsafe { Library::new(library_filename) }.context(error::LinkExpression)?;
 
@@ -142,7 +141,7 @@ fn compile_file(
     library_folder: &Path,
     input_filename: &Path,
     dependencies: &ExpressionDependencies,
-) -> Result<PathBuf, std::io::Error> {
+) -> Result<PathBuf> {
     let output_filename = library_folder.join(library_filename("expression"));
 
     let mut command = Command::new("rustc");
@@ -157,11 +156,20 @@ fn compile_file(
         command.args(["-A", "warnings"]);
     }
 
-    command
+    let output = command
         .arg("-o")
         .arg(&output_filename)
         .arg(input_filename)
-        .status()?;
+        .output()
+        .context(Compiler)?;
+
+    ensure!(
+        output.status.success(),
+        CompilationFailed {
+            stderr: String::from_utf8_lossy(&output.stderr),
+            stdout: String::from_utf8_lossy(&output.stdout),
+        }
+    );
 
     Ok(output_filename)
 }

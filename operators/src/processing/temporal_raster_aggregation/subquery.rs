@@ -284,7 +284,7 @@ pub struct GlobalStateTemporalRasterAggregationSubQuery<
     pub _phantom_pixel_type: PhantomData<(P, F)>,
 }
 
-impl<'a, P, F, FoldM, FoldF> SubQueryTileAggregator<'a, P>
+impl<P, F, FoldM, FoldF> SubQueryTileAggregator<'_, P>
     for TemporalRasterAggregationSubQuery<FoldM, P, F>
 where
     P: Pixel,
@@ -338,7 +338,7 @@ where
     }
 }
 
-impl<'a, P, F, FoldM, FoldF> SubQueryTileAggregator<'a, P>
+impl<P, F, FoldM, FoldF> SubQueryTileAggregator<'_, P>
     for GlobalStateTemporalRasterAggregationSubQuery<FoldM, P, F>
 where
     P: Pixel,

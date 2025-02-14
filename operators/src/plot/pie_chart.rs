@@ -57,7 +57,10 @@ impl PlotOperator for PieChart {
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let vector_source = initialized_sources.vector;
 
         let in_desc = vector_source.result_descriptor().clone();

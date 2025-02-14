@@ -6,7 +6,7 @@ use crate::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::engine::{
     CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
     QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    TypedRasterQueryProcessor,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
 use crate::util::Result;
@@ -91,6 +91,14 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
         self.source.canonic_name()
     }
 
+    fn name(&self) -> &'static str {
+        self.source.name()
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.source.path()
+    }
+
     fn optimize(
         &self,
         resolution: geoengine_datatypes::primitives::SpatialResolution,
@@ -144,6 +152,14 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.source.canonic_name()
+    }
+
+    fn name(&self) -> &'static str {
+        self.source.name()
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.source.path()
     }
 
     fn optimize(

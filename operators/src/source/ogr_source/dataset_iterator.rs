@@ -316,7 +316,7 @@ impl<'f> Iterator for &'f mut OgrDatasetIterator {
     }
 }
 
-impl<'f> FusedIterator for &'f mut OgrDatasetIterator {}
+impl FusedIterator for &mut OgrDatasetIterator {}
 
 // TODO: add this to the `gdal` crate
 #[inline]

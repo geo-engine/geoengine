@@ -6,6 +6,7 @@ use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefiniti
 use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
+use crate::workflows::workflow::WorkflowId;
 use float_cmp::approx_eq;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
@@ -29,6 +30,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 use super::{DatasetIdAndName, DatasetName};
 
@@ -124,6 +126,7 @@ impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 pub struct RasterDatasetFromWorkflowTask<C: SessionContext, R: InitializedRasterOperator> {
     pub source_name: String,
     pub initialized_operator: R,
+    pub workflow_id: WorkflowId,
     pub ctx: Arc<C>,
     pub info: RasterDatasetFromWorkflowParams,
     pub upload: UploadId,
@@ -142,7 +145,7 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
             BandSelection,
         > = &self.info.query;
 
-        let query_ctx = self.ctx.query_context()?;
+        let query_ctx = self.ctx.query_context(self.workflow_id.0, Uuid::new_v4())?;
         let request_spatial_ref =
             Option::<SpatialReference>::from(result_descriptor.spatial_reference)
                 .ok_or(crate::error::Error::MissingSpatialReference)?;
@@ -168,7 +171,6 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
             Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
         ).await)?
             .map_err(crate::error::Error::from)?;
-
         // create the dataset
         let dataset = create_dataset(
             &self.info,
@@ -237,6 +239,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<
 >(
     source_name: String,
     initialized_operator: R,
+    workflow_id: WorkflowId,
     ctx: Arc<C>,
     info: RasterDatasetFromWorkflowParams,
     compression_num_threads: GdalCompressionNumThreads,
@@ -266,6 +269,7 @@ pub async fn schedule_raster_dataset_from_workflow_task<
     let task = RasterDatasetFromWorkflowTask {
         source_name,
         initialized_operator,
+        workflow_id,
         ctx: ctx.clone(),
         info,
         upload,

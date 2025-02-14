@@ -90,7 +90,10 @@ impl VectorOperator for PointInPolygonFilter {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         let points_rd = initialized_source.points.result_descriptor();
         let polygons_rd = initialized_source.polygons.result_descriptor();
@@ -125,6 +128,7 @@ impl VectorOperator for PointInPolygonFilter {
 
         let initialized_operator = InitializedPointInPolygonFilter {
             name,
+            path,
             result_descriptor: out_desc,
             points: initialized_source.points,
             polygons: initialized_source.polygons,
@@ -138,6 +142,7 @@ impl VectorOperator for PointInPolygonFilter {
 
 pub struct InitializedPointInPolygonFilter {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     points: Box<dyn InitializedVectorOperator>,
     polygons: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
@@ -188,8 +193,22 @@ impl InitializedVectorOperator for InitializedPointInPolygonFilter {
         }
         .boxed())
     }
-}
 
+    fn name(&self) -> &'static str {
+        PointInPolygonFilter::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
+    }
+
+    fn boxed(self) -> Box<dyn InitializedVectorOperator>
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+}
 pub struct PointInPolygonFilterProcessor {
     result_descriptor: VectorResultDescriptor,
     points: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,

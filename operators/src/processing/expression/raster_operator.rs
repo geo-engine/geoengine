@@ -68,7 +68,11 @@ impl RasterOperator for Expression {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let source = self.sources.initialize_sources(path, context).await?.raster;
+        let source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?
+            .raster;
 
         let in_descriptor = source.result_descriptor();
 
@@ -115,6 +119,7 @@ impl RasterOperator for Expression {
 
         let initialized_operator = InitializedExpression {
             name,
+            path,
             result_descriptor,
             source,
             expression_string: self.params.expression,
@@ -135,6 +140,7 @@ impl OperatorName for Expression {
 #[derive(Clone)]
 pub struct InitializedExpression {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     expression_string: String,
@@ -205,6 +211,14 @@ impl InitializedRasterOperator for InitializedExpression {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Expression::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

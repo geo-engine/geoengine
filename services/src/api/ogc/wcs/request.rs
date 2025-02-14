@@ -77,16 +77,21 @@ pub struct GetCoverage {
     #[serde(deserialize_with = "parse_wcs_bbox")]
     #[param(value_type = String, example = "-90,-180,90,180,urn:ogc:def:crs:EPSG::4326")]
     pub boundingbox: WcsBoundingbox, // TODO: optional?
-    #[serde(alias = "GRIDBASECRS", alias = "CRS", alias = "crs")]
+    #[serde(
+        alias = "GRIDBASECRS",
+        alias = "GridBaseCRS",
+        alias = "CRS",
+        alias = "crs"
+    )]
     #[serde(deserialize_with = "parse_wcs_crs")]
     #[param(example = "urn:ogc:def:crs:EPSG::4326", value_type = String)]
     pub gridbasecrs: SpatialReference,
     #[serde(default)]
-    #[serde(alias = "GRIDORIGIN")]
+    #[serde(alias = "GRIDORIGIN", alias = "GridOrigin")]
     #[serde(deserialize_with = "parse_grid_origin_option")]
     #[param(value_type = String, example="90,-180")]
     pub gridorigin: Option<GridOrigin>,
-    #[serde(alias = "GRIDOFFSETS")]
+    #[serde(alias = "GRIDOFFSETS", alias = "GridOffsets")]
     #[serde(default)]
     #[serde(deserialize_with = "parse_grid_offset_option")]
     #[param(value_type = String, example="-0.1,0.1")]

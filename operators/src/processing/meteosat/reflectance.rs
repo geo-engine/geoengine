@@ -56,6 +56,7 @@ impl OperatorName for Reflectance {
 
 pub struct InitializedReflectance {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     params: ReflectanceParams,
@@ -71,7 +72,10 @@ impl RasterOperator for Reflectance {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let input = initialized_source.raster;
 
         let in_desc = input.result_descriptor();
@@ -132,6 +136,7 @@ impl RasterOperator for Reflectance {
 
         let initialized_operator = InitializedReflectance {
             name,
+            path,
             result_descriptor: out_desc,
             source: input,
             params: self.params,
@@ -165,6 +170,14 @@ impl InitializedRasterOperator for InitializedReflectance {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Reflectance::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

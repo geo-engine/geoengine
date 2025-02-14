@@ -71,7 +71,10 @@ impl VectorOperator for TimeProjection {
 
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         debug!("Initializing `TimeProjection` with {:?}.", &self.params);
 
@@ -86,6 +89,7 @@ impl VectorOperator for TimeProjection {
 
         let initialized_operator = InitializedVectorTimeProjection {
             name,
+            path,
             source: initialized_sources.vector,
             result_descriptor,
             step: self.params.step,
@@ -114,6 +118,7 @@ fn rewrite_result_descriptor(
 
 pub struct InitializedVectorTimeProjection {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: VectorResultDescriptor,
     step: TimeStep,
@@ -140,6 +145,14 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        TimeProjection::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

@@ -148,12 +148,9 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
             }
         }));
 
-    let (result, _ch) =
+    let (result, ch) =
         abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-    Ok((
-        result.unbounded().to_png(width, height, &colorizer)?,
-        output_cache_hint,
-    ))
+    Ok((result.unbounded().to_png(width, height, &colorizer)?, ch))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -348,10 +345,12 @@ mod tests {
     use crate::{
         engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
     };
+    use geoengine_datatypes::primitives::{DateTime, TimeInstance};
     use geoengine_datatypes::{
-        primitives::{BandSelection, DateTime, TimeInstance},
+        primitives::BandSelection,
         raster::TilingSpecification,
-        util::test::TestDefault,
+        test_data,
+        util::{assert_image_equals, test::TestDefault},
     };
 
     use super::*;
@@ -407,9 +406,6 @@ mod tests {
 
         // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "png_from_stream.png");
 
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/png/png_from_stream.png") as &[u8],
-            image_bytes.as_slice()
-        );
+        assert_image_equals(test_data!("raster/png/png_from_stream.png"), &image_bytes);
     }
 }

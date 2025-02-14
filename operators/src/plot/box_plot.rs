@@ -111,8 +111,7 @@ impl PlotOperator for BoxPlot {
                     .collect::<Vec<_>>();
 
                 let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-                let bbox =
-                    partitions_extent(in_descriptors.iter().map(|d| Some(d.spatial_bounds()))); // Fixme: remove Some() when `partitions_extent` is fixed
+                let bbox = partitions_extent(in_descriptors.iter().map(|d| d.spatial_bounds()));
 
                 Ok(InitializedBoxPlot::new(
                     name,

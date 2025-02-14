@@ -49,9 +49,10 @@ pub trait RasterOperator:
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let span = self.span();
         debug!("Initialize {}, path: {}", self.typetag_name(), &path);
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         let op = self._initialize(path.clone(), context).await?;
 
-        Ok(context.wrap_initialized_raster_operator(op, span, path))
+        Ok(context.wrap_initialized_raster_operator(op, span))
     }
 
     /// Wrap a box around a `RasterOperator`
@@ -77,6 +78,7 @@ pub trait VectorOperator:
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>>;
 
+    #[allow(clippy::used_underscore_items)]
     async fn initialize(
         self: Box<Self>,
         path: WorkflowOperatorPath,
@@ -85,7 +87,7 @@ pub trait VectorOperator:
         let span = self.span();
         debug!("Initialize {}, path: {}", self.typetag_name(), &path);
         let op = self._initialize(path.clone(), context).await?;
-        Ok(context.wrap_initialized_vector_operator(op, span, path))
+        Ok(context.wrap_initialized_vector_operator(op, span))
     }
 
     /// Wrap a box around a `VectorOperator`
@@ -118,8 +120,9 @@ pub trait PlotOperator:
     ) -> Result<Box<dyn InitializedPlotOperator>> {
         let span = self.span();
         debug!("Initialize {}, path: {}", self.typetag_name(), &path);
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
         let op = self._initialize(path.clone(), context).await?;
-        Ok(context.wrap_initialized_plot_operator(op, span, path))
+        Ok(context.wrap_initialized_plot_operator(op, span))
     }
 
     /// Wrap a box around a `PlotOperator`
@@ -133,6 +136,7 @@ pub trait PlotOperator:
     fn span(&self) -> CreateSpan;
 }
 
+// TODO: implement a derive macro for common fields of operators: name, path, data, result_descriptor and automatically implement common trait functions
 #[async_trait]
 pub trait InitializedRasterOperator: Send + Sync {
     /// Get the result descriptor of the `Operator`
@@ -151,6 +155,17 @@ pub trait InitializedRasterOperator: Send + Sync {
 
     /// Get a canonic representation of the operator and its sources
     fn canonic_name(&self) -> CanonicOperatorName;
+
+    /// Get the unique name of the operator
+    fn name(&self) -> &'static str;
+
+    // Get the path of the operator in the workflow
+    fn path(&self) -> WorkflowOperatorPath;
+
+    /// Return the name of the data loaded by the operator (if any)
+    fn data(&self) -> Option<String> {
+        None
+    }
 
     /// Optimize the operator graph for a given resolution
     fn optimize(
@@ -191,6 +206,17 @@ pub trait InitializedVectorOperator: Send + Sync {
     /// Get a canonic representation of the operator and its sources.
     /// This only includes *logical* operators, not wrappers
     fn canonic_name(&self) -> CanonicOperatorName;
+
+    /// Get the unique name of the operator
+    fn name(&self) -> &'static str;
+
+    // Get the path of the operator in the workflow
+    fn path(&self) -> WorkflowOperatorPath;
+
+    /// Return the name of the data loaded by the operator (if any)
+    fn data(&self) -> Option<String> {
+        None
+    }
 
     /// Optimize the operator graph for a given resolution
     fn optimize(
@@ -287,6 +313,18 @@ impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
         self.as_ref().canonic_name()
     }
 
+    fn name(&self) -> &'static str {
+        self.as_ref().name()
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.as_ref().path()
+    }
+
+    fn data(&self) -> Option<String> {
+        self.as_ref().data()
+    }
+
     fn optimize(
         &self,
         resolution: SpatialResolution,
@@ -306,6 +344,18 @@ impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.as_ref().canonic_name()
+    }
+
+    fn name(&self) -> &'static str {
+        self.as_ref().name()
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.as_ref().path()
+    }
+
+    fn data(&self) -> Option<String> {
+        self.as_ref().data()
     }
 
     fn optimize(

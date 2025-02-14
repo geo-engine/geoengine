@@ -194,9 +194,10 @@ fn send_result(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::{PostgresContext, PostgresSessionContext};
+    use crate::contexts::PostgresSessionContext;
     use crate::ge_context;
-    use crate::{contexts::SimpleApplicationContext, workflows::workflow::Workflow};
+    use crate::util::tests::MockQueryContext;
+    use crate::workflows::workflow::Workflow;
     use actix_http::error::PayloadError;
     use actix_web_actors::ws::WebsocketContext;
     use bytes::{Bytes, BytesMut};
@@ -217,7 +218,7 @@ mod tests {
     }
 
     #[ge_context::test(query_ctx_chunk_size = "max_chunk_size")]
-    async fn test_websocket_stream(app_ctx: PostgresContext<NoTls>) {
+    async fn test_websocket_stream(ctx: PostgresSessionContext<NoTls>) {
         fn send_next(input_sender: &UnboundedSender<Result<Bytes, PayloadError>>) {
             let mut buf = BytesMut::new();
             actix_http::ws::Parser::write_message(
@@ -258,8 +259,6 @@ mod tests {
         )
         .unwrap();
 
-        let ctx = app_ctx.default_session_context().await.unwrap();
-
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockFeatureCollectionSource::multiple(vec![
@@ -282,7 +281,7 @@ mod tests {
             workflow.operator.get_vector().unwrap(),
             query_rectangle,
             ctx.execution_context().unwrap(),
-            ctx.query_context().unwrap(),
+            ctx.mock_query_context().unwrap(),
         )
         .await
         .unwrap();

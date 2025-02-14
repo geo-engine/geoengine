@@ -1,13 +1,7 @@
-use geoengine_datatypes::{
-    primitives::Coordinate2D,
-    raster::{
-        BoundedGrid, GeoTransform, GridBoundingBox2D, GridBounds, GridContains, GridIdx2D,
-        GridIntersection, GridOrEmpty2D, GridShape2D, GridShapeAccess, GridSize, RasterProperties,
-        SpatialGridDefinition,
-    },
+use geoengine_datatypes::raster::{
+    GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridIntersection, GridOrEmpty2D,
+    GridShape2D, GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
 };
-
-use super::GdalDatasetParameters;
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
 /// The Workflow is as follows:

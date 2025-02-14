@@ -25,7 +25,7 @@ use geoengine_datatypes::{
         VectorQueryRectangle,
     },
     raster::{GridBoundingBox2D, Pixel},
-    util::{test::TestDefault, Identifier},
+    util::test::TestDefault,
 };
 use geoengine_operators::{
     engine::{
@@ -34,7 +34,7 @@ use geoengine_operators::{
         SingleVectorMultipleRasterSources, StatisticsWrappingMockExecutionContext,
         TypedRasterQueryProcessor, VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
     },
-    meta::quota::{ComputationContext, ComputationUnit, QuotaCheck, QuotaChecker, QuotaTracking},
+    meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking},
     processing::{
         AggregateFunctionParams, ColumnNames, FeatureAggregationMethod, NeighborhoodAggregate,
         NeighborhoodAggregateParams, NeighborhoodParams, RasterVectorJoin, RasterVectorJoinParams,
@@ -69,16 +69,19 @@ type BenchmarkElementCounts = HashMap<String, u64>;
 
 fn setup_contexts() -> (StatisticsWrappingMockExecutionContext, MockQueryContext) {
     let exe_ctx = StatisticsWrappingMockExecutionContext::test_default();
-    let computation_unit = ComputationUnit {
-        issuer: uuid::Uuid::new_v4(),
-        context: ComputationContext::new(),
-    };
+
+    let user = uuid::Uuid::new_v4();
+    let workflow = uuid::Uuid::new_v4();
+    let computation = uuid::Uuid::new_v4();
+
     let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
         ChunkByteSize::test_default(),
         None,
         Some(QuotaTracking::new(
             tokio::sync::mpsc::unbounded_channel().0,
-            computation_unit,
+            user,
+            workflow,
+            computation,
         )),
         Some(Box::new(MockQuotaChecker) as QuotaChecker),
     );

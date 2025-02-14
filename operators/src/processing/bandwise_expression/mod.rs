@@ -49,7 +49,11 @@ impl RasterOperator for BandwiseExpression {
     ) -> Result<Box<dyn InitializedRasterOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let source = self.sources.initialize_sources(path, context).await?.raster;
+        let source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?
+            .raster;
 
         let in_descriptor = source.result_descriptor();
 
@@ -69,6 +73,7 @@ impl RasterOperator for BandwiseExpression {
 
         Ok(Box::new(InitializedBandwiseExpression {
             name,
+            path,
             params: self.params.clone(),
             result_descriptor,
             source,
@@ -83,6 +88,7 @@ impl RasterOperator for BandwiseExpression {
 pub struct InitializedBandwiseExpression {
     name: CanonicOperatorName,
     params: BandwiseExpressionParams,
+    path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     expression: ExpressionAst,
@@ -124,6 +130,14 @@ impl InitializedRasterOperator for InitializedBandwiseExpression {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        BandwiseExpression::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

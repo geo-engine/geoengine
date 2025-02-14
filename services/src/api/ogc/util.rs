@@ -248,7 +248,7 @@ pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
     spatial_reference: SpatialReference,
 ) -> Result<A> {
     let [a, b, c, d] = values;
-    let axis_order = spatial_reference_specification(&spatial_reference.into())?
+    let axis_order = spatial_reference_specification(spatial_reference)?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
@@ -265,7 +265,7 @@ pub fn tuple_from_ogc_params(
     b: f64,
     spatial_reference: SpatialReference,
 ) -> Result<(f64, f64)> {
-    match spatial_reference_specification(&spatial_reference.into())?
+    match spatial_reference_specification(spatial_reference)?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
@@ -312,7 +312,7 @@ impl<'a> OgcRequestGuard<'a> {
 
 impl Guard for OgcRequestGuard<'_> {
     fn check(&self, ctx: &GuardContext<'_>) -> bool {
-        ctx.head().uri.query().map_or(false, |q| {
+        ctx.head().uri.query().is_some_and(|q| {
             q.contains(&format!("request={}", self.request))
                 || q.contains(&format!("REQUEST={}", self.request))
         })

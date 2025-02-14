@@ -190,7 +190,7 @@ impl<'de> Deserialize<'de> for TimeInstance {
     {
         struct IsoStringOrUnixTimestamp;
 
-        impl<'de> serde::de::Visitor<'de> for IsoStringOrUnixTimestamp {
+        impl serde::de::Visitor<'_> for IsoStringOrUnixTimestamp {
             type Value = TimeInstance;
 
             fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {

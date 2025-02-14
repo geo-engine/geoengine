@@ -98,7 +98,10 @@ impl RasterOperator for TemporalRasterAggregation {
 
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_source = self.sources.initialize_sources(path, context).await?;
+        let initialized_source = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
         let source = initialized_source.raster;
 
         debug!(
@@ -114,6 +117,7 @@ impl RasterOperator for TemporalRasterAggregation {
 
         let initialized_operator = InitializedTemporalRasterAggregation {
             name,
+            path,
             aggregation_type: self.params.aggregation,
             window: self.params.window,
             window_reference: self
@@ -134,6 +138,7 @@ impl RasterOperator for TemporalRasterAggregation {
 
 pub struct InitializedTemporalRasterAggregation {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     aggregation_type: Aggregation,
     window: TimeStep,
     window_reference: TimeInstance,
@@ -184,6 +189,14 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        TemporalRasterAggregation::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(

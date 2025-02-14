@@ -47,10 +47,14 @@ impl VectorOperator for ColumnRangeFilter {
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         let name = CanonicOperatorName::from(&self);
 
-        let initialized_sources = self.sources.initialize_sources(path, context).await?;
+        let initialized_sources = self
+            .sources
+            .initialize_sources(path.clone(), context)
+            .await?;
 
         let initialized_operator = InitializedColumnRangeFilter {
             name,
+            path,
             result_descriptor: initialized_sources.vector.result_descriptor().clone(),
             vector_source: initialized_sources.vector,
             state: self.params,
@@ -64,6 +68,7 @@ impl VectorOperator for ColumnRangeFilter {
 
 pub struct InitializedColumnRangeFilter {
     name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     state: ColumnRangeFilterParams,
@@ -83,6 +88,14 @@ impl InitializedVectorOperator for InitializedColumnRangeFilter {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        ColumnRangeFilter::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
     }
 
     fn optimize(
