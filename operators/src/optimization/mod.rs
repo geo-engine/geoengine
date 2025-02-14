@@ -72,11 +72,12 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MultipleRasterSources, RasterOperator,
+            MockExecutionContext, MultipleRasterSources, PlotOperator, RasterOperator,
             SingleRasterOrVectorSource, SingleRasterSource, SingleVectorMultipleRasterSources,
             SingleVectorSource, StaticMetaData, VectorOperator, VectorResultDescriptor,
             WorkflowOperatorPath,
         },
+        plot::{Histogram, HistogramBounds, HistogramBuckets, HistogramParams},
         processing::{
             ColumnNames, ColumnRangeFilter, ColumnRangeFilterParams, DeriveOutRasterSpecsSource,
             Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
@@ -1428,5 +1429,80 @@ mod tests {
                 .spatial_resolution(),
             SpatialResolution::new(0.6, 0.6).unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn it_optimizes_plot() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let gdal = GdalSource {
+            params: GdalSourceParameters {
+                data: ndvi_id.clone(),
+                overview_level: None,
+            },
+        }
+        .boxed();
+
+        let expression = Histogram {
+            params: HistogramParams {
+                attribute_name: "ndvi".to_string(),
+                bounds: HistogramBounds::Values {
+                    min: 0.0,
+                    max: 255.0,
+                },
+                buckets: HistogramBuckets::Number { value: 8 },
+                interactive: false,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(gdal),
+            },
+        }
+        .boxed();
+
+        let expression_initialized = expression
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let expression_optimized = expression_initialized
+            .optimize(SpatialResolution::new(0.8, 0.8).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&expression_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                "params": {
+                    "attributeName": "ndvi",
+                    "bounds": {
+                        "max": 255.0,
+                        "min": 0.0
+                    },
+                    "buckets": {
+                        "type": "number",
+                        "value": 8
+                    },
+                    "interactive": false
+                },
+                "sources": {
+                    "source": {
+                        "params": {
+                            "data": "ndvi",
+                            "overviewLevel": 8
+                        },
+                        "type": "GdalSource"
+                    }
+                },
+                "type": "Histogram"
+            })
+        );
+
+        let expression_optimized_initialized = expression_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
     }
 }

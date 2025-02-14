@@ -7,6 +7,7 @@ use crate::engine::{
 };
 use crate::error;
 use crate::error::Error;
+use crate::optimization::OptimizationError;
 use crate::string_token;
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
@@ -17,7 +18,8 @@ use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, ColumnSelection, DataRef, FeatureDataRef, FeatureDataType,
-    Geometry, Measurement, PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
+    Geometry, Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::{
@@ -168,6 +170,7 @@ impl PlotOperator for Histogram {
 /// The initialization of `Histogram`
 pub struct InitializedHistogram<Op> {
     name: CanonicOperatorName,
+    params: HistogramParams,
     result_descriptor: PlotResultDescriptor,
     metadata: HistogramMetadataOptions,
     source: Op,
@@ -199,6 +202,7 @@ impl<Op> InitializedHistogram<Op> {
 
         Self {
             name,
+            params: params.clone(),
             result_descriptor,
             metadata: HistogramMetadataOptions {
                 number_of_buckets,
@@ -240,6 +244,19 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedRasterO
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(Histogram {
+            params: self.params.clone(),
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
+            },
+        }
+        .boxed())
+    }
 }
 
 impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorOperator>> {
@@ -266,6 +283,19 @@ impl InitializedPlotOperator for InitializedHistogram<Box<dyn InitializedVectorO
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(Histogram {
+            params: self.params.clone(),
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
+            },
+        }
+        .boxed())
     }
 }
 

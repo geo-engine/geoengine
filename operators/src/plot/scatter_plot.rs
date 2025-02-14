@@ -12,9 +12,10 @@ use crate::engine::{
     TypedPlotQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use geoengine_datatypes::primitives::{
-    ColumnSelection, Coordinate2D, PlotQueryRectangle, VectorQueryRectangle,
+    ColumnSelection, Coordinate2D, PlotQueryRectangle, SpatialResolution, VectorQueryRectangle,
 };
 
 pub const SCATTERPLOT_OPERATOR_NAME: &str = "ScatterPlot";
@@ -132,6 +133,22 @@ impl InitializedPlotOperator for InitializedScatterPlot<Box<dyn InitializedVecto
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(ScatterPlot {
+            params: ScatterPlotParams {
+                column_x: self.column_x.clone(),
+                column_y: self.column_y.clone(),
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

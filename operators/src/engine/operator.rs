@@ -170,7 +170,7 @@ pub trait InitializedRasterOperator: Send + Sync {
     /// Optimize the operator graph for a given resolution
     fn optimize(
         &self,
-        _resolution: SpatialResolution,
+        resolution: SpatialResolution,
     ) -> Result<Box<dyn RasterOperator>, OptimizationError>;
 
     /// optimize the operator graph and reinitialize it
@@ -221,22 +221,8 @@ pub trait InitializedVectorOperator: Send + Sync {
     /// Optimize the operator graph for a given resolution
     fn optimize(
         &self,
-        _resolution: SpatialResolution,
+        resolution: SpatialResolution,
     ) -> Result<Box<dyn VectorOperator>, OptimizationError>;
-
-    // /// optimize the operator graph and reinitialize it
-    // async fn optimize_and_reinitialize(
-    //     &self,
-    //     resolution: SpatialResolution,
-    //     exe_ctx: &dyn ExecutionContext,
-    // ) -> Result<Box<dyn InitializedVectorOperator>> {
-    //     let optimized = self
-    //         .optimize(resolution)
-    //         .context(crate::error::Optimization)?;
-    //     optimized
-    //         .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
-    //         .await
-    // }
 }
 
 /// A canonic name for an operator and its sources
@@ -298,6 +284,12 @@ pub trait InitializedPlotOperator: Send + Sync {
 
     /// Get a canonic representation of the operator and its sources
     fn canonic_name(&self) -> CanonicOperatorName;
+
+    /// Optimize the operator graph for a given resolution
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError>;
 }
 
 impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
@@ -377,6 +369,13 @@ impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.as_ref().canonic_name()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        self.as_ref().optimize(resolution)
     }
 }
 
