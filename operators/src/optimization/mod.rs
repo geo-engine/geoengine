@@ -815,9 +815,6 @@ mod tests {
         );
     }
 
-    // TODO: a test with raster and vector data that pushes the resoltion down through the vector operator
-    // idea: - Rasterization(?)
-    //       - RasterVectorJoin, outputs a vector, but the raster shall be optimized
     #[tokio::test]
     async fn it_optimizes_rasterization() {
         let id: DataId = DatasetId::new().into();
@@ -1500,7 +1497,7 @@ mod tests {
             })
         );
 
-        let expression_optimized_initialized = expression_optimized
+        expression_optimized
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
