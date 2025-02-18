@@ -88,7 +88,7 @@ impl SpatialReference {
     pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
         let proj_string = self.proj_string()?;
 
-        let proj = Proj::new(&proj_string).ok_or(error::Error::InvalidProjDefinition {
+        let proj = Proj::new(&proj_string).map_err(|_| error::Error::InvalidProjDefinition {
             proj_definition: proj_string.clone(),
         })?;
         let area = proj

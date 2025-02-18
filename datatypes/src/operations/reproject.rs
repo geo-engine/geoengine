@@ -38,7 +38,7 @@ pub struct CoordinateProjector {
 impl CoordinateProjection for CoordinateProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
         let p = Proj::new_known_crs(&from.proj_string()?, &to.proj_string()?, None)
-            .ok_or(error::Error::NoCoordinateProjector { from, to })?;
+            .map_err(|_| error::Error::NoCoordinateProjector { from, to })?;
         Ok(CoordinateProjector { from, to, p })
     }
 

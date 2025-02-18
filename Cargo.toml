@@ -139,8 +139,8 @@ postgres-types = { version = "0.2", features = [
 pretty_assertions = "1.4"
 prettyplease = "0.2"
 proc-macro2 = "1.0"
-proj = "0.22" # needs to stay fixed to use fixed proj version
-proj-sys = "0.19" # needs to stay fixed to use fixed proj version
+proj = "0.28" # needs to stay fixed to use fixed proj version
+proj-sys = "0.25" # needs to stay fixed to use fixed proj version
 prost = "0.12" # must be compatible with `aruna-rust-api`
 pwhash = "1.0"
 quote = "1.0"
