@@ -1,6 +1,9 @@
 [workspace]
 members = ["datatypes", "expression", "macros", "operators", "services"]
-exclude = ["expression/deps-workspace"]
+exclude = [
+    "expression/deps-workspace", # Buggy, cf. https://github.com/rust-lang/cargo/issues/6745
+    ".scripts",
+]
 # Edition 2021 defaults to resolver 2, but virtual workspaces default to resolver 1, so we need to set it explicitly.
 resolver = "2"
 
