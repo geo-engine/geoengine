@@ -3,4 +3,4 @@ description: "Run Geo Engine tests"
 runs:
   using: "docker"
   image: "docker://quay.io/geoengine/devcontainer:test"
-  entrypoint: "test.sh"
+  entrypoint: "./.github/actions/test/test.sh"
