@@ -1,7 +1,5 @@
 name: "Run Tests"
 description: "Run Geo Engine tests"
-inputs:
-outputs:
 runs:
   using: "docker"
   image: "docker://quay.io/geoengine/devcontainer:test"
