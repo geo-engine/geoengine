@@ -12,7 +12,6 @@ env:
 jobs:
   test:
     runs-on: ubuntu-24.04
-    container: quay.io/geoengine/devcontainer:test
 
     services:
       postgres:
@@ -28,61 +27,63 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
-      # - name: Free Disk Space (Ubuntu)
-      #   uses: jlumbroso/free-disk-space@main
-      #   with:
-      #     tool-cache: true
-      #     android: true
-      #     dotnet: true
-      #     haskell: true
-      #     large-packages: true
-      #     docker-images: true
-      #     swap-storage: true
-      - name: Init rustup toolchain
-        run: rustup show # enough to initialize the toolchain
-      - name: setup rust build cache
-        uses: Swatinem/rust-cache@v2
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
         with:
-          # An explicit cache key that is used instead of the automatic `job`-based
-          # cache key and is thus stable across jobs.
-          # Default: empty
-          shared-key: ""
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      - name: Testsuite
+        uses: ./.github/actions/test
+      # - name: Init rustup toolchain
+      #   run: rustup show # enough to initialize the toolchain
+      # - name: setup rust build cache
+      #   uses: Swatinem/rust-cache@v2
+      #   with:
+      #     # An explicit cache key that is used instead of the automatic `job`-based
+      #     # cache key and is thus stable across jobs.
+      #     # Default: empty
+      #     shared-key: ""
 
-          # An additional cache key that is added alongside the automatic `job`-based
-          # cache key and can be used to further differentiate jobs.
-          # Default: empty
-          key: ci_test_
+      #     # An additional cache key that is added alongside the automatic `job`-based
+      #     # cache key and can be used to further differentiate jobs.
+      #     # Default: empty
+      #     key: ci_test_
 
-          # A whitespace separated list of env-var *prefixes* who's value contributes
-          # to the environment cache key.
-          # The env-vars are matched by *prefix*, so the default `RUST` var will
-          # match all of `RUSTC`, `RUSTUP_*`, `RUSTFLAGS`, `RUSTDOC_*`, etc.
-          # Default: "CARGO CC CFLAGS CXX CMAKE RUST"
-          #env-vars: ""
+      #     # A whitespace separated list of env-var *prefixes* who's value contributes
+      #     # to the environment cache key.
+      #     # The env-vars are matched by *prefix*, so the default `RUST` var will
+      #     # match all of `RUSTC`, `RUSTUP_*`, `RUSTFLAGS`, `RUSTDOC_*`, etc.
+      #     # Default: "CARGO CC CFLAGS CXX CMAKE RUST"
+      #     #env-vars: ""
 
-          # The cargo workspaces and target directory configuration.
-          # These entries are separated by newlines and have the form
-          # `$workspace -> $target`. The `$target` part is treated as a directory
-          # relative to the `$workspace` and defaults to "target" if not explicitly given.
-          # Default: ". -> target"
-          #workspaces: ""
+      #     # The cargo workspaces and target directory configuration.
+      #     # These entries are separated by newlines and have the form
+      #     # `$workspace -> $target`. The `$target` part is treated as a directory
+      #     # relative to the `$workspace` and defaults to "target" if not explicitly given.
+      #     # Default: ". -> target"
+      #     #workspaces: ""
 
-          # Determines if the cache should be saved even when the workflow has failed.
-          # Default: "false"
-          #cache-on-failure: ""
-      - name: Check with Rustfmt
-        run: cargo fmt --all -- --check
-      - name: Check with Clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
-      - name: Check with SQLFluff
-        run: pipx run sqlfluff==3.3.0 lint
-      - name: Verify for expression dependencies workspace
-        run: |
-          rustup toolchain install nightly
-          chmod +x ./.scripts/check-expression-deps.rs
-          ./.scripts/check-expression-deps.rs
-      - name: Run tests
-        run: cargo test --locked --verbose
+      #     # Determines if the cache should be saved even when the workflow has failed.
+      #     # Default: "false"
+      #     #cache-on-failure: ""
+      # - name: Check with Rustfmt
+      #   run: cargo fmt --all -- --check
+      # - name: Check with Clippy
+      #   run: cargo clippy --all-targets --locked -- -D warnings
+      # - name: Check with SQLFluff
+      #   run: pipx run sqlfluff==3.3.0 lint
+      # - name: Verify for expression dependencies workspace
+      #   run: |
+      #     rustup toolchain install nightly
+      #     chmod +x ./.scripts/check-expression-deps.rs
+      #     ./.scripts/check-expression-deps.rs
+      # - name: Run tests
+      #   run: cargo test --locked --verbose
 
   build:
     runs-on: ubuntu-24.04
