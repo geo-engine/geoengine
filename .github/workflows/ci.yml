@@ -13,16 +13,16 @@ jobs:
   test:
     runs-on: ubuntu-24.04
 
-    services:
-      postgres:
-        image: postgis/postgis
-        env:
-          POSTGRES_USER: geoengine
-          POSTGRES_PASSWORD: geoengine
-          POSTGRES_DB: geoengine
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    # services:
+    #   postgres:
+    #     image: postgis/postgis
+    #     env:
+    #       POSTGRES_USER: geoengine
+    #       POSTGRES_PASSWORD: geoengine
+    #       POSTGRES_DB: geoengine
+    #     ports:
+    #       - 5432:5432
+    #     options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
       - name: Checkout code
