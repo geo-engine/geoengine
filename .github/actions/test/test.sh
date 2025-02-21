@@ -22,4 +22,5 @@ chmod +x ./.scripts/check-expression-deps.rs
 ./.scripts/check-expression-deps.rs
 
 print_headline "Running tests"
+service postgresql start
 cargo test --locked --verbose
