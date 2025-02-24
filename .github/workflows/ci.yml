@@ -75,6 +75,10 @@ jobs:
         uses: ./.github/actions/coverage
       - name: Debug
         run: cat lcov.info
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lcov.info
+          path: lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
