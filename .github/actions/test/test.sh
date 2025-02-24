@@ -9,4 +9,4 @@ function print_headline() {
 
 print_headline "Running tests"
 service postgresql start
-cargo test --locked --verbose
+cargo test --locked --verbose --jobs 1
