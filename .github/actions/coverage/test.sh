@@ -11,6 +11,7 @@ print_headline "Install cargo-llvm-cov"
 cargo install cargo-llvm-cov
 
 print_headline "Generate code coverage"
+service postgresql start
 cargo llvm-cov \
     --locked \
     --all-features \
