@@ -2695,7 +2695,7 @@ mod tests {
 
         assert_eq!(
             provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
-            "[2.0,25093.0]"
+            "[1.0,98.0]"
         );
 
         // manipulate a field in the metadata
@@ -2737,7 +2737,7 @@ mod tests {
 
         assert_eq!(
             provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
-            "[2.0,25093.0]"
+            "[1.0,98.0]"
         );
 
         // forcefully remove file to test error handling

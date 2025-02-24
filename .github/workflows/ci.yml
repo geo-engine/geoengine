@@ -13,16 +13,37 @@ jobs:
   test:
     runs-on: ubuntu-24.04
 
-    # services:
-    #   postgres:
-    #     image: postgis/postgis
-    #     env:
-    #       POSTGRES_USER: geoengine
-    #       POSTGRES_PASSWORD: geoengine
-    #       POSTGRES_DB: geoengine
-    #     ports:
-    #       - 5432:5432
-    #     options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      # TODO: Get Cache back
+      # - name: setup rust build cache
+      #   uses: Swatinem/rust-cache@v2
+      #   with:
+      #     # An explicit cache key that is used instead of the automatic `job`-based
+      #     # cache key and is thus stable across jobs.
+      #     # Default: empty
+      #     shared-key: ""
+
+      #     # An additional cache key that is added alongside the automatic `job`-based
+      #     # cache key and can be used to further differentiate jobs.
+      #     # Default: empty
+      #     key: ci_test_
+      - name: Testsuite
+        uses: ./.github/actions/test
+  
+  coverage:
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
@@ -37,10 +58,7 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
-      - name: Testsuite
-        uses: ./.github/actions/test
-      # - name: Init rustup toolchain
-      #   run: rustup show # enough to initialize the toolchain
+      # TODO: Get Cache back
       # - name: setup rust build cache
       #   uses: Swatinem/rust-cache@v2
       #   with:
@@ -53,37 +71,47 @@ jobs:
       #     # cache key and can be used to further differentiate jobs.
       #     # Default: empty
       #     key: ci_test_
+      - name: Testsuite
+        uses: ./.github/actions/coverage
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path-to-lcov: lcov.info
 
-      #     # A whitespace separated list of env-var *prefixes* who's value contributes
-      #     # to the environment cache key.
-      #     # The env-vars are matched by *prefix*, so the default `RUST` var will
-      #     # match all of `RUSTC`, `RUSTUP_*`, `RUSTFLAGS`, `RUSTDOC_*`, etc.
-      #     # Default: "CARGO CC CFLAGS CXX CMAKE RUST"
-      #     #env-vars: ""
+  lint:
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:test
 
-      #     # The cargo workspaces and target directory configuration.
-      #     # These entries are separated by newlines and have the form
-      #     # `$workspace -> $target`. The `$target` part is treated as a directory
-      #     # relative to the `$workspace` and defaults to "target" if not explicitly given.
-      #     # Default: ". -> target"
-      #     #workspaces: ""
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      - name: Init rustup toolchain
+        # somehow rustup show will take care to initialize the version based on the toolchain file
+        run: rustup show
+      - name: setup rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          # An explicit cache key that is used instead of the automatic `job`-based
+          # cache key and is thus stable across jobs.
+          # Default: empty
+          shared-key: ""
 
-      #     # Determines if the cache should be saved even when the workflow has failed.
-      #     # Default: "false"
-      #     #cache-on-failure: ""
-      # - name: Check with Rustfmt
-      #   run: cargo fmt --all -- --check
-      # - name: Check with Clippy
-      #   run: cargo clippy --all-targets --locked -- -D warnings
-      # - name: Check with SQLFluff
-      #   run: pipx run sqlfluff==3.3.0 lint
-      # - name: Verify for expression dependencies workspace
-      #   run: |
-      #     rustup toolchain install nightly
-      #     chmod +x ./.scripts/check-expression-deps.rs
-      #     ./.scripts/check-expression-deps.rs
-      # - name: Run tests
-      #   run: cargo test --locked --verbose
+          # An additional cache key that is added alongside the automatic `job`-based
+          # cache key and can be used to further differentiate jobs.
+          # Default: empty
+          key: ci_test_
+      - name: Rustfmt
+        run: cargo fmt --all -- --check
+      - name: Clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: SQLFluff
+        run: pipx run sqlfluff==3.3.0 lint
+      - name: Verifying expression dependencies workspace
+        run: |
+          rustup toolchain install nightly
+          chmod +x ./.scripts/check-expression-deps.rs
+          ./.scripts/check-expression-deps.rs
 
   build:
     runs-on: ubuntu-24.04
@@ -111,23 +139,5 @@ jobs:
           # cache key and can be used to further differentiate jobs.
           # Default: empty
           key: ci_test_${{ matrix.build }}
-
-          # A whitespace separated list of env-var *prefixes* who's value contributes
-          # to the environment cache key.
-          # The env-vars are matched by *prefix*, so the default `RUST` var will
-          # match all of `RUSTC`, `RUSTUP_*`, `RUSTFLAGS`, `RUSTDOC_*`, etc.
-          # Default: "CARGO CC CFLAGS CXX CMAKE RUST"
-          #env-vars: ""
-
-          # The cargo workspaces and target directory configuration.
-          # These entries are separated by newlines and have the form
-          # `$workspace -> $target`. The `$target` part is treated as a directory
-          # relative to the `$workspace` and defaults to "target" if not explicitly given.
-          # Default: ". -> target"
-          #workspaces: ""
-
-          # Determines if the cache should be saved even when the workflow has failed.
-          # Default: "false"
-          #cache-on-failure: ""
       - name: Build
         run: cargo build --locked ${{ matrix.build }} --verbose

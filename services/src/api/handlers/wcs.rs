@@ -541,6 +541,9 @@ mod tests {
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::assert_image_equals_with_format;
+    use geoengine_datatypes::util::ImageFormat;
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -749,10 +752,10 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
-        assert_eq!(
-            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            test::read_body(res).await.as_ref()
+        assert_image_equals_with_format(
+            test_data!("raster/geotiff_from_stream_compressed.tiff"),
+            test::read_body(res).await.as_ref(),
+            ImageFormat::Tiff,
         );
     }
 

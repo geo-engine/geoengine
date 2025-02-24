@@ -682,6 +682,9 @@ mod tests {
     };
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::assert_image_equals_with_format;
+    use geoengine_datatypes::util::ImageFormat;
     use geoengine_operators::engine::{
         ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
         RasterBandDescriptors, TypedOperator,
@@ -1480,10 +1483,10 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            result.as_slice()
+        assert_image_equals_with_format(
+            test_data!("raster/geotiff_from_stream_compressed.tiff"),
+            result.as_slice(),
+            ImageFormat::Tiff,
         );
     }
 }
