@@ -74,16 +74,17 @@ jobs:
       - name: Testsuite
         uses: ./.github/actions/coverage
       - name: Debug
-        run: ls -la
+        run: cat lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          path-to-lcov: lcov.info
+          file: lcov.info
+          debug: true
 
   lint:
     runs-on: ubuntu-24.04
-    container: quay.io/geoengine/devcontainer:test
+    container: quay.io/geoengine/devcontainer:latest
 
     steps:
       - name: Checkout code
@@ -117,7 +118,7 @@ jobs:
 
   build:
     runs-on: ubuntu-24.04
-    container: quay.io/geoengine/devcontainer:test
+    container: quay.io/geoengine/devcontainer:latest
 
     strategy:
       matrix:

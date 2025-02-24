@@ -1,9 +1,9 @@
-name: Create containers
+name: Create dev container
 
 on:
-  # run every night
+  # run every Monday at 4:00 AM
   schedule:
-    - cron: "0 22 * * *"
+    - cron: "0 4 * * 1"
 
   # schedule manually
   workflow_dispatch:
@@ -14,7 +14,7 @@ on:
       tag_name:
         description: "Tag name for the container"
         required: true
-        default: "nightly"
+        default: "latest"
 
       container_repository_branch:
         description: "Branch of the container repository"
@@ -28,19 +28,8 @@ jobs:
     runs-on: ubuntu-24.04
 
     env:
-      TAG_NAME: nightly
+      TAG_NAME: latest
       CONTAINER_REPOSITORY_BRANCH: main
-
-    services:
-      postgres:
-        image: postgis/postgis
-        env:
-          POSTGRES_USER: geoengine
-          POSTGRES_PASSWORD: geoengine
-          POSTGRES_DB: geoengine
-        ports:
-          - 5432:5432
-        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
 
     steps:
       - name: Modify TAG_NAME if on `tag_name` is set on `workflow_dispatch`
@@ -52,12 +41,6 @@ jobs:
         if: github.event.inputs.container_repository_branch != ''
         run: |
           echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
-
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          ref: ${{ github.ref_name }}
-          path: geoengine
 
       - name: Checkout container files
         uses: actions/checkout@v4
@@ -74,24 +57,14 @@ jobs:
         run: |
           podman build \
             --tag geoengine:${{env.TAG_NAME}} \
-            --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release" \
-            -f container/geoengine/Dockerfile \
+            -f container/devcontainer/Dockerfile \
             .
-
-      - name: Test the container
-        working-directory: geoengine
-        run: |
-          CONTAINER_ID=geoengine:${{env.TAG_NAME}}
-          POD_ID=$(podman run --rm -d --network=host $CONTAINER_ID)
-          (podman run --rm -i $CONTAINER_ID ./geoengine-cli check-successful-startup --output-stdin) < <(podman logs --follow $POD_ID |& tee)
-          podman run --rm --network=host $CONTAINER_ID ./geoengine-cli heartbeat --server-url http://localhost:8080/api
-          podman stop $POD_ID
 
       - name: Push image to quay.io
         run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}
 
-      - name: Push nightly with date
-        if: env.TAG_NAME == 'nightly'
+      - name: Push latest with date
+        if: env.TAG_NAME == 'latest'
         run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
 
   notify-slack-on-failure:
