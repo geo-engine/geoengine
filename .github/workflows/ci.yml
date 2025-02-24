@@ -80,6 +80,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: lcov.info
+          base-path: /github/workspace/
           debug: true
 
   lint:
