@@ -371,7 +371,7 @@ pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFut
             let mut data = vec![];
             let start = Instant::now();
 
-            while timeout.map_or(true, |t| start.elapsed() >= t) {
+            while timeout.is_none_or(|t| start.elapsed() >= t) {
                 let r = nix::sys::socket::recv(fd, data.as_mut_slice(), MsgFlags::MSG_PEEK);
 
                 match r {

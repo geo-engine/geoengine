@@ -684,8 +684,7 @@ impl Accu for MovingAverageAccu {
 
         if self
             .input_band_tiles
-            .back()
-            .map_or(true, |t| t.0 < last_band)
+            .back().is_none_or(|t| t.0 < last_band)
         {
             // not enough bands for the window
             return None;

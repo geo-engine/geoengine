@@ -391,8 +391,7 @@ impl<'f> DataRef<'f, f64> for FloatDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref()
-            .map_or(true, |bitmap| bitmap.is_valid(i))
+            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -676,8 +675,7 @@ impl<'f> DataRef<'f, i64> for IntDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref()
-            .map_or(true, |bitmap| bitmap.is_valid(i))
+            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -759,8 +757,7 @@ impl<'f> DataRef<'f, bool> for BoolDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref()
-            .map_or(true, |bitmap| bitmap.is_valid(i))
+            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -951,8 +948,7 @@ impl<'f> DataRef<'f, TimeInstance> for DateTimeDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref()
-            .map_or(true, |bitmap| bitmap.is_valid(i))
+            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -1134,8 +1130,7 @@ impl<'f> DataRef<'f, u8> for CategoryDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref()
-            .map_or(true, |bitmap| bitmap.is_valid(i))
+            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -1300,8 +1295,7 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref()
-            .map_or(true, |bitmap| bitmap.is_valid(i))
+            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {

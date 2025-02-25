@@ -178,13 +178,11 @@ where
     fn intersects_query(&self, query: &Self::Query) -> bool {
         // If the chunk has no time bounds it must be empty so we can skip the temporal check and return true.
         let temporal_hit = self
-            .time_interval
-            .map_or(true, |tb| tb.intersects(&query.time_interval));
+            .time_interval.is_none_or(|tb| tb.intersects(&query.time_interval));
 
         // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
         let spatial_hit = self
-            .spatial_bounds
-            .map_or(true, |sb| sb.intersects_bbox(&query.spatial_bounds));
+            .spatial_bounds.is_none_or(|sb| sb.intersects_bbox(&query.spatial_bounds));
 
         temporal_hit && spatial_hit
     }

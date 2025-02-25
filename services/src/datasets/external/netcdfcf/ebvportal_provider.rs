@@ -514,8 +514,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for EbvPortalDataProvider<D> {
                 };
                 layer_collection.entry_label = layer_collection
                     .items
-                    .first()
-                    .map_or(true, |item| matches!(item, CollectionItem::Layer(_)))
+                    .first().is_none_or(|item| matches!(item, CollectionItem::Layer(_)))
                     .then_some("Entity".to_string())
                     .or_else(|| Some("Metric".to_string()));
 

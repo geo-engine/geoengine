@@ -54,7 +54,7 @@ pub fn get_expression_dependencies(
 /// Replaces all non-alphanumeric characters in a string with underscores.
 /// Prepends an underscore if the string is empty or starts with a number.
 fn canonicalize_name(name: &str) -> String {
-    let prepend_underscore = name.chars().next().map_or(true, char::is_numeric);
+    let prepend_underscore = name.chars().next().is_none_or(char::is_numeric);
 
     let mut canonicalized_name =
         String::with_capacity(name.len() + usize::from(prepend_underscore));

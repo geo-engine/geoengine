@@ -588,7 +588,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
             if !path.is_file() {
                 continue;
             }
-            if path.extension().map_or(true, |extension| extension != "nc") {
+            if path.extension().is_none_or(|extension| extension != "nc") {
                 continue;
             }
 

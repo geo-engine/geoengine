@@ -697,8 +697,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
     ) -> Result<()> {
         if self
             .intermediate_dataset
-            .as_ref()
-            .map_or(true, |x| x.time_interval != time_interval)
+            .as_ref().is_none_or(|x| x.time_interval != time_interval)
         {
             if let Some(intermediate_dataset) = self.intermediate_dataset.take() {
                 self.dataset_writer.finish_dataset(intermediate_dataset)?;
