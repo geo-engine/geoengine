@@ -74,11 +74,9 @@ jobs:
       - name: Testsuite
         uses: ./.github/actions/coverage
       - name: Adjust lcov.info
+        # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
         run: |
           sed -i 's|/github/workspace/||g' lcov.info
-          pwd
-          ls -lha
-          head lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
