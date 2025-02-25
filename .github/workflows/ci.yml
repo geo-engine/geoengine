@@ -73,19 +73,17 @@ jobs:
       #     key: ci_test_
       - name: Testsuite
         uses: ./.github/actions/coverage
-      - name: Debug
-        run: cat lcov.info
-      - uses: actions/upload-artifact@v4
-        with:
-          name: lcov.info
-          path: lcov.info
+      - name: Adjust lcov.info
+        run: |
+          sed -i 's|/github/workspace/||g' lcov.info
+          pwd
+          ls -lha
+          head lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: lcov.info
-          base-path: /github/workspace/
-          debug: true
 
   lint:
     runs-on: ubuntu-24.04
