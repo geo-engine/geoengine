@@ -30,6 +30,7 @@ jobs:
     env:
       TAG_NAME: latest
       CONTAINER_REPOSITORY_BRANCH: main
+      CONTAINER_NAME: devcontainer
 
     steps:
       - name: Modify TAG_NAME if on `tag_name` is set on `workflow_dispatch`
@@ -56,16 +57,16 @@ jobs:
       - name: Build with podman
         run: |
           podman build \
-            --tag geoengine:${{env.TAG_NAME}} \
-            -f container/devcontainer/Dockerfile \
+            --tag ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} \
+            -f container/${{env.CONTAINER_NAME}}/Dockerfile \
             .
 
       - name: Push image to quay.io
-        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}
+        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
 
       - name: Push latest with date
         if: env.TAG_NAME == 'latest'
-        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
+        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
 
   notify-slack-on-failure:
     name: Post to a Slack channel in case of failure

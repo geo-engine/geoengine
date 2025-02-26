@@ -30,6 +30,7 @@ jobs:
     env:
       TAG_NAME: nightly
       CONTAINER_REPOSITORY_BRANCH: main
+      CONTAINER_NAME: geoengine
 
     services:
       postgres:
@@ -73,26 +74,26 @@ jobs:
       - name: Build with podman
         run: |
           podman build \
-            --tag geoengine:${{env.TAG_NAME}} \
+            --tag ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} \
             --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release" \
-            -f container/geoengine/Dockerfile \
+            -f container/${{env.CONTAINER_NAME}}/Dockerfile \
             .
 
       - name: Test the container
         working-directory: geoengine
         run: |
-          CONTAINER_ID=geoengine:${{env.TAG_NAME}}
+          CONTAINER_ID=${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
           POD_ID=$(podman run --rm -d --network=host $CONTAINER_ID)
           (podman run --rm -i $CONTAINER_ID ./geoengine-cli check-successful-startup --output-stdin) < <(podman logs --follow $POD_ID |& tee)
           podman run --rm --network=host $CONTAINER_ID ./geoengine-cli heartbeat --server-url http://localhost:8080/api
           podman stop $POD_ID
 
       - name: Push image to quay.io
-        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}
+        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
 
       - name: Push nightly with date
         if: env.TAG_NAME == 'nightly'
-        run: podman push geoengine:${{env.TAG_NAME}} quay.io/geoengine/geoengine:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
+        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
 
   notify-slack-on-failure:
     name: Post to a Slack channel in case of failure
