@@ -15,7 +15,6 @@ use async_trait::async_trait;
 use gdal::Dataset;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
-use geoengine_datatypes::hashmap;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, Coordinate2D,
     FeatureDataType, Measurement, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
@@ -34,24 +33,19 @@ use geoengine_operators::source::{
     OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
     OgrSourceParameters, OgrSourceTimeFormat,
 };
-use geoengine_operators::util::TemporaryGdalThreadLocalConfigOptions;
 use geoengine_operators::util::gdal::gdal_open_dataset;
+use geoengine_operators::util::TemporaryGdalThreadLocalConfigOptions;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
-use std::sync::OnceLock;
 use url::Url;
 
-static IS_FILETYPE_RASTER: OnceLock<HashMap<&'static str, bool>> = OnceLock::new();
-
-// TODO: change to `LazyLock' once stable
-fn init_is_filetype_raster() -> HashMap<&'static str, bool> {
-    //name:is_raster
-    hashmap! {
+fn is_filetype_raster(filetype: &str) -> bool {
+    match filetype {
         "GeoTIFF" => true,
-        "GeoJSON" => false
+        _ /* e.g., "GeoJSON" */ => false,
     }
 }
 
@@ -449,10 +443,7 @@ impl EdrCollectionMetaData {
 
     fn select_output_format(&self) -> Result<String, geoengine_operators::error::Error> {
         for format in &self.output_formats {
-            if IS_FILETYPE_RASTER
-                .get_or_init(init_is_filetype_raster)
-                .contains_key(format.as_str())
-            {
+            if is_filetype_raster(format.as_str()) {
                 return Ok(format.to_string());
             }
         }
@@ -462,10 +453,7 @@ impl EdrCollectionMetaData {
     }
 
     fn is_raster_file(&self) -> Result<bool, geoengine_operators::error::Error> {
-        Ok(*IS_FILETYPE_RASTER
-            .get_or_init(init_is_filetype_raster)
-            .get(&self.select_output_format()?.as_str())
-            .expect("can only return values in map"))
+        Ok(is_filetype_raster(self.select_output_format()?.as_str()))
     }
 
     fn get_vector_download_url(
@@ -558,24 +546,33 @@ impl EdrCollectionMetaData {
                     "FLOAT".to_string()
                 };
                 match data_type.as_str() {
-                    "STRING" => (parameter_name.to_string(), VectorColumnInfo {
-                        data_type: FeatureDataType::Text,
-                        measurement: Measurement::Unitless,
-                    }),
-                    "INTEGER" => (parameter_name.to_string(), VectorColumnInfo {
-                        data_type: FeatureDataType::Int,
-                        measurement: Measurement::Continuous(ContinuousMeasurement {
-                            measurement: parameter_metadata.observed_property.label.clone(),
-                            unit: parameter_metadata.unit.as_ref().map(|x| x.symbol.clone()),
-                        }),
-                    }),
-                    _ => (parameter_name.to_string(), VectorColumnInfo {
-                        data_type: FeatureDataType::Float,
-                        measurement: Measurement::Continuous(ContinuousMeasurement {
-                            measurement: parameter_metadata.observed_property.label.clone(),
-                            unit: parameter_metadata.unit.as_ref().map(|x| x.symbol.clone()),
-                        }),
-                    }),
+                    "STRING" => (
+                        parameter_name.to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                    "INTEGER" => (
+                        parameter_name.to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Int,
+                            measurement: Measurement::Continuous(ContinuousMeasurement {
+                                measurement: parameter_metadata.observed_property.label.clone(),
+                                unit: parameter_metadata.unit.as_ref().map(|x| x.symbol.clone()),
+                            }),
+                        },
+                    ),
+                    _ => (
+                        parameter_name.to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Float,
+                            measurement: Measurement::Continuous(ContinuousMeasurement {
+                                measurement: parameter_metadata.observed_property.label.clone(),
+                                unit: parameter_metadata.unit.as_ref().map(|x| x.symbol.clone()),
+                            }),
+                        },
+                    ),
                 }
             })
             .collect();
@@ -1031,10 +1028,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                    MockDatasetDataSourceLoadingInfo,
-                    VectorResultDescriptor,
-                    VectorQueryRectangle,
-                >,
+                MockDatasetDataSourceLoadingInfo,
+                VectorResultDescriptor,
+                VectorQueryRectangle,
+            >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -1225,7 +1222,7 @@ mod tests {
         util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
-    use httptest::{Expectation, Server, matchers::*, responders::status_code};
+    use httptest::{matchers::*, responders::status_code, Expectation, Server};
     use std::{ops::Range, path::PathBuf};
     use tokio_postgres::NoTls;
 
@@ -1309,10 +1306,13 @@ mod tests {
         let provider = create_provider(&server, db).await;
 
         let datasets = provider
-            .load_layer_collection(collection, LayerCollectionListOptions {
-                offset: 0,
-                limit: 20,
-            })
+            .load_layer_collection(
+                collection,
+                LayerCollectionListOptions {
+                    offset: 0,
+                    limit: 20,
+                },
+            )
             .await?;
         server.verify_and_clear();
 
@@ -1324,69 +1324,76 @@ mod tests {
         let root_collection_id = LayerCollectionId("collections".to_string());
         let datasets = load_layer_collection(&root_collection_id, ctx.db()).await?;
 
-        assert_eq!(datasets, LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: DEMO_PROVIDER_ID,
-                collection_id: root_collection_id
-            },
-            name: "EDR".to_owned(),
-            description: "Environmental Data Retrieval".to_owned(),
-            items: vec![
-                // Note: The dataset GFS_single-level_50 gets filtered out because there is no extent set.
-                // This means that it contains no data.
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        collection_id: LayerCollectionId(
-                            "collections!GFS_single-level".to_string()
-                        )
-                    },
-                    name: "GFS - Single Level".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                }),
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        collection_id: LayerCollectionId("collections!GFS_isobaric".to_string())
-                    },
-                    name: "GFS - Isobaric level".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                }),
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        collection_id: LayerCollectionId(
-                            "collections!GFS_between-depth".to_string()
-                        )
-                    },
-                    name: "GFS - Layer between two depths below land surface".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                }),
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        layer_id: LayerId("collections!PointsInGermany".to_string())
-                    },
-                    name: "PointsInGermany".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                }),
-                CollectionItem::Collection(LayerCollectionListing {
-                    id: ProviderLayerCollectionId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        collection_id: LayerCollectionId("collections!PointsInFrance".to_string())
-                    },
-                    name: "PointsInFrance".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                }),
-            ],
-            entry_label: None,
-            properties: vec![]
-        });
+        assert_eq!(
+            datasets,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DEMO_PROVIDER_ID,
+                    collection_id: root_collection_id
+                },
+                name: "EDR".to_owned(),
+                description: "Environmental Data Retrieval".to_owned(),
+                items: vec![
+                    // Note: The dataset GFS_single-level_50 gets filtered out because there is no extent set.
+                    // This means that it contains no data.
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!GFS_single-level".to_string()
+                            )
+                        },
+                        name: "GFS - Single Level".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!GFS_isobaric".to_string()
+                            )
+                        },
+                        name: "GFS - Isobaric level".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!GFS_between-depth".to_string()
+                            )
+                        },
+                        name: "GFS - Layer between two depths below land surface".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId("collections!PointsInGermany".to_string())
+                        },
+                        name: "PointsInGermany".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        id: ProviderLayerCollectionId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            collection_id: LayerCollectionId(
+                                "collections!PointsInFrance".to_string()
+                            )
+                        },
+                        name: "PointsInFrance".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                ],
+                entry_label: None,
+                properties: vec![]
+            }
+        );
 
         Ok(())
     }
@@ -1398,27 +1405,30 @@ mod tests {
         let collection_id = LayerCollectionId("collections!GFS_isobaric".to_string());
         let datasets = load_layer_collection(&collection_id, ctx.db()).await?;
 
-        assert_eq!(datasets, LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: DEMO_PROVIDER_ID,
-                collection_id
-            },
-            name: "GFS_isobaric".to_owned(),
-            description: "Parameters of GFS_isobaric".to_owned(),
-            items: vec![CollectionItem::Collection(LayerCollectionListing {
+        assert_eq!(
+            datasets,
+            LayerCollection {
                 id: ProviderLayerCollectionId {
                     provider_id: DEMO_PROVIDER_ID,
-                    collection_id: LayerCollectionId(
-                        "collections!GFS_isobaric!temperature".to_string()
-                    )
+                    collection_id
                 },
-                name: "temperature".to_string(),
-                description: String::new(),
-                properties: vec![],
-            })],
-            entry_label: None,
-            properties: vec![]
-        });
+                name: "GFS_isobaric".to_owned(),
+                description: "Parameters of GFS_isobaric".to_owned(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    id: ProviderLayerCollectionId {
+                        provider_id: DEMO_PROVIDER_ID,
+                        collection_id: LayerCollectionId(
+                            "collections!GFS_isobaric!temperature".to_string()
+                        )
+                    },
+                    name: "temperature".to_string(),
+                    description: String::new(),
+                    properties: vec![],
+                })],
+                entry_label: None,
+                properties: vec![]
+            }
+        );
 
         Ok(())
     }
@@ -1428,36 +1438,39 @@ mod tests {
         let collection_id = LayerCollectionId("collections!PointsInFrance".to_string());
         let datasets = load_layer_collection(&collection_id, ctx.db()).await?;
 
-        assert_eq!(datasets, LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: DEMO_PROVIDER_ID,
-                collection_id
-            },
-            name: "PointsInFrance".to_owned(),
-            description: "Height selection of PointsInFrance".to_owned(),
-            items: vec![
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        layer_id: LayerId("collections!PointsInFrance!0\\10cm".to_string())
-                    },
-                    name: "0\\10cm".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                }),
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        layer_id: LayerId("collections!PointsInFrance!10\\40cm".to_string())
-                    },
-                    name: "10\\40cm".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                })
-            ],
-            entry_label: None,
-            properties: vec![]
-        });
+        assert_eq!(
+            datasets,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DEMO_PROVIDER_ID,
+                    collection_id
+                },
+                name: "PointsInFrance".to_owned(),
+                description: "Height selection of PointsInFrance".to_owned(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId("collections!PointsInFrance!0\\10cm".to_string())
+                        },
+                        name: "0\\10cm".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId("collections!PointsInFrance!10\\40cm".to_string())
+                        },
+                        name: "10\\40cm".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![]
+            }
+        );
 
         Ok(())
     }
@@ -1475,36 +1488,43 @@ mod tests {
         let collection_id = LayerCollectionId("collections!GFS_isobaric!temperature".to_string());
         let datasets = load_layer_collection(&collection_id, ctx.db()).await?;
 
-        assert_eq!(datasets, LayerCollection {
-            id: ProviderLayerCollectionId {
-                provider_id: DEMO_PROVIDER_ID,
-                collection_id
-            },
-            name: "GFS_isobaric".to_owned(),
-            description: "Height selection of GFS_isobaric".to_owned(),
-            items: vec![
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        layer_id: LayerId("collections!GFS_isobaric!temperature!0.01".to_string())
-                    },
-                    name: "0.01".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                }),
-                CollectionItem::Layer(LayerListing {
-                    id: ProviderLayerId {
-                        provider_id: DEMO_PROVIDER_ID,
-                        layer_id: LayerId("collections!GFS_isobaric!temperature!1000".to_string())
-                    },
-                    name: "1000".to_string(),
-                    description: String::new(),
-                    properties: vec![],
-                })
-            ],
-            entry_label: None,
-            properties: vec![]
-        });
+        assert_eq!(
+            datasets,
+            LayerCollection {
+                id: ProviderLayerCollectionId {
+                    provider_id: DEMO_PROVIDER_ID,
+                    collection_id
+                },
+                name: "GFS_isobaric".to_owned(),
+                description: "Height selection of GFS_isobaric".to_owned(),
+                items: vec![
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId(
+                                "collections!GFS_isobaric!temperature!0.01".to_string()
+                            )
+                        },
+                        name: "0.01".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        id: ProviderLayerId {
+                            provider_id: DEMO_PROVIDER_ID,
+                            layer_id: LayerId(
+                                "collections!GFS_isobaric!temperature!1000".to_string()
+                            )
+                        },
+                        name: "1000".to_string(),
+                        description: String::new(),
+                        properties: vec![],
+                    })
+                ],
+                entry_label: None,
+                properties: vec![]
+            }
+        );
 
         Ok(())
     }
@@ -1634,27 +1654,30 @@ mod tests {
         );
 
         let result_descriptor = meta.result_descriptor().await.unwrap();
-        assert_eq!(result_descriptor, VectorResultDescriptor {
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            data_type: VectorDataType::MultiPoint,
-            columns: hashmap! {
-                "ID".to_string() => VectorColumnInfo {
-                    data_type: FeatureDataType::Int,
-                    measurement: Measurement::Continuous(ContinuousMeasurement {
-                        measurement: "ID".to_string(),
-                        unit: None,
-                    }),
-                }
-            },
-            time: Some(TimeInterval::new_unchecked(
-                1_672_576_949_000,
-                1_675_255_349_000,
-            )),
-            bbox: Some(BoundingBox2D::new_unchecked(
-                (-180., -90.).into(),
-                (180., 90.).into()
-            )),
-        });
+        assert_eq!(
+            result_descriptor,
+            VectorResultDescriptor {
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                data_type: VectorDataType::MultiPoint,
+                columns: hashmap! {
+                    "ID".to_string() => VectorColumnInfo {
+                        data_type: FeatureDataType::Int,
+                        measurement: Measurement::Continuous(ContinuousMeasurement {
+                            measurement: "ID".to_string(),
+                            unit: None,
+                        }),
+                    }
+                },
+                time: Some(TimeInterval::new_unchecked(
+                    1_672_576_949_000,
+                    1_675_255_349_000,
+                )),
+                bbox: Some(BoundingBox2D::new_unchecked(
+                    (-180., -90.).into(),
+                    (180., 90.).into()
+                )),
+            }
+        );
     }
 
     #[ge_context::test]
@@ -1772,19 +1795,22 @@ mod tests {
         );
 
         let result_descriptor = meta.result_descriptor().await.unwrap();
-        assert_eq!(result_descriptor, RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: Some(TimeInterval::new_unchecked(
-                1_692_144_000_000,
-                1_692_500_400_000
-            )),
-            bbox: Some(SpatialPartition2D::new_unchecked(
-                (0., 90.).into(),
-                (359.500_000_000_000_06, -90.).into()
-            )),
-            resolution: None,
-            bands: RasterBandDescriptors::new_single_band(),
-        });
+        assert_eq!(
+            result_descriptor,
+            RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                time: Some(TimeInterval::new_unchecked(
+                    1_692_144_000_000,
+                    1_692_500_400_000
+                )),
+                bbox: Some(SpatialPartition2D::new_unchecked(
+                    (0., 90.).into(),
+                    (359.500_000_000_000_06, -90.).into()
+                )),
+                resolution: None,
+                bands: RasterBandDescriptors::new_single_band(),
+            }
+        );
     }
 }
