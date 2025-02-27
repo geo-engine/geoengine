@@ -1218,6 +1218,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         dataset::ExternalDataId,
+        hashmap,
         primitives::{BandSelection, ColumnSelection, SpatialResolution},
         util::gdal::hide_gdal_errors,
     };
