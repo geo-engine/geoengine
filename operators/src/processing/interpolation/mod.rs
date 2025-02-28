@@ -380,7 +380,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
-) -> impl Future<Output = Result<InterpolationAccu<T, I>>> {
+) -> impl Future<Output = Result<InterpolationAccu<T, I>>> + use<T, I> {
     // create an accumulator as a single tile that fits all the input tiles
     let spatial_bounds = query_rect.spatial_bounds;
     let spatial_resolution = query_rect.spatial_resolution;

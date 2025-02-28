@@ -633,7 +633,7 @@ async fn entities(
     file_name: &str,
     offset: u32,
     limit: u32,
-) -> Result<impl Iterator<Item = NetCdfEntity>> {
+) -> Result<impl Iterator<Item = NetCdfEntity> + use<>> {
     let entities = transaction
         .query(
             "

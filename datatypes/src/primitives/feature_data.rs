@@ -1187,10 +1187,10 @@ impl<'f> CategoryDataRef<'f> {
     }
 }
 
-unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
+unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str { unsafe {
     let text_ref = slice::from_raw_parts(bytes, length);
     str::from_utf8_unchecked(text_ref)
-}
+}}
 
 /// A reference to nullable text data
 ///

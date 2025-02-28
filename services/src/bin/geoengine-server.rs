@@ -5,14 +5,14 @@ use geoengine_services::config;
 use geoengine_services::config::get_config_element;
 use geoengine_services::error::Result;
 use tracing::Subscriber;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 use tracing_subscriber::field::RecordFields;
-use tracing_subscriber::fmt::format::{DefaultFields, Writer};
 use tracing_subscriber::fmt::FormatFields;
+use tracing_subscriber::fmt::format::{DefaultFields, Writer};
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::Layer;
 
 /// Starts the server.
 ///
@@ -71,7 +71,7 @@ fn open_telemetry_layer<S>(
 ) -> Result<
     tracing_opentelemetry::OpenTelemetryLayer<
         S,
-        impl opentelemetry::trace::Tracer + tracing_opentelemetry::PreSampledTracer,
+        impl opentelemetry::trace::Tracer + tracing_opentelemetry::PreSampledTracer + use<S>,
     >,
 >
 where
@@ -130,7 +130,7 @@ fn file_layer_with_filter<S, F: Filter<S> + 'static>(
     filename_prefix: &str,
     log_directory: Option<&str>,
     filter: F,
-) -> (impl Layer<S>, FileLogWriterHandle)
+) -> (impl Layer<S> + use<S, F>, FileLogWriterHandle)
 where
     S: Subscriber,
     for<'a> S: LookupSpan<'a>,
@@ -196,7 +196,7 @@ fn reroute_gdal_logging() {
 fn configure_error_report_formatting(logging_config: &config::Logging) {
     if logging_config.raw_error_messages {
         // there is no way to configure snafu::Report other than through env variables
-        std::env::set_var("SNAFU_RAW_ERROR_MESSAGES", "1");
+        unsafe { std::env::set_var("SNAFU_RAW_ERROR_MESSAGES", "1") };
     }
 }
 

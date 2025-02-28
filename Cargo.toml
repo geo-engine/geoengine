@@ -14,7 +14,7 @@ authors = [
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
     "Michael Mattig <mattig@mathematik.uni-marburg.de>",
 ]
-edition = "2021"
+edition = "2024"
 publish = false
 license-file = "LICENSE"
 documentation = "https://docs.geoengine.io"

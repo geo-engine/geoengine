@@ -799,7 +799,7 @@ fn select_layer_from_dataset<'a>(
     dataset: &'a Dataset,
     layer_name: &Option<String>,
 ) -> Result<Layer<'a>> {
-    if let Some(ref layer_name) = layer_name {
+    if let Some(layer_name) = layer_name {
         dataset.layer_by_name(layer_name).map_err(|_| {
             crate::error::Error::DatasetInvalidLayerName {
                 layer_name: layer_name.clone(),

@@ -1,9 +1,9 @@
 use crate::{
-    error::{self, CompilationFailed, Compiler, ExpressionExecutionError},
     ExpressionAst, ExpressionDependencies,
+    error::{self, CompilationFailed, Compiler, ExpressionExecutionError},
 };
-use libloading::{library_filename, Library, Symbol};
-use snafu::{ensure, ResultExt};
+use libloading::{Library, Symbol, library_filename};
+use snafu::{ResultExt, ensure};
 use std::{
     borrow::Cow,
     fs::File,
@@ -77,13 +77,13 @@ impl LinkedExpression {
     /// The caller must ensure that the function is called with the correct type of input parameter
     ///
     #[allow(clippy::type_complexity)]
-    pub unsafe fn function_1<A>(&self) -> Result<Symbol<fn(A) -> Option<f64>>> {
+    pub unsafe fn function_1<A>(&self) -> Result<Symbol<fn(A) -> Option<f64>>> { unsafe {
         self.library
             .get(self.function_name.as_bytes())
             .context(error::LinkedFunctionNotFound {
                 name: self.function_name.clone(),
             })
-    }
+    }}
     /// Returns a function with 3 input parameters
     ///
     /// # Safety
@@ -91,13 +91,13 @@ impl LinkedExpression {
     /// The caller must ensure that the function is called with the correct type of input parameter
     ///
     #[allow(clippy::type_complexity)]
-    pub unsafe fn function_2<A, B>(&self) -> Result<Symbol<fn(A, B) -> Option<f64>>> {
+    pub unsafe fn function_2<A, B>(&self) -> Result<Symbol<fn(A, B) -> Option<f64>>> { unsafe {
         self.library
             .get(self.function_name.as_bytes())
             .context(error::LinkedFunctionNotFound {
                 name: self.function_name.clone(),
             })
-    }
+    }}
 
     /// Returns an n-ary function
     ///
@@ -106,13 +106,13 @@ impl LinkedExpression {
     /// The caller must ensure that the function is called with the correct type of input and output parameters
     ///
     #[allow(clippy::type_complexity)]
-    pub unsafe fn function_nary<F>(&self) -> Result<Symbol<F>> {
+    pub unsafe fn function_nary<F>(&self) -> Result<Symbol<F>> { unsafe {
         self.library
             .get(self.function_name.as_bytes())
             .context(error::LinkedFunctionNotFound {
                 name: self.function_name.clone(),
             })
-    }
+    }}
 }
 
 impl Drop for LinkedExpression {
@@ -146,7 +146,7 @@ fn compile_file(
 
     let mut command = Command::new("rustc");
     command
-        .args(["--edition", "2021"])
+        .args(["--edition", "2024"])
         .args(["--crate-type", "cdylib"])
         .args(["-C", "opt-level=3"])
         .arg("-L")

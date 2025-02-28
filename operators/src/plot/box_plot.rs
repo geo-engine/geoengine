@@ -381,7 +381,7 @@ enum BoxPlotAccumKind {
 impl BoxPlotAccumKind {
     fn update(&mut self, values: impl Iterator<Item = f64>) -> crate::util::Result<()> {
         match self {
-            Self::Exact(ref mut x) => {
+            Self::Exact(x) => {
                 x.extend(values.filter(|x| x.is_finite()));
 
                 if x.len() > EXACT_CALC_BOUND {
@@ -390,7 +390,7 @@ impl BoxPlotAccumKind {
                 }
                 Ok(())
             }
-            Self::Estimated(ref mut est) => {
+            Self::Estimated(est) => {
                 for v in values {
                     est.update(v);
                 }
