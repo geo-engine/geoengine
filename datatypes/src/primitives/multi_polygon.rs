@@ -13,11 +13,11 @@ use super::MultiPoint;
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{
-    error, BoundingBox2D, GeometryRef, MultiLineString, PrimitivesError, TypedGeometry,
+    BoundingBox2D, GeometryRef, MultiLineString, PrimitivesError, TypedGeometry, error,
 };
 use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
+use crate::util::arrow::{ArrowTyped, downcast_array, padded_buffer_size};
 use arrow::datatypes::DataType;
 
 /// A trait that allows a common access to polygons of `MultiPolygon`s and its references

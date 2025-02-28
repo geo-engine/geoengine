@@ -1,7 +1,7 @@
 use super::{
-    grid_traits::{ChangeGridBounds, GridShapeAccess},
     GridBoundingBox, GridBounds, GridContains, GridIdx, GridIdx2D, GridIndexAccess,
     GridIndexAccessMut, GridSize, GridSpaceToLinearSpace,
+    grid_traits::{ChangeGridBounds, GridShapeAccess},
 };
 use crate::util::Result;
 use crate::{error, util::ByteSize};

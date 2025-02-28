@@ -1,8 +1,8 @@
 use crate::error;
 use crate::primitives::TimeInstance;
 use crate::raster::RasterDataType;
-use crate::util::helpers::indices_for_split_at;
 use crate::util::Result;
+use crate::util::helpers::indices_for_split_at;
 use arrow::buffer::NullBuffer;
 use arrow_array::{BooleanArray, Date64Array, Float64Array, Int64Array, StringArray};
 use gdal::vector::OGRFieldType;
@@ -391,7 +391,8 @@ impl<'f> DataRef<'f, f64> for FloatDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
+            .as_ref()
+            .is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -675,7 +676,8 @@ impl<'f> DataRef<'f, i64> for IntDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
+            .as_ref()
+            .is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -757,7 +759,8 @@ impl<'f> DataRef<'f, bool> for BoolDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
+            .as_ref()
+            .is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -948,7 +951,8 @@ impl<'f> DataRef<'f, TimeInstance> for DateTimeDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
+            .as_ref()
+            .is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -1130,7 +1134,8 @@ impl<'f> DataRef<'f, u8> for CategoryDataRef<'f> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
+            .as_ref()
+            .is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {
@@ -1187,10 +1192,12 @@ impl<'f> CategoryDataRef<'f> {
     }
 }
 
-unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str { unsafe {
-    let text_ref = slice::from_raw_parts(bytes, length);
-    str::from_utf8_unchecked(text_ref)
-}}
+unsafe fn byte_ptr_to_str<'d>(bytes: *const u8, length: usize) -> &'d str {
+    unsafe {
+        let text_ref = slice::from_raw_parts(bytes, length);
+        str::from_utf8_unchecked(text_ref)
+    }
+}
 
 /// A reference to nullable text data
 ///
@@ -1295,7 +1302,8 @@ impl<'r> DataRef<'r, u8> for TextDataRef<'r> {
 
     fn is_valid(&self, i: usize) -> bool {
         self.valid_bitmap
-            .as_ref().is_none_or(|bitmap| bitmap.is_valid(i))
+            .as_ref()
+            .is_none_or(|bitmap| bitmap.is_valid(i))
     }
 
     fn has_nulls(&self) -> bool {

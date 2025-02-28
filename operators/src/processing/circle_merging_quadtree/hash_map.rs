@@ -304,8 +304,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use rand::prelude::SliceRandom;
     use rand::SeedableRng;
+    use rand::prelude::SliceRandom;
 
     use super::*;
 

@@ -1,8 +1,8 @@
 use arrow::array::{
-    downcast_array, Array, ArrayData, AsArray, BooleanArray, Date64Array, Date64Builder,
-    FixedSizeBinaryBuilder, FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder,
-    Int32Array, Int32Builder, Int64Builder, ListArray, ListBuilder, StringArray, StringBuilder,
-    StructBuilder, UInt64Array, UInt64Builder,
+    Array, ArrayData, AsArray, BooleanArray, Date64Array, Date64Builder, FixedSizeBinaryBuilder,
+    FixedSizeListArray, FixedSizeListBuilder, Float64Array, Float64Builder, Int32Array,
+    Int32Builder, Int64Builder, ListArray, ListBuilder, StringArray, StringBuilder, StructBuilder,
+    UInt64Array, UInt64Builder, downcast_array,
 };
 use arrow::buffer::Buffer;
 use arrow::compute::kernels::filter::filter;

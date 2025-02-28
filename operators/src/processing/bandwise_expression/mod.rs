@@ -19,8 +19,8 @@ use geoengine_expression::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::expression::get_expression_dependencies;
 use super::RasterExpressionError;
+use super::expression::get_expression_dependencies;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]

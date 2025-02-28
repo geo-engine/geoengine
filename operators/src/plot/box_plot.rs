@@ -1,8 +1,8 @@
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, AxisAlignedRectangle, BandSelection, BoundingBox2D,
-    PlotQueryRectangle, RasterQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, PlotQueryRectangle, RasterQueryRectangle,
+    partitions_extent, time_interval_extent,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -19,9 +19,9 @@ use crate::engine::{
     WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
+use crate::util::Result;
 use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
-use crate::util::Result;
 use snafu::ensure;
 
 pub const BOXPLOT_OPERATOR_NAME: &str = "BoxPlot";
@@ -770,14 +770,15 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_single_feature() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 1],
                 &[("foo", FeatureData::Int(vec![1]))],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -822,14 +823,15 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_empty() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[] as &[TimeInterval],
                 &[("foo", FeatureData::Int(vec![]))],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -876,14 +878,15 @@ mod tests {
             data.push(i);
         }
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 2 * super::EXACT_CALC_BOUND],
                 &[("foo", FeatureData::Int(data))],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {

@@ -13,7 +13,7 @@ use geoengine_datatypes::primitives::{
     AsGeoOption, MultiLineString, MultiLineStringRef, MultiPoint, MultiPointRef, MultiPolygon,
     MultiPolygonRef, NoGeometry,
 };
-use geoengine_expression::{error::ExpressionExecutionError, ExpressionDependencies};
+use geoengine_expression::{ExpressionDependencies, error::ExpressionExecutionError};
 use std::sync::{Arc, OnceLock};
 
 /// The expression dependencies are initialized once and then reused for all expression evaluations.
@@ -26,8 +26,8 @@ static EXPRESSION_DEPENDENCIES: OnceLock<
 ///
 /// If it fails, you can retry or terminate the program.
 ///
-pub async fn initialize_expression_dependencies(
-) -> Result<(), ExpressionDependenciesInitializationError> {
+pub async fn initialize_expression_dependencies()
+-> Result<(), ExpressionDependenciesInitializationError> {
     crate::util::spawn_blocking(|| {
         let dependencies = ExpressionDependencies::new()?;
 
@@ -38,13 +38,13 @@ pub async fn initialize_expression_dependencies(
     .await?
 }
 
-fn generate_expression_dependencies(
-) -> Result<ExpressionDependencies, Arc<ExpressionExecutionError>> {
+fn generate_expression_dependencies()
+-> Result<ExpressionDependencies, Arc<ExpressionExecutionError>> {
     ExpressionDependencies::new().map_err(Arc::new)
 }
 
-pub fn get_expression_dependencies(
-) -> Result<&'static ExpressionDependencies, Arc<ExpressionExecutionError>> {
+pub fn get_expression_dependencies()
+-> Result<&'static ExpressionDependencies, Arc<ExpressionExecutionError>> {
     EXPRESSION_DEPENDENCIES
         .get_or_init(generate_expression_dependencies)
         .as_ref()

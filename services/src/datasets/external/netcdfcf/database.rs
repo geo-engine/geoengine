@@ -1,19 +1,18 @@
 use super::{
-    determine_data_range_and_colorizer, error,
+    NetCdfCf4DDatasetId, NetCdfCf4DProviderError, NetCdfEntity, NetCdfGroup, NetCdfOverview,
+    Result, determine_data_range_and_colorizer, error,
     loading::{
-        create_layer, create_layer_collection_from_parts, LayerCollectionIdFn, LayerCollectionParts,
+        LayerCollectionIdFn, LayerCollectionParts, create_layer, create_layer_collection_from_parts,
     },
     metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata},
     overviews::LoadingInfoMetadata,
-    NetCdfCf4DDatasetId, NetCdfCf4DProviderError, NetCdfEntity, NetCdfGroup, NetCdfOverview,
-    Result,
 };
 use crate::layers::{
     layer::{Layer, LayerCollection, LayerCollectionListOptions, ProviderLayerId},
     listing::LayerCollectionId,
 };
 use async_trait::async_trait;
-use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
+use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
 use geoengine_datatypes::{
     dataset::{DataProviderId, LayerId},
     error::BoxedResultExt,
@@ -23,8 +22,8 @@ use geoengine_operators::source::GdalMetaDataList;
 use snafu::ResultExt;
 use std::sync::Arc;
 use tokio_postgres::{
-    tls::{MakeTlsConnect, TlsConnect},
     Socket, Transaction,
+    tls::{MakeTlsConnect, TlsConnect},
 };
 
 #[async_trait]

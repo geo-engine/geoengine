@@ -87,9 +87,11 @@ mod tests {
 
         let wrapper = PointInPolygonTesterWithCollection::new(collection);
 
-        assert!(wrapper
-            .tester()
-            .any_polygon_contains_coordinate(&(5.0, 5.1).into(), &TimeInterval::default()));
+        assert!(
+            wrapper
+                .tester()
+                .any_polygon_contains_coordinate(&(5.0, 5.1).into(), &TimeInterval::default())
+        );
 
         assert_eq!(wrapper.collection().len(), 2);
     }

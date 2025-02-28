@@ -19,7 +19,7 @@ use geoengine_operators::{
         TemporalRasterAggregationParameters,
     },
     source::{GdalSource, GdalSourceParameters},
-    util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
+    util::{Result, gdal::add_ndvi_dataset, number_statistics::NumberStatistics},
 };
 use serde::Serialize;
 

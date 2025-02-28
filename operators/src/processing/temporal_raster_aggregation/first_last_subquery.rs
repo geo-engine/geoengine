@@ -3,7 +3,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
+use futures::{Future, FutureExt, TryFuture, TryFutureExt, future::BoxFuture};
 use geoengine_datatypes::{
     primitives::{
         CacheHint, QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance,

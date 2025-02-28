@@ -12,8 +12,8 @@ use crate::util::Result;
 use gdal::vector::OGRwkbGeometryType;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::collections::hash_map::Keys;
 use std::collections::HashMap;
+use std::collections::hash_map::Keys;
 use std::convert::{TryFrom, TryInto};
 use std::ops::RangeBounds;
 

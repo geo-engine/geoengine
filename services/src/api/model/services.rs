@@ -2,9 +2,9 @@ use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, MockMetaData,
     OgrMetaData,
 };
+use crate::datasets::DatasetName;
 use crate::datasets::storage::validate_tags;
 use crate::datasets::upload::{UploadId, VolumeName};
-use crate::datasets::DatasetName;
 use crate::projects::Symbology;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;

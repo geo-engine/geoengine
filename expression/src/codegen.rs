@@ -1,7 +1,7 @@
 use super::error::{ExpressionParserError, ExpressionSemanticError};
 use crate::functions::Function;
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash};
 
 type Result<T, E = ExpressionParserError> = std::result::Result<T, E>;

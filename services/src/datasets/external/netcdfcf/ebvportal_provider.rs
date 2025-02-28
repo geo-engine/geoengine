@@ -1,7 +1,7 @@
 use super::{
+    NetCdfCfDataProvider, NetCdfCfDataProviderDefinition, NetCdfLayerCollectionId,
     ebvportal_api::EbvPortalApi, loading::LayerCollectionIdFn, netcdf_entity_to_layer_id,
-    netcdf_group_to_layer_collection_id, NetCdfCfDataProvider, NetCdfCfDataProviderDefinition,
-    NetCdfLayerCollectionId,
+    netcdf_group_to_layer_collection_id,
 };
 use crate::{
     contexts::GeoEngineDb,
@@ -209,7 +209,7 @@ impl TryFrom<EbvCollectionId> for LayerCollectionId {
                 groups,
             } => format!("classes/{}/{}/{}/{}", class, ebv, dataset, groups.join("/")),
             EbvCollectionId::Entity { .. } => {
-                return Err(crate::error::Error::InvalidLayerCollectionId)
+                return Err(crate::error::Error::InvalidLayerCollectionId);
             }
         };
 
@@ -514,7 +514,8 @@ impl<D: GeoEngineDb> LayerCollectionProvider for EbvPortalDataProvider<D> {
                 };
                 layer_collection.entry_label = layer_collection
                     .items
-                    .first().is_none_or(|item| matches!(item, CollectionItem::Layer(_)))
+                    .first()
+                    .is_none_or(|item| matches!(item, CollectionItem::Layer(_)))
                     .then_some("Entity".to_string())
                     .or_else(|| Some("Metric".to_string()));
 
@@ -667,10 +668,10 @@ impl<D: GeoEngineDb>
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -704,7 +705,7 @@ mod tests {
         layers::layer::{LayerListing, ProviderLayerId},
     };
     use geoengine_datatypes::test_data;
-    use httptest::{matchers::request, responders::status_code, Expectation};
+    use httptest::{Expectation, matchers::request, responders::status_code};
     use std::str::FromStr;
     use tokio_postgres::NoTls;
 

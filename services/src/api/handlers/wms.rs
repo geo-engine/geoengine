@@ -2,7 +2,7 @@ use crate::api::model::datatypes::{
     RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
-use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
 use crate::api::ogc::wms::request::{
     GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
 };
@@ -11,10 +11,10 @@ use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
+use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, RasterQueryRectangle, SpatialPartition2D,
@@ -484,16 +484,17 @@ mod tests {
     use crate::api::model::responses::ErrorResponse;
     use crate::contexts::PostgresContext;
     use crate::contexts::Session;
+    use crate::datasets::DatasetName;
     use crate::datasets::listing::DatasetProvider;
     use crate::datasets::storage::DatasetStore;
-    use crate::datasets::DatasetName;
     use crate::ge_context;
     use crate::users::UserAuth;
-    use crate::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::util::tests::{
-        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper_with_cache_ttl,
-        register_ne2_multiband_workflow, send_test_request, MockQueryContext,
+        MockQueryContext, check_allowed_http_methods, read_body_string,
+        register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
+        send_test_request,
     };
+    use crate::util::tests::{admin_login, register_ndvi_workflow_helper};
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
     use actix_web::http::Method;

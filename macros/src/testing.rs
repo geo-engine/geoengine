@@ -1,7 +1,7 @@
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use std::collections::HashMap;
-use syn::{parse::Parser, punctuated::Punctuated, FnArg, Ident, ItemFn, Lit, Pat, TypePath};
+use syn::{FnArg, Ident, ItemFn, Lit, Pat, TypePath, parse::Parser, punctuated::Punctuated};
 
 pub type Result<T, E = syn::Error> = std::result::Result<T, E>;
 pub type AttributeArgs = syn::punctuated::Punctuated<syn::Meta, syn::Token![,]>;
@@ -117,7 +117,7 @@ impl TestConfig {
                     return Err(syn::Error::new_spanned(
                         lit,
                         "test_execution must be \"parallel\" or \"serial\"",
-                    ))
+                    ));
                 }
             }
         }
@@ -389,7 +389,7 @@ fn parse_inputs(inputs: &Punctuated<FnArg, syn::token::Comma>) -> Result<Inputs>
                 return Err(syn::Error::new_spanned(
                     input,
                     format!("Unknown input type: {other}"),
-                ))
+                ));
             }
         };
 

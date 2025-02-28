@@ -6,19 +6,19 @@ use super::{
         Branch, ExpressionAst, Identifier, Parameter,
     },
     error::{self, ExpressionSemanticError},
-    functions::{init_functions, FUNCTIONS},
+    functions::{FUNCTIONS, init_functions},
     util::duplicate_or_empty_str_slice,
 };
 use pest::{
+    Parser,
     iterators::{Pair, Pairs},
     pratt_parser::{Assoc, Op, PrattParser},
-    Parser,
 };
 use pest_derive::Parser;
 use snafu::{OptionExt, ResultExt};
 use std::{
     cell::RefCell,
-    collections::{hash_map, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, hash_map},
     rc::Rc,
     sync::OnceLock,
 };
@@ -336,7 +336,7 @@ impl ExpressionParser {
                 return Err(ExpressionSemanticError::UnexpectedOperator {
                     found: op.as_str().to_string(),
                 }
-                .into_parser_error(op.as_span()))
+                .into_parser_error(op.as_span()));
             }
         };
 
@@ -446,7 +446,7 @@ impl ExpressionParser {
                         return Err(ExpressionSemanticError::UnexpectedComparator {
                             comparator: format!("{:?}", second_pair.as_rule()),
                         }
-                        .into_parser_error(span))
+                        .into_parser_error(span));
                     }
                 };
                 let right_expression = self.build_ast(third_pair.into_inner(), variables)?;
@@ -504,7 +504,7 @@ mod tests {
     use crate::codegen::Prelude;
     use pretty_assertions::assert_str_eq;
     use proc_macro2::TokenStream;
-    use quote::{quote, ToTokens};
+    use quote::{ToTokens, quote};
 
     fn parse(name: &str, parameters: &[&str], input: &str) -> String {
         let parameters: Vec<Parameter> = parameters
@@ -946,7 +946,7 @@ mod tests {
             try_parse("will_not_compile", &[], DataType::Number, "max(1, 2, 3)")
                 .unwrap_err()
                 .to_string(),
-                " --> 1:1\n  |\n1 | max(1, 2, 3)\n  | ^----------^\n  |\n  = Invalid function arguments for function `max`: expected [number, number], got [number, number, number]"
+            " --> 1:1\n  |\n1 | max(1, 2, 3)\n  | ^----------^\n  |\n  = Invalid function arguments for function `max`: expected [number, number], got [number, number, number]"
         );
     }
 
@@ -1148,10 +1148,10 @@ mod tests {
                 let c = 2;
                 a + b",
             )
-                .unwrap_err()
-                .to_string(),
-                " --> 2:25\n  |\n2 |                 let b = C;\n  |                         ^\n  |\n  = The variable `C` was not defined",
-                "no access before declaration"
+            .unwrap_err()
+            .to_string(),
+            " --> 2:25\n  |\n2 |                 let b = C;\n  |                         ^\n  |\n  = The variable `C` was not defined",
+            "no access before declaration"
         );
 
         assert_eq!(
@@ -1162,10 +1162,10 @@ mod tests {
                 "let A = 2;
                 a",
             )
-                .unwrap_err()
-                .to_string(),
-                " --> 1:1\n  |\n1 | let A = 2;\n2 |                 a\n  | ^---------------^\n  |\n  = The variable `A` was already defined",
-                "no shadowing"
+            .unwrap_err()
+            .to_string(),
+            " --> 1:1\n  |\n1 | let A = 2;\n2 |                 a\n  | ^---------------^\n  |\n  = The variable `A` was already defined",
+            "no shadowing"
         );
     }
 
@@ -1233,7 +1233,7 @@ mod tests {
             try_parse("expression", &[], DataType::MultiPoint, "1",)
                 .unwrap_err()
                 .to_string(),
-                " --> 1:1\n  |\n1 | \n  | ^---\n  |\n  = The expression was expected to output `geometry (multipoint)`, but it outputs `number`",
+            " --> 1:1\n  |\n1 | \n  | ^---\n  |\n  = The expression was expected to output `geometry (multipoint)`, but it outputs `number`",
             "cannot call with wrong output"
         );
     }

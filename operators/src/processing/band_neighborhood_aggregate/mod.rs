@@ -69,7 +69,9 @@ pub enum BandNeighborhoodAggregateError {
     ))]
     FirstDerivativeNeedsAtLeastTwoBands,
 
-    #[snafu(display("The distance of the bands for computing the first derivative must be positive, found {distance}."))]
+    #[snafu(display(
+        "The distance of the bands for computing the first derivative must be positive, found {distance}."
+    ))]
     FirstDerivativeDistanceMustBePositive { distance: f64 },
 
     #[snafu(display("The window size for the average must be odd, found {window_size}."))]
@@ -682,10 +684,7 @@ impl Accu for MovingAverageAccu {
             self.output_band_idx + window_radius
         };
 
-        if self
-            .input_band_tiles
-            .back().is_none_or(|t| t.0 < last_band)
-        {
+        if self.input_band_tiles.back().is_none_or(|t| t.0 < last_band) {
             // not enough bands for the window
             return None;
         }
@@ -806,50 +805,53 @@ mod tests {
         assert!(accu.next_band_tile().is_none());
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 0,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }),);
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 1,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                }),
+        );
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 2,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }
@@ -898,50 +900,53 @@ mod tests {
         assert!(accu.next_band_tile().is_none());
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 0,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }),);
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 1,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                }),
+        );
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 2,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }
@@ -990,50 +995,53 @@ mod tests {
         assert!(accu.next_band_tile().is_none());
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1., 2., 3., 4.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 0,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![1., 2., 3., 4.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![3., 4., 5., 6.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 1,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 2,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![3., 4., 5., 6.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }

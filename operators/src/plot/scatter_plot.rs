@@ -401,8 +401,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_with_nulls_and_nan() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -432,8 +432,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -609,8 +610,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_single_feature() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 1],
                 &[
@@ -618,8 +619,9 @@ mod tests {
                     ("bar", FeatureData::Int(vec![1])),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -663,8 +665,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_empty() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[] as &[TimeInterval],
                 &[
@@ -672,8 +674,9 @@ mod tests {
                     ("bar", FeatureData::Int(vec![])),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -719,8 +722,8 @@ mod tests {
         let mut values = vec![1; 700];
         values.push(2);
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 701],
                 &[
@@ -728,8 +731,9 @@ mod tests {
                     ("bar", FeatureData::Int(values.clone())),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {

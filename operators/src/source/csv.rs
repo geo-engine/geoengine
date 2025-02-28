@@ -10,7 +10,7 @@ use futures::{Stream, StreamExt};
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{ColumnSelection, VectorQueryRectangle};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt, ResultExt};
+use snafu::{OptionExt, ResultExt, ensure};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
@@ -27,7 +27,7 @@ use crate::engine::{
 };
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
-use crate::util::{safe_lock_mutex, Result};
+use crate::util::{Result, safe_lock_mutex};
 use async_trait::async_trait;
 use std::sync::atomic::Ordering;
 

@@ -12,7 +12,7 @@ use geoengine_datatypes::{
     identifier,
     primitives::{CacheHint, Geometry, RasterQueryRectangle, VectorQueryRectangle},
     raster::Pixel,
-    util::{arrow::ArrowTyped, test::TestDefault, ByteSize, Identifier},
+    util::{ByteSize, Identifier, arrow::ArrowTyped, test::TestDefault},
 };
 use log::{debug, log_enabled};
 use lru::LruCache;
@@ -171,7 +171,10 @@ where
             // debug output
             log::debug!(
                 "Removed query {}. Landing zone size: {}. Landing zone size used: {}, Landing zone used percentage: {}.",
-                query_id, self.landing_zone_size.total_byte_size(), self.landing_zone_size.byte_size_used(), self.landing_zone_size.size_used_fraction()
+                query_id,
+                self.landing_zone_size.total_byte_size(),
+                self.landing_zone_size.byte_size_used(),
+                self.landing_zone_size.size_used_fraction()
             );
 
             Some(entry)
@@ -197,7 +200,10 @@ where
 
             log::debug!(
                 "Removed cache entry {}. Cache size: {}. Cache size used: {}, Cache used percentage: {}.",
-                cache_entry_id, self.cache_size.total_byte_size(), self.cache_size.byte_size_used(), self.cache_size.size_used_fraction()
+                cache_entry_id,
+                self.cache_size.total_byte_size(),
+                self.cache_size.byte_size_used(),
+                self.cache_size.size_used_fraction()
             );
 
             Some(entry)
@@ -262,7 +268,10 @@ where
 
         log::trace!(
             "Inserted tile for query {} into landing zone. Landing zone size: {}. Landing zone size used: {}. Landing zone used percentage: {}",
-            query_id, self.landing_zone_size.total_byte_size(), self.landing_zone_size.byte_size_used(), self.landing_zone_size.size_used_fraction()
+            query_id,
+            self.landing_zone_size.total_byte_size(),
+            self.landing_zone_size.byte_size_used(),
+            self.landing_zone_size.size_used_fraction()
         );
 
         Ok(())
@@ -309,7 +318,10 @@ where
         // debug output
         log::trace!(
             "Added query {} to landing zone. Landing zone size: {}. Landing zone size used: {}, Landing zone used percentage: {}.",
-            query_id, self.landing_zone_size.total_byte_size(), self.landing_zone_size.byte_size_used(), self.landing_zone_size.size_used_fraction()
+            query_id,
+            self.landing_zone_size.total_byte_size(),
+            self.landing_zone_size.byte_size_used(),
+            self.landing_zone_size.size_used_fraction()
         );
 
         Ok(query_id)
@@ -385,9 +397,9 @@ struct CacheQueryResult<'a, Query, CE> {
 
 pub trait Cache<C: CacheBackendElementExt>:
     CacheView<
-    CacheQueryEntry<C::Query, C::CacheContainer>,
-    CacheQueryEntry<C::Query, C::LandingZoneContainer>,
->
+        CacheQueryEntry<C::Query, C::CacheContainer>,
+        CacheQueryEntry<C::Query, C::LandingZoneContainer>,
+    >
 where
     C::Query: Clone + CacheQueryMatch,
 {
@@ -543,10 +555,10 @@ impl<T> Cache<CompressedRasterTile2D<T>> for CacheBackend
 where
     T: Pixel,
     CompressedRasterTile2D<T>: CacheBackendElementExt<
-        Query = RasterQueryRectangle,
-        LandingZoneContainer = LandingZoneQueryTiles,
-        CacheContainer = CachedTiles,
-    >,
+            Query = RasterQueryRectangle,
+            LandingZoneContainer = LandingZoneQueryTiles,
+            CacheContainer = CachedTiles,
+        >,
 {
     fn operator_cache_view_mut(
         &mut self,
@@ -567,10 +579,10 @@ impl<T> Cache<CompressedFeatureCollection<T>> for CacheBackend
 where
     T: Geometry + ArrowTyped,
     CompressedFeatureCollection<T>: CacheBackendElementExt<
-        Query = VectorQueryRectangle,
-        LandingZoneContainer = LandingZoneQueryFeatures,
-        CacheContainer = CachedFeatures,
-    >,
+            Query = VectorQueryRectangle,
+            LandingZoneContainer = LandingZoneQueryFeatures,
+            CacheContainer = CachedFeatures,
+        >,
 {
     fn operator_cache_view_mut(
         &mut self,
@@ -1251,14 +1263,16 @@ mod tests {
         }
 
         // access fails because ttl is expired
-        assert!(<SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(
-            &tile_cache,
-            &op(1),
-            &query_rect()
-        )
-        .await
-        .unwrap()
-        .is_none());
+        assert!(
+            <SharedCache as AsyncCache<RasterTile2D<u8>>>::query_cache(
+                &tile_cache,
+                &op(1),
+                &query_rect()
+            )
+            .await
+            .unwrap()
+            .is_none()
+        );
     }
 
     #[tokio::test]

@@ -1,6 +1,6 @@
 use crate::primitives::{BoundingBox2D, Coordinate2D, Geometry, GeometryRef, TimeInterval};
-use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
+use crate::util::arrow::ArrowTyped;
 use arrow::array::StructArray;
 use arrow::{
     array::{Array, ArrayData},

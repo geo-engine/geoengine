@@ -709,18 +709,22 @@ mod tests {
 
     #[test]
     fn it_checks_duplicate_bands() {
-        assert!(RasterBandDescriptors::new(vec![
-            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-            RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-        ])
-        .is_ok());
+        assert!(
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+            ])
+            .is_ok()
+        );
 
-        assert!(RasterBandDescriptors::new(vec![
-            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-            RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
-            RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
-        ])
-        .is_err());
+        assert!(
+            RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("bar".into(), Measurement::Unitless),
+                RasterBandDescriptor::new("foo".into(), Measurement::Unitless),
+            ])
+            .is_err()
+        );
     }
 
     #[test]
@@ -771,17 +775,19 @@ mod tests {
             .unwrap()
         );
 
-        assert!(serde_json::from_value::<RasterBandDescriptors>(json!([{
-            "name": "foo",
-            "measurement": {
-                "type": "unitless"
-            }
-        },{
-            "name": "foo",
-            "measurement": {
-                "type": "unitless"
-            }
-        }]))
-        .is_err());
+        assert!(
+            serde_json::from_value::<RasterBandDescriptors>(json!([{
+                "name": "foo",
+                "measurement": {
+                    "type": "unitless"
+                }
+            },{
+                "name": "foo",
+                "measurement": {
+                    "type": "unitless"
+                }
+            }]))
+            .is_err()
+        );
     }
 }

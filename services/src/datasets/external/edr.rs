@@ -34,8 +34,8 @@ use geoengine_operators::source::{
     OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
     OgrSourceParameters, OgrSourceTimeFormat,
 };
-use geoengine_operators::util::gdal::gdal_open_dataset;
 use geoengine_operators::util::TemporaryGdalThreadLocalConfigOptions;
+use geoengine_operators::util::gdal::gdal_open_dataset;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
@@ -865,7 +865,7 @@ impl TryFrom<EdrCollectionId> for LayerCollectionId {
                 parameter,
             } => format!("collections!{collection}!{parameter}"),
             EdrCollectionId::ParameterAndHeight { .. } => {
-                return Err(Error::InvalidLayerCollectionId)
+                return Err(Error::InvalidLayerCollectionId);
             }
         };
 
@@ -1034,10 +1034,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -1222,7 +1222,7 @@ mod tests {
         util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
-    use httptest::{matchers::*, responders::status_code, Expectation, Server};
+    use httptest::{Expectation, Server, matchers::*, responders::status_code};
     use std::{ops::Range, path::PathBuf};
     use tokio_postgres::NoTls;
 

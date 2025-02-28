@@ -1,12 +1,12 @@
 use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
 use async_trait::async_trait;
-use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
+use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
 use log::info;
 use snafu::ensure;
 use tokio_postgres::{
+    Socket, Transaction,
     error::SqlState,
     tls::{MakeTlsConnect, TlsConnect},
-    Socket, Transaction,
 };
 
 pub type DatabaseVersion = String;
@@ -195,8 +195,8 @@ mod tests {
         config::get_config_element,
         contexts::PostgresDb,
         contexts::{
-            migrations::{all_migrations, CurrentSchemaMigration, Migration0015LogQuota},
             SessionId,
+            migrations::{CurrentSchemaMigration, Migration0015LogQuota, all_migrations},
         },
         permissions::RoleId,
         projects::{ProjectDb, ProjectListOptions},
@@ -204,7 +204,7 @@ mod tests {
         util::postgres::DatabaseConnectionConfig,
         workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
     };
-    use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+    use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
     use geoengine_datatypes::{primitives::DateTime, test_data};
     use tokio_postgres::NoTls;
 
