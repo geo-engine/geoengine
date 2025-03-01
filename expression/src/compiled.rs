@@ -200,7 +200,7 @@ mod tests {
             use geo::{polygon};
             use geoengine_expression_deps::*;
 
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             pub extern "Rust" fn area_of_polygon() -> Option<f64> {
                 let polygon = MultiPolygon::from(polygon![
                     (x: 0., y: 0.),

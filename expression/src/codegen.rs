@@ -84,7 +84,7 @@ impl ToTokens for ExpressionAst {
         let dtype = self.out_type;
 
         tokens.extend(quote! {
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             pub extern "Rust" fn #fn_name (#(#params),*) -> Option<#dtype> {
                 #content
             }

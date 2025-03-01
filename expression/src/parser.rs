@@ -615,7 +615,7 @@ mod tests {
             quote! {
                 #Prelude
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     Some(1f64)
                 }
@@ -630,7 +630,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn foo() -> Option<f64> {
                     expression_fn_add__n_n(Some(1f64), Some(2f64))
                 }
@@ -645,7 +645,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn bar() -> Option<f64> {
                     expression_fn_add__n_n(Some(-1f64), Some(2f64))
                 }
@@ -660,7 +660,7 @@ mod tests {
 
                 #SUB_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn baz() -> Option<f64> {
                     expression_fn_sub__n_n(Some(1f64), Some(-2f64))
                 }
@@ -683,7 +683,7 @@ mod tests {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     expression_fn_add__n_n(
                         Some(1f64),
@@ -701,7 +701,7 @@ mod tests {
 
                 #POW_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     expression_fn_pow__n_n(Some(2f64) , Some(4f64))
                 }
@@ -719,7 +719,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     expression_fn_add__n_n(a, Some(1f64))
                 }
@@ -736,7 +736,7 @@ mod tests {
                 #DIV_FN
                 #SUB_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn ndvi(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     expression_fn_div__n_n(
                         expression_fn_sub__n_n(a, b),
@@ -764,7 +764,7 @@ mod tests {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     expression_fn_max__n_n(a, Some(0f64))
                 }
@@ -789,7 +789,7 @@ mod tests {
                     a.map(f64::sqrt)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     expression_fn_pow__n_n(expression_fn_sqrt__n(a), Some(2f64))
                 }
@@ -827,7 +827,7 @@ mod tests {
                     a.map(f64::tan)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn waves() -> Option<f64> {
                     expression_fn_cos__n(expression_fn_sin__n(expression_fn_tan__n(expression_fn_acos__n(expression_fn_asin__n(expression_fn_atan__n(Some(1f64)))))))
                 }
@@ -853,7 +853,7 @@ mod tests {
                     Some(std::f64::consts::PI)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn non_linear() -> Option<f64> {
                     expression_fn_ln__n(expression_fn_log10__n(expression_fn_pi_()))
                 }
@@ -880,7 +880,7 @@ mod tests {
                     a.map(f64::round)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn rounding() -> Option<f64> {
                     expression_fn_add__n_n(
                         expression_fn_add__n_n(
@@ -909,7 +909,7 @@ mod tests {
                     a.map(f64::to_radians)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn radians() -> Option<f64> {
                     expression_fn_add__n_n(expression_fn_to_radians__n(Some(1.3f64)), expression_fn_to_degrees__n(Some(1.3f64)))
                 }
@@ -934,7 +934,7 @@ mod tests {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn mod_e() -> Option<f64> {
                     expression_fn_mod__n_n(Some(5f64), expression_fn_e_())
                 }
@@ -957,7 +957,7 @@ mod tests {
             quote! {
                 #Prelude
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     if ((a) == (None)) {
                         Some(0f64)
@@ -986,7 +986,7 @@ mod tests {
 
                 #MUL_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(A: Option<f64>, B: Option<f64>) -> Option<f64> {
                     if ((A) == (None)) {
                         expression_fn_mul__n_n(B, Some(2f64))
@@ -1009,7 +1009,7 @@ mod tests {
             quote! {
                 #Prelude
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
                         Some(1f64)
@@ -1032,7 +1032,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
                         Some(1f64)
@@ -1058,7 +1058,7 @@ mod tests {
                 #ADD_FN
                 #SUB_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((Some(1f64)) < (Some(2f64))) {
                         Some(1f64)
@@ -1095,7 +1095,7 @@ mod tests {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((true) && (false)) {
                         Some(1f64)
@@ -1125,7 +1125,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     let a = Some(1.2f64);
                     let b = Some(2f64);
@@ -1257,7 +1257,7 @@ mod tests {
                     geom.centroid()
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn make_centroid(
                     geom: Option<MultiPolygon>
                 ) -> Option<MultiPoint> {
