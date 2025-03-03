@@ -13,7 +13,13 @@ cargo install --locked cargo-nextest
 
 print_headline "Run Tests & Generate Code Coverage"
 service postgresql start
+cargo llvm-cov nextest-archive \
+    --archive-file tests.tar.zst
+    --locked \
+    --all-features
+cargo clean
 cargo llvm-cov nextest \
+    --archive-file tests.tar.zst
     --locked \
     --all-features \
     --lcov \
