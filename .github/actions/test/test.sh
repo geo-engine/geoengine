@@ -7,12 +7,13 @@ function print_headline() {
     printf "${BOLD_WHITE_ON_CYAN} ▶ ${BOLD_CYAN} $1 ${RESET_COLOR}\n" >&2
 }
 
-print_headline "Install cargo-llvm-cov"
+print_headline "Install cargo-llvm-cov and nextest"
 cargo install cargo-llvm-cov
+cargo install --locked cargo-nextest
 
 print_headline "Run Tests & Generate Code Coverage"
 service postgresql start
-cargo llvm-cov \
+cargo llvm-cov nextest \
     --locked \
     --all-features \
     --lcov \
