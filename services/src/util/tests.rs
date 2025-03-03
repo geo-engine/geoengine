@@ -240,7 +240,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl(
 pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
     let ndvi = DatasetDefinition {
         properties: AddDataset {
-            name: None,
+            name: Some(DatasetName::new(None, "land_cover_raster_test".to_string())),
             display_name: "Land Cover".to_string(),
             description: "Land Cover derived from MODIS/Terra+Aqua Land Cover".to_string(),
             source_operator: "GdalSource".to_string(),
@@ -307,7 +307,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
                 time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                  GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
-                 GridBoundingBox2D::new_min_max(0,0, 3600, 1800).unwrap(),
+                 GridBoundingBox2D::new_min_max(0,1799, 0, 1599).unwrap(),
                 ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
