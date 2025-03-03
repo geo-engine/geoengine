@@ -8,19 +8,19 @@ function print_headline() {
 }
 
 print_headline "Install cargo-llvm-cov and nextest"
-cargo install cargo-llvm-cov
+cargo install --locked cargo-llvm-cov
 cargo install --locked cargo-nextest
 
 print_headline "Run Tests & Generate Code Coverage"
 service postgresql start
 cargo llvm-cov nextest-archive \
-    --archive-file tests.tar.zst
+    --archive-file tests.tar.zst \
+    --cargo-profile ci \
     --locked \
     --all-features
 cargo clean
 cargo llvm-cov nextest \
     --archive-file tests.tar.zst
-    --locked \
     --all-features \
     --lcov \
     --output-path lcov.info
