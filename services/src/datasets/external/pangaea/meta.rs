@@ -172,7 +172,7 @@ impl PangaeaMetaData {
                                 ErrorKind::UnexpectedEof,
                                 "End of Pangea TSV reached unexpectedly.",
                             ),
-                        })
+                        });
                     }
                 },
                 TSVParseState::DataStart(idx) => {

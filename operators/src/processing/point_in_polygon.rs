@@ -404,14 +404,16 @@ mod tests {
     #[test]
     fn point_in_polygon_boundary_conditions() {
         let collection = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.0, 0.0).into(),
-                (10.0, 0.0).into(),
-                (10.0, 10.0).into(),
-                (0.0, 10.0).into(),
-                (0.0, 0.0).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.0, 0.0).into(),
+                    (10.0, 0.0).into(),
+                    (10.0, 10.0).into(),
+                    (0.0, 10.0).into(),
+                    (0.0, 0.0).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![Default::default(); 1],
             Default::default(),
             CacheHint::default(),
@@ -435,26 +437,60 @@ mod tests {
             &Default::default()
         ),);
 
-        assert!(tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(9.9, 9.9), &Default::default()),);
-        assert!(tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(10.0, 9.9), &Default::default()),);
-        assert!(tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(9.9, 10.0), &Default::default()),);
+        assert!(
+            tester
+                .any_polygon_contains_coordinate(&Coordinate2D::new(9.9, 9.9), &Default::default()),
+        );
+        assert!(
+            tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(10.0, 9.9),
+                &Default::default()
+            ),
+        );
+        assert!(
+            tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(9.9, 10.0),
+                &Default::default()
+            ),
+        );
 
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(-0.1, -0.1), &Default::default()),);
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(0.0, -0.1), &Default::default()),);
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(-0.1, 0.0), &Default::default()),);
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(-0.1, -0.1),
+                &Default::default()
+            ),
+        );
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(0.0, -0.1),
+                &Default::default()
+            ),
+        );
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(-0.1, 0.0),
+                &Default::default()
+            ),
+        );
 
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(10.1, 10.1), &Default::default()),);
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(10.1, 9.9), &Default::default()),);
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(9.9, 10.1), &Default::default()),);
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(10.1, 10.1),
+                &Default::default()
+            ),
+        );
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(10.1, 9.9),
+                &Default::default()
+            ),
+        );
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(9.9, 10.1),
+                &Default::default()
+            ),
+        );
     }
 
     #[tokio::test]
@@ -771,14 +807,16 @@ mod tests {
         .unwrap();
 
         let polygon_collection = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.0, 0.0).into(),
-                (10.0, 0.0).into(),
-                (10.0, 10.0).into(),
-                (0.0, 10.0).into(),
-                (0.0, 0.0).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.0, 0.0).into(),
+                    (10.0, 0.0).into(),
+                    (10.0, 10.0).into(),
+                    (0.0, 10.0).into(),
+                    (0.0, 0.0).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::default()],
             Default::default(),
             CacheHint::default(),
@@ -836,14 +874,16 @@ mod tests {
         .unwrap();
 
         let polygon_collection = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.0, 0.0).into(),
-                (10.0, 0.0).into(),
-                (10.0, 10.0).into(),
-                (0.0, 10.0).into(),
-                (0.0, 0.0).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.0, 0.0).into(),
+                    (10.0, 0.0).into(),
+                    (10.0, 10.0).into(),
+                    (0.0, 10.0).into(),
+                    (0.0, 0.0).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::default()],
             Default::default(),
             CacheHint::default(),

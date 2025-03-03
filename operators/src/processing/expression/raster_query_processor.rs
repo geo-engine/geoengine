@@ -4,7 +4,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     primitives::{
         BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval,

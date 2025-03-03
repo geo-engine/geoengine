@@ -1,6 +1,6 @@
 use geoengine_datatypes::dataset::{DatasetId, NamedData};
 use postgres_types::{FromSql, ToSql};
-use serde::{de::Visitor, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Visitor};
 use snafu::Snafu;
 use std::str::FromStr;
 use strum::IntoStaticStr;

@@ -1,5 +1,5 @@
 use rayon::iter::{
-    plumbing::Producer, IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
+    IndexedParallelIterator, IntoParallelIterator, ParallelIterator, plumbing::Producer,
 };
 
 /// This macro allows comparing float slices using [`float_cmp::approx_eq`].

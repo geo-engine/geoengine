@@ -668,10 +668,10 @@ impl
     ) -> geoengine_operators::util::Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)
@@ -1062,8 +1062,8 @@ mod tests {
     use std::str::FromStr;
     use std::task::Poll;
 
-    use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationDirection;
     use aruna_rust_api::api::storage::models::v2::Relation as ArunaRelationStruct;
+    use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationDirection;
     use aruna_rust_api::api::storage::models::v2::{
         DataClass, Dataset, InternalRelation, InternalRelationVariant, KeyValue, KeyValueVariant,
         Object, Project, RelationDirection, ResourceVariant, Status,
@@ -1075,14 +1075,14 @@ mod tests {
     };
     use futures::StreamExt;
     use httptest::responders::status_code;
-    use httptest::{responders, Expectation, Server};
-    use serde_json::{json, Value};
+    use httptest::{Expectation, Server, responders};
+    use serde_json::{Value, json};
     use tokio::fs::File;
     use tokio::io::AsyncReadExt;
-    use tonic::codegen::http::Request;
-    use tonic::codegen::{http, Body, Service};
-    use tonic::transport::server::Router;
     use tonic::Code;
+    use tonic::codegen::http::Request;
+    use tonic::codegen::{Body, Service, http};
+    use tonic::transport::server::Router;
 
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};

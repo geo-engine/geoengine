@@ -8,7 +8,7 @@ use crate::util::parsing::parse_spatial_resolution;
 use crate::util::server::connection_closed;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use actix_web::{web, FromRequest, HttpRequest, Responder};
+use actix_web::{FromRequest, HttpRequest, Responder, web};
 use base64::Engine;
 use geoengine_datatypes::operations::reproject::reproject_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
@@ -218,7 +218,7 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use actix_web;
     use actix_web::dev::ServiceResponse;
-    use actix_web::http::{header, Method};
+    use actix_web::http::{Method, header};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::DateTime;
@@ -234,7 +234,7 @@ mod tests {
     use geoengine_operators::plot::{
         Histogram, HistogramBounds, HistogramBuckets, HistogramParams, Statistics, StatisticsParams,
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tokio_postgres::NoTls;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {

@@ -206,8 +206,8 @@ mod tests {
     use super::*;
 
     use async_stream::stream;
-    use futures::stream::BoxStream;
     use futures::StreamExt;
+    use futures::stream::BoxStream;
 
     #[tokio::test]
     async fn concurrent_stream() {

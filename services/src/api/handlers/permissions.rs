@@ -1,7 +1,7 @@
 use crate::api::model::datatypes::LayerId;
 use crate::contexts::{ApplicationContext, GeoEngineDb, SessionContext};
-use crate::datasets::storage::DatasetDb;
 use crate::datasets::DatasetName;
+use crate::datasets::storage::DatasetDb;
 use crate::error::{self, Error, Result};
 use crate::layers::listing::LayerCollectionId;
 use crate::machine_learning::MlModelDb;
@@ -9,7 +9,7 @@ use crate::permissions::{
     Permission, PermissionDb, PermissionListing as DbPermissionListing, ResourceId, Role, RoleId,
 };
 use crate::projects::ProjectId;
-use actix_web::{web, FromRequest, HttpResponse};
+use actix_web::{FromRequest, HttpResponse, web};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::machine_learning::MlModelName;
 use serde::{Deserialize, Serialize};
@@ -21,7 +21,6 @@ use uuid::Uuid;
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext,
-
     C::Session: FromRequest,
 {
     cfg.service(
@@ -140,7 +139,7 @@ impl TryFrom<(String, String)> for Resource {
                 return Err(Error::InvalidResourceId {
                     resource_type: value.0,
                     resource_id: value.1,
-                })
+                });
             }
         })
     }
@@ -300,7 +299,7 @@ mod tests {
         mock::{MockPointSource, MockPointSourceParams},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -356,11 +355,12 @@ mod tests {
 
         // check that workflow can only be intitialized after adding permissions
 
-        assert!(gdal
-            .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_err());
+        assert!(
+            gdal.clone()
+                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_err()
+        );
 
         admin_ctx
             .db()
@@ -372,16 +372,18 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(gdal
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_ok());
+        assert!(
+            gdal.initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_ok()
+        );
 
-        assert!(ogr
-            .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_err());
+        assert!(
+            ogr.clone()
+                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_err()
+        );
 
         admin_ctx
             .db()
@@ -393,10 +395,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(ogr
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_ok());
+        assert!(
+            ogr.initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_ok()
+        );
     }
 
     #[ge_context::test]

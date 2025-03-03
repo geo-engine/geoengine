@@ -7,11 +7,11 @@ use crate::projects::{ProjectId, STRectangle};
 use crate::users::UserId;
 use crate::util::Identifier;
 use actix_http::Payload;
-use actix_web::{web, FromRequest, HttpRequest};
+use actix_web::{FromRequest, HttpRequest, web};
 use bb8_postgres::tokio_postgres::NoTls;
 use futures::future::err;
-use futures_util::future::LocalBoxFuture;
 use futures_util::FutureExt;
+use futures_util::future::LocalBoxFuture;
 use geoengine_datatypes::primitives::DateTime;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -96,7 +96,7 @@ impl FromRequest for UserSession {
             "Application context should be present because it is set during server initialization.",
         );
         let pg_ctx = pg_ctx.get_ref().clone();
-        async move { pg_ctx.session_by_id(token).await.map_err(Into::into) }.boxed_local()
+        async move { pg_ctx.session_by_id(token).await }.boxed_local()
     }
 }
 

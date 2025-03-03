@@ -25,7 +25,7 @@ jobs:
   create-container:
     if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
 
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     env:
       TAG_NAME: nightly
@@ -54,13 +54,13 @@ jobs:
           echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
 
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           ref: ${{ github.ref_name }}
           path: geoengine
 
       - name: Checkout container files
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: geo-engine/geoengine-container
           ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
@@ -98,7 +98,7 @@ jobs:
     name: Post to a Slack channel in case of failure
     needs: create-container
     if: always()
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
     steps:
       - name: Post to a Slack channel
         if: ${{ needs.create-container.result == 'failure' }}

@@ -1,9 +1,9 @@
-use futures::{future::BoxFuture, Future, FutureExt};
+use futures::{Future, FutureExt, future::BoxFuture};
 use log::debug;
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::task::JoinHandle;
-use tracing::{span, Level};
+use tracing::{Level, span};
 
 use crate::{engine::QueryAbortTrigger, error, util::Result};
 

@@ -3,8 +3,8 @@ use crate::{raster::RasterDataType, spatial_reference::SpatialReferenceOption, u
 use arrow::{
     array::{Array, ArrayRef, PrimitiveBuilder},
     datatypes::{
-        Field, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type, Schema,
-        UInt16Type, UInt32Type, UInt64Type, UInt8Type,
+        Field, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type, Schema,
+        UInt8Type, UInt16Type, UInt32Type, UInt64Type,
     },
     ipc::writer::{FileWriter, IpcWriteOptions},
     record_batch::RecordBatch,

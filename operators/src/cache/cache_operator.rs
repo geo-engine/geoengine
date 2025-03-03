@@ -12,7 +12,7 @@ use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
-use futures::{ready, Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt, TryStreamExt, ready};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Geometry, QueryAttributeSelection, QueryRectangle, VectorQueryRectangle,
@@ -23,7 +23,7 @@ use geoengine_datatypes::util::helpers::ge_report;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 /// A cache operator that caches the results of its source operator
 pub struct InitializedCacheOperator<S> {
@@ -264,7 +264,8 @@ where
                         let result = tile_cache.finish_query(&cache_key, &query_id).await;
                         log::debug!(
                             "finished cache insertion for cache key {} and query id {}, result: {:?}",
-                            cache_key,query_id,
+                            cache_key,
+                            query_id,
                             result
                         );
                     }

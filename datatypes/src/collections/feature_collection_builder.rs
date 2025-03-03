@@ -1,11 +1,11 @@
 use crate::collections::batch_builder::RawFeatureCollectionBuilder;
-use crate::collections::{error, FeatureCollection, FeatureCollectionError};
+use crate::collections::{FeatureCollection, FeatureCollectionError, error};
 use crate::primitives::CacheHint;
 use crate::primitives::{FeatureDataType, FeatureDataValue, Geometry, TimeInstance, TimeInterval};
-use crate::util::arrow::{
-    downcast_dyn_array_builder, downcast_mut_array, padded_buffer_size, ArrowTyped,
-};
 use crate::util::Result;
+use crate::util::arrow::{
+    ArrowTyped, downcast_dyn_array_builder, downcast_mut_array, padded_buffer_size,
+};
 use arrow::array::{
     ArrayBuilder, BooleanArray, BooleanBuilder, Date64Builder, Float64Builder, Int64Builder,
     PrimitiveArray, PrimitiveBuilder, StringArray, StringBuilder, StructArray, StructBuilder,
@@ -13,8 +13,8 @@ use arrow::array::{
 };
 use arrow::datatypes::{ArrowPrimitiveType, Date64Type, Field, Float64Type, Int64Type, UInt8Type};
 use snafu::ensure;
-use std::collections::hash_map::Entry;
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::iter;
 use std::marker::PhantomData;
 

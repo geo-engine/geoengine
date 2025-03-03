@@ -3,7 +3,7 @@ use crate::{
     error::ExpressionSemanticError,
 };
 use proc_macro2::TokenStream;
-use quote::{quote, ToTokens};
+use quote::{ToTokens, quote};
 use std::{collections::HashMap, hash::Hash, sync::OnceLock};
 
 type Result<T, E = ExpressionSemanticError> = std::result::Result<T, E>;
@@ -240,9 +240,11 @@ pub fn init_functions() -> HashMap<&'static str, FunctionGenerator> {
         FunctionGenerator {
             name,
             generate_fn: |name, args| match args {
-                [dtype @ (DataType::MultiPoint
-                | DataType::MultiLineString
-                | DataType::MultiPolygon)] => Ok(Function {
+                [
+                    dtype @ (DataType::MultiPoint
+                    | DataType::MultiLineString
+                    | DataType::MultiPolygon),
+                ] => Ok(Function {
                     name: unique_name(name, args),
                     signature: vec![*dtype],
                     output_type: DataType::MultiPoint,
@@ -288,9 +290,11 @@ pub fn init_functions() -> HashMap<&'static str, FunctionGenerator> {
         FunctionGenerator {
             name,
             generate_fn: |name, args| match args {
-                [dtype @ (DataType::MultiPoint
-                | DataType::MultiLineString
-                | DataType::MultiPolygon)] => Ok(Function {
+                [
+                    dtype @ (DataType::MultiPoint
+                    | DataType::MultiLineString
+                    | DataType::MultiPolygon),
+                ] => Ok(Function {
                     name: unique_name(name, args),
                     signature: vec![*dtype],
                     output_type: DataType::Number,

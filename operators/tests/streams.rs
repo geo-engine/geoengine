@@ -1,7 +1,7 @@
+use futures::Stream;
 use futures::executor::block_on_stream;
 use futures::stream;
 use futures::task::Poll;
-use futures::Stream;
 
 pub fn fn_stream() -> impl Stream<Item = usize> {
     let mut counter: usize = 2;

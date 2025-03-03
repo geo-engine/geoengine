@@ -1,0 +1,8 @@
+[test-groups]
+integration-tests = { max-threads = 1 }
+
+
+[[profile.default.overrides]]
+filter = 'package(geoengine-services)'
+test-group = 'integration-tests'
+slow-timeout = { period = "360s" }

@@ -2,7 +2,7 @@ use crate::error::{AtLeastOneStreamRequired, Error};
 use crate::util::Result;
 use futures::future::join_all;
 use futures::stream::{BoxStream, Stream};
-use futures::{ready, Future};
+use futures::{Future, ready};
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
@@ -165,7 +165,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use geoengine_datatypes::{
         primitives::{CacheHint, TimeInterval},
         raster::{Grid, TilesEqualIgnoringCacheHint},

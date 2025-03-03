@@ -8,8 +8,8 @@ use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::error::Error;
 use crate::string_token;
-use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
+use crate::util::input::RasterOrVectorOperator;
 use async_trait::async_trait;
 use float_cmp::approx_eq;
 use futures::stream::BoxStream;
@@ -673,8 +673,8 @@ mod tests {
         EmptyGrid2D, Grid2D, RasterDataType, RasterTile2D, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::{DataCollection, VectorDataType},
         primitives::MultiPoint,
@@ -788,11 +788,13 @@ mod tests {
 
         let execution_context = MockExecutionContext::test_default();
 
-        assert!(histogram
-            .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-            .await
-            .is_err());
+        assert!(
+            histogram
+                .boxed()
+                .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+                .await
+                .is_err()
+        );
     }
 
     fn mock_raster_source() -> Box<dyn RasterOperator> {
@@ -1330,12 +1332,14 @@ mod tests {
     #[tokio::test]
     async fn feature_collection_with_one_feature() {
         let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
-            vec![DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[TimeInterval::default()],
-                &[("foo", FeatureData::Float(vec![5.0]))],
-            )
-            .unwrap()],
+            vec![
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[TimeInterval::default()],
+                    &[("foo", FeatureData::Float(vec![5.0]))],
+                )
+                .unwrap(),
+            ],
             [(
                 "foo".to_string(),
                 Measurement::continuous("bar".to_string(), None),

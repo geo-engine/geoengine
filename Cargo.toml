@@ -1,6 +1,9 @@
 [workspace]
 members = ["datatypes", "expression", "macros", "operators", "services"]
-exclude = ["expression/deps-workspace"]
+exclude = [
+    "expression/deps-workspace", # Buggy, cf. https://github.com/rust-lang/cargo/issues/6745
+    ".scripts",
+]
 # Edition 2021 defaults to resolver 2, but virtual workspaces default to resolver 1, so we need to set it explicitly.
 resolver = "2"
 
@@ -11,7 +14,7 @@ authors = [
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
     "Michael Mattig <mattig@mathematik.uni-marburg.de>",
 ]
-edition = "2021"
+edition = "2024"
 publish = false
 license-file = "LICENSE"
 documentation = "https://docs.geoengine.io"
@@ -21,6 +24,10 @@ repository = "https://github.com/geo-engine/geoengine"
 # TODO: Maybe https://rust-lang.github.io/rust-clippy/stable/index.html#missing_inline_in_public_items is more suitable
 [profile.release]
 lto = true
+
+[profile.ci]
+inherits = "test"
+strip = "debuginfo"
 
 [workspace.lints.clippy]
 # configure default clippy lints
@@ -139,8 +146,8 @@ postgres-types = { version = "0.2", features = [
 pretty_assertions = "1.4"
 prettyplease = "0.2"
 proc-macro2 = "1.0"
-proj = "0.22" # needs to stay fixed to use fixed proj version
-proj-sys = "0.19" # needs to stay fixed to use fixed proj version
+proj = "0.28" # needs to stay fixed to use fixed proj version
+proj-sys = "0.25" # needs to stay fixed to use fixed proj version
 prost = "0.12" # must be compatible with `aruna-rust-api`
 pwhash = "1.0"
 quote = "1.0"

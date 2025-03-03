@@ -103,7 +103,7 @@ impl TilingStrategy {
     pub fn tile_idx_iterator(
         &self,
         partition: SpatialPartition2D,
-    ) -> impl Iterator<Item = GridIdx2D> {
+    ) -> impl Iterator<Item = GridIdx2D> + use<> {
         let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
             self.pixel_idx_to_tile_idx(self.geo_transform.upper_left_pixel_idx(&partition));
 
@@ -121,7 +121,7 @@ impl TilingStrategy {
     pub fn tile_information_iterator(
         &self,
         partition: SpatialPartition2D,
-    ) -> impl Iterator<Item = TileInformation> {
+    ) -> impl Iterator<Item = TileInformation> + use<> {
         let tile_pixel_size = self.tile_size_in_pixels;
         let geo_transform = self.geo_transform;
         self.tile_idx_iterator(partition)

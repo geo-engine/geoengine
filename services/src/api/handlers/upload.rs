@@ -5,7 +5,7 @@ use crate::error::Result;
 use crate::error::{self, Error};
 use crate::util::path_with_base_path;
 use actix_multipart::Multipart;
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{FromRequest, Responder, web};
 use futures::StreamExt;
 use gdal::vector::LayerAccess;
 use geoengine_datatypes::util::Identifier;
@@ -203,7 +203,7 @@ mod tests {
     use crate::contexts::Session;
     use crate::ge_context;
     use crate::users::UserAuth;
-    use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
+    use crate::util::tests::{SetMultipartBody, TestDataUploads, send_test_request};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use tokio_postgres::NoTls;
