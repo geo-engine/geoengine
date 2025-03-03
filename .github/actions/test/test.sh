@@ -21,4 +21,4 @@ cargo llvm-cov nextest \
 
 print_headline "Run Doctests"
 # cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
-cargo test --doc --all-features
+cargo test --doc --all-features --locked
