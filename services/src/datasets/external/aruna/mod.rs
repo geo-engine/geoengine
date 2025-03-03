@@ -2018,7 +2018,8 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:DATASET_ID"
+                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:DATASET_ID",
+                        "overviewLevel": null
                     }
                 }
             }),

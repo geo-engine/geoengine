@@ -27,10 +27,11 @@ fn setup_gdal_source(
     tiling_specification: TilingSpecification,
 ) -> GdalSourceProcessor<u8> {
     GdalSourceProcessor::<u8> {
-        result_descriptor: meta_data.result_descriptor.clone(),
+        produced_result_descriptor: meta_data.result_descriptor.clone(),
         tiling_specification,
         overview_level: 0,
         meta_data: Box::new(meta_data),
+        original_resolution_spatial_grid: None,
         _phantom_data: PhantomData,
     }
 }

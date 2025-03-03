@@ -622,10 +622,11 @@ mod tests {
         let meta_data = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: meta_data.result_descriptor.clone(),
+            produced_result_descriptor: meta_data.result_descriptor.clone(),
             tiling_specification: exe_ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(meta_data),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
