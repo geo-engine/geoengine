@@ -41,38 +41,6 @@ jobs:
       #     key: ci_test_
       - name: Testsuite
         uses: ./.github/actions/test
-
-  coverage:
-    runs-on: ubuntu-24.04
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-      - name: Free Disk Space (Ubuntu)
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
-      # TODO: Get Cache back
-      # - name: setup rust build cache
-      #   uses: Swatinem/rust-cache@v2
-      #   with:
-      #     # An explicit cache key that is used instead of the automatic `job`-based
-      #     # cache key and is thus stable across jobs.
-      #     # Default: empty
-      #     shared-key: ""
-
-      #     # An additional cache key that is added alongside the automatic `job`-based
-      #     # cache key and can be used to further differentiate jobs.
-      #     # Default: empty
-      #     key: ci_test_
-      - name: Testsuite
-        uses: ./.github/actions/coverage
       - name: Adjust lcov.info
         # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
         run: |

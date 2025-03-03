@@ -7,6 +7,17 @@ function print_headline() {
     printf "${BOLD_WHITE_ON_CYAN} ▶ ${BOLD_CYAN} $1 ${RESET_COLOR}\n" >&2
 }
 
-print_headline "Running tests"
+print_headline "Install cargo-llvm-cov"
+cargo install cargo-llvm-cov
+
+print_headline "Run Tests & Generate Code Coverage"
 service postgresql start
-cargo test --locked --verbose --jobs 1 -- --test-threads 1
+cargo llvm-cov \
+    --locked \
+    --all-features \
+    --lcov \
+    --output-path lcov.info
+
+print_headline "Run Doctests"
+# cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
+cargo test --doc --all-features
