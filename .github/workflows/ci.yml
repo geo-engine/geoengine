@@ -50,6 +50,89 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: lcov.info
+      
+  test2:
+    runs-on: ubuntu-24.04
+
+    env:
+      CONTAINER_REPOSITORY_BRANCH: ubuntu-24
+
+    services:
+      postgres:
+        image: postgis/postgis
+        env:
+          POSTGRES_USER: geoengine
+          POSTGRES_PASSWORD: geoengine
+          POSTGRES_DB: geoengine
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      - name: Checkout container files
+        uses: actions/checkout@v4
+        with:
+          repository: geo-engine/geoengine-container
+          ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
+          ssh-key: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
+          path: "container"
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            $(cat container/devcontainer/packages.txt | sed '/^#/d' | tr '\n' ' ')
+          sudo apt-get clean
+
+          export C_INCLUDE_PATH=/usr/include/gdal:$C_INCLUDE_PATH
+          export CPLUS_INCLUDE_PATH=/usr/include/gdal:$CPLUS_INCLUDE_PATH
+          sudo ldconfig
+
+          curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused -fsSL \
+            "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
+          echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
+      - name: Init rustup toolchain
+        run: rustup show # enough to initialize the toolchain
+      - name: setup rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          # An explicit cache key that is used instead of the automatic `job`-based
+          # cache key and is thus stable across jobs.
+          # Default: empty
+          shared-key: ""
+
+          # An additional cache key that is added alongside the automatic `job`-based
+          # cache key and can be used to further differentiate jobs.
+          # Default: empty
+          key: ci_test_
+      - name: Testsuite
+        run: |
+          cargo install cargo-llvm-cov
+
+          cargo llvm-cov \
+            --locked \
+            --all-features \
+            --lcov \
+            --output-path lcov.info
+
+          # cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
+          cargo test --doc --all-features --locked
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: lcov.info
 
   lint:
     runs-on: ubuntu-24.04
