@@ -103,7 +103,7 @@ jobs:
             "https://sh.rustup.rs" | sh -s -- --profile minimal --default-toolchain none -y
           echo "${CARGO_HOME:-$HOME/.cargo}/bin" >> $GITHUB_PATH
       - name: Init rustup toolchain
-        run: rustup show # enough to initialize the toolchain
+        run: rustup show active-toolchain || rustup toolchain install
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:
