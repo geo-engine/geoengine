@@ -123,10 +123,10 @@ jobs:
       - name: Run tests
         run: >
           cargo llvm-cov
-            --locked
-            --all-features
-            --lcov
-            --output-path lcov.info
+          --locked
+          --all-features
+          --lcov
+          --output-path lcov.info
       - name: Make some space
         run: cargo llvm-cov clean --frozen
       - name: Make some more space

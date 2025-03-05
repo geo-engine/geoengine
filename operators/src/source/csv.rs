@@ -32,39 +32,6 @@ use async_trait::async_trait;
 use std::sync::atomic::Ordering;
 
 /// Parameters for the CSV Source Operator
-///
-/// # Examples
-///
-/// ```rust
-/// use serde_json::{Result, Value};
-/// use geoengine_operators::source::{CsvSourceParameters, CsvSource};
-/// use geoengine_operators::source::{CsvGeometrySpecification, CsvTimeSpecification};
-///
-/// let json_string = r#"
-///     {
-///         "type": "CsvSource",
-///         "params": {
-///             "filePath": "/foo/bar.csv",
-///             "fieldSeparator": ",",
-///             "geometry": {
-///                 "type": "xy",
-///                 "x": "x",
-///                 "y": "y"
-///             }
-///         }
-///     }"#;
-///
-/// let operator: CsvSource = serde_json::from_str(json_string).unwrap();
-///
-/// assert_eq!(operator, CsvSource {
-///     params: CsvSourceParameters {
-///         file_path: "/foo/bar.csv".into(),
-///         field_separator: ',',
-///         geometry: CsvGeometrySpecification::XY { x: "x".into(), y: "y".into() },
-///         time: CsvTimeSpecification::None,
-///     },
-/// });
-/// ```
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CsvSourceParameters {
@@ -447,6 +414,40 @@ mod tests {
     use super::*;
     use crate::engine::MockQueryContext;
     use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
+
+    #[test]
+    fn it_deserializes() {
+        let json_string = r#"
+            {
+                "type": "CsvSource",
+                "params": {
+                    "filePath": "/foo/bar.csv",
+                    "fieldSeparator": ",",
+                    "geometry": {
+                        "type": "xy",
+                        "x": "x",
+                        "y": "y"
+                    }
+                }
+            }"#;
+
+        let operator: CsvSource = serde_json::from_str(json_string).unwrap();
+
+        assert_eq!(
+            operator,
+            CsvSource {
+                params: CsvSourceParameters {
+                    file_path: "/foo/bar.csv".into(),
+                    field_separator: ',',
+                    geometry: CsvGeometrySpecification::XY {
+                        x: "x".into(),
+                        y: "y".into()
+                    },
+                    time: CsvTimeSpecification::None,
+                },
+            }
+        );
+    }
 
     #[tokio::test]
     async fn read_points() {

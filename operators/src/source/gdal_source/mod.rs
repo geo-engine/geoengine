@@ -72,31 +72,6 @@ static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
 static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 /// Parameters for the GDAL Source Operator
-///
-/// # Examples
-///
-/// ```rust
-/// use serde_json::{Result, Value};
-/// use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-/// use geoengine_datatypes::dataset::{NamedData};
-/// use geoengine_datatypes::util::Identifier;
-///
-/// let json_string = r#"
-///     {
-///         "type": "GdalSource",
-///         "params": {
-///             "data": "ns:dataset"
-///         }
-///     }"#;
-///
-/// let operator: GdalSource = serde_json::from_str(json_string).unwrap();
-///
-/// assert_eq!(operator, GdalSource {
-///     params: GdalSourceParameters {
-///         data: NamedData::with_namespaced_name("ns", "dataset"),
-///     },
-/// });
-/// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct GdalSourceParameters {
     pub data: NamedData,
@@ -1360,6 +1335,28 @@ mod tests {
             TimeInterval::default(),
             CacheHint::default(),
         )
+    }
+
+    #[test]
+    fn it_deserializes() {
+        let json_string = r#"
+            {
+                "type": "GdalSource",
+                "params": {
+                    "data": "ns:dataset"
+                }
+            }"#;
+
+        let operator: GdalSource = serde_json::from_str(json_string).unwrap();
+
+        assert_eq!(
+            operator,
+            GdalSource {
+                params: GdalSourceParameters {
+                    data: NamedData::with_namespaced_name("ns", "dataset"),
+                },
+            }
+        );
     }
 
     #[test]
