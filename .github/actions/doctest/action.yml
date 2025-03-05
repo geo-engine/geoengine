@@ -1,0 +1,6 @@
+name: "Run Doc Tests"
+description: "Run Geo Engine documentation tests"
+runs:
+  using: "docker"
+  image: "docker://quay.io/geoengine/devcontainer:latest"
+  entrypoint: "./.github/actions/doctest/test.sh"
