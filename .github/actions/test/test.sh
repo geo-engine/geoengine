@@ -17,3 +17,7 @@ cargo llvm-cov \
     --all-features \
     --lcov \
     --output-path lcov.info
+
+print_headline "Clean Up"
+service postgresql stop
+cargo llvm-cov clean --frozen

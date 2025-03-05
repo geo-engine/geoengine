@@ -129,7 +129,8 @@ jobs:
             --output-path lcov.info
 
           # make some space
-          cargo llvm-cov clean --frozen --profraw-only
+          cargo llvm-cov clean --frozen
+          cargo clean
       - name: Testsuite (doctests)
         uses: ./.github/actions/doctest
       - name: Upload coverage to Coveralls
