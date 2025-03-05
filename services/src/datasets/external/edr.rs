@@ -20,7 +20,10 @@ use geoengine_datatypes::primitives::{
     BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, Coordinate2D, FeatureDataType,
     Measurement, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D, RasterDataType};
+use geoengine_datatypes::raster::{
+    BoundedGrid, GeoTransform, GridIdx2D, GridShape2D, GridSize, RasterDataType,
+    SpatialGridDefinition,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
@@ -688,15 +691,27 @@ impl EdrCollectionMetaData {
         geo_transform: GeoTransform,
         grid_shape: GridShape2D,
     ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
-        // TODO: add explicit conversion to tiling based
+        // IF the dataset has a fliped y-axis and we want to use it up-up we need to flip the grid!
+
+        let spatial_grid = if geo_transform.y_axis_is_neg() {
+            SpatialGridDefinition::new(geo_transform, grid_shape.bounding_box())
+        } else {
+            let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_shape.bounding_box());
+            spatial_grid
+                .flip_axis_y()
+                .shift_bounds_relative_by_pixel_offset(GridIdx2D::new_y_x(
+                    spatial_grid.grid_bounds.axis_size_y() as isize,
+                    0,
+                ))
+        };
+
+        let spatial_grid_def = SpatialGridDescriptor::new_source(spatial_grid);
+
         Ok(RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: Some(self.get_time_interval()?),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                geo_transform,
-                grid_shape.bounding_box(),
-            ),
+            spatial_grid: spatial_grid_def,
             bands: RasterBandDescriptors::new_single_band(),
         })
     }
@@ -1189,7 +1204,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 source: Box::new(e),
             }
         })?;
-        let grid_shape = GridShape2D::new_2d(
+        let grid_shape: geoengine_datatypes::raster::GridShape<[usize; 2]> = GridShape2D::new_2d(
             params[0].params.as_mut().unwrap().height,
             params[0].params.as_mut().unwrap().width,
         );
@@ -1664,7 +1679,6 @@ mod tests {
                 cache_ttl: Default::default(),
             }
         );
-
         let result_descriptor = meta.result_descriptor().await.unwrap();
         assert_eq!(
             result_descriptor,
@@ -1808,11 +1822,11 @@ mod tests {
                 )),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new(
-                        (0., -90.).into(),
+                        (0., 90.).into(),
                         0.499_305_555_555_555_6,
                         -0.498_614_958_448_753_5
                     ),
-                    GridBoundingBox2D::new_min_max(0, 0, 720, 361).unwrap(),
+                    GridBoundingBox2D::new_min_max(0, 360, 0, 719).unwrap(),
                 ),
                 bands: RasterBandDescriptors::new_single_band(),
             }

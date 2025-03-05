@@ -982,10 +982,11 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
@@ -1035,10 +1036,11 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
@@ -1083,10 +1085,11 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
@@ -1135,10 +1138,11 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
@@ -1190,10 +1194,11 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
@@ -1245,10 +1250,11 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
@@ -1314,10 +1320,11 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
@@ -1356,10 +1363,11 @@ mod tests {
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification: ctx.tiling_specification(),
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
@@ -1563,10 +1571,11 @@ mod tests {
         let tiling_specification = TilingSpecification::new([512, 512].into());
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: metadata.result_descriptor.clone(),
+            produced_result_descriptor: metadata.result_descriptor.clone(),
             tiling_specification,
             overview_level: 0,
             meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 

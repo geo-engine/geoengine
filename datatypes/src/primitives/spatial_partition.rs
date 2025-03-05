@@ -309,10 +309,7 @@ impl From<&SpatialPartition2D> for geo::Rect<f64> {
 pub fn partitions_extent<I: Iterator<Item = SpatialPartition2D>>(
     bboxes: I,
 ) -> Option<SpatialPartition2D> {
-    bboxes.fold(None, |accu, other| match accu {
-        None => None,
-        Some(a) => Some(a.extended(&other)),
-    })
+    bboxes.reduce(|s, other| s.extended(&other))
 }
 
 #[cfg(test)]

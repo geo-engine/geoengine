@@ -38,9 +38,8 @@ impl GeoTransform {
     ///
     #[inline]
     pub fn new(origin_coordinate: Coordinate2D, x_pixel_size: f64, y_pixel_size: f64) -> Self {
-        debug_assert!(x_pixel_size > 0.0);
-        debug_assert!(y_pixel_size < 0.0);
-
+        debug_assert!(x_pixel_size != 0.0);
+        debug_assert!(y_pixel_size != 0.0);
         Self {
             origin_coordinate,
             x_pixel_size,
@@ -64,9 +63,8 @@ impl GeoTransform {
         origin_coordinate_y: f64,
         y_pixel_size: f64,
     ) -> Self {
-        debug_assert!(x_pixel_size > 0.0);
-        debug_assert!(y_pixel_size < 0.0);
-
+        debug_assert!(x_pixel_size != 0.0);
+        debug_assert!(y_pixel_size != 0.0);
         Self {
             origin_coordinate: (origin_coordinate_x, origin_coordinate_y).into(),
             x_pixel_size,
@@ -80,6 +78,10 @@ impl GeoTransform {
 
     pub fn y_pixel_size(&self) -> f64 {
         self.y_pixel_size
+    }
+
+    pub fn y_axis_is_neg(&self) -> bool {
+        self.y_pixel_size < 0.0
     }
 
     /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)
@@ -153,6 +155,7 @@ impl GeoTransform {
     }
 
     pub fn spatial_resolution(&self) -> SpatialResolution {
+        // TODO: should honor negative y size
         SpatialResolution {
             x: self.x_pixel_size.abs(),
             y: self.y_pixel_size.abs(),

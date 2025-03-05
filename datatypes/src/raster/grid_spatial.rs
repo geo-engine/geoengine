@@ -52,12 +52,15 @@ impl SpatialGridDefinition {
     }
 
     #[must_use]
+    /// Moves the origin and bounds using a pixel offset. The spatial location stays the same!
     pub fn shift_bounds_relative_by_pixel_offset(&self, offset: GridIdx2D) -> Self {
         let grid_bounds = self.grid_bounds.shift_by_offset(offset);
         let geo_transform = self.geo_transform.shift_by_pixel_offset(-offset);
         Self::new(geo_transform, grid_bounds)
     }
 
+    /// Moves the origin to another pixel edge. The spatial location stays the same!
+    /// Check if you can use `shift_bounds_relative_by_pixel_offset`!
     pub fn with_moved_origin_exact_grid(&self, new_origin: Coordinate2D) -> Option<Self> {
         if approx_eq!(
             Coordinate2D,
@@ -134,8 +137,14 @@ impl SpatialGridDefinition {
             return None;
         };
 
-        let other_shift =
-            other.with_moved_origin_exact_grid(self.geo_transform.origin_coordinate)?;
+        let (other_shift, dist) = other.with_moved_origin_to_nearest_grid_edge_with_distance(
+            self.geo_transform.origin_coordinate,
+        );
+        if dist.x.abs() > self.geo_transform().x_pixel_size().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
+            || dist.y.abs() > self.geo_transform().y_pixel_size().abs() * 0.00001
+        {
+            return None;
+        }
 
         let intersection_bounds = self
             .grid_bounds()
@@ -182,6 +191,25 @@ impl SpatialGridDefinition {
             .geo_transform
             .spatial_to_grid_bounds(&spatial_partition);
         Self::new(self.geo_transform, grid_bounds)
+    }
+
+    #[must_use]
+    pub fn flip_axis_y(&self) -> Self {
+        let geo_transform = GeoTransform::new(
+            self.geo_transform.origin_coordinate,
+            self.geo_transform.x_pixel_size(),
+            -self.geo_transform.y_pixel_size(),
+        );
+
+        let y_min = -(self.grid_bounds.y_max() + 1); // since grid bounds are inclusive
+        let y_max = -(self.grid_bounds.y_min() + 1);
+
+        let grid_bounds = GridBoundingBox2D::new_unchecked(
+            [y_min, self.grid_bounds.x_min()],
+            [y_max, self.grid_bounds.x_max()],
+        );
+
+        Self::new(geo_transform, grid_bounds)
     }
 }
 
@@ -449,5 +477,25 @@ mod tests {
 
         assert!(1. - (result_res.geo_transform().x_pixel_size() / res_4326.x).abs() < 0.02);
         assert!(1. - (result_res.geo_transform().y_pixel_size() / res_4326.y).abs() < 0.02);
+    }
+
+    #[test]
+    fn flip_axis_y() {
+        let spatial_grid = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(20.0, 20.0), 3., 2.),
+            GridBoundingBox2D::new_min_max(10, 25, 1, 2).unwrap(),
+        );
+
+        let fliped = spatial_grid.flip_axis_y();
+
+        assert_eq!(
+            fliped.geo_transform,
+            GeoTransform::new(Coordinate2D::new(20.0, 20.0), 3., -2.)
+        );
+
+        assert_eq!(
+            fliped.grid_bounds,
+            GridBoundingBox2D::new_min_max(-26, -11, 1, 2).unwrap()
+        );
     }
 }

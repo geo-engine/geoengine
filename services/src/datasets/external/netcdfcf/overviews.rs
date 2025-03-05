@@ -827,8 +827,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
-                        GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
+                        GeoTransform::new((50., 55.).into(), 1., -1.),
+                        GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
@@ -992,8 +992,8 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new((0., 0.).into(), 1., -1.), // Fixme: find correct values
-                        GridBoundingBox2D::new_min_max(0, 0, 5, 5).unwrap(), // Fixme: find correct values
+                        GeoTransform::new((50., 55.).into(), 1., -1.),
+                        GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
                     ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
