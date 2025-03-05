@@ -118,7 +118,7 @@ jobs:
           key: ci_test_
       - name: Testsuite
         run: |
-          cargo install cargo-llvm-cov
+          cargo install --locked cargo-llvm-cov
 
           cargo llvm-cov \
             --locked \
@@ -126,8 +126,11 @@ jobs:
             --lcov \
             --output-path lcov.info
 
+          # make some space
+          cargo llvm-cov clean --frozen --profraw-only
+
           # cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
-          cargo test --doc --all-features --locked
+          cargo test --doc --all-features --frozen
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
