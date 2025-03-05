@@ -5,13 +5,14 @@ use crate::engine::{
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
-    RasterQueryRectangle, RasterSpatialQueryRectangle,
+    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{
     MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
@@ -191,6 +192,19 @@ impl InitializedRasterOperator for InitializedTemperature {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(Temperature {
+            params: self.params.clone(),
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

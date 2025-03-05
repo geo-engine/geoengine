@@ -6,6 +6,7 @@ use crate::engine::{
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
@@ -13,6 +14,7 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::primitives::{
     Geometry, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
     VectorQueryRectangle,
@@ -139,9 +141,10 @@ where
     }
 }
 
-pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry> {
+pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry + ArrowTyped> {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    params: MockFeatureCollectionSourceParams<G>,
     result_descriptor: R,
     collections: Vec<FeatureCollection<G>>,
 }
@@ -204,6 +207,7 @@ macro_rules! impl_mock_feature_collection_source {
                 Ok(InitializedMockFeatureCollectionSource {
                     name: CanonicOperatorName::from(&self),
                     path,
+                    params: self.params.clone(),
                     result_descriptor,
                     collections: self.params.collections,
                 }
@@ -236,6 +240,16 @@ macro_rules! impl_mock_feature_collection_source {
             }
             fn path(&self) -> WorkflowOperatorPath {
                 self.path.clone()
+            }
+
+            fn optimize(
+                &self,
+                _target_resolution: SpatialResolution,
+            ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+                Ok(MockFeatureCollectionSource {
+                    params: self.params.clone(),
+                }
+                .boxed())
             }
         }
     };

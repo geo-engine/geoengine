@@ -4,6 +4,7 @@ use crate::engine::{
     PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor, SingleRasterSource,
     TypedPlotQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::math::average_floor;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -11,8 +12,8 @@ use futures::stream::BoxStream;
 use futures::StreamExt;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    BandSelection, Measurement, PlotQueryRectangle, RasterQueryRectangle, TimeInstance,
-    TimeInterval,
+    BandSelection, Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
+    TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use serde::{Deserialize, Serialize};
@@ -121,6 +122,19 @@ impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(MeanRasterPixelValuesOverTime {
+            params: self.state.clone(),
+            sources: SingleRasterSource {
+                raster: self.raster.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

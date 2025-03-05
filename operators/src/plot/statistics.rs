@@ -7,6 +7,7 @@ use crate::engine::{
 };
 use crate::error;
 use crate::error::Error;
+use crate::optimization::OptimizationError;
 use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::statistics::{SafePSquareQuantileEstimator, StatisticsError};
@@ -17,7 +18,8 @@ use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, AxisAlignedRectangle, BandSelection, BoundingBox2D,
-    ColumnSelection, PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
+    ColumnSelection, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
@@ -245,6 +247,29 @@ impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVector
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(Statistics {
+            params: StatisticsParams {
+                column_names: self.column_names.clone(),
+                percentiles: self
+                    .percentiles
+                    .iter()
+                    .cloned()
+                    .map(NotNan::<f64>::new)
+                    .collect::<Result<Vec<_>,_>>().expect("percentiles should be not nan because they are NotNan<f64> during initialization"),
+            },
+            sources: MultipleRasterOrSingleVectorSource {
+                source: MultiRasterOrVectorOperator::Vector(
+                    self.source.optimize(target_resolution)?,
+                ),
+            },
+        }
+        .boxed())
+    }
 }
 
 impl InitializedPlotOperator for InitializedStatistics<Vec<Box<dyn InitializedRasterOperator>>> {
@@ -269,6 +294,32 @@ impl InitializedPlotOperator for InitializedStatistics<Vec<Box<dyn InitializedRa
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(Statistics {
+            params: StatisticsParams {
+                column_names: self.column_names.clone(),
+                percentiles: self
+                    .percentiles
+                    .iter()
+                    .cloned()
+                    .map(NotNan::<f64>::new)
+                    .collect::<Result<Vec<_>,_>>().expect("percentiles should be not nan because they are NotNan<f64> during initialization"),
+            },
+            sources: MultipleRasterOrSingleVectorSource {
+                source: MultiRasterOrVectorOperator::Raster(
+                    self.source
+                        .iter()
+                        .map(|s| s.optimize(target_resolution))
+                        .collect::<Result<Vec<_>, OptimizationError>>()?,
+                ),
+            },
+        }
+        .boxed())
     }
 }
 

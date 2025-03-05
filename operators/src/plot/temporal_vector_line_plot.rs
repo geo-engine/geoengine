@@ -5,9 +5,11 @@ use crate::engine::{
     TypedPlotQueryProcessor, VectorColumnInfo, VectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::TryStreamExt;
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::{
     collections::{FeatureCollection, FeatureCollectionInfos},
     plots::{DataPoint, MultiLineChart, Plot, PlotData},
@@ -137,6 +139,19 @@ impl InitializedPlotOperator for InitializedFeatureAttributeValuesOverTime {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(FeatureAttributeValuesOverTime {
+            params: self.state.clone(),
+            sources: SingleVectorSource {
+                vector: self.vector_source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

@@ -6,13 +6,15 @@ use crate::engine::{
 };
 use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    ColumnSelection, FeatureDataRef, Measurement, PlotQueryRectangle, VectorQueryRectangle,
+    ColumnSelection, FeatureDataRef, Measurement, PlotQueryRectangle, SpatialResolution,
+    VectorQueryRectangle,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -155,6 +157,22 @@ impl InitializedPlotOperator for InitializedCountPieChart<Box<dyn InitializedVec
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(PieChart {
+            params: PieChartParams::Count {
+                column_name: self.column_name.clone(),
+                donut: self.donut,
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

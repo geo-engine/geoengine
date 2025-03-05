@@ -194,6 +194,13 @@ impl SpatialGridDescriptor {
         grid_def.spatial_partition()
     }
 
+    pub fn geo_transform(&self) -> GeoTransform {
+        match self {
+            SpatialGridDescriptor::Source(s) => s.geo_transform(),
+            SpatialGridDescriptor::Derived(m) => m.geo_transform(),
+        }
+    }
+
     pub fn spatial_resolution(&self) -> SpatialResolution {
         match self {
             SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => {
@@ -396,6 +403,21 @@ impl RasterResultDescriptor {
             )),
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         }
+    }
+
+    pub fn replace_resolution(&mut self, resolution: SpatialResolution) {
+        self.spatial_grid = match self.spatial_grid {
+            SpatialGridDescriptor::Source(spatial_grid_definition) => {
+                SpatialGridDescriptor::Source(
+                    spatial_grid_definition.with_changed_resolution(resolution),
+                )
+            }
+            SpatialGridDescriptor::Derived(spatial_grid_definition) => {
+                SpatialGridDescriptor::Derived(
+                    spatial_grid_definition.with_changed_resolution(resolution),
+                )
+            }
+        };
     }
 }
 

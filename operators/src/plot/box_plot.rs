@@ -6,6 +6,7 @@ use crate::engine::{
     WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
+use crate::optimization::OptimizationError;
 use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
 use crate::util::Result;
@@ -15,7 +16,8 @@ use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::primitives::{
     partitions_extent, time_interval_extent, AxisAlignedRectangle, BandSelection, BoundingBox2D,
-    ColumnSelection, PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
+    ColumnSelection, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::GridOrEmpty;
 use num_traits::AsPrimitive;
@@ -221,6 +223,23 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(BoxPlot {
+            params: BoxPlotParams {
+                column_names: self.names.clone(),
+            },
+            sources: MultipleRasterOrSingleVectorSource {
+                source: MultiRasterOrVectorOperator::Vector(
+                    self.source.optimize(target_resolution)?,
+                ),
+            },
+        }
+        .boxed())
+    }
 }
 
 impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRasterOperator>>> {
@@ -244,6 +263,26 @@ impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRaste
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(BoxPlot {
+            params: BoxPlotParams {
+                column_names: self.names.clone(),
+            },
+            sources: MultipleRasterOrSingleVectorSource {
+                source: MultiRasterOrVectorOperator::Raster(
+                    self.source
+                        .iter()
+                        .map(|s| s.optimize(target_resolution))
+                        .collect::<Result<Vec<_>, OptimizationError>>()?,
+                ),
+            },
+        }
+        .boxed())
     }
 }
 

@@ -27,6 +27,7 @@ pub use band_neighborhood_aggregate::{
 pub use circle_merging_quadtree::{
     InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
 };
+pub use column_range_filter::{ColumnRangeFilter, ColumnRangeFilterParams};
 pub use downsample::{
     Downsampling, DownsamplingError, DownsamplingMethod, DownsamplingParams,
     DownsamplingResolution, InitializedDownsampling,
@@ -58,6 +59,7 @@ pub use raster_vector_join::{
     ColumnNames, FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams,
     TemporalAggregationMethod,
 };
+pub use rasterization::{Rasterization, RasterizationParams};
 pub use reprojection::{
     DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
     Reprojection, ReprojectionParams,
