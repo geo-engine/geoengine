@@ -849,23 +849,12 @@ impl RasterOperator for GdalSource {
         let op = InitializedGdalSourceOperator::initialize_with_overview_level(
             CanonicOperatorName::from(&self),
             path,
-            self.params.data.to_string(),
+            self.params.data,
             meta_data,
             meta_data_result_descriptor,
             context.tiling_specification(),
             self.params.overview_level.unwrap_or(0),
         );
-
-        let op = InitializedGdalSourceOperator {
-            name: CanonicOperatorName::from(&self),
-            path,
-            data: self.params.data.to_string(),
-            result_descriptor: res,
-            meta_data,
-            data_name: self.params.data,
-            overview_level: self.params.overview_level.unwrap_or(0),
-            tiling_specification: context.tiling_specification(),
-        };
 
         Ok(op.boxed())
     }
@@ -877,7 +866,6 @@ impl RasterOperator for GdalSource {
 pub struct InitializedGdalSourceOperator {
     pub name: CanonicOperatorName,
     path: WorkflowOperatorPath,
-    data: String,
     pub meta_data: GdalMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
@@ -888,30 +876,10 @@ pub struct InitializedGdalSourceOperator {
 }
 
 impl InitializedGdalSourceOperator {
-    pub fn initialize_original_resolution(
-        name: CanonicOperatorName,
-        path: WorkflowOperatorPath,
-        data: String,
-        meta_data: GdalMetaData,
-        result_descriptor: RasterResultDescriptor,
-        tiling_specification: TilingSpecification,
-    ) -> Self {
-        InitializedGdalSourceOperator {
-            name,
-            path,
-            data,
-            produced_result_descriptor: result_descriptor,
-            meta_data,
-            tiling_specification,
-            overview_level: 0,
-            original_resolution_spatial_grid: None,
-        }
-    }
-
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
         path: WorkflowOperatorPath,
-        data: String,
+        data_name: NamedData,
         meta_data: GdalMetaData,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
@@ -937,10 +905,10 @@ impl InitializedGdalSourceOperator {
         InitializedGdalSourceOperator {
             name,
             path,
-            data,
             produced_result_descriptor: result_descriptor,
             meta_data,
             tiling_specification,
+            data_name,
             overview_level,
             original_resolution_spatial_grid: original_grid,
         }
@@ -1062,7 +1030,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     }
 
     fn data(&self) -> Option<String> {
-        Some(self.data.clone())
+        Some(self.data_name.to_string())
     }
 
     fn optimize(
@@ -1082,7 +1050,10 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
 
         // as overview level is always 0 for now, the result descriptor contains the native resolution
         // TODO: when allowing to optimize upon overview levels, compute the native resolution first
-        let native_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+        let native_resolution = self
+            .produced_result_descriptor
+            .spatial_grid
+            .spatial_resolution();
 
         // TODO: get available overviews levels from the dataset metadata (not available yet) and only load these.
         //       Then, we might have to prepend a Resampling operator to match the target resolution.
