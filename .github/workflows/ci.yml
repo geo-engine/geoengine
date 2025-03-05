@@ -118,21 +118,22 @@ jobs:
           # cache key and can be used to further differentiate jobs.
           # Default: empty
           key: ci_test_
-      - name: Testsuite
-        run: |
-          cargo install --locked cargo-llvm-cov
-
-          cargo llvm-cov \
-            --locked \
-            --all-features \
-            --lcov \
+      - name: Install cargo-llvm-cov
+        run: cargo install --locked cargo-llvm-cov
+      - name: Run tests
+        run: >
+          cargo llvm-cov
+            --locked
+            --all-features
+            --lcov
             --output-path lcov.info
-
-          # make some space
-          cargo llvm-cov clean --frozen
-          cargo clean
-      - name: Testsuite (doctests)
-        uses: ./.github/actions/doctest
+      - name: Make some space
+        run: cargo llvm-cov clean --frozen
+      - name: Make some more space
+        run: cargo clean
+      - name: Run doctests
+        # cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
+        run: cargo test --doc --all-features --locked
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:

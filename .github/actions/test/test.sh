@@ -21,3 +21,4 @@ cargo llvm-cov \
 print_headline "Clean Up"
 service postgresql stop
 cargo llvm-cov clean --frozen
+cargo clean
