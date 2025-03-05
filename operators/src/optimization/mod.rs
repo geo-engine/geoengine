@@ -313,7 +313,73 @@ mod tests {
 
     #[tokio::test]
     async fn it_removes_upsampling() {
-        todo!("need a workflow, dataset and target resolution that makes upsampling obsolete")
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
+
+        let workflow = Interpolation {
+            params: InterpolationParams {
+                interpolation: InterpolationMethod::NearestNeighbor,
+                output_resolution: InterpolationResolution::Resolution(
+                    SpatialResolution::new_unchecked(0.15, 0.15),
+                ),
+                output_origin_reference: None,
+            },
+            sources: SingleRasterSource {
+                raster: GdalSource {
+                    params: GdalSourceParameters {
+                        data: ndvi_downscaled_3x_id.clone(),
+                        overview_level: None,
+                    },
+                }
+                .boxed(),
+            },
+        }
+        .boxed();
+
+        let workflow_initialized = workflow
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            workflow_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.15, 0.15).unwrap()
+        );
+
+        let workflow_optimized = workflow_initialized
+            .optimize(SpatialResolution::new(0.3, 0.3).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&workflow_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+                    "params": {
+                        "data": "ndvi_downscaled_3x",
+                        "overviewLevel": 0
+                    },
+                    "type": "GdalSource"
+                }
+            )
+        );
+
+        let gdal_optimized_initialized = workflow_optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        assert_eq!(
+            gdal_optimized_initialized
+                .result_descriptor()
+                .spatial_grid
+                .spatial_resolution(),
+            SpatialResolution::new(0.3, 0.3).unwrap()
+        );
     }
 
     #[tokio::test]
