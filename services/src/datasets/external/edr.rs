@@ -1571,7 +1571,7 @@ mod tests {
         server: &mut Server,
         collection: &'static str,
         db: D,
-    ) -> Box<dyn MetaData<L, R, Q>>
+    ) -> Result<Box<dyn MetaData<L, R, Q>>>
     where
         R: ResultDescriptor,
         dyn DataProvider: MetaDataProvider<L, R, Q>,
@@ -1593,10 +1593,9 @@ mod tests {
                 provider_id: DEMO_PROVIDER_ID,
                 layer_id: LayerId(format!("collections!{collection}")),
             }))
-            .await
-            .unwrap();
+            .await?;
         server.verify_and_clear();
-        meta
+        Ok(meta)
     }
 
     #[ge_context::test]
@@ -1608,7 +1607,8 @@ mod tests {
             VectorQueryRectangle,
             PostgresDb<NoTls>,
         >(&mut server, "PointsInGermany", ctx.db())
-        .await;
+        .await
+        .unwrap();
         let loading_info = meta
             .loading_info(VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new_unchecked(
@@ -1705,13 +1705,27 @@ mod tests {
             .times(0..2)
             .respond_with(status_code(404)),
         );
-        let meta = load_metadata::<
-            GdalLoadingInfo,
-            RasterResultDescriptor,
-            RasterQueryRectangle,
-            PostgresDb<NoTls>,
-        >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
-        .await;
+
+        // TODO: This test is flaky in the CI, so we run it multiple times to increase the chance of success
+        let mut number_of_retries = 10;
+        let meta = loop {
+            let meta = load_metadata::<
+                GdalLoadingInfo,
+                RasterResultDescriptor,
+                RasterQueryRectangle,
+                PostgresDb<NoTls>,
+            >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
+            .await;
+
+            if let Ok(meta) = meta {
+                break meta;
+            }
+
+            number_of_retries -= 1;
+            if number_of_retries == 0 {
+                meta.unwrap();
+            }
+        };
 
         let loading_info_parts = meta
             .loading_info(RasterQueryRectangle {

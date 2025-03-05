@@ -8,7 +8,7 @@ function print_headline() {
 }
 
 print_headline "Install cargo-llvm-cov"
-cargo install cargo-llvm-cov
+cargo install --locked cargo-llvm-cov
 
 print_headline "Run Tests & Generate Code Coverage"
 service postgresql start
@@ -18,6 +18,9 @@ cargo llvm-cov \
     --lcov \
     --output-path lcov.info
 
+print_headline "Make some space"
+cargo llvm-cov clean --frozen --profraw-only
+
 print_headline "Run Doctests"
 # cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
-cargo test --doc --all-features --locked
+cargo test --doc --all-features --frozen
