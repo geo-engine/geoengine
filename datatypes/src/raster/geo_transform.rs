@@ -2,7 +2,7 @@ use crate::{
     primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution},
     util::test::TestDefault,
 };
-use serde::{de, Deserialize, Deserializer, Serialize};
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
 

@@ -15,7 +15,7 @@ use crate::util;
 use async_trait::async_trait;
 
 use futures::stream::BoxStream;
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use geoengine_datatypes::collections::GeometryCollection;
 
 use geoengine_datatypes::primitives::{
@@ -608,7 +608,7 @@ mod tests {
     use crate::mock::{MockPointSource, MockPointSourceParams};
     use crate::processing::rasterization::GridSizeMode::{Fixed, Relative};
     use crate::processing::rasterization::{
-        gaussian, DensityParams, GridOrDensity, GridParams, Rasterization,
+        DensityParams, GridOrDensity, GridParams, Rasterization, gaussian,
     };
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{

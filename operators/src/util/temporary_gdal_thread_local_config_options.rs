@@ -11,13 +11,8 @@ impl TemporaryGdalThreadLocalConfigOptions {
         let mut original_configs = vec![];
 
         for (key, value) in configs {
-            let old = gdal::config::get_thread_local_config_option(key, "").map(|value| {
-                if value.is_empty() {
-                    None
-                } else {
-                    Some(value)
-                }
-            })?;
+            let old = gdal::config::get_thread_local_config_option(key, "")
+                .map(|value| if value.is_empty() { None } else { Some(value) })?;
 
             // TODO: check if overriding existing config (local & global) is ok for the given key
             gdal::config::set_thread_local_config_option(key, value)?;

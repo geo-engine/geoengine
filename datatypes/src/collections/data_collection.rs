@@ -39,7 +39,7 @@ impl ExactSizeIterator for NoGeometryIterator {}
 mod par_iter {
     use super::*;
     use rayon::iter::{
-        plumbing::Producer, IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
+        IndexedParallelIterator, IntoParallelIterator, ParallelIterator, plumbing::Producer,
     };
 
     impl IntoParallelIterator for NoGeometryIterator {

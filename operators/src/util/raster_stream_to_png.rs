@@ -2,7 +2,7 @@ use super::abortable_query_execution;
 use crate::engine::{QueryAbortTrigger, QueryContext, QueryProcessor, RasterQueryProcessor};
 use crate::util::Result;
 use futures::TryStreamExt;
-use futures::{future::BoxFuture, StreamExt};
+use futures::{StreamExt, future::BoxFuture};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::operations::image::{ColorMapper, RgbParams};
 use geoengine_datatypes::raster::{FromIndexFn, GridIndexAccess, GridShapeAccess};
@@ -14,7 +14,7 @@ use geoengine_datatypes::{
 use num_traits::AsPrimitive;
 use snafu::Snafu;
 use std::convert::TryInto;
-use tracing::{span, Level};
+use tracing::{Level, span};
 
 /// # Panics
 /// Panics if not three bands were queried.

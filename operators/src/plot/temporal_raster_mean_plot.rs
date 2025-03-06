@@ -4,11 +4,11 @@ use crate::engine::{
     PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor, SingleRasterSource,
     TypedPlotQueryProcessor, WorkflowOperatorPath,
 };
-use crate::util::math::average_floor;
 use crate::util::Result;
+use crate::util::math::average_floor;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
     BandSelection, Measurement, PlotQueryRectangle, RasterQueryRectangle, TimeInstance,
@@ -280,7 +280,7 @@ mod tests {
         raster::{Grid2D, RasterDataType, TileInformation},
         util::test::TestDefault,
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     #[test]
     fn serialization() {
@@ -341,11 +341,13 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: generate_mock_raster_source(
-                    vec![TimeInterval::new(
-                        TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
-                        TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
-                    )
-                    .unwrap()],
+                    vec![
+                        TimeInterval::new(
+                            TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                        )
+                        .unwrap(),
+                    ],
                     vec![vec![1, 2, 3, 4, 5, 6]],
                 ),
             },

@@ -1,7 +1,6 @@
 use super::{
-    error,
+    NetCdfEntity, Result, error,
     metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata},
-    NetCdfEntity, Result,
 };
 use crate::{
     layers::{

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use utoipa::openapi::{OpenApi, RefOr, Schema};
 
-use super::openapi_visitor::{visit_api, OpenapiVisitor};
+use super::openapi_visitor::{OpenapiVisitor, visit_api};
 
 struct CanResolveVisitor {
     pub unknown_ref: Option<String>,
@@ -67,11 +67,11 @@ pub fn get_schema_use_counts(api: &OpenApi) -> HashMap<String, usize> {
 mod tests {
     use geoengine_datatypes::hashmap;
     use utoipa::openapi::{
-        path::{OperationBuilder, ParameterBuilder, PathItemBuilder},
-        request_body::RequestBodyBuilder,
         AllOfBuilder, ArrayBuilder, Components, ComponentsBuilder, ContentBuilder, Object,
         ObjectBuilder, OneOfBuilder, OpenApiBuilder, PathItemType, PathsBuilder, Ref,
         ResponseBuilder,
+        path::{OperationBuilder, ParameterBuilder, PathItemBuilder},
+        request_body::RequestBodyBuilder,
     };
 
     use crate::util::openapi_visitor::visit_schema;

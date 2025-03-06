@@ -5,11 +5,11 @@ use crate::collections::{
     GeometryCollection, GeometryRandomAccess, IntoGeometryIterator,
 };
 use crate::primitives::{Coordinate2D, MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
-use crate::util::helpers::indices_for_split_at;
 use crate::util::Result;
+use crate::util::helpers::indices_for_split_at;
 use crate::{
     primitives::MultiLineString,
-    util::arrow::{downcast_array, ArrowTyped},
+    util::arrow::{ArrowTyped, downcast_array},
 };
 use arrow::datatypes::ToByteSlice;
 use arrow::{
@@ -923,8 +923,8 @@ mod tests {
         use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 
         use crate::util::well_known_data::{
-            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
-            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
+            MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
         };
 
         let from = SpatialReference::epsg_4326();
@@ -1056,41 +1056,43 @@ mod tests {
         let from_geo = MultiPolygonCollection::from(geometries);
 
         let collection = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![
-                vec![
+            vec![
+                MultiPolygon::new(vec![
                     vec![
-                        Coordinate2D::new(-111., 45.),
-                        Coordinate2D::new(-111., 41.),
-                        Coordinate2D::new(-104., 41.),
-                        Coordinate2D::new(-104., 45.),
-                        Coordinate2D::new(-111., 45.),
+                        vec![
+                            Coordinate2D::new(-111., 45.),
+                            Coordinate2D::new(-111., 41.),
+                            Coordinate2D::new(-104., 41.),
+                            Coordinate2D::new(-104., 45.),
+                            Coordinate2D::new(-111., 45.),
+                        ],
+                        vec![
+                            Coordinate2D::new(-110., 44.),
+                            Coordinate2D::new(-110., 42.),
+                            Coordinate2D::new(-105., 42.),
+                            Coordinate2D::new(-105., 44.),
+                            Coordinate2D::new(-110., 44.),
+                        ],
                     ],
                     vec![
-                        Coordinate2D::new(-110., 44.),
-                        Coordinate2D::new(-110., 42.),
-                        Coordinate2D::new(-105., 42.),
-                        Coordinate2D::new(-105., 44.),
-                        Coordinate2D::new(-110., 44.),
+                        vec![
+                            Coordinate2D::new(-111., 45.),
+                            Coordinate2D::new(-111., 41.),
+                            Coordinate2D::new(-104., 41.),
+                            Coordinate2D::new(-104., 45.),
+                            Coordinate2D::new(-111., 45.),
+                        ],
+                        vec![
+                            Coordinate2D::new(-110., 44.),
+                            Coordinate2D::new(-110., 42.),
+                            Coordinate2D::new(-105., 42.),
+                            Coordinate2D::new(-105., 44.),
+                            Coordinate2D::new(-110., 44.),
+                        ],
                     ],
-                ],
-                vec![
-                    vec![
-                        Coordinate2D::new(-111., 45.),
-                        Coordinate2D::new(-111., 41.),
-                        Coordinate2D::new(-104., 41.),
-                        Coordinate2D::new(-104., 45.),
-                        Coordinate2D::new(-111., 45.),
-                    ],
-                    vec![
-                        Coordinate2D::new(-110., 44.),
-                        Coordinate2D::new(-110., 42.),
-                        Coordinate2D::new(-105., 42.),
-                        Coordinate2D::new(-105., 44.),
-                        Coordinate2D::new(-110., 44.),
-                    ],
-                ],
-            ])
-            .unwrap()],
+                ])
+                .unwrap(),
+            ],
             vec![Default::default(); 1],
             Default::default(),
             CacheHint::default(),

@@ -33,8 +33,8 @@ use geoengine_operators::source::{
     OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
     OgrSourceParameters, OgrSourceTimeFormat,
 };
-use geoengine_operators::util::gdal::gdal_open_dataset;
 use geoengine_operators::util::TemporaryGdalThreadLocalConfigOptions;
+use geoengine_operators::util::gdal::gdal_open_dataset;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
@@ -1030,10 +1030,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -1225,7 +1225,7 @@ mod tests {
         util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
-    use httptest::{matchers::*, responders::status_code, Expectation, Server};
+    use httptest::{Expectation, Server, matchers::*, responders::status_code};
     use std::{ops::Range, path::PathBuf};
     use tokio_postgres::NoTls;
 
@@ -1574,7 +1574,7 @@ mod tests {
         server: &mut Server,
         collection: &'static str,
         db: D,
-    ) -> Box<dyn MetaData<L, R, Q>>
+    ) -> Result<Box<dyn MetaData<L, R, Q>>>
     where
         R: ResultDescriptor,
         dyn DataProvider: MetaDataProvider<L, R, Q>,
@@ -1596,10 +1596,9 @@ mod tests {
                 provider_id: DEMO_PROVIDER_ID,
                 layer_id: LayerId(format!("collections!{collection}")),
             }))
-            .await
-            .unwrap();
+            .await?;
         server.verify_and_clear();
-        meta
+        Ok(meta)
     }
 
     #[ge_context::test]
@@ -1611,7 +1610,8 @@ mod tests {
             VectorQueryRectangle,
             PostgresDb<NoTls>,
         >(&mut server, "PointsInGermany", ctx.db())
-        .await;
+        .await
+        .unwrap();
         let loading_info = meta
             .loading_info(VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new_unchecked(
@@ -1708,13 +1708,28 @@ mod tests {
             .times(0..2)
             .respond_with(status_code(404)),
         );
-        let meta = load_metadata::<
-            GdalLoadingInfo,
-            RasterResultDescriptor,
-            RasterQueryRectangle,
-            PostgresDb<NoTls>,
-        >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
-        .await;
+
+        // TODO: This test is flaky in the CI, so we run it multiple times to increase the chance of success
+        // The error is in `GDALOpenEx`: "TIFFReadDirectory:Failed to read directory at offset 109658"
+        let mut number_of_retries = 10;
+        let meta = loop {
+            let meta = load_metadata::<
+                GdalLoadingInfo,
+                RasterResultDescriptor,
+                RasterQueryRectangle,
+                PostgresDb<NoTls>,
+            >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
+            .await;
+
+            if let Ok(meta) = meta {
+                break meta;
+            }
+
+            number_of_retries -= 1;
+            if number_of_retries == 0 {
+                meta.unwrap();
+            }
+        };
 
         let loading_info_parts = meta
             .loading_info(RasterQueryRectangle {

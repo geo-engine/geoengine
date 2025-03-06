@@ -698,7 +698,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         if self
             .intermediate_dataset
             .as_ref()
-            .map_or(true, |x| x.time_interval != time_interval)
+            .is_none_or(|x| x.time_interval != time_interval)
         {
             if let Some(intermediate_dataset) = self.intermediate_dataset.take() {
                 self.dataset_writer.finish_dataset(intermediate_dataset)?;
@@ -862,10 +862,9 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         // No-data masks are described by the rasterio docs as:
         // "One is the the valid data mask from GDAL, an unsigned byte array with the same number of rows and columns as the dataset in which non-zero elements (typically 255) indicate that the corresponding data elements are valid. Other elements are invalid, or nodata elements."
 
-        let mask_grid_gdal_values =
-            masked_grid
-                .validity_mask
-                .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
+        let mask_grid_gdal_values = masked_grid
+            .validity_mask
+            .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
         let mut mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
 
         let mut mask_band = raster_band.open_mask_band()?;
@@ -1024,7 +1023,7 @@ mod tests {
     use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::{
-        assert_image_equals, assert_image_equals_with_format, ImageFormat,
+        ImageFormat, assert_image_equals, assert_image_equals_with_format,
     };
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},

@@ -17,8 +17,8 @@ use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde_json::json;
 use std::hint::black_box;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 static WRITTEN_ELEMENTS: AtomicUsize = AtomicUsize::new(0);
 

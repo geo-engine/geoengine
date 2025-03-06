@@ -1,7 +1,7 @@
 use crate::contexts::SessionId;
 use crate::error::{Error, Result};
-use actix_web::http::header;
 use actix_web::HttpRequest;
+use actix_web::http::header;
 use actix_web_httpauth::headers::authorization::{Bearer, Scheme};
 use std::str::FromStr;
 

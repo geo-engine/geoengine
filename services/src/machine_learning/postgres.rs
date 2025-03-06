@@ -1,12 +1,12 @@
 use crate::{
     contexts::PostgresDb,
     machine_learning::{
+        MlModel, MlModelDb, MlModelId, MlModelIdAndName, MlModelListOptions, MlModelMetadata,
         error::{
-            error::{Bb8MachineLearningError, PostgresMachineLearningError},
             MachineLearningError,
+            error::{Bb8MachineLearningError, PostgresMachineLearningError},
         },
         name::MlModelName,
-        MlModel, MlModelDb, MlModelId, MlModelIdAndName, MlModelListOptions, MlModelMetadata,
     },
     permissions::Permission,
     util::postgres::PostgresErrorExt,
@@ -15,8 +15,8 @@ use async_trait::async_trait;
 use geoengine_datatypes::util::Identifier;
 use snafu::ResultExt;
 use tokio_postgres::{
-    tls::{MakeTlsConnect, TlsConnect},
     Socket,
+    tls::{MakeTlsConnect, TlsConnect},
 };
 
 #[async_trait]

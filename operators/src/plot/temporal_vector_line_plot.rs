@@ -284,7 +284,7 @@ mod tests {
             BoundingBox2D, DateTime, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
         },
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     use crate::{
         engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator},

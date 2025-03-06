@@ -4,12 +4,12 @@ use crate::contexts::PostgresDb;
 use crate::error::Result;
 use crate::permissions::Permission;
 use crate::permissions::TxPermissionDb;
-use crate::projects::error::{
-    AccessFailedProjectDbError, Bb8ProjectDbError, ProjectNotFoundProjectDbError,
-};
 use crate::projects::LoadVersion;
 use crate::projects::Plot;
 use crate::projects::ProjectLayer;
+use crate::projects::error::{
+    AccessFailedProjectDbError, Bb8ProjectDbError, ProjectNotFoundProjectDbError,
+};
 use crate::projects::{
     CreateProject, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
     ProjectVersion, ProjectVersionId, UpdateProject,
@@ -20,10 +20,10 @@ use crate::workflows::workflow::WorkflowId;
 use async_trait::async_trait;
 use bb8_postgres::tokio_postgres::Transaction;
 use bb8_postgres::{
-    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
+    tokio_postgres::Socket, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
 };
 use geoengine_datatypes::error::BoxedResultExt;
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use tokio_postgres::Row;
 
 #[async_trait]

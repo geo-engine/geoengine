@@ -398,18 +398,22 @@ mod tests {
             2
         );
 
-        assert!(call_bi_generic_raster_tile_2d_same!(
-            &typed_raster_a, &typed_raster_b,
-            (a, b) => Ok(first_pixel_add(a, b)),
-            Err(())
-        )
-        .is_err());
+        assert!(
+            call_bi_generic_raster_tile_2d_same!(
+                &typed_raster_a, &typed_raster_b,
+                (a, b) => Ok(first_pixel_add(a, b)),
+                Err(())
+            )
+            .is_err()
+        );
 
-        assert!(catch_unwind_silent(|| call_bi_generic_raster_tile_2d_same!(
-            &typed_raster_a, &typed_raster_b,
-            (a, b) => first_pixel_add(a, b)
-        ))
-        .is_err());
+        assert!(
+            catch_unwind_silent(|| call_bi_generic_raster_tile_2d_same!(
+                &typed_raster_a, &typed_raster_b,
+                (a, b) => first_pixel_add(a, b)
+            ))
+            .is_err()
+        );
     }
 
     #[test]
@@ -449,12 +453,14 @@ mod tests {
             2
         );
 
-        assert!(call_bi_generic_raster_tile_2d_staircase!(
-            &typed_raster_b, &typed_raster_a,
-            (a, b) => Ok(first_pixel_add(a, b)),
-            Err(())
-        )
-        .is_err());
+        assert!(
+            call_bi_generic_raster_tile_2d_staircase!(
+                &typed_raster_b, &typed_raster_a,
+                (a, b) => Ok(first_pixel_add(a, b)),
+                Err(())
+            )
+            .is_err()
+        );
 
         assert!(
             catch_unwind_silent(|| call_bi_generic_raster_tile_2d_staircase!(

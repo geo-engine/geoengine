@@ -9,7 +9,7 @@ use actix_http::{Extensions, HttpMessage, StatusCode};
 
 use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
-use actix_web::{http, middleware, web, HttpRequest, HttpResponse};
+use actix_web::{HttpRequest, HttpResponse, http, middleware, web};
 use futures::future::BoxFuture;
 use geoengine_datatypes::primitives::CacheHint;
 use log::debug;
@@ -17,11 +17,11 @@ use log::debug;
 use std::any::Any;
 use std::num::NonZeroUsize;
 use std::time::Duration;
-use tracing::log::info;
 use tracing::Span;
+use tracing::log::info;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 use url::Url;
-use utoipa::{openapi::OpenApi, ToSchema};
+use utoipa::{ToSchema, openapi::OpenApi};
 /// Custom root span for web requests that paste a request id to all logs.
 pub struct CustomRootSpanBuilder;
 
@@ -371,7 +371,7 @@ pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFut
             let mut data = vec![];
             let start = Instant::now();
 
-            while timeout.map_or(true, |t| start.elapsed() >= t) {
+            while timeout.is_none_or(|t| start.elapsed() >= t) {
                 let r = nix::sys::socket::recv(fd, data.as_mut_slice(), MsgFlags::MSG_PEEK);
 
                 match r {

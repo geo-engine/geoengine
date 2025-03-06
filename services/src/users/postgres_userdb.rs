@@ -14,19 +14,19 @@ use crate::users::{
     SessionTokenStore, StoredOidcTokens, User, UserCredentials, UserDb, UserId, UserInfo,
     UserRegistration, UserSession,
 };
-use crate::util::postgres::PostgresErrorExt;
 use crate::util::Identifier;
+use crate::util::postgres::PostgresErrorExt;
 use crate::{contexts::PostgresContext, error};
 use async_trait::async_trait;
 use geoengine_operators::meta::quota::ComputationUnit;
 
 use crate::util::encryption::MaybeEncryptedBytes;
 use bb8_postgres::{
-    tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect, tokio_postgres::Socket,
+    tokio_postgres::Socket, tokio_postgres::tls::MakeTlsConnect, tokio_postgres::tls::TlsConnect,
 };
 use oauth2::AccessToken;
 use pwhash::bcrypt;
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use tokio_postgres::Transaction;
 use uuid::Uuid;
 

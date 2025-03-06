@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use utoipa::{
-    openapi::{Discriminator, OneOfBuilder, Ref, RefOr, Schema},
     Modify,
+    openapi::{Discriminator, OneOfBuilder, Ref, RefOr, Schema},
 };
 
 use super::openapi_visitors::get_schema_use_counts;
@@ -17,9 +17,9 @@ impl Modify for OpenApiServerInfo {
         let mut api_url = web_config.api_url().expect("external address").to_string();
         api_url.pop(); //remove trailing slash because codegen requires it
 
-        openapi.servers = Some(vec![utoipa::openapi::ServerBuilder::new()
-            .url(api_url)
-            .build()]);
+        openapi.servers = Some(vec![
+            utoipa::openapi::ServerBuilder::new().url(api_url).build(),
+        ]);
     }
 }
 
@@ -183,8 +183,10 @@ impl Modify for TransformSchemasWithTag {
 
                 if matches!(schema_uses.get(&variant_schema_name), Some(count) if count != &1usize)
                 {
-                    panic!("The type {variant_schema_name} is used in the enum {schema_name} as payload, but also in other places. \
-                    You have to use a newly created struct, anonymous struct variant or set #[schema(title = \"XXX\")] on the variant.");
+                    panic!(
+                        "The type {variant_schema_name} is used in the enum {schema_name} as payload, but also in other places. \
+                    You have to use a newly created struct, anonymous struct variant or set #[schema(title = \"XXX\")] on the variant."
+                    );
                 }
 
                 if let Some(flattened) = Self::flatten_allof(item, old_schemas) {
@@ -216,8 +218,8 @@ mod tests {
     use serde::Serialize;
     use serde_json::json;
     use utoipa::{
-        openapi::{path::*, *},
         Modify, ToSchema,
+        openapi::{path::*, *},
     };
 
     #[test]

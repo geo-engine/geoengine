@@ -3,7 +3,7 @@ use crate::api::model::datatypes::{
 };
 use crate::contexts::ApplicationContext;
 use crate::{error::Error, error::Result};
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{FromRequest, Responder, web};
 use proj_sys::PJ_PROJ_STRING_TYPE_PJ_PROJ_4;
 use serde::{Deserialize, Serialize};
 use std::str::FromStr;
@@ -45,20 +45,26 @@ impl ProjJson {
     pub fn axis_order(&self) -> Option<AxisOrder> {
         match &self.coordinate_system.axis {
             Some(axes) => match *axes.as_slice() {
-                [ProjJsonAxis {
-                    direction: ProjJsonAxisDirection::North,
-                    ..
-                }, ProjJsonAxis {
-                    direction: ProjJsonAxisDirection::East,
-                    ..
-                }] => Some(AxisOrder::NorthEast),
-                [ProjJsonAxis {
-                    direction: ProjJsonAxisDirection::East,
-                    ..
-                }, ProjJsonAxis {
-                    direction: ProjJsonAxisDirection::North,
-                    ..
-                }] => Some(AxisOrder::EastNorth),
+                [
+                    ProjJsonAxis {
+                        direction: ProjJsonAxisDirection::North,
+                        ..
+                    },
+                    ProjJsonAxis {
+                        direction: ProjJsonAxisDirection::East,
+                        ..
+                    },
+                ] => Some(AxisOrder::NorthEast),
+                [
+                    ProjJsonAxis {
+                        direction: ProjJsonAxisDirection::East,
+                        ..
+                    },
+                    ProjJsonAxis {
+                        direction: ProjJsonAxisDirection::North,
+                        ..
+                    },
+                ] => Some(AxisOrder::EastNorth),
                 _ => None,
             },
             _ => None,

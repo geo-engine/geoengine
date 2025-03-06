@@ -2,7 +2,7 @@ use std::{collections::HashMap, convert::TryFrom};
 
 use geo::Rect;
 use geoengine_datatypes::primitives::DateTime;
-use serde::{de::value::MapDeserializer, de::Error, Deserialize, Deserializer};
+use serde::{Deserialize, Deserializer, de::Error, de::value::MapDeserializer};
 use serde_with::with_prefix;
 
 use snafu::Snafu;

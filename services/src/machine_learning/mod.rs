@@ -1,12 +1,12 @@
 use crate::{
     api::model::datatypes::RasterDataType,
-    config::{get_config_element, MachineLearning},
+    config::{MachineLearning, get_config_element},
     datasets::upload::{UploadId, UploadRootPath},
     identifier,
     util::path_with_base_path,
 };
 use async_trait::async_trait;
-use error::{error::CouldNotFindMlModelFileMachineLearningError, MachineLearningError};
+use error::{MachineLearningError, error::CouldNotFindMlModelFileMachineLearningError};
 use name::MlModelName;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
