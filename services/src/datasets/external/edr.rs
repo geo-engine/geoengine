@@ -1707,6 +1707,7 @@ mod tests {
         );
 
         // TODO: This test is flaky in the CI, so we run it multiple times to increase the chance of success
+        // The error is in `GDALOpenEx`: "TIFFReadDirectory:Failed to read directory at offset 109658"
         let mut number_of_retries = 10;
         let meta = loop {
             let meta = load_metadata::<
