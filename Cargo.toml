@@ -25,6 +25,10 @@ repository = "https://github.com/geo-engine/geoengine"
 [profile.release]
 lto = true
 
+[profile.ci]
+inherits = "test"
+strip = "debuginfo"
+
 [workspace.lints.clippy]
 # configure default clippy lints
 complexity = { level = "warn", priority = 0 }
