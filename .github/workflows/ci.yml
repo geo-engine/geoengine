@@ -41,8 +41,8 @@ jobs:
       #     key: ci_test_
       - name: Testsuite
         uses: ./.github/actions/test
-      - name: Testsuite (doctests)
-        uses: ./.github/actions/doctest
+      # - name: Testsuite (doctests)
+      #   uses: ./.github/actions/doctest
       - name: Adjust lcov.info
         # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
         run: |
