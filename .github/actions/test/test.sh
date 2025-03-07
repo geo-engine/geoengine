@@ -17,8 +17,9 @@ cargo llvm-cov \
     --all-features \
     --profile ci \
     --lcov \
-    --output-path lcov.info
+    --output-path lcov.info \
+    || exit 1
 
 print_headline "Run Doctests"
 # cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
-cargo test --doc --all-features --profile ci --locked
+cargo test --doc --all-features --profile ci --locked || exit 1
