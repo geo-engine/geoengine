@@ -43,8 +43,8 @@ impl MockGRPCServer {
 
     fn find_open_port(num_tries: u16) -> Option<u16> {
         for _ in 0..num_tries {
-            let mut rng = rand::thread_rng();
-            let port: u16 = rng.gen_range(50000..60000);
+            let mut rng = rand::rng();
+            let port: u16 = rng.random_range(50000..60000);
             let address: SocketAddr = format!("[::1]:{port}").parse().unwrap();
             if TcpListener::bind(address).is_ok() {
                 return Some(port);

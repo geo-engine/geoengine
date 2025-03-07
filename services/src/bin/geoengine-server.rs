@@ -80,17 +80,19 @@ where
     use opentelemetry::trace::TracerProvider as _;
     use opentelemetry_otlp::WithExportConfig;
     use opentelemetry_sdk::trace::Sampler;
-    use opentelemetry_sdk::trace::TracerProvider;
+    use opentelemetry_sdk::trace::SdkTracerProvider;
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_endpoint(open_telemetry_config.endpoint.to_string())
         .build()?;
-    let provider = TracerProvider::builder()
-        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
         .with_sampler(Sampler::AlwaysOn)
-        .with_resource(opentelemetry_sdk::Resource::new(vec![
-            opentelemetry::KeyValue::new("service.name", "Geo Engine"),
-        ]))
+        .with_resource(
+            opentelemetry_sdk::Resource::builder_empty()
+                .with_attribute(opentelemetry::KeyValue::new("service.name", "Geo Engine"))
+                .build(),
+        )
         .build();
 
     let tracer = provider.tracer("Geo Engine");

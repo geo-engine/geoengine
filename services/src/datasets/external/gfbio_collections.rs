@@ -848,7 +848,7 @@ mod tests {
             .read_to_string(&mut sql)
             .unwrap();
 
-        let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
+        let schema = format!("geoengine_test_{}", rand::rng().next_u64());
 
         // basic schema
         conn.batch_execute(&format!(

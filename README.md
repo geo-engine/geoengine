@@ -30,9 +30,9 @@ There are some dependencies that need to be installed on the system:
 apt install build-essential
 # lld linker
 apt install clang lld
-# GDAL (>=  3.4.1)
+# GDAL (>=  3.8.4)
 apt install libgdal-dev gdal-bin
-# Proj build dependencies (if libproj >= 7.2 not installed)
+# Proj build dependencies (if libproj >= 9.4 not installed)
 apt install cmake sqlite3
 # Protocl Buffers
 apt install protobuf-compiler

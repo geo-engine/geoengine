@@ -73,10 +73,10 @@ actix-web-httpauth = "0.8"
 aes-gcm = "0.10.3"
 anyhow = "1.0"
 approx = "0.5"
-arrow = { version = "54.0", features = ["ipc_compression"] }
-arrow-array = "54.0"
-arrow-ord = "54.0"
-arrow-schema = { version = "54", features = ["serde"] }
+arrow = { version = "54.2", features = ["ipc_compression"] }
+arrow-array = "54.2"
+arrow-ord = "54.2"
+arrow-schema = { version = "54.2", features = ["serde"] }
 aruna-rust-api = "2.0.0-beta.12"
 assert-json-diff = "2.0.2"
 assert_cmd = "2.0"
@@ -88,7 +88,7 @@ bb8-postgres = { version = "0.9", features = [
     "with-chrono-0_4",
     "with-serde_json-1",
 ] }
-bytes = "1.5" # for postgres-types impls
+bytes = "1.10" # for postgres-types impls
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 clap_derive = "4.5"
@@ -106,15 +106,15 @@ gdal = "0.17"
 gdal-sys = "0.10"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.29.3"
-geo-rand = { git = "https://github.com/lelongg/geo-rand", tag = "v0.3.0" }
+geo-rand = "0.4"
 geo-types = "0.7.15"                                                       # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
-httptest = "0.16.1"
+httptest = "0.16"
 image = "0.25"
 itertools = "0.14"
 libloading = "0.8"
 log = "0.4"
-lru = "0.12"
+lru = "0.13"
 lz4_flex = "0.11"
 mime = "0.3"
 ndarray = { version = "0.16", features = ["approx"] }                      # has to match with `ort`
@@ -122,13 +122,13 @@ num = "0.4"
 num-traits = "0.2"
 oauth2 = "5.0"
 openidconnect = "4.0"
+ordered-float = { version = "5.0", features = ["serde"] }
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
-ordered-float = { version = "4.6", features = ["serde"] }
-opentelemetry = { version = "0.27", default-features = false, features = [
+opentelemetry = { version = "0.28", default-features = false, features = [
     "trace",
 ] }
-opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
-opentelemetry-otlp = "0.27"
+opentelemetry_sdk = { version = "0.28", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.28", features = ["grpc-tonic"] }
 ort = "2.0.0-rc.9"
 ouroboros = "0.18"
 paste = "1.0"
@@ -151,7 +151,7 @@ proj-sys = "0.25" # needs to stay fixed to use fixed proj version
 prost = "0.12" # must be compatible with `aruna-rust-api`
 pwhash = "1.0"
 quote = "1.0"
-rand = "0.8"
+rand = "0.9"
 rayon = "1.8"
 reqwest = { version = "0.12", features = [
     "json",
@@ -166,12 +166,12 @@ serde_with = "3.12"
 serial_test = "3.0"
 sha2 = "0.10.8"
 snafu = "0.8"
-stac = "0.11"
+stac = "0.12"
 stream-cancel = "0.8"
-strum = { version = "0.26", features = ["derive"] }
-strum_macros = "0.26"
+strum = { version = "0.27", features = ["derive"] }
+strum_macros = "0.27"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-tempfile = "3.15"
+tempfile = "3.18"
 time = "0.3"
 tokio = { version = "1.43", features = [
     "fs",
@@ -188,7 +188,7 @@ tonic = { version = "0.11", features = [
 ] } # must be compatible with `aruna-rust-api`
 tracing = "0.1"
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.28" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
+tracing-opentelemetry = "0.29" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
 tracing-subscriber = { version = "0.3", features = [
     "local-time",
     "ansi",
@@ -208,10 +208,10 @@ uuid = { version = "1.12", features = [
     "v4",
     "v5",
 ] } # must be compatible with `bb8-postgres`
-validator = { version = "0.19.0", features = ["derive"] }
+validator = { version = "0.20.0", features = ["derive"] }
 vergen = "9.0"
 vergen-gitcl = "1.0"
 walkdir = "2.4"
 wkt = "0.12"
 xml-rs = "0.8"
-zip = "2.2.2"
+zip = "2.2"
