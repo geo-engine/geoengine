@@ -3318,7 +3318,6 @@ mod tests {
         add_test_data(&db_config).await;
 
         let result = test(ctx, db_config).await;
-
         assert!(result.is_ok());
     }
 

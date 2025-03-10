@@ -1197,17 +1197,19 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
             )?);
         }
 
+        let first_params = params[0]
+            .params
+            .as_ref()
+            .expect("there must be at least one element");
         // TODO: we need the GeoTransform and GridShape to produce the result descriptor. Since we already have the dataset open, we could also get it from there.
-        let gdal_geotransform = params[0].params.as_mut().unwrap().geo_transform;
+        let gdal_geotransform = first_params.geo_transform;
         let geo_transform: GeoTransform = gdal_geotransform.try_into().map_err(|e| {
             geoengine_operators::error::Error::LoadingInfo {
                 source: Box::new(e),
             }
         })?;
-        let grid_shape: geoengine_datatypes::raster::GridShape<[usize; 2]> = GridShape2D::new_2d(
-            params[0].params.as_mut().unwrap().height,
-            params[0].params.as_mut().unwrap().width,
-        );
+        let grid_shape: geoengine_datatypes::raster::GridShape<[usize; 2]> =
+            GridShape2D::new_2d(first_params.height, first_params.width);
 
         Ok(Box::new(GdalMetaDataList {
             result_descriptor: collection

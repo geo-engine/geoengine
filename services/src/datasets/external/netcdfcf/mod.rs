@@ -455,6 +455,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
         .boxed_context(error::UnexpectedExecution)?
     }
 
+    #[allow(clippy::too_many_lines)]
     fn meta_data_from_netcdf(
         base_path: &Path,
         dataset_id: &NetCdfCf4DDatasetId,
@@ -466,9 +467,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
         const TIME_DIMENSION_INDEX: usize = 1;
 
         let dataset = gdal_netcdf_open(Some(base_path), Path::new(&dataset_id.file_name))?;
-
         let root_group = dataset.root_group().context(error::GdalMd)?;
-
         let time_coverage = TimeCoverage::from_dimension(&root_group)?;
 
         let geo_transform = {
@@ -556,7 +555,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
                 "band".into(),
                 derive_measurement(data_array.unit()),
             )])
-            .unwrap(),
+            .expect("must work since derive_measurement can't fail"),
         };
 
         let dimensions_time = dimensions
