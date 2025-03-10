@@ -1355,11 +1355,11 @@ mod tests {
             RasterBandDescriptors::new(vec![
                 RasterBandDescriptor {
                     name: "foo".into(),
-                    measurement: Measurement::Unitless
+                    measurement: Measurement::Unitless(Default::default()),
                 },
                 RasterBandDescriptor {
                     name: "bar".into(),
-                    measurement: Measurement::Unitless
+                    measurement: Measurement::Unitless(Default::default()),
                 },
             ])
             .unwrap()

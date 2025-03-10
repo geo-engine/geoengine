@@ -2633,6 +2633,7 @@ dependencies = [
  "opentelemetry-otlp",
  "opentelemetry_sdk",
  "ordered-float 4.6.0",
+ "paste",
  "pbkdf2",
  "postgres-types",
  "pretty_assertions",

@@ -72,10 +72,7 @@ use crate::users::{
     AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
     UserSession,
 };
-use crate::util::{
-    apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
-    server::ServerInfo,
-};
+use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -428,7 +425,7 @@ use utoipa::{Modify, OpenApi};
             MlModelNameResponse
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;
@@ -447,7 +444,7 @@ impl Modify for SecurityAddon {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .bearer_format("UUID")
-                    .description(Some("A valid session token can be obtained via the /anonymous or /login (pro only) endpoints. Alternatively, it can be defined as a fixed value in the Settings.toml file."))
+                    .description(Some("A valid session token can be obtained via the /anonymous or /login endpoints."))
                     .build(),
             ),
         );

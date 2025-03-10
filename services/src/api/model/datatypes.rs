@@ -1,3 +1,4 @@
+use super::type_tag;
 use crate::error::{self, Error, Result};
 use crate::identifier;
 use geoengine_datatypes::operations::image::RgbParams;
@@ -823,11 +824,15 @@ impl From<FeatureDataType> for geoengine_datatypes::primitives::FeatureDataType 
     }
 }
 
+type_tag!(Unitless);
+type_tag!(Continuous);
+type_tag!(Classification);
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum Measurement {
-    #[schema(title = "UnitlessMeasurement")]
-    Unitless,
+    Unitless(UnitlessMeasurement),
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
 }
@@ -835,7 +840,11 @@ pub enum Measurement {
 impl From<geoengine_datatypes::primitives::Measurement> for Measurement {
     fn from(value: geoengine_datatypes::primitives::Measurement) -> Self {
         match value {
-            geoengine_datatypes::primitives::Measurement::Unitless => Self::Unitless,
+            geoengine_datatypes::primitives::Measurement::Unitless => {
+                Self::Unitless(UnitlessMeasurement {
+                    r#type: Default::default(),
+                })
+            }
             geoengine_datatypes::primitives::Measurement::Continuous(cm) => {
                 Self::Continuous(cm.into())
             }
@@ -849,15 +858,21 @@ impl From<geoengine_datatypes::primitives::Measurement> for Measurement {
 impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
     fn from(value: Measurement) -> Self {
         match value {
-            Measurement::Unitless => Self::Unitless,
+            Measurement::Unitless { .. } => Self::Unitless,
             Measurement::Continuous(cm) => Self::Continuous(cm.into()),
             Measurement::Classification(cm) => Self::Classification(cm.into()),
         }
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
+pub struct UnitlessMeasurement {
+    r#type: TypeTagUnitless,
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
+    r#type: TypeTagContinuous,
     pub measurement: String,
     pub unit: Option<String>,
 }
@@ -865,6 +880,7 @@ pub struct ContinuousMeasurement {
 impl From<geoengine_datatypes::primitives::ContinuousMeasurement> for ContinuousMeasurement {
     fn from(value: geoengine_datatypes::primitives::ContinuousMeasurement) -> Self {
         Self {
+            r#type: Default::default(),
             measurement: value.measurement,
             unit: value.unit,
         }
@@ -886,6 +902,7 @@ impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::Continuous
     into = "SerializableClassificationMeasurement"
 )]
 pub struct ClassificationMeasurement {
+    r#type: TypeTagClassification,
     pub measurement: String,
     pub classes: HashMap<u8, String>,
 }
@@ -895,6 +912,7 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
 {
     fn from(value: geoengine_datatypes::primitives::ClassificationMeasurement) -> Self {
         Self {
+            r#type: Default::default(),
             measurement: value.measurement,
             classes: value.classes,
         }
@@ -943,6 +961,7 @@ impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasuremen
             classes.insert(k.parse::<u8>()?, v);
         }
         Ok(Self {
+            r#type: Default::default(),
             measurement: measurement.measurement,
             classes,
         })
