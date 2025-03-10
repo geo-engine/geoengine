@@ -23,6 +23,9 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 use utoipa::{PartialSchema, ToSchema};
 
+use super::datatypes::TimeGranularity;
+use super::type_tag;
+
 /// A `ResultDescriptor` for raster queries
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -811,21 +814,55 @@ impl Default for OgrSourceDatasetTimeType {
     }
 }
 
+type_tag!(Value);
+type_tag!(Infinite);
+type_tag!(Zero);
+
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum OgrSourceDurationSpec {
-    Infinite,
-    Zero,
-    #[schema(title = "OgrSourceDurationSpecValue")]
-    Value(TimeStep),
+    Infinite(OgrSourceDurationSpecInfinite),
+    Zero(OgrSourceDurationSpecZero),
+    Value(OgrSourceDurationSpecValue),
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
+pub struct OgrSourceDurationSpecInfinite {
+    #[schema(inline)]
+    r#type: InfiniteTag,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
+pub struct OgrSourceDurationSpecZero {
+    #[schema(inline)]
+    r#type: ZeroTag,
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+pub struct OgrSourceDurationSpecValue {
+    #[schema(inline)]
+    r#type: ValueTag,
+    pub granularity: TimeGranularity,
+    pub step: u32,
 }
 
 impl From<geoengine_operators::source::OgrSourceDurationSpec> for OgrSourceDurationSpec {
     fn from(value: geoengine_operators::source::OgrSourceDurationSpec) -> Self {
         match value {
-            geoengine_operators::source::OgrSourceDurationSpec::Infinite => Self::Infinite,
-            geoengine_operators::source::OgrSourceDurationSpec::Zero => Self::Zero,
-            geoengine_operators::source::OgrSourceDurationSpec::Value(v) => Self::Value(v.into()),
+            geoengine_operators::source::OgrSourceDurationSpec::Infinite => {
+                Self::Infinite(Default::default())
+            }
+            geoengine_operators::source::OgrSourceDurationSpec::Zero => {
+                Self::Zero(Default::default())
+            }
+            geoengine_operators::source::OgrSourceDurationSpec::Value(v) => {
+                Self::Value(OgrSourceDurationSpecValue {
+                    r#type: Default::default(),
+                    granularity: v.granularity.into(),
+                    step: v.step,
+                })
+            }
         }
     }
 }
@@ -833,9 +870,14 @@ impl From<geoengine_operators::source::OgrSourceDurationSpec> for OgrSourceDurat
 impl From<OgrSourceDurationSpec> for geoengine_operators::source::OgrSourceDurationSpec {
     fn from(value: OgrSourceDurationSpec) -> Self {
         match value {
-            OgrSourceDurationSpec::Infinite => Self::Infinite,
-            OgrSourceDurationSpec::Zero => Self::Zero,
-            OgrSourceDurationSpec::Value(v) => Self::Value(v.into()),
+            OgrSourceDurationSpec::Infinite(..) => Self::Infinite,
+            OgrSourceDurationSpec::Zero(..) => Self::Zero,
+            OgrSourceDurationSpec::Value(v) => {
+                Self::Value(geoengine_datatypes::primitives::TimeStep {
+                    granularity: v.granularity.into(),
+                    step: v.step,
+                })
+            }
         }
     }
 }
