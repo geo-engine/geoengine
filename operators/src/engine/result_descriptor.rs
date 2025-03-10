@@ -74,17 +74,49 @@ pub trait ResultDescriptor: Clone + Serialize {
         F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>;
 }
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+
+pub enum SpatialGridDescriptorState {
+    /// The spatial grid represents a native dataset
+    Source,
+    /// The spatial grid was created by merging two non equal spatial grids
+    Merged,
+}
+
+impl SpatialGridDescriptorState {
+    pub fn merge(&self, other: Self) -> Self {
+        match (*self, other) {
+            (SpatialGridDescriptorState::Source, SpatialGridDescriptorState::Source) => {
+                SpatialGridDescriptorState::Source
+            }
+            _ => SpatialGridDescriptorState::Merged,
+        }
+    }
+
+    pub fn is_source(&self) -> bool {
+        *self == SpatialGridDescriptorState::Source
+    }
+
+    pub fn is_derived(&self) -> bool {
+        !self.is_source()
+    }
+}
+
 /// A `ResultDescriptor` for raster queries
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
-#[serde(rename_all = "camelCase", tag = "type")]
-pub enum SpatialGridDescriptor {
-    Source(SpatialGridDefinition),
-    Derived(SpatialGridDefinition),
+#[serde(rename_all = "camelCase")]
+pub struct SpatialGridDescriptor {
+    spatial_grid: SpatialGridDefinition,
+    state: SpatialGridDescriptorState,
 }
 
 impl SpatialGridDescriptor {
     pub fn new_source(spatial_grid_def: SpatialGridDefinition) -> Self {
-        Self::Source(spatial_grid_def)
+        Self {
+            spatial_grid: spatial_grid_def,
+            state: SpatialGridDescriptorState::Source,
+        }
     }
 
     pub fn source_from_parts(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
@@ -93,40 +125,34 @@ impl SpatialGridDescriptor {
 
     #[must_use]
     pub fn as_derived(self) -> Self {
-        match self {
-            Self::Source(s) => Self::Derived(s),
-            Self::Derived(d) => Self::Derived(d),
+        Self {
+            state: SpatialGridDescriptorState::Merged,
+            ..self
         }
     }
 
     pub fn merge(&self, other: &SpatialGridDescriptor) -> Option<Self> {
         // TODO: merge directly to tiling origin?
-        match (self, other) {
-            (SpatialGridDescriptor::Source(s), SpatialGridDescriptor::Source(o)) => {
-                let m = s.merge(o)?;
-                if m.grid_bounds == s.grid_bounds && m.grid_bounds == o.grid_bounds {
-                    Some(SpatialGridDescriptor::Source(m))
-                } else {
-                    Some(SpatialGridDescriptor::Derived(m))
-                }
-            }
-            (SpatialGridDescriptor::Source(s), SpatialGridDescriptor::Derived(o)) => {
-                Some(SpatialGridDescriptor::Derived(s.merge(o)?))
-            }
-            (SpatialGridDescriptor::Derived(s), SpatialGridDescriptor::Source(o)) => {
-                Some(SpatialGridDescriptor::Derived(s.merge(o)?))
-            }
-            (SpatialGridDescriptor::Derived(s), SpatialGridDescriptor::Derived(o)) => {
-                Some(SpatialGridDescriptor::Derived(s.merge(o)?))
-            }
-        }
+        let merged_grid = self.spatial_grid.merge(&other.spatial_grid)?;
+        let state = if self.spatial_grid.grid_bounds == merged_grid.grid_bounds
+            && other.spatial_grid.grid_bounds == merged_grid.grid_bounds
+        {
+            self.state.merge(other.state)
+        } else {
+            SpatialGridDescriptorState::Merged
+        };
+
+        Some(Self {
+            spatial_grid: merged_grid,
+            state,
+        })
     }
 
     #[must_use]
     pub fn map<F: Fn(&SpatialGridDefinition) -> SpatialGridDefinition>(&self, map_fn: F) -> Self {
-        match self {
-            SpatialGridDescriptor::Source(s) => SpatialGridDescriptor::Source(map_fn(s)),
-            SpatialGridDescriptor::Derived(m) => SpatialGridDescriptor::Derived(map_fn(m)),
+        Self {
+            spatial_grid: map_fn(&self.spatial_grid),
+            ..*self
         }
     }
 
@@ -134,25 +160,18 @@ impl SpatialGridDescriptor {
         &self,
         map_fn: F,
     ) -> Result<Self> {
-        match self {
-            SpatialGridDescriptor::Source(s) => Ok(SpatialGridDescriptor::Source(map_fn(s)?)),
-            SpatialGridDescriptor::Derived(m) => Ok(SpatialGridDescriptor::Derived(map_fn(m)?)),
-        }
+        Ok(Self {
+            spatial_grid: map_fn(&self.spatial_grid)?,
+            ..*self
+        })
     }
 
     pub fn is_compatible_grid_generic<G: GeoTransformAccess>(&self, g: &G) -> bool {
-        match self {
-            SpatialGridDescriptor::Source(s) => s.is_compatible_grid_generic(g),
-            SpatialGridDescriptor::Derived(m) => m.is_compatible_grid_generic(g),
-        }
+        self.spatial_grid.is_compatible_grid_generic(g)
     }
 
     pub fn is_compatible_grid(&self, other: &Self) -> bool {
-        let b = match other {
-            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => s,
-        };
-
-        self.is_compatible_grid_generic(b)
+        self.is_compatible_grid_generic(&other.spatial_grid)
     }
 
     pub fn tiling_grid_definition(
@@ -160,55 +179,37 @@ impl SpatialGridDescriptor {
         tiling_specification: TilingSpecification,
     ) -> TilingSpatialGridDefinition {
         // TODO: we could also store the tiling_origin_reference and then use that directly?
-        let grid_def = match self {
-            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => s,
-        };
-        TilingSpatialGridDefinition::new(*grid_def, tiling_specification)
+        TilingSpatialGridDefinition::new(self.spatial_grid, tiling_specification)
     }
 
     pub fn is_source(&self) -> bool {
-        match self {
-            SpatialGridDescriptor::Source(_) => true,
-            SpatialGridDescriptor::Derived(_) => false,
-        }
+        self.state == SpatialGridDescriptorState::Source
     }
 
     pub fn source_spatial_grid_definition(&self) -> Option<SpatialGridDefinition> {
-        match self {
-            SpatialGridDescriptor::Source(s) => Some(*s),
-            SpatialGridDescriptor::Derived(_) => None,
+        match self.state {
+            SpatialGridDescriptorState::Source => Some(self.spatial_grid),
+            SpatialGridDescriptorState::Merged => None,
         }
     }
 
     pub fn derived_spatial_grid_definition(&self) -> Option<SpatialGridDefinition> {
-        match self {
-            SpatialGridDescriptor::Source(_) => None,
-            SpatialGridDescriptor::Derived(m) => Some(*m),
+        match self.state {
+            SpatialGridDescriptorState::Merged => Some(self.spatial_grid),
+            SpatialGridDescriptorState::Source => None,
         }
     }
 
     pub fn spatial_partition(&self) -> SpatialPartition2D {
-        let grid_def = match self {
-            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => s,
-        };
-        grid_def.spatial_partition()
+        self.spatial_grid.spatial_partition()
     }
 
     pub fn spatial_resolution(&self) -> SpatialResolution {
-        match self {
-            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => {
-                s.geo_transform().spatial_resolution()
-            }
-        }
+        self.spatial_grid.geo_transform.spatial_resolution()
     }
 
     pub fn grid_shape(&self) -> GridShape2D {
-        let shape = match self {
-            SpatialGridDescriptor::Source(s) | SpatialGridDescriptor::Derived(s) => {
-                s.grid_bounds().grid_shape_array()
-            }
-        };
-        GridShape2D::new(shape)
+        self.spatial_grid.grid_bounds().grid_shape()
     }
 
     #[must_use]
@@ -233,21 +234,18 @@ impl SpatialGridDescriptor {
         &self,
         projector: &P,
     ) -> Result<Option<Self>> {
-        match self {
-            SpatialGridDescriptor::Source(s) => Ok(s
-                .reproject_clipped(projector)?
-                .map(SpatialGridDescriptor::Derived)),
-            SpatialGridDescriptor::Derived(m) => Ok(m
-                .reproject_clipped(projector)?
-                .map(SpatialGridDescriptor::Derived)),
+        let projected = self.spatial_grid.reproject_clipped(projector)?;
+        match projected {
+            Some(p) => Ok(Some(Self {
+                spatial_grid: p,
+                state: SpatialGridDescriptorState::Merged,
+            })),
+            None => Ok(None),
         }
     }
 
     pub fn generate_coord_grid_pixel_center(&self) -> Grid<GridBoundingBox2D, Coordinate2D> {
-        match self {
-            SpatialGridDescriptor::Source(s) => s.generate_coord_grid_pixel_center(),
-            SpatialGridDescriptor::Derived(m) => m.generate_coord_grid_pixel_center(),
-        }
+        self.spatial_grid.generate_coord_grid_pixel_center()
     }
 
     #[must_use]
@@ -263,11 +261,26 @@ impl SpatialGridDescriptor {
         tiling_grid: &TilingSpatialGridDefinition,
     ) -> Option<Self> {
         let tiling_spatial_grid = tiling_grid.tiling_spatial_grid_definition();
-        let intersect = match self {
-            SpatialGridDescriptor::Source(s) => s.intersection(&tiling_spatial_grid),
-            SpatialGridDescriptor::Derived(d) => d.intersection(&tiling_spatial_grid),
+        let intersection = self.spatial_grid.intersection(&tiling_spatial_grid)?;
+
+        let descriptor = if self.spatial_grid.grid_bounds == intersection.grid_bounds {
+            self.state
+        } else {
+            SpatialGridDescriptorState::Merged
         };
-        intersect.map(SpatialGridDescriptor::Derived)
+
+        Some(Self {
+            spatial_grid: intersection,
+            state: descriptor,
+        })
+    }
+
+    pub fn as_parts(&self) -> (SpatialGridDescriptorState, SpatialGridDefinition) {
+        let SpatialGridDescriptor {
+            spatial_grid,
+            state,
+        } = *self;
+        (state, spatial_grid)
     }
 }
 
@@ -897,44 +910,53 @@ mod db_types {
     }
 
     #[derive(Debug, ToSql, FromSql)]
-    pub enum SpatialGridDescriptorState {
+    #[postgres(name = "SpatialGridDescriptorState")]
+    pub enum SpatialGridDescriptorStateDbType {
         /// The spatial grid represents the original data
         Source,
         /// The spatial grid was created by merging two non equal spatial grids
         Merged,
     }
 
+    impl From<&SpatialGridDescriptorState> for SpatialGridDescriptorStateDbType {
+        fn from(value: &SpatialGridDescriptorState) -> Self {
+            match value {
+                SpatialGridDescriptorState::Source => SpatialGridDescriptorStateDbType::Source,
+                SpatialGridDescriptorState::Merged => SpatialGridDescriptorStateDbType::Merged,
+            }
+        }
+    }
+
+    impl From<SpatialGridDescriptorStateDbType> for SpatialGridDescriptorState {
+        fn from(value: SpatialGridDescriptorStateDbType) -> Self {
+            match value {
+                SpatialGridDescriptorStateDbType::Source => SpatialGridDescriptorState::Source,
+                SpatialGridDescriptorStateDbType::Merged => SpatialGridDescriptorState::Merged,
+            }
+        }
+    }
+
     #[derive(Debug, ToSql, FromSql)]
     #[postgres(name = "SpatialGridDescriptor")]
     pub struct SpatialGridDescriptorDbType {
-        state: SpatialGridDescriptorState,
+        state: SpatialGridDescriptorStateDbType,
         spatial_grid: SpatialGridDefinition,
     }
 
     impl From<&SpatialGridDescriptor> for SpatialGridDescriptorDbType {
         fn from(value: &SpatialGridDescriptor) -> Self {
-            match value {
-                SpatialGridDescriptor::Source(s) => Self {
-                    spatial_grid: *s,
-                    state: SpatialGridDescriptorState::Source,
-                },
-                SpatialGridDescriptor::Derived(m) => Self {
-                    spatial_grid: *m,
-                    state: SpatialGridDescriptorState::Merged,
-                },
+            Self {
+                spatial_grid: value.spatial_grid,
+                state: SpatialGridDescriptorStateDbType::from(&value.state),
             }
         }
     }
 
     impl From<SpatialGridDescriptorDbType> for SpatialGridDescriptor {
-        fn from(value: SpatialGridDescriptorDbType) -> SpatialGridDescriptor {
-            match value.state {
-                SpatialGridDescriptorState::Source => {
-                    SpatialGridDescriptor::Source(value.spatial_grid)
-                }
-                SpatialGridDescriptorState::Merged => {
-                    SpatialGridDescriptor::Derived(value.spatial_grid)
-                }
+        fn from(value: SpatialGridDescriptorDbType) -> Self {
+            Self {
+                spatial_grid: value.spatial_grid,
+                state: SpatialGridDescriptorState::from(value.state),
             }
         }
     }

@@ -840,16 +840,28 @@ impl RasterOperator for GdalSource {
 
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
 
-        // generate a result descriptor with the overview level
-        let op = InitializedGdalSourceOperator::initialize_with_overview_level(
-            CanonicOperatorName::from(&self),
-            path,
-            self.params.data.to_string(),
-            meta_data,
-            meta_data_result_descriptor,
-            context.tiling_specification(),
-            self.params.overview_level.unwrap_or(0),
-        );
+        let op_name = CanonicOperatorName::from(&self);
+        let op = if self.params.overview_level.is_none() {
+            InitializedGdalSourceOperator::initialize_original_resolution(
+                op_name,
+                path,
+                self.params.data.to_string(),
+                meta_data,
+                meta_data_result_descriptor,
+                context.tiling_specification(),
+            )
+        } else {
+            // generate a result descriptor with the overview level
+            InitializedGdalSourceOperator::initialize_with_overview_level(
+                op_name,
+                path,
+                self.params.data.to_string(),
+                meta_data,
+                meta_data_result_descriptor,
+                context.tiling_specification(),
+                self.params.overview_level.unwrap_or(0),
+            )
+        };
 
         Ok(op.boxed())
     }
@@ -908,7 +920,7 @@ impl InitializedGdalSourceOperator {
             overview_level_spatial_grid(source_resolution_spatial_grid, overview_level)
         {
             let ovr_res = RasterResultDescriptor {
-                spatial_grid: SpatialGridDescriptor::Source(ovr_spatial_grid),
+                spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid),
                 ..result_descriptor
             };
             (ovr_res, Some(source_resolution_spatial_grid))

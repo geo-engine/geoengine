@@ -430,20 +430,22 @@ mod tests {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
                     "time": null,
-                    "spatialGrid": {
-                        "type": "source",
-                        "geoTransform": {
-                            "originCoordinate": {
-                                "x": 0.0,
-                                "y": 0.0
+                        "spatialGrid": {
+                            "spatialGrid": {
+                            "geoTransform": {
+                                "originCoordinate": {
+                                    "x": 0.0,
+                                    "y": 0.0
+                                },
+                                "xPixelSize": 1.0,
+                                "yPixelSize": -1.0
                             },
-                            "xPixelSize": 1.0,
-                            "yPixelSize": -1.0
+                            "gridBounds": {
+                                "max": [2, 1],
+                                "min": [0, 0]
+                            }
                         },
-                        "gridBounds": {
-                            "max": [2, 1],
-                            "min": [0, 0]
-                        }
+                        "state": "source",
                     },
                     "bands": [
                         {

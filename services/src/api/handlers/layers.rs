@@ -2116,7 +2116,7 @@ mod tests {
         tiling_spec = "test_raster_layer_with_timeshift_to_dataset_success_tiling_spec"
     )]
     async fn test_raster_layer_with_timeshift_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
-        let mock_source = MockRasterWorkflowLayerDescription::new(true, 1_000);
+        let mock_source: MockRasterWorkflowLayerDescription = MockRasterWorkflowLayerDescription::new(true, 1_000);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
 

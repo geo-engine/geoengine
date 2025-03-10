@@ -46,38 +46,37 @@ pub enum SpatialGridDescriptorState {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SpatialGridDescriptor {
-    spatial_grid: SpatialGridDefinition,
-    descriptor: SpatialGridDescriptorState,
-}
-
-impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDescriptor {
-    fn from(value: geoengine_operators::engine::SpatialGridDescriptor) -> Self {
-        match value {
-            geoengine_operators::engine::SpatialGridDescriptor::Source(s) => Self {
-                spatial_grid: s.into(),
-                descriptor: SpatialGridDescriptorState::Source,
-            },
-            geoengine_operators::engine::SpatialGridDescriptor::Derived(d) => Self {
-                spatial_grid: d.into(),
-                descriptor: SpatialGridDescriptorState::Derived,
-            },
-        }
-    }
+    pub spatial_grid: SpatialGridDefinition,
+    pub descriptor: SpatialGridDescriptorState,
 }
 
 impl From<SpatialGridDescriptor> for geoengine_operators::engine::SpatialGridDescriptor {
     fn from(value: SpatialGridDescriptor) -> Self {
+        let sp = geoengine_operators::engine::SpatialGridDescriptor::new_source(
+            value.spatial_grid.into(),
+        );
         match value.descriptor {
-            SpatialGridDescriptorState::Source => {
-                geoengine_operators::engine::SpatialGridDescriptor::Source(
-                    value.spatial_grid.into(),
-                )
-            }
-            SpatialGridDescriptorState::Derived => {
-                geoengine_operators::engine::SpatialGridDescriptor::Derived(
-                    value.spatial_grid.into(),
-                )
-            }
+            SpatialGridDescriptorState::Source => sp,
+            SpatialGridDescriptorState::Derived => sp.as_derived(),
+        }
+    }
+}
+
+impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDescriptor {
+    fn from(value: geoengine_operators::engine::SpatialGridDescriptor) -> Self {
+        if value.is_source() {
+            let sp = value.source_spatial_grid_definition().expect("is source");
+            return SpatialGridDescriptor {
+                spatial_grid: sp.into(),
+                descriptor: SpatialGridDescriptorState::Source,
+            };
+        }
+        let sp = value
+            .derived_spatial_grid_definition()
+            .expect("if not source it must be derived");
+        SpatialGridDescriptor {
+            spatial_grid: sp.into(),
+            descriptor: SpatialGridDescriptorState::Derived,
         }
     }
 }

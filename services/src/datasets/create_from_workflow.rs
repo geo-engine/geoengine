@@ -315,11 +315,8 @@ async fn create_dataset<C: SessionContext>(
         .intersection_with_tiling_grid(&query_tiling_spatial_grid)
         .ok_or(error::Error::EmptyDatasetCannotBeImported)?; // TODO: maybe allow empty datasets?
 
-    // TODO: this is not ow it is intended to work with the spatial grid descriptor. The source should propably not need that defined in its params since it can be derived from the dataset!
-    let dataset_source_descriptor_spatial_grid = match result_descriptor_bounds {
-        geoengine_operators::engine::SpatialGridDescriptor::Derived(d) => d,
-        geoengine_operators::engine::SpatialGridDescriptor::Source(s) => s,
-    };
+    // TODO: this is not how it is intended to work with the spatial grid descriptor. The source should propably not need that defined in its params since it can be derived from the dataset!
+    let (_state, dataset_source_descriptor_spatial_grid) = result_descriptor_bounds.as_parts();
 
     let dataset_spatial_grid = geoengine_operators::engine::SpatialGridDescriptor::new_source(
         dataset_source_descriptor_spatial_grid,
