@@ -147,7 +147,7 @@ pub fn create_layer(
         workflow: Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters { data: data_id },
+                    params: GdalSourceParameters::new(data_id),
                 }
                 .boxed(),
             ),

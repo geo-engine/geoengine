@@ -664,7 +664,6 @@ impl CogRasterCreationOptionss {
         fn inner(this: &CogRasterCreationOptionss) -> Result<RasterCreationOptions, GdalError> {
             let mut options = RasterCreationOptions::new();
             options.add_name_value("COMPRESS", &this.compression_format)?;
-            options.add_name_value("TILED", "YES")?;
             options.add_name_value("LEVEL", &this.compression_level)?;
             options.add_name_value("NUM_THREADS", &this.num_threads)?;
             options.add_name_value("BLOCKSIZE", COG_BLOCK_SIZE)?;
@@ -769,12 +768,13 @@ mod tests {
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
-        primitives::{DateTime, SpatialResolution, TimeInterval},
-        raster::RasterDataType,
+        primitives::{DateTime, TimeInterval},
+        raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
         spatial_reference::SpatialReference,
         test_data,
         util::gdal::hide_gdal_errors,
     };
+    use geoengine_operators::engine::SpatialGridDescriptor;
     use geoengine_operators::{
         engine::{RasterBandDescriptors, RasterResultDescriptor},
         source::{
@@ -826,8 +826,10 @@ mod tests {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((50., 55.).into(), 1., -1.),
+                        GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![
@@ -989,8 +991,10 @@ mod tests {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((50., 55.).into(), 1., -1.),
+                        GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![

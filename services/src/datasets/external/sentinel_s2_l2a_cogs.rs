@@ -17,18 +17,17 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
-    CoordinateProjection, CoordinateProjector, ReprojectClipped,
+    CoordinateProjection, CoordinateProjector, Reproject,
 };
-use geoengine_datatypes::primitives::CacheTtlSeconds;
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, CacheTtlSeconds, SpatialPartition2D};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, RasterQueryRectangle,
-    SpatialPartitioned, TimeInstance, TimeInterval, VectorQueryRectangle,
+    DateTime, Duration, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::raster::{GeoTransform, RasterDataType, SpatialGridDefinition};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
-    RasterResultDescriptor, TypedOperator, VectorResultDescriptor,
+    RasterResultDescriptor, SpatialGridDescriptor, TypedOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -45,6 +44,7 @@ use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
+use std::ops::Neg;
 use std::path::PathBuf;
 
 static STAC_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
@@ -161,12 +161,15 @@ pub struct StacBand {
     pub name: String,
     pub no_data_value: Option<f64>,
     pub data_type: RasterDataType,
+    pub pixel_size: f64,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
+#[serde(rename_all = "camelCase")]
 pub struct StacZone {
     pub name: String,
     pub epsg: u32,
+    pub global_native_bounds: SpatialPartition2D,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -375,13 +378,11 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             workflow: Workflow {
                 operator: TypedOperator::Raster(
                     GdalSource {
-                        params: GdalSourceParameters {
-                            data: NamedData {
-                                namespace: None,
-                                provider: Some(self.id.to_string()),
-                                name: id.to_string(),
-                            },
-                        },
+                        params: GdalSourceParameters::new(NamedData {
+                            namespace: None,
+                            provider: Some(self.id.to_string()),
+                            name: id.to_string(),
+                        }),
                     }
                     .boxed(),
                 ),
@@ -463,7 +464,7 @@ impl SentinelS2L2aCogsMetaData {
                 start_times[i + 1]
             } else {
                 // (or end of query?)
-                query.time_interval.end() + query_end_buffer
+                start + query_end_buffer
             };
 
             /*
@@ -510,22 +511,27 @@ impl SentinelS2L2aCogsMetaData {
 
             let time_interval = TimeInterval::new(start, end)?;
 
-            if time_interval.start() <= query.time_interval.start() {
-                let t = if time_interval.end() > query.time_interval.start() {
-                    time_interval.start()
-                } else {
-                    time_interval.end()
-                };
-                known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
-            }
+            if time_interval.contains(&query.time_interval) {
+                let t1 = time_interval.start();
+                let t2 = time_interval.end();
+                known_time_start = Some(t1);
+                known_time_end = Some(t2);
+            } else {
+                if time_interval.end() <= query.time_interval.start() {
+                    let t1 = time_interval.end();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                } else if time_interval.start() <= query.time_interval.start() {
+                    let t1 = time_interval.start();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                }
 
-            if time_interval.end() >= query.time_interval.end() {
-                let t = if time_interval.start() < query.time_interval.end() {
-                    time_interval.end()
-                } else {
-                    time_interval.start()
-                };
-                known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+                if time_interval.start() >= query.time_interval.end() {
+                    let t2 = time_interval.start();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                } else if time_interval.end() >= query.time_interval.end() {
+                    let t2 = time_interval.end();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                }
             }
 
             if time_interval.intersects(&query.time_interval) {
@@ -654,18 +660,22 @@ impl SentinelS2L2aCogsMetaData {
         let t_start = t_start - Duration::seconds(self.stac_query_buffer.start_seconds);
         let t_end = t_end + Duration::seconds(self.stac_query_buffer.end_seconds);
 
-        // request all features in zone in order to be able to determine the temporal validity of individual tile
-        let projector = CoordinateProjector::from_known_srs(
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg),
-            SpatialReference::epsg_4326(),
-        )?;
+        let native_spatial_ref =
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg);
+        let epsg_4326_ref = SpatialReference::epsg_4326();
+        let projector = CoordinateProjector::from_known_srs(native_spatial_ref, epsg_4326_ref)?;
+        let native_bounds = self.zone.global_native_bounds;
 
-        let spatial_partition = query.spatial_partition(); // TODO: use SpatialPartition2D directly
-        let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(
-            spatial_partition.upper_left(),
-            spatial_partition.lower_right(),
-        );
-        let bbox = bbox.reproject_clipped(&projector)?; // TODO: use reproject_clipped on SpatialPartition2D
+        // request all features in zone in order to be able to determine the temporal validity of individual tile
+        let bbox = native_bounds
+            .reproject(&projector)
+            .inspect_err(|e| {
+                debug!(
+                    "could not project zone bounds to EPSG:4326. Was: {:?}. Source: {}",
+                    native_bounds, e
+                );
+            })
+            .ok();
 
         Ok(bbox.map(|bbox| {
             vec![
@@ -793,6 +803,14 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
+        let geo_transform = GeoTransform::new(
+            self.zone.global_native_bounds.upper_left(),
+            self.band.pixel_size,
+            self.band.pixel_size.neg(),
+        );
+        let grid_bounds = geo_transform.spatial_to_grid_bounds(&self.zone.global_native_bounds);
+        let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
+
         Ok(RasterResultDescriptor {
             data_type: self.band.data_type,
             spatial_reference: SpatialReference::new(
@@ -801,8 +819,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             )
             .into(),
             time: None,
-            bbox: None,
-            resolution: None, // TODO: determine from STAC or data or hardcode it
+            spatial_grid: SpatialGridDescriptor::new_source(spatial_grid),
             bands: RasterBandDescriptors::new_single_band(),
         })
     }
@@ -902,13 +919,13 @@ mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
         dataset::{DatasetId, ExternalDataId},
-        primitives::{BandSelection, SpatialPartition2D, SpatialResolution},
+        primitives::{BandSelection, SpatialPartition2D},
         util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
     };
     use geoengine_operators::{
         engine::{
-            ChunkByteSize, MockExecutionContext, MockQueryContext, RasterOperator,
-            WorkflowOperatorPath,
+            ChunkByteSize, ExecutionContext, MockExecutionContext, MockQueryContext,
+            RasterOperator, WorkflowOperatorPath,
         },
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
@@ -929,13 +946,10 @@ mod tests {
             File::open(test_data!("provider_defs/sentinel_s2_l2a_cogs.json"))?,
         ))?;
 
-        let provider = Box::new(def)
-            .initialize(
-                app_ctx
-                    .session_context(app_ctx.create_anonymous_session().await?)
-                    .db(),
-            )
-            .await?;
+        let session_context = app_ctx.session_context(app_ctx.create_anonymous_session().await?);
+        let exe_ctx = session_context.execution_context().unwrap();
+
+        let provider = Box::new(def).initialize(session_context.db()).await?;
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
@@ -951,20 +965,29 @@ mod tests {
                 .await
                 .unwrap();
 
+        let data_bounds =
+            SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
+                .unwrap();
+
+        let raster_result_descriptor = meta.result_descriptor().await.unwrap();
+        let tiling_grid_definition = raster_result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(exe_ctx.tiling_specification());
+
+        let data_bounds_in_pixel_grid = tiling_grid_definition
+            .tiling_geo_transform()
+            .spatial_to_grid_bounds(&data_bounds);
+
         let loading_info = meta
-            .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new(
-                    (166_021.44, 9_329_005.18).into(),
-                    (534_994.66, 0.00).into(),
-                )
-                .unwrap(),
-                time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
-                spatial_resolution: SpatialResolution::one(),
-                attributes: BandSelection::first(),
-            })
+            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                data_bounds_in_pixel_grid,
+                TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+                BandSelection::first(),
+            ))
             .await
             .unwrap();
 
+        // we expect only one tile because there is only this one at the queried time
         let expected = vec![GdalLoadingInfoTemporalSlice {
             time: TimeInterval::new_unchecked(1_609_581_746_000, 1_609_581_758_000),
             params: Some(GdalDatasetParameters {
@@ -1054,31 +1077,32 @@ mod tests {
         );
 
         let op = GdalSource {
-            params: GdalSourceParameters { data: name },
+            params: GdalSourceParameters::new(name),
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe)
         .await
         .unwrap();
 
-        let processor = op.query_processor()?.get_u16().unwrap();
-
-        let spatial_bounds =
+        let sp =
             SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
                 .unwrap();
 
-        let spatial_resolution = SpatialResolution::new_unchecked(
-            spatial_bounds.size_x() / 256.,
-            spatial_bounds.size_y() / 256.,
-        );
-        let query = RasterQueryRectangle {
-            spatial_bounds,
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
-            spatial_resolution,
-            attributes: BandSelection::first(),
-        };
+        let processor = op.query_processor()?.get_u16().unwrap();
+        let sp = processor
+            .raster_result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(exe.tiling_specification)
+            .tiling_geo_transform()
+            .spatial_to_grid_bounds(&sp);
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            sp,
+            TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+            BandSelection::first(),
+        );
+
+        let ctx = exe.mock_query_context(ChunkByteSize::MAX);
 
         let result = processor
             .raster_query(query, &ctx)
@@ -1087,7 +1111,8 @@ mod tests {
             .await;
 
         // TODO: check actual data
-        assert_eq!(result.len(), 1);
+        // NOTE: this are 3951 NO DATA tiles and one real tile...
+        assert_eq!(result.len(), 3952);
 
         Ok(())
     }
@@ -1115,11 +1140,11 @@ mod tests {
                 request::query(url_decoded(contains(("limit", "500")))),
                 request::query(url_decoded(contains((
                     "bbox",
-                    "[33.899332958586406,-2.261536424319933,33.900232774450984,-2.2606312588790414]"
+                    "[9.396566748392315,-83.82852972938498,63.83756656611425,0]"
                 )))),
                 request::query(url_decoded(contains((
                     "datetime",
-                    // default case adds one minute to the start/end of the query to catch elements before/after 
+                    // default case adds one minute to the start/end of the query to catch elements before/after
                     "2021-09-23T08:09:44+00:00/2021-09-23T08:11:44+00:00"
                 )))),
             ])
@@ -1312,10 +1337,15 @@ mod tests {
                     name: "B04".into(),
                     no_data_value: Some(0.),
                     data_type: RasterDataType::U16,
+                    pixel_size: 10.0,
                 }],
                 zones: vec![StacZone {
                     name: "UTM36S".into(),
                     epsg: 32736,
+                    global_native_bounds: SpatialPartition2D::new_unchecked(
+                        (199_980.0, 10_000_000.0).into(),
+                        (909_780.0, 690_220.).into(),
+                    ),
                 }],
                 stac_api_retries: Default::default(),
                 gdal_retries: GdalRetries {
@@ -1325,14 +1355,10 @@ mod tests {
                 query_buffer: Default::default(),
             });
 
-        let provider = provider_def
-            .initialize(
-                app_ctx
-                    .session_context(app_ctx.create_anonymous_session().await.unwrap())
-                    .db(),
-            )
-            .await
-            .unwrap();
+        let session_ctx =
+            app_ctx.session_context(app_ctx.create_anonymous_session().await.unwrap());
+
+        let provider = provider_def.initialize(session_ctx.db()).await.unwrap();
 
         let meta: Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>> =
             provider
@@ -1346,17 +1372,27 @@ mod tests {
                 .await
                 .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (600_000.00, 9_750_100.).into(),
-                (600_100.0, 9_750_000.).into(),
-            ),
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44))
-                .unwrap(),
-            spatial_resolution: SpatialResolution::new_unchecked(10., 10.),
-            attributes: BandSelection::first(),
-        };
+        let exe_ctx = session_ctx.execution_context().unwrap();
+        let result_descriptor = meta.result_descriptor().await.unwrap();
 
+        let data_bounds = SpatialPartition2D::new_unchecked(
+            (600_000.00, 9_750_100.).into(),
+            (600_100.0, 9_750_000.).into(),
+        );
+
+        let tiling_geo_transform = result_descriptor
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(exe_ctx.tiling_specification())
+            .tiling_geo_transform();
+
+        let sp: geoengine_datatypes::raster::GridBoundingBox<[isize; 2]> =
+            tiling_geo_transform.spatial_to_grid_bounds(&data_bounds);
+
+        let query = RasterQueryRectangle::new_with_grid_bounds(
+            sp,
+            TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44)).unwrap(),
+            BandSelection::first(),
+        );
         let loading_info = meta.loading_info(query).await.unwrap();
         let parts =
             if let GdalLoadingInfoTemporalSliceIterator::Static { parts } = loading_info.info {
@@ -1424,21 +1460,14 @@ mod tests {
             name.clone(),
             Box::new(GdalMetaDataStatic {
                 time: None,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U16,
-                    spatial_reference: SpatialReference::from_str("EPSG:32736").unwrap().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
                 params,
                 cache_ttl: CacheTtlSeconds::default(),
             }),
         );
 
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: name },
+            params: GdalSourceParameters::new(name),
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1451,20 +1480,21 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
+        let data_bounds = SpatialPartition2D::new_unchecked(
+            (499_980., 9_804_800.).into(),
+            (499_990., 9_804_810.).into(),
+        );
+
+        let sp: geoengine_datatypes::raster::GridBoundingBox<[isize; 2]> =
+            tiling_geo_transform.spatial_to_grid_bounds(&data_bounds);
+
         let stream = gdal_source
             .raster_query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (499_980., 9_804_800.).into(),
-                        (499_990., 9_804_810.).into(),
-                    ),
-                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
-                        2014, 3, 1, 0, 0, 0,
-                    ))
-                    .unwrap(),
-                    spatial_resolution: SpatialResolution::new(10., 10.).unwrap(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new_with_grid_bounds(
+                    sp,
+                    TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+                    BandSelection::first(),
+                ),
                 &query_context,
             )
             .await

@@ -3,62 +3,17 @@ use crate::api::handlers::datasets::VolumeFileLayersResponse;
 use crate::api::handlers::permissions::{
     PermissionListOptions, PermissionListing, PermissionRequest, Resource,
 };
-use crate::api::handlers::plots::WrappedPlotOutput;
-use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
-use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
-use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use crate::api::handlers::users::AddRole;
-use crate::api::handlers::users::{Quota, UpdateQuota, UsageSummaryGranularity};
-use crate::api::handlers::wfs::{CollectionType, GeoJson};
-use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
-    AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
-    ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
-    DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId, FeatureDataType,
-    GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement, MultiLineString,
-    MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle,
-    RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
-    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType, VectorQueryRectangle,
-};
-use crate::api::model::operators::{
-    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
-    GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
-    GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
-    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
-    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
-    OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterResultDescriptor, TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor,
-    UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
-};
-use crate::api::model::responses::datasets::DatasetNameResponse;
-use crate::api::model::responses::ml_models::MlModelNameResponse;
-use crate::api::model::responses::{
-    BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse, PngResponse,
-    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
-    ZipResponse,
-};
-use crate::api::model::services::{
-    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
-    Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
-};
-use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
-use crate::contexts::SessionId;
-use crate::datasets::listing::{DatasetListing, OrderBy};
-use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
-use crate::datasets::upload::{UploadId, VolumeName};
-use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
-use crate::layers::layer::{
-    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
-    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
-    UpdateLayerCollection,
+    DateTimeParseFormat, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
+    LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
+    NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterColorizer,
+    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
+    RgbaColor, SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, TimeInstance,
 };
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
-use crate::machine_learning::name::MlModelName;
-use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
+use crate::machine_learning::{name::MlModelName, MlModel, MlModelId, MlModelMetadata};
 use crate::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
@@ -77,6 +32,64 @@ use crate::util::{
     server::ServerInfo,
 };
 use crate::workflows::workflow::{Workflow, WorkflowId};
+use crate::{
+    api::{
+        handlers::{
+            plots::WrappedPlotOutput,
+            spatial_references::{AxisOrder, SpatialReferenceSpecification},
+            tasks::{TaskAbortOptions, TaskResponse},
+            upload::{UploadFileLayersResponse, UploadFilesResponse},
+            users::{AddRole, Quota, UpdateQuota, UsageSummaryGranularity},
+            wfs::{CollectionType, GeoJson},
+            workflows::{ProvenanceEntry, RasterStreamWebsocketResultType},
+        },
+        model::{
+            datatypes::{
+                AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
+                ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
+                DataProviderId, DatasetId, DateTime, GeoTransform, GridBoundingBox2D, GridIdx2D,
+                SpatialGridDefinition, StringPair, TimeGranularity, TimeInterval, TimeStep,
+                VectorDataType, VectorQueryRectangle,
+            },
+            operators::{
+                CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
+                GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList,
+                GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf,
+                GdalSourceTimePlaceholder, MockDatasetDataSourceLoadingInfo, MockMetaData,
+                OgrMetaData, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
+                OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
+                PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
+                RasterResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState,
+                TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor,
+                UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
+            },
+            responses::{
+                datasets::DatasetNameResponse, ml_models::MlModelNameResponse,
+                BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse,
+                PngResponse, UnauthorizedAdminResponse, UnauthorizedUserResponse,
+                UnsupportedMediaTypeForJsonResponse, ZipResponse,
+            },
+            services::{
+                AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
+                MetaDataSuggestion, Provenance, ProvenanceOutput, Provenances, UpdateDataset,
+                Volume,
+            },
+        },
+        ogc::{util::OgcBoundingBox, wcs, wfs, wms},
+    },
+    contexts::SessionId,
+    datasets::{
+        listing::{DatasetListing, OrderBy},
+        storage::{AutoCreateDataset, Dataset, SuggestMetaData},
+        upload::{UploadId, VolumeName},
+        DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult,
+    },
+    layers::layer::{
+        AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection,
+        LayerCollectionListing, LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
+        UpdateLayer, UpdateLayerCollection,
+    },
+};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
@@ -410,6 +423,13 @@ use utoipa::{Modify, OpenApi};
             LayerVisibility,
             RasterStreamWebsocketResultType,
             CacheTtlSeconds,
+
+            SpatialGridDefinition,
+            SpatialGridDescriptorState,
+            SpatialGridDescriptor,
+            GridBoundingBox2D,
+            GridIdx2D,
+            GeoTransform,
 
             PermissionRequest,
             Resource,

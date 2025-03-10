@@ -38,27 +38,29 @@ mod test_util {
     use std::str::FromStr;
 
     use futures::StreamExt;
-    use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds};
-    use geoengine_datatypes::util::test::TestDefault;
-    use num_traits::AsPrimitive;
-
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
+    use geoengine_datatypes::hashmap;
+    use geoengine_datatypes::primitives::{
+        BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D,
+    };
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, DateTime, DateTimeParseFormat, Measurement, RasterQueryRectangle,
-        SpatialPartition2D, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-        TimeStep,
+        TimeGranularity, TimeInstance, TimeInterval, TimeStep,
     };
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, GridOrEmpty2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties,
-        RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D, TileInformation,
+        BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, GridOrEmpty2D,
+        GridShape2D, MaskedGrid2D, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
+        RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use num_traits::AsPrimitive;
 
     use crate::engine::{
         MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptor,
-        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+        WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -122,27 +124,22 @@ mod test_util {
     }
 
     pub(crate) fn _create_gdal_query() -> RasterQueryRectangle {
-        let sr = SpatialResolution::new_unchecked(3_000.403_165_817_261, 3_000.403_165_817_261);
-        let ul = (0., 0.).into();
-        let lr = (599. * sr.x, -599. * sr.y).into();
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(ul, lr),
-            time_interval: TimeInterval::new_unchecked(
+        RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(0, 599, 0, 599).unwrap(),
+            TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 15, 0)),
             ),
-            spatial_resolution: sr,
-            attributes: BandSelection::first(),
-        }
+            BandSelection::first(),
+        )
     }
 
     pub(crate) fn create_mock_query() -> RasterQueryRectangle {
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        }
+        RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        )
     }
 
     pub(crate) fn create_mock_source<P: Pixel>(
@@ -192,8 +189,10 @@ mod test_util {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
+                        GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                         "band".into(),
                         measurement.unwrap_or_else(|| {
@@ -214,6 +213,11 @@ mod test_util {
         let dataset_name = NamedData::with_system_name("gdal-ds");
 
         let no_data_value = Some(0.);
+        let origin_coordinate: Coordinate2D =
+            (-5_570_248.477_339_745, 5_570_248.477_339_745).into();
+        let x_pixel_size = 3_000.403_165_817_261;
+        let y_pixel_size = -3_000.403_165_817_261;
+
         let meta = GdalMetaDataRegular {
             data_time: TimeInterval::new_unchecked(
                 TimeInstance::from_str("2012-12-12T12:00:00.000Z").unwrap(),
@@ -233,9 +237,9 @@ mod test_util {
                 file_path: test_data!("raster/msg/%_START_TIME_%.tif").into(),
                 rasterband_channel: 1,
                 geo_transform: GdalDatasetGeoTransform {
-                    origin_coordinate: (-5_570_248.477_339_745, 5_570_248.477_339_745).into(),
-                    x_pixel_size: 3_000.403_165_817_261,
-                    y_pixel_size: -3_000.403_165_817_261,
+                    origin_coordinate,
+                    x_pixel_size,
+                    y_pixel_size,
                 },
                 width: 3712,
                 height: 3712,
@@ -269,8 +273,10 @@ mod test_util {
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81)
                     .into(),
                 time: None,
-                bbox: None,
-                resolution: None,
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
+                    GridShape2D::new_2d(3712, 3712).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                     "band".into(),
                     Measurement::Continuous(ContinuousMeasurement {
@@ -285,7 +291,7 @@ mod test_util {
         ctx.add_meta_data(dataset_id, dataset_name.clone(), Box::new(meta));
 
         GdalSource {
-            params: GdalSourceParameters { data: dataset_name },
+            params: GdalSourceParameters::new(dataset_name),
         }
     }
 }

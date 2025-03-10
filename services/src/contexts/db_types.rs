@@ -1167,7 +1167,9 @@ delegate_from_to_sql!(
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        dataset::DataProviderId, primitives::CacheTtlSeconds, util::Identifier,
+        dataset::DataProviderId,
+        primitives::{CacheTtlSeconds, SpatialPartition2D},
+        util::Identifier,
     };
 
     use super::*;
@@ -1212,6 +1214,7 @@ mod tests {
                     name: "band".to_owned(),
                     no_data_value: Some(133.7),
                     data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                    pixel_size: 10.0,
                 }],
             )
             .await;
@@ -1222,6 +1225,10 @@ mod tests {
                 [StacZone {
                     name: "zone".to_owned(),
                     epsg: 4326,
+                    global_native_bounds: SpatialPartition2D::new_unchecked(
+                        (-180., 90.).into(),
+                        (180., -90.).into(),
+                    ),
                 }],
             )
             .await;
@@ -1239,10 +1246,15 @@ mod tests {
                         name: "band".to_owned(),
                         no_data_value: Some(133.7),
                         data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                        pixel_size: 10.0,
                     }],
                     zones: vec![StacZone {
                         name: "zone".to_owned(),
                         epsg: 4326,
+                        global_native_bounds: SpatialPartition2D::new_unchecked(
+                            (-180., 90.).into(),
+                            (180., -90.).into(),
+                        ),
                     }],
                     stac_api_retries: StacApiRetries {
                         number_of_retries: 3,
@@ -1306,10 +1318,15 @@ mod tests {
                                 name: "band".to_owned(),
                                 no_data_value: Some(133.7),
                                 data_type: geoengine_datatypes::raster::RasterDataType::F32,
+                                pixel_size: 10.,
                             }],
                             zones: vec![StacZone {
                                 name: "zone".to_owned(),
                                 epsg: 4326,
+                                global_native_bounds: SpatialPartition2D::new_unchecked(
+                                    (-180., 90.).into(),
+                                    (180., -90.).into(),
+                                ),
                             }],
                             stac_api_retries: StacApiRetries {
                                 number_of_retries: 3,

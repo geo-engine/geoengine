@@ -91,6 +91,13 @@ impl Sentinel2ProductBand {
             Sentinel2ProductBand::L2A(band) => format!("{band}"),
         }
     }
+
+    pub fn resolution_meters(self) -> usize {
+        match self {
+            Sentinel2ProductBand::L1C(l1c) => l1c.resolution_meters(),
+            Sentinel2ProductBand::L2A(l2a) => l2a.resolution_meters(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, EnumString, strum::Display, EnumIter)]
@@ -342,6 +349,10 @@ impl UtmZone {
     pub fn extent(self) -> Option<SpatialPartition2D> {
         // TODO: as Sentinel uses enlarged grids, we could return a larger extent
         self.spatial_reference().area_of_use().ok()
+    }
+
+    pub fn native_extent(self) -> Option<SpatialPartition2D> {
+        self.spatial_reference().area_of_use_projected().ok()
     }
 }
 

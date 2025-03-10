@@ -1,4 +1,39 @@
 mod dataset_iterator;
+
+use futures::future::{BoxFuture, Future};
+use futures::stream::{BoxStream, FusedStream};
+use futures::task::Context;
+use futures::FutureExt;
+use futures::{ready, Stream, StreamExt};
+use gdal::vector::sql::ResultSet;
+use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
+use geoengine_datatypes::collections::{
+    BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
+    FeatureCollectionModifications, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
+    VectorDataType,
+};
+use geoengine_datatypes::primitives::CacheTtlSeconds;
+use geoengine_datatypes::primitives::{
+    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
+    FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
+    NoGeometry, SpatialBounded, TimeInstance, TimeInterval, TimeStep, TypedGeometry,
+    VectorQueryRectangle, VectorSpatialQueryRectangle,
+};
+use geoengine_datatypes::util::arrow::ArrowTyped;
+use log::debug;
+use postgres_protocol::escape::{escape_identifier, escape_literal};
+use serde::{Deserialize, Serialize};
+use std::collections::{HashMap, HashSet};
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use std::ops::{Add, DerefMut};
+use std::path::PathBuf;
+use std::pin::Pin;
+use std::str::FromStr;
+use std::sync::Arc;
+use std::task::Poll;
+use tokio::sync::Mutex;
+
 use self::dataset_iterator::OgrDatasetIterator;
 use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
@@ -15,43 +50,11 @@ use crate::{
     error,
 };
 use async_trait::async_trait;
-use futures::future::BoxFuture;
-use futures::stream::{BoxStream, FusedStream};
-use futures::task::Context;
-use futures::{ready, Stream, StreamExt};
-use futures::{Future, FutureExt};
 use gdal::errors::GdalError;
-use gdal::vector::sql::ResultSet;
-use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
-use geoengine_datatypes::collections::{
-    BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
-    FeatureCollectionModifications, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    VectorDataType,
-};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
-    FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
-    NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
-};
-use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
-use geoengine_datatypes::util::arrow::ArrowTyped;
-use log::debug;
+use geoengine_datatypes::primitives::ColumnSelection;
 use pin_project::pin_project;
-use postgres_protocol::escape::{escape_identifier, escape_literal};
 use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::convert::{TryFrom, TryInto};
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::ops::{Add, DerefMut};
-use std::path::PathBuf;
-use std::pin::Pin;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::task::Poll;
-use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -535,7 +538,7 @@ where
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -1290,7 +1293,7 @@ where
 
         // filter out geometries that are not contained in the query's bounding box
         if !was_spatial_filtered_by_ogr
-            && !geometry.intersects_bbox(&query_rectangle.spatial_bounds)
+            && !geometry.intersects_bbox(&query_rectangle.spatial_query().spatial_bounds())
         {
             return Ok(());
         }
@@ -1964,8 +1967,9 @@ mod tests {
     use geoengine_datatypes::dataset::{DataId, DatasetId};
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, Measurement, SpatialResolution, TimeGranularity,
+        BoundingBox2D, FeatureData, Measurement, TimeGranularity,
     };
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
@@ -2147,15 +2151,15 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -2202,15 +2206,15 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await;
@@ -2251,15 +2255,15 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -2305,15 +2309,15 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -2391,15 +2395,14 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -2491,15 +2494,14 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -2594,15 +2596,14 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -2748,15 +2749,14 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -2923,18 +2923,14 @@ mod tests {
 
         let query_processor = source.query_processor()?.multi_point().unwrap();
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new(
-                        (-180.0, -90.0).into(),
-                        (180.0, 90.0).into(),
-                    )?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -4112,15 +4108,15 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(rd, Box::new(info), vec![]);
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -4234,15 +4230,15 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -4444,15 +4440,14 @@ mod tests {
             (4.824_087_161, 52.413_055_56),
         ])?;
 
-        let context1 = MockQueryContext::new(ChunkByteSize::MIN);
+        let context1 = exe_ctx.mock_query_context(ChunkByteSize::MIN);
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context1,
             )
             .await
@@ -4479,15 +4474,14 @@ mod tests {
         assert!(!result.last().unwrap().is_empty());
 
         // LARGER CHUNK
-        let context = MockQueryContext::new((1_650).into());
+        let context = exe_ctx.mock_query_context((1_650).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -4597,15 +4591,14 @@ mod tests {
         let query_bbox =
             BoundingBox2D::new((-180.0, -90.0).into(), (-180.00, -90.0).into()).unwrap();
 
-        let context = MockQueryContext::new(ChunkByteSize::MIN);
+        let context = exe_ctx.mock_query_context(ChunkByteSize::MIN);
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -4687,15 +4680,14 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -4808,15 +4800,14 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -4936,15 +4927,14 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -5062,15 +5052,14 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -5188,15 +5177,14 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -5310,15 +5298,14 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -5445,15 +5432,14 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -5566,15 +5552,14 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let context = MockQueryContext::new((1024 * 1024).into());
+        let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: query_bbox,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    query_bbox,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -5680,15 +5665,15 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(rd, Box::new(info), vec![]);
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -5810,15 +5795,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -5929,15 +5914,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6048,15 +6033,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6171,15 +6156,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6293,15 +6278,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6430,15 +6415,15 @@ mod tests {
             ],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6549,15 +6534,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6660,15 +6645,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6757,15 +6742,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6851,15 +6836,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -6945,15 +6930,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
@@ -7039,15 +7024,15 @@ mod tests {
             }],
         );
 
-        let context = MockQueryContext::new(ChunkByteSize::MAX);
+        let context =
+            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &context,
             )
             .await
