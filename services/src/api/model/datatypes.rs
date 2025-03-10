@@ -34,25 +34,29 @@ impl From<DatasetId> for geoengine_datatypes::dataset::DatasetId {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 /// The identifier for loadable data. It is used in the source operators to get the loading info (aka parametrization)
 /// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 pub enum DataId {
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "InternalDataId")]
-    Internal {
-        dataset_id: DatasetId,
-    },
+    Internal(InternalDataId),
     External(ExternalDataId),
+}
+
+type_tag!(Internal);
+type_tag!(External);
+
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalDataId {
+    r#type: InternalTag,
+    pub dataset_id: DatasetId,
 }
 
 impl DataId {
     pub fn internal(&self) -> Option<DatasetId> {
-        if let Self::Internal {
-            dataset_id: dataset,
-        } = self
-        {
-            return Some(*dataset);
+        if let Self::Internal(internal) = self {
+            return Some(internal.dataset_id);
         }
         None
     }
@@ -67,7 +71,10 @@ impl DataId {
 
 impl From<DatasetId> for DataId {
     fn from(value: DatasetId) -> Self {
-        Self::Internal { dataset_id: value }
+        Self::Internal(InternalDataId {
+            r#type: Default::default(),
+            dataset_id: value,
+        })
     }
 }
 
@@ -103,9 +110,12 @@ impl From<ExternalDataId> for geoengine_datatypes::dataset::ExternalDataId {
 impl From<geoengine_datatypes::dataset::DataId> for DataId {
     fn from(id: geoengine_datatypes::dataset::DataId) -> Self {
         match id {
-            geoengine_datatypes::dataset::DataId::Internal { dataset_id } => Self::Internal {
-                dataset_id: dataset_id.into(),
-            },
+            geoengine_datatypes::dataset::DataId::Internal { dataset_id } => {
+                Self::Internal(InternalDataId {
+                    r#type: Default::default(),
+                    dataset_id: dataset_id.into(),
+                })
+            }
             geoengine_datatypes::dataset::DataId::External(external_id) => {
                 Self::External(external_id.into())
             }
@@ -116,8 +126,8 @@ impl From<geoengine_datatypes::dataset::DataId> for DataId {
 impl From<DataId> for geoengine_datatypes::dataset::DataId {
     fn from(id: DataId) -> Self {
         match id {
-            DataId::Internal { dataset_id } => Self::Internal {
-                dataset_id: dataset_id.into(),
+            DataId::Internal(internal) => Self::Internal {
+                dataset_id: internal.dataset_id.into(),
             },
             DataId::External(external_id) => Self::External(external_id.into()),
         }
@@ -127,8 +137,8 @@ impl From<DataId> for geoengine_datatypes::dataset::DataId {
 impl From<&DataId> for geoengine_datatypes::dataset::DataId {
     fn from(id: &DataId) -> Self {
         match id {
-            DataId::Internal { dataset_id } => Self::Internal {
-                dataset_id: dataset_id.into(),
+            DataId::Internal(internal) => Self::Internal {
+                dataset_id: internal.dataset_id.into(),
             },
             DataId::External(external_id) => Self::External(external_id.into()),
         }
@@ -243,6 +253,7 @@ impl std::fmt::Display for LayerId {
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDataId {
+    r#type: ExternalTag,
     pub provider_id: DataProviderId,
     pub layer_id: LayerId,
 }
@@ -250,6 +261,7 @@ pub struct ExternalDataId {
 impl From<geoengine_datatypes::dataset::ExternalDataId> for ExternalDataId {
     fn from(id: geoengine_datatypes::dataset::ExternalDataId) -> Self {
         Self {
+            r#type: Default::default(),
             provider_id: id.provider_id.into(),
             layer_id: id.layer_id.into(),
         }
@@ -867,12 +879,12 @@ impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
 pub struct UnitlessMeasurement {
-    r#type: TypeTagUnitless,
+    r#type: UnitlessTag,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
-    r#type: TypeTagContinuous,
+    r#type: ContinuousTag,
     pub measurement: String,
     pub unit: Option<String>,
 }
@@ -902,7 +914,7 @@ impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::Continuous
     into = "SerializableClassificationMeasurement"
 )]
 pub struct ClassificationMeasurement {
-    r#type: TypeTagClassification,
+    r#type: ClassificationTag,
     pub measurement: String,
     pub classes: HashMap<u8, String>,
 }
@@ -1499,9 +1511,14 @@ impl From<Breakpoint> for geoengine_datatypes::operations::image::Breakpoint {
     }
 }
 
+type_tag!(LinearGradient);
+type_tag!(LogarithmicGradient);
+type_tag!(Palette);
+
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LinearGradient {
+    r#type: LogarithmicGradientTag,
     pub breakpoints: Vec<Breakpoint>,
     pub no_data_color: RgbaColor,
     pub over_color: RgbaColor,
@@ -1511,28 +1528,31 @@ pub struct LinearGradient {
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LogarithmicGradient {
+    r#type: LogarithmicGradientTag,
     pub breakpoints: Vec<Breakpoint>,
     pub no_data_color: RgbaColor,
     pub over_color: RgbaColor,
     pub under_color: RgbaColor,
 }
 
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PaletteColorizer {
+    r#type: PaletteTag,
+    pub colors: Palette,
+    pub no_data_color: RgbaColor,
+    pub default_color: RgbaColor,
+}
+
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum Colorizer {
-    #[serde(rename_all = "camelCase")]
     LinearGradient(LinearGradient),
-    #[serde(rename_all = "camelCase")]
     LogarithmicGradient(LogarithmicGradient),
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "PaletteColorizer")]
-    Palette {
-        colors: Palette,
-        no_data_color: RgbaColor,
-        default_color: RgbaColor,
-    },
+    Palette(PaletteColorizer),
 }
 
 impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
@@ -1544,6 +1564,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 over_color,
                 under_color,
             } => Self::LinearGradient(LinearGradient {
+                r#type: Default::default(),
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
@@ -1558,6 +1579,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 over_color,
                 under_color,
             } => Self::LogarithmicGradient(LogarithmicGradient {
+                r#type: Default::default(),
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
@@ -1570,11 +1592,12 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 colors,
                 no_data_color,
                 default_color,
-            } => Self::Palette {
+            } => Self::Palette(PaletteColorizer {
+                r#type: Default::default(),
                 colors: colors.into(),
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
-            },
+            }),
         }
     }
 }
@@ -1603,11 +1626,12 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
                 under_color: logarithmic_gradient.under_color.into(),
             },
 
-            Colorizer::Palette {
+            Colorizer::Palette(PaletteColorizer {
                 colors,
                 no_data_color,
                 default_color,
-            } => Self::Palette {
+                ..
+            }) => Self::Palette {
                 colors: colors.into(),
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
@@ -1616,53 +1640,64 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
     }
 }
 
+type_tag!(SingleBand);
+type_tag!(MultiBand);
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum RasterColorizer {
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "SingleBandRasterColorizer")]
-    SingleBand {
-        band: u32,
-        band_colorizer: Colorizer,
-    },
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "MultiBandRasterColorizer")]
-    MultiBand {
-        /// The band index of the red channel.
-        red_band: u32,
-        /// The minimum value for the red channel.
-        red_min: f64,
-        /// The maximum value for the red channel.
-        red_max: f64,
-        /// A scaling factor for the red channel between 0 and 1.
-        #[serde(default = "num_traits::One::one")]
-        red_scale: f64,
+    SingleBand(SingleBandRasterColorizer),
+    MultiBand(MultiBandRasterColorizer),
+}
 
-        /// The band index of the green channel.
-        green_band: u32,
-        /// The minimum value for the red channel.
-        green_min: f64,
-        /// The maximum value for the red channel.
-        green_max: f64,
-        /// A scaling factor for the green channel between 0 and 1.
-        #[serde(default = "num_traits::One::one")]
-        green_scale: f64,
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SingleBandRasterColorizer {
+    pub r#type: SingleBandTag,
+    pub band: u32,
+    pub band_colorizer: Colorizer,
+}
 
-        /// The band index of the blue channel.
-        blue_band: u32,
-        /// The minimum value for the red channel.
-        blue_min: f64,
-        /// The maximum value for the red channel.
-        blue_max: f64,
-        /// A scaling factor for the blue channel between 0 and 1.
-        #[serde(default = "num_traits::One::one")]
-        blue_scale: f64,
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiBandRasterColorizer {
+    pub r#type: MultiBandTag,
 
-        /// The color to use for no data values.
-        /// If not specified, the no data values will be transparent.
-        #[serde(default = "rgba_transparent")]
-        no_data_color: RgbaColor,
-    },
+    /// The band index of the red channel.
+    pub red_band: u32,
+    /// The minimum value for the red channel.
+    pub red_min: f64,
+    /// The maximum value for the red channel.
+    pub red_max: f64,
+    /// A scaling factor for the red channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub red_scale: f64,
+
+    /// The band index of the green channel.
+    pub green_band: u32,
+    /// The minimum value for the red channel.
+    pub green_min: f64,
+    /// The maximum value for the red channel.
+    pub green_max: f64,
+    /// A scaling factor for the green channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub green_scale: f64,
+
+    /// The band index of the blue channel.
+    pub blue_band: u32,
+    /// The minimum value for the red channel.
+    pub blue_min: f64,
+    /// The maximum value for the red channel.
+    pub blue_max: f64,
+    /// A scaling factor for the blue channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub blue_scale: f64,
+
+    /// The color to use for no data values.
+    /// If not specified, the no data values will be transparent.
+    #[serde(default = "rgba_transparent")]
+    pub no_data_color: RgbaColor,
 }
 
 fn rgba_transparent() -> RgbaColor {
@@ -1674,13 +1709,15 @@ impl Eq for RasterColorizer {}
 impl RasterColorizer {
     pub fn band_selection(&self) -> BandSelection {
         match self {
-            RasterColorizer::SingleBand { band, .. } => BandSelection(vec![*band as usize]),
-            RasterColorizer::MultiBand {
+            RasterColorizer::SingleBand(SingleBandRasterColorizer { band, .. }) => {
+                BandSelection(vec![*band as usize])
+            }
+            RasterColorizer::MultiBand(MultiBandRasterColorizer {
                 red_band,
                 green_band,
                 blue_band,
                 ..
-            } => {
+            }) => {
                 let mut bands = Vec::with_capacity(3);
                 for band in [
                     *red_band as usize,
@@ -1704,16 +1741,18 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
             geoengine_datatypes::operations::image::RasterColorizer::SingleBand {
                 band,
                 band_colorizer: colorizer,
-            } => Self::SingleBand {
+            } => Self::SingleBand(SingleBandRasterColorizer {
+                r#type: Default::default(),
                 band,
                 band_colorizer: colorizer.into(),
-            },
+            }),
             geoengine_datatypes::operations::image::RasterColorizer::MultiBand {
                 red_band,
                 green_band,
                 blue_band,
                 rgb_params,
-            } => Self::MultiBand {
+            } => Self::MultiBand(MultiBandRasterColorizer {
+                r#type: Default::default(),
                 red_band,
                 green_band,
                 blue_band,
@@ -1727,7 +1766,7 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
                 blue_max: rgb_params.blue_max,
                 blue_scale: rgb_params.blue_scale,
                 no_data_color: rgb_params.no_data_color.into(),
-            },
+            }),
         }
     }
 }
@@ -1735,14 +1774,15 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
 impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterColorizer {
     fn from(v: RasterColorizer) -> Self {
         match v {
-            RasterColorizer::SingleBand {
+            RasterColorizer::SingleBand(SingleBandRasterColorizer {
                 band,
                 band_colorizer: colorizer,
-            } => Self::SingleBand {
+                ..
+            }) => Self::SingleBand {
                 band,
                 band_colorizer: colorizer.into(),
             },
-            RasterColorizer::MultiBand {
+            RasterColorizer::MultiBand(MultiBandRasterColorizer {
                 red_band,
                 red_min,
                 red_max,
@@ -1756,7 +1796,8 @@ impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterCol
                 blue_max,
                 blue_scale,
                 no_data_color,
-            } => Self::MultiBand {
+                ..
+            }) => Self::MultiBand {
                 red_band,
                 green_band,
                 blue_band,

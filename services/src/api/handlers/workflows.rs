@@ -401,7 +401,7 @@ async fn resolve_provenance<C: SessionContext>(
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal { dataset_id } => db.load_provenance(&dataset_id.into()).await,
+        DataId::Internal(internal) => db.load_provenance(&internal.dataset_id.into()).await,
         DataId::External(e) => {
             db.load_layer_provider(e.provider_id.into())
                 .await?
