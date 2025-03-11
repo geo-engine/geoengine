@@ -1,10 +1,10 @@
-use super::type_tag;
 use crate::error::{self, Error, Result};
 use crate::identifier;
 use geoengine_datatypes::operations::image::RgbParams;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
+use geoengine_macros::type_tag;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
 use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
@@ -43,14 +43,10 @@ pub enum DataId {
     External(ExternalDataId),
 }
 
-type_tag!(Internal);
-type_tag!(External);
-
+#[type_tag(tag = "internal")]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct InternalDataId {
-    #[schema(inline)]
-    r#type: InternalTag,
     pub dataset_id: DatasetId,
 }
 
@@ -251,11 +247,10 @@ impl std::fmt::Display for LayerId {
     }
 }
 
+#[type_tag(tag = "external")]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDataId {
-    #[schema(inline)]
-    r#type: ExternalTag,
     pub provider_id: DataProviderId,
     pub layer_id: LayerId,
 }
@@ -838,10 +833,6 @@ impl From<FeatureDataType> for geoengine_datatypes::primitives::FeatureDataType 
     }
 }
 
-type_tag!(Unitless);
-type_tag!(Continuous);
-type_tag!(Classification);
-
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
@@ -879,16 +870,13 @@ impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
     }
 }
 
+#[type_tag(tag = "unitless")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
-pub struct UnitlessMeasurement {
-    #[schema(inline)]
-    r#type: UnitlessTag,
-}
+pub struct UnitlessMeasurement {}
 
+#[type_tag(tag = "continuous")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
-    #[schema(inline)]
-    r#type: ContinuousTag,
     pub measurement: String,
     pub unit: Option<String>,
 }
@@ -912,14 +900,13 @@ impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::Continuous
     }
 }
 
+#[type_tag(tag = "classification")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(
     try_from = "SerializableClassificationMeasurement",
     into = "SerializableClassificationMeasurement"
 )]
 pub struct ClassificationMeasurement {
-    #[schema(inline)]
-    r#type: ClassificationTag,
     pub measurement: String,
     pub classes: HashMap<u8, String>,
 }
@@ -1516,37 +1503,30 @@ impl From<Breakpoint> for geoengine_datatypes::operations::image::Breakpoint {
     }
 }
 
-type_tag!(LinearGradient);
-type_tag!(LogarithmicGradient);
-type_tag!(Palette);
-
+#[type_tag(tag = "linearGradient")]
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LinearGradient {
-    #[schema(inline)]
-    r#type: LogarithmicGradientTag,
     pub breakpoints: Vec<Breakpoint>,
     pub no_data_color: RgbaColor,
     pub over_color: RgbaColor,
     pub under_color: RgbaColor,
 }
 
+#[type_tag(tag = "logarithmicGradient")]
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LogarithmicGradient {
-    #[schema(inline)]
-    r#type: LogarithmicGradientTag,
     pub breakpoints: Vec<Breakpoint>,
     pub no_data_color: RgbaColor,
     pub over_color: RgbaColor,
     pub under_color: RgbaColor,
 }
 
+#[type_tag(tag = "palette")]
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteColorizer {
-    #[schema(inline)]
-    r#type: PaletteTag,
     pub colors: Palette,
     pub no_data_color: RgbaColor,
     pub default_color: RgbaColor,
@@ -1648,9 +1628,6 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
     }
 }
 
-type_tag!(SingleBand);
-type_tag!(MultiBand);
-
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
@@ -1659,21 +1636,18 @@ pub enum RasterColorizer {
     MultiBand(MultiBandRasterColorizer),
 }
 
+#[type_tag(tag = "singleBand")]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleBandRasterColorizer {
-    #[schema(inline)]
-    pub r#type: SingleBandTag,
     pub band: u32,
     pub band_colorizer: Colorizer,
 }
 
+#[type_tag(tag = "multiBand")]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MultiBandRasterColorizer {
-    #[schema(inline)]
-    pub r#type: MultiBandTag,
-
     /// The band index of the red channel.
     pub red_band: u32,
     /// The minimum value for the red channel.

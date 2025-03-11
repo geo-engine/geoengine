@@ -55,7 +55,7 @@ impl Dataset {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AddDataset {
     pub name: Option<DatasetName>,
@@ -67,7 +67,7 @@ pub struct AddDataset {
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetDefinition {
     pub properties: AddDataset,
@@ -122,7 +122,7 @@ pub struct SuggestMetaData {
     pub layer_name: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaDataSuggestion {
     pub main_file: String,
@@ -130,10 +130,9 @@ pub struct MetaDataSuggestion {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(PartialEq, Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum MetaDataDefinition {
-    #[schema(value_type = crate::api::model::operators::MockMetaData)]
     MockMetaData(
         StaticMetaData<
             MockDatasetDataSourceLoadingInfo,
@@ -141,16 +140,11 @@ pub enum MetaDataDefinition {
             VectorQueryRectangle,
         >,
     ),
-    #[schema(value_type = crate::api::model::operators::OgrMetaData)]
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>),
-    #[schema(value_type = crate::api::model::operators::GdalMetaDataRegular)]
     GdalMetaDataRegular(GdalMetaDataRegular),
-    #[schema(value_type = crate::api::model::operators::GdalMetaDataStatic)]
     GdalStatic(GdalMetaDataStatic),
 
-    #[schema(value_type = crate::api::model::operators::GdalMetadataNetCdfCf)]
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
-    #[schema(value_type = crate::api::model::operators::GdalMetaDataList)]
     GdalMetaDataList(GdalMetaDataList),
 }
 

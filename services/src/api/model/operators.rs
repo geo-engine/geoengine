@@ -11,6 +11,7 @@ use crate::error::{
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::ColumnSelection;
 use geoengine_datatypes::util::ByteSize;
+use geoengine_macros::type_tag;
 use geoengine_operators::{
     engine::{MetaData, ResultDescriptor},
     util::input::float_option_with_nan,
@@ -22,9 +23,6 @@ use std::fmt::Debug;
 use std::marker::PhantomData;
 use std::path::PathBuf;
 use utoipa::{PartialSchema, ToSchema};
-
-use super::datatypes::TimeGranularity;
-use super::type_tag;
 
 /// A `ResultDescriptor` for raster queries
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
@@ -282,59 +280,114 @@ impl From<PlotResultDescriptor> for geoengine_operators::engine::PlotResultDescr
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum TypedResultDescriptor {
-    #[schema(title = "TypedPlotResultDescriptor")]
-    Plot(PlotResultDescriptor),
-    #[schema(title = "TypedRasterResultDescriptor")]
-    Raster(RasterResultDescriptor),
-    #[schema(title = "TypedVectorResultDescriptor")]
-    Vector(VectorResultDescriptor),
+    Plot(TypedPlotResultDescriptor),
+    Raster(TypedRasterResultDescriptor),
+    Vector(TypedVectorResultDescriptor),
+}
+
+#[type_tag(tag = "plot")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TypedPlotResultDescriptor {
+    #[serde(flatten)]
+    pub result_descriptor: PlotResultDescriptor,
+}
+
+#[type_tag(tag = "raster")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TypedRasterResultDescriptor {
+    #[serde(flatten)]
+    pub result_descriptor: RasterResultDescriptor,
+}
+
+#[type_tag(tag = "vector")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TypedVectorResultDescriptor {
+    #[serde(flatten)]
+    pub result_descriptor: VectorResultDescriptor,
 }
 
 impl From<geoengine_operators::engine::TypedResultDescriptor> for TypedResultDescriptor {
     fn from(value: geoengine_operators::engine::TypedResultDescriptor) -> Self {
         match value {
-            geoengine_operators::engine::TypedResultDescriptor::Plot(p) => Self::Plot(p.into()),
-            geoengine_operators::engine::TypedResultDescriptor::Raster(r) => Self::Raster(r.into()),
-            geoengine_operators::engine::TypedResultDescriptor::Vector(v) => Self::Vector(v.into()),
+            geoengine_operators::engine::TypedResultDescriptor::Plot(p) => {
+                Self::Plot(TypedPlotResultDescriptor {
+                    r#type: Default::default(),
+                    result_descriptor: p.into(),
+                })
+            }
+            geoengine_operators::engine::TypedResultDescriptor::Raster(r) => {
+                Self::Raster(TypedRasterResultDescriptor {
+                    r#type: Default::default(),
+                    result_descriptor: r.into(),
+                })
+            }
+            geoengine_operators::engine::TypedResultDescriptor::Vector(v) => {
+                Self::Vector(TypedVectorResultDescriptor {
+                    r#type: Default::default(),
+                    result_descriptor: v.into(),
+                })
+            }
         }
     }
 }
 
 impl From<geoengine_operators::engine::PlotResultDescriptor> for TypedResultDescriptor {
     fn from(value: geoengine_operators::engine::PlotResultDescriptor) -> Self {
-        Self::Plot(value.into())
+        Self::Plot(TypedPlotResultDescriptor {
+            r#type: Default::default(),
+            result_descriptor: value.into(),
+        })
     }
 }
 
 impl From<PlotResultDescriptor> for TypedResultDescriptor {
     fn from(value: PlotResultDescriptor) -> Self {
-        Self::Plot(value)
+        Self::Plot(TypedPlotResultDescriptor {
+            r#type: Default::default(),
+            result_descriptor: value,
+        })
     }
 }
 
 impl From<geoengine_operators::engine::RasterResultDescriptor> for TypedResultDescriptor {
     fn from(value: geoengine_operators::engine::RasterResultDescriptor) -> Self {
-        Self::Raster(value.into())
+        Self::Raster(TypedRasterResultDescriptor {
+            r#type: Default::default(),
+            result_descriptor: value.into(),
+        })
     }
 }
 
 impl From<RasterResultDescriptor> for TypedResultDescriptor {
     fn from(value: RasterResultDescriptor) -> Self {
-        Self::Raster(value)
+        Self::Raster(TypedRasterResultDescriptor {
+            r#type: Default::default(),
+            result_descriptor: value,
+        })
     }
 }
 
 impl From<geoengine_operators::engine::VectorResultDescriptor> for TypedResultDescriptor {
     fn from(value: geoengine_operators::engine::VectorResultDescriptor) -> Self {
-        Self::Vector(value.into())
+        Self::Vector(TypedVectorResultDescriptor {
+            r#type: Default::default(),
+            result_descriptor: value.into(),
+        })
     }
 }
 
 impl From<VectorResultDescriptor> for TypedResultDescriptor {
     fn from(value: VectorResultDescriptor) -> Self {
-        Self::Vector(value)
+        Self::Vector(TypedVectorResultDescriptor {
+            r#type: Default::default(),
+            result_descriptor: value,
+        })
     }
 }
 
@@ -364,10 +417,6 @@ impl From<MockDatasetDataSourceLoadingInfo>
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize, ToSchema)]
-// #[aliases( // TODO: add aliases
-//     MockMetaData = StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>,
-//     OgrMetaData = StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-// )]
 #[serde(rename_all = "camelCase")]
 pub struct StaticMetaData<L, R, Q> {
     pub loading_info: L,
@@ -376,10 +425,24 @@ pub struct StaticMetaData<L, R, Q> {
     pub phantom: PhantomData<Q>,
 }
 
-pub type MockMetaData =
-    StaticMetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>;
-pub type OgrMetaData =
-    StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>;
+#[type_tag(tag = "mockMetaData")]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MockMetaData {
+    #[schema(inline)]
+    pub inner: StaticMetaData<
+        MockDatasetDataSourceLoadingInfo,
+        VectorResultDescriptor,
+        VectorQueryRectangle,
+    >,
+}
+#[type_tag(tag = "ogrMetaData")]
+#[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OgrMetaData {
+    #[schema(inline)]
+    pub inner: StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+}
 
 impl
     From<
@@ -478,8 +541,8 @@ impl From<MockMetaData>
 {
     fn from(value: MockMetaData) -> Self {
         Self {
-            loading_info: value.loading_info.into(),
-            result_descriptor: value.result_descriptor.into(),
+            loading_info: value.inner.loading_info.into(),
+            result_descriptor: value.inner.result_descriptor.into(),
             phantom: Default::default(),
         }
     }
@@ -497,13 +560,14 @@ impl From<OgrMetaData>
 {
     fn from(value: OgrMetaData) -> Self {
         Self {
-            loading_info: value.loading_info.into(),
-            result_descriptor: value.result_descriptor.into(),
+            loading_info: value.inner.loading_info.into(),
+            result_descriptor: value.inner.result_descriptor.into(),
             phantom: Default::default(),
         }
     }
 }
 
+#[type_tag(tag = "gdalStatic")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
@@ -517,6 +581,7 @@ pub struct GdalMetaDataStatic {
 impl From<geoengine_operators::source::GdalMetaDataStatic> for GdalMetaDataStatic {
     fn from(value: geoengine_operators::source::GdalMetaDataStatic) -> Self {
         Self {
+            r#type: Default::default(),
             time: value.time.map(Into::into),
             params: value.params.into(),
             result_descriptor: value.result_descriptor.into(),
@@ -705,67 +770,88 @@ impl From<OgrSourceErrorSpec> for geoengine_operators::source::OgrSourceErrorSpe
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum OgrSourceDatasetTimeType {
-    None,
-    #[serde(rename_all = "camelCase")]
-    Start {
-        start_field: String,
-        start_format: OgrSourceTimeFormat,
-        duration: OgrSourceDurationSpec,
-    },
-    #[serde(rename = "start+end")]
-    #[schema(title = "OgrSourceDatasetTimeTypeStartEnd")]
-    #[serde(rename_all = "camelCase")]
-    StartEnd {
-        start_field: String,
-        start_format: OgrSourceTimeFormat,
-        end_field: String,
-        end_format: OgrSourceTimeFormat,
-    },
-    #[serde(rename = "start+duration")]
-    #[schema(title = "OgrSourceDatasetTimeTypeStartDuration")]
-    #[serde(rename_all = "camelCase")]
-    StartDuration {
-        start_field: String,
-        start_format: OgrSourceTimeFormat,
-        duration_field: String,
-    },
+    None(OgrSourceDatasetTimeTypeNone),
+    Start(OgrSourceDatasetTimeTypeStart),
+    StartEnd(OgrSourceDatasetTimeTypeStartEnd),
+    StartDuration(OgrSourceDatasetTimeTypeStartDuration),
+}
+
+#[type_tag(tag = "none")]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OgrSourceDatasetTimeTypeNone {}
+
+#[type_tag(tag = "start")]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OgrSourceDatasetTimeTypeStart {
+    pub start_field: String,
+    pub start_format: OgrSourceTimeFormat,
+    pub duration: OgrSourceDurationSpec,
+}
+
+#[type_tag(tag = "start+end")]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OgrSourceDatasetTimeTypeStartEnd {
+    pub start_field: String,
+    pub start_format: OgrSourceTimeFormat,
+    pub end_field: String,
+    pub end_format: OgrSourceTimeFormat,
+}
+
+#[type_tag(tag = "start+duration")]
+#[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OgrSourceDatasetTimeTypeStartDuration {
+    pub start_field: String,
+    pub start_format: OgrSourceTimeFormat,
+    pub duration_field: String,
 }
 
 impl From<geoengine_operators::source::OgrSourceDatasetTimeType> for OgrSourceDatasetTimeType {
     fn from(value: geoengine_operators::source::OgrSourceDatasetTimeType) -> Self {
         match value {
-            geoengine_operators::source::OgrSourceDatasetTimeType::None => Self::None,
+            geoengine_operators::source::OgrSourceDatasetTimeType::None => {
+                Self::None(OgrSourceDatasetTimeTypeNone {
+                    r#type: Default::default(),
+                })
+            }
             geoengine_operators::source::OgrSourceDatasetTimeType::Start {
                 start_field,
                 start_format,
                 duration,
-            } => Self::Start {
+            } => Self::Start(OgrSourceDatasetTimeTypeStart {
+                r#type: Default::default(),
                 start_field,
                 start_format: start_format.into(),
                 duration: duration.into(),
-            },
+            }),
             geoengine_operators::source::OgrSourceDatasetTimeType::StartEnd {
                 start_field,
                 start_format,
                 end_field,
                 end_format,
-            } => Self::StartEnd {
+            } => Self::StartEnd(OgrSourceDatasetTimeTypeStartEnd {
+                r#type: Default::default(),
                 start_field,
                 start_format: start_format.into(),
                 end_field,
                 end_format: end_format.into(),
-            },
+            }),
             geoengine_operators::source::OgrSourceDatasetTimeType::StartDuration {
                 start_field,
                 start_format,
                 duration_field,
-            } => Self::StartDuration {
+            } => Self::StartDuration(OgrSourceDatasetTimeTypeStartDuration {
+                r#type: Default::default(),
                 start_field,
                 start_format: start_format.into(),
                 duration_field,
-            },
+            }),
         }
     }
 }
@@ -773,32 +859,35 @@ impl From<geoengine_operators::source::OgrSourceDatasetTimeType> for OgrSourceDa
 impl From<OgrSourceDatasetTimeType> for geoengine_operators::source::OgrSourceDatasetTimeType {
     fn from(value: OgrSourceDatasetTimeType) -> Self {
         match value {
-            OgrSourceDatasetTimeType::None => Self::None,
-            OgrSourceDatasetTimeType::Start {
+            OgrSourceDatasetTimeType::None(..) => Self::None,
+            OgrSourceDatasetTimeType::Start(OgrSourceDatasetTimeTypeStart {
                 start_field,
                 start_format,
                 duration,
-            } => Self::Start {
+                ..
+            }) => Self::Start {
                 start_field,
                 start_format: start_format.into(),
                 duration: duration.into(),
             },
-            OgrSourceDatasetTimeType::StartEnd {
+            OgrSourceDatasetTimeType::StartEnd(OgrSourceDatasetTimeTypeStartEnd {
                 start_field,
                 start_format,
                 end_field,
                 end_format,
-            } => Self::StartEnd {
+                ..
+            }) => Self::StartEnd {
                 start_field,
                 start_format: start_format.into(),
                 end_field,
                 end_format: end_format.into(),
             },
-            OgrSourceDatasetTimeType::StartDuration {
+            OgrSourceDatasetTimeType::StartDuration(OgrSourceDatasetTimeTypeStartDuration {
                 start_field,
                 start_format,
                 duration_field,
-            } => Self::StartDuration {
+                ..
+            }) => Self::StartDuration {
                 start_field,
                 start_format: start_format.into(),
                 duration_field,
@@ -810,13 +899,11 @@ impl From<OgrSourceDatasetTimeType> for geoengine_operators::source::OgrSourceDa
 /// If no time is specified, expect to parse none
 impl Default for OgrSourceDatasetTimeType {
     fn default() -> Self {
-        Self::None
+        Self::None(OgrSourceDatasetTimeTypeNone {
+            r#type: Default::default(),
+        })
     }
 }
-
-type_tag!(Value);
-type_tag!(Infinite);
-type_tag!(Zero);
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
@@ -827,24 +914,19 @@ pub enum OgrSourceDurationSpec {
     Value(OgrSourceDurationSpecValue),
 }
 
+#[type_tag(tag = "infinite")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
-pub struct OgrSourceDurationSpecInfinite {
-    #[schema(inline)]
-    r#type: InfiniteTag,
-}
+pub struct OgrSourceDurationSpecInfinite {}
 
+#[type_tag(tag = "zero")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
-pub struct OgrSourceDurationSpecZero {
-    #[schema(inline)]
-    r#type: ZeroTag,
-}
+pub struct OgrSourceDurationSpecZero {}
 
+#[type_tag(tag = "value")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct OgrSourceDurationSpecValue {
-    #[schema(inline)]
-    r#type: ValueTag,
-    pub granularity: TimeGranularity,
-    pub step: u32,
+    #[serde(flatten)]
+    pub time_step: TimeStep,
 }
 
 impl From<geoengine_operators::source::OgrSourceDurationSpec> for OgrSourceDurationSpec {
@@ -859,8 +941,7 @@ impl From<geoengine_operators::source::OgrSourceDurationSpec> for OgrSourceDurat
             geoengine_operators::source::OgrSourceDurationSpec::Value(v) => {
                 Self::Value(OgrSourceDurationSpecValue {
                     r#type: Default::default(),
-                    granularity: v.granularity.into(),
-                    step: v.step,
+                    time_step: v.into(),
                 })
             }
         }
@@ -874,8 +955,7 @@ impl From<OgrSourceDurationSpec> for geoengine_operators::source::OgrSourceDurat
             OgrSourceDurationSpec::Zero(..) => Self::Zero,
             OgrSourceDurationSpec::Value(v) => {
                 Self::Value(geoengine_datatypes::primitives::TimeStep {
-                    granularity: v.granularity.into(),
-                    step: v.step,
+                    ..v.time_step.into()
                 })
             }
         }
@@ -969,6 +1049,7 @@ impl From<OgrSourceColumnSpec> for geoengine_operators::source::OgrSourceColumnS
     }
 }
 
+#[type_tag(tag = "gdalMetaDataRegular")]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataRegular {
@@ -984,6 +1065,7 @@ pub struct GdalMetaDataRegular {
 impl From<geoengine_operators::source::GdalMetaDataRegular> for GdalMetaDataRegular {
     fn from(value: geoengine_operators::source::GdalMetaDataRegular) -> Self {
         Self {
+            r#type: Default::default(),
             result_descriptor: value.result_descriptor.into(),
             params: value.params.into(),
             time_placeholders: value
@@ -1214,6 +1296,7 @@ impl From<TimeReference> for geoengine_operators::source::TimeReference {
 }
 
 /// Meta data for 4D `NetCDF` CF datasets
+#[type_tag(tag = "gdalMetaDataNetCdfCf")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataNetCdfCf {
@@ -1235,6 +1318,7 @@ pub struct GdalMetadataNetCdfCf {
 impl From<geoengine_operators::source::GdalMetadataNetCdfCf> for GdalMetadataNetCdfCf {
     fn from(value: geoengine_operators::source::GdalMetadataNetCdfCf) -> Self {
         Self {
+            r#type: Default::default(),
             result_descriptor: value.result_descriptor.into(),
             params: value.params.into(),
             start: value.start.into(),
@@ -1260,6 +1344,7 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
     }
 }
 
+#[type_tag(tag = "gdalMetaDataList")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {
@@ -1270,6 +1355,7 @@ pub struct GdalMetaDataList {
 impl From<geoengine_operators::source::GdalMetaDataList> for GdalMetaDataList {
     fn from(value: geoengine_operators::source::GdalMetaDataList) -> Self {
         Self {
+            r#type: Default::default(),
             result_descriptor: value.result_descriptor.into(),
             params: value.params.into_iter().map(Into::into).collect(),
         }

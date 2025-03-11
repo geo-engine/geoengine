@@ -507,7 +507,8 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
     match meta {
         MetaDataDefinition::MockMetaData(_) => {}
         MetaDataDefinition::OgrMetaData(m) => {
-            m.loading_info.file_name = adjust.adjust_file_path(&m.loading_info.file_name)?;
+            m.inner.loading_info.file_name =
+                adjust.adjust_file_path(&m.inner.loading_info.file_name)?;
         }
         MetaDataDefinition::GdalMetaDataRegular(m) => {
             m.params.file_path = adjust.adjust_file_path(&m.params.file_path)?;
@@ -768,6 +769,7 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
             main_file,
             layer_name: String::new(),
             meta_data: MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+                r#type: Default::default(),
                 result_descriptor: result_descriptor.into(),
                 params: vec![GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::default().into(),

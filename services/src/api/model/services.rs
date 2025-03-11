@@ -14,7 +14,8 @@ use super::datatypes::DataId;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
-#[serde(tag = "type")]
+#[serde(untagged)]
+#[schema(discriminator = "type")]
 pub enum MetaDataDefinition {
     MockMetaData(MockMetaData),
     OgrMetaData(OgrMetaData),
@@ -28,10 +29,16 @@ impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
     fn from(value: crate::datasets::storage::MetaDataDefinition) -> Self {
         match value {
             crate::datasets::storage::MetaDataDefinition::MockMetaData(x) => {
-                Self::MockMetaData(x.into())
+                Self::MockMetaData(MockMetaData {
+                    r#type: Default::default(),
+                    inner: x.into(),
+                })
             }
             crate::datasets::storage::MetaDataDefinition::OgrMetaData(x) => {
-                Self::OgrMetaData(x.into())
+                Self::OgrMetaData(OgrMetaData {
+                    r#type: Default::default(),
+                    inner: x.into(),
+                })
             }
             crate::datasets::storage::MetaDataDefinition::GdalMetaDataRegular(x) => {
                 Self::GdalMetaDataRegular(x.into())

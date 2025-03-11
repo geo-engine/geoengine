@@ -1,6 +1,10 @@
 use proc_macro2::TokenStream;
 
 mod testing;
+mod typetag;
+mod util;
+
+type Result<T, E = syn::Error> = std::result::Result<T, E>;
 
 /// A macro to generate tests for Geo Engine services.
 /// It automatically spins up a database context.
@@ -24,6 +28,17 @@ pub fn test(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     match testing::test(attr.into(), &item.clone().into()) {
+        Ok(ts) => ts.into(),
+        Err(e) => token_stream_with_error(item.into(), e).into(),
+    }
+}
+
+#[proc_macro_attribute]
+pub fn type_tag(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    match typetag::type_tag(attr.into(), &item.clone().into()) {
         Ok(ts) => ts.into(),
         Err(e) => token_stream_with_error(item.into(), e).into(),
     }
