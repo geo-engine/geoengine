@@ -15,6 +15,7 @@ use geoengine_datatypes::{
     primitives::{SpatialBounded, TemporalBounded},
     util::Identifier,
 };
+use geoengine_macros::type_tag;
 use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -250,7 +251,8 @@ pub enum LayerType {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[allow(clippy::large_enum_variant)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum Symbology {
     Raster(RasterSymbology),
     Point(PointSymbology),
@@ -258,7 +260,8 @@ pub enum Symbology {
     Polygon(PolygonSymbology),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(tag = "raster")]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterSymbology {
     pub opacity: f64,
@@ -276,7 +279,8 @@ pub struct TextSymbology {
     pub stroke: StrokeParam,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(tag = "point")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PointSymbology {
     pub radius: NumberParam,
@@ -288,15 +292,24 @@ pub struct PointSymbology {
 impl Default for PointSymbology {
     fn default() -> Self {
         Self {
-            radius: NumberParam::Static { value: 10 },
-            fill_color: ColorParam::Static {
+            r#type: Default::default(),
+            radius: NumberParam::Static(StaticNumber {
+                r#type: Default::default(),
+                value: 10,
+            }),
+            fill_color: ColorParam::Static(StaticColor {
+                r#type: Default::default(),
                 color: RgbaColor::white(),
-            },
+            }),
             stroke: StrokeParam {
-                width: NumberParam::Static { value: 1 },
-                color: ColorParam::Static {
+                width: NumberParam::Static(StaticNumber {
+                    r#type: Default::default(),
+                    value: 1,
+                }),
+                color: ColorParam::Static(StaticColor {
+                    r#type: Default::default(),
                     color: RgbaColor::black(),
-                },
+                }),
             },
             text: None,
         }
@@ -309,7 +322,8 @@ impl From<PointSymbology> for Symbology {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(tag = "line")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LineSymbology {
     pub stroke: StrokeParam,
@@ -319,7 +333,8 @@ pub struct LineSymbology {
     pub auto_simplified: bool,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(tag = "polygon")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolygonSymbology {
     pub fill_color: ColorParam,
@@ -332,15 +347,21 @@ pub struct PolygonSymbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum NumberParam {
-    #[schema(title = "StaticNumberParam")]
-    Static {
-        value: usize,
-    },
+    Static(StaticNumber),
     Derived(DerivedNumber),
 }
 
+#[type_tag(tag = "static")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StaticNumber {
+    pub value: usize,
+}
+
+#[type_tag(tag = "derived")]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DerivedNumber {
@@ -359,16 +380,22 @@ pub struct StrokeParam {
 impl Eq for DerivedNumber {}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum ColorParam {
-    Static {
-        #[schema(value_type = crate::api::model::datatypes::RgbaColor)]
-        color: RgbaColor,
-    },
+    Static(StaticColor),
     Derived(DerivedColor),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(tag = "static")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+pub struct StaticColor {
+    #[schema(value_type = crate::api::model::datatypes::RgbaColor)]
+    pub color: RgbaColor,
+}
+
+#[type_tag(tag = "derived")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct DerivedColor {
     pub attribute: String,
     #[schema(value_type = crate::api::model::datatypes::Colorizer)]
@@ -736,6 +763,7 @@ mod tests {
                     legend: false,
                 },
                 symbology: Symbology::Raster(RasterSymbology {
+                    r#type: Default::default(),
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
@@ -760,6 +788,7 @@ mod tests {
                     name: "vector layer".to_string(),
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
+                        r#type: Default::default(),
                         opacity: 1.0,
                         raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
@@ -772,6 +801,7 @@ mod tests {
                     name: "raster layer".to_string(),
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
+                        r#type: Default::default(),
                         opacity: 1.0,
                         raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
@@ -805,16 +835,25 @@ mod tests {
     #[test]
     fn serialize_point_symbology() {
         let symbology = Symbology::Point(PointSymbology {
-            radius: NumberParam::Static { value: 1 },
+            r#type: Default::default(),
+            radius: NumberParam::Static(StaticNumber {
+                r#type: Default::default(),
+                value: 1,
+            }),
             fill_color: ColorParam::Derived(DerivedColor {
+                r#type: Default::default(),
                 attribute: "foo".to_owned(),
                 colorizer: Colorizer::test_default(),
             }),
             stroke: StrokeParam {
-                width: NumberParam::Static { value: 1 },
-                color: ColorParam::Static {
+                width: NumberParam::Static(StaticNumber {
+                    r#type: Default::default(),
+                    value: 1,
+                }),
+                color: ColorParam::Static(StaticColor {
+                    r#type: Default::default(),
                     color: RgbaColor::black(),
-                },
+                }),
             },
             text: None,
         });
@@ -870,11 +909,16 @@ mod tests {
     #[test]
     fn serialize_linestring_symbology() {
         let symbology = Symbology::Line(LineSymbology {
+            r#type: Default::default(),
             stroke: StrokeParam {
-                width: NumberParam::Static { value: 1 },
-                color: ColorParam::Static {
+                width: NumberParam::Static(StaticNumber {
+                    r#type: Default::default(),
+                    value: 1,
+                }),
+                color: ColorParam::Static(StaticColor {
+                    r#type: Default::default(),
                     color: RgbaColor::black(),
-                },
+                }),
             },
             text: None,
             auto_simplified: true,
@@ -909,6 +953,7 @@ mod tests {
     fn serialize_derived_number_param() {
         assert_eq!(
             serde_json::to_value(NumberParam::Derived(DerivedNumber {
+                r#type: Default::default(),
                 attribute: "foo".to_owned(),
                 factor: 1.,
                 default_value: 0.

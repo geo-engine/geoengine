@@ -70,7 +70,8 @@ pub fn create_layer_collection_from_parts<ID: LayerCollectionIdFn>(
     let items = if subgroups.is_empty() {
         entities
             .map(|entity| {
-                CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id,
                         layer_id: id_fn.layer_id(
@@ -92,7 +93,8 @@ pub fn create_layer_collection_from_parts<ID: LayerCollectionIdFn>(
             .map(|group| {
                 let mut out_groups = group_path.clone();
                 out_groups.push(group.name.clone());
-                CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id,
                         collection_id: id_fn.layer_collection_id(
@@ -153,6 +155,7 @@ pub fn create_layer(
             ),
         },
         symbology: Some(Symbology::Raster(RasterSymbology {
+            r#type: Default::default(),
             opacity: 1.0,
             raster_colorizer: RasterColorizer::SingleBand {
                 band: 0,

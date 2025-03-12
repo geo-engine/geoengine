@@ -766,6 +766,7 @@ mod tests {
                 name: "L1".to_string(),
                 visibility: Default::default(),
                 symbology: Symbology::Raster(RasterSymbology {
+                    r#type: Default::default(),
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
@@ -833,6 +834,7 @@ mod tests {
                 legend: false,
             },
             symbology: Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
@@ -849,6 +851,7 @@ mod tests {
                 legend: true,
             },
             symbology: Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,

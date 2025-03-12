@@ -251,6 +251,7 @@ impl SentinelS2L2aCogsDataProvider {
                             .expect("Gdal source is a valid operator."),
                         },
                         symbology: Some(Symbology::Raster(RasterSymbology {
+                            r#type: Default::default(),
                             opacity: 1.0,
                             raster_colorizer: RasterColorizer::SingleBand {
                                 band: 0, band_colorizer:
@@ -329,7 +330,8 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             .datasets
             .values()
             .map(|d| {
-                Ok(CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                Ok(CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),

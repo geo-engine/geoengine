@@ -2714,6 +2714,7 @@ mod tests {
         } = add_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json")).await;
 
         let symbology = Symbology::Raster(RasterSymbology {
+            r#type: Default::default(),
             opacity: 1.0,
             raster_colorizer: RasterColorizer::SingleBand {
                 band: 0,
