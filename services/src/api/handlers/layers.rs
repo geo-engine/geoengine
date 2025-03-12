@@ -755,7 +755,7 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
     ),
     params(
         ("provider" = DataProviderId, description = "Data provider id"),
-        ("layer" = LayerCollectionId, description = "Layer id"),
+        ("layer" = LayerId, description = "Layer id"),
     ),
     security(
         ("session_token" = [])

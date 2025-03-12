@@ -33,6 +33,14 @@ pub fn test(
     }
 }
 
+/// This macro generates a type tag for a struct.
+/// It creates a new enum with a single variant that is used as a type tag.
+/// The type tag is used for serialization and deserialization as well as for schema generation.
+///
+/// # Parameters
+/// - `tag` - the name of the type tag
+/// - `discriminator` - (optional) the name of the field that is used as a discriminator (default: `"type"`)
+///
 #[proc_macro_attribute]
 pub fn type_tag(
     attr: proc_macro::TokenStream,

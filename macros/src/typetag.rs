@@ -1,7 +1,9 @@
 use crate::{util::parse_config_args, Result};
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse2, parse_quote, spanned::Spanned, DeriveInput, Field, FieldMutability, Ident};
+use syn::{parse2, parse_quote, spanned::Spanned, DeriveInput, Field, FieldMutability, Ident, Lit};
+
+const DEFAULT_DISCRIMINATOR: &str = "type";
 
 pub fn type_tag(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::Error> {
     let mut ast = parse2::<DeriveInput>(item.clone())?;
@@ -27,6 +29,17 @@ pub fn type_tag(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, sy
             &ast,
             "type tag requires a `tag` argument",
         ));
+    };
+
+    let tag_field = match inputs.get("discriminator") {
+        Some(Lit::Str(tag_field)) => tag_field.value(),
+        Some(_) => {
+            return Err(syn::Error::new_spanned(
+                &ast,
+                "the `discriminator` argument must be a string",
+            ));
+        }
+        None => DEFAULT_DISCRIMINATOR.into(),
     };
 
     let newtype_name = Ident::new(&format!("{}TypeTag", ast.ident), ast.ident.span());
@@ -56,7 +69,7 @@ pub fn type_tag(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, sy
         attrs: vec![parse_quote! { #[schema(inline)] }],
         vis: parse_quote! { pub },
         mutability: FieldMutability::None,
-        ident: Some(Ident::new_raw("type", fields.span())),
+        ident: Some(Ident::new_raw(&tag_field, fields.span())),
         colon_token: Default::default(),
         ty: parse_quote!(#newtype_name),
     };

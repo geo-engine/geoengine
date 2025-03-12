@@ -134,6 +134,7 @@ impl PartialSchema for TaskStatus {
         OneOfBuilder::new()
             .item(
                 ObjectBuilder::new()
+                    .title(Some("TaskStatusRunning"))
                     .property(
                         "status",
                         ObjectBuilder::new()
@@ -169,6 +170,7 @@ impl PartialSchema for TaskStatus {
             )
             .item(
                 ObjectBuilder::new()
+                    .title(Some("TaskStatusCompleted"))
                     .property(
                         "status",
                         ObjectBuilder::new()
@@ -199,6 +201,7 @@ impl PartialSchema for TaskStatus {
             )
             .item(
                 ObjectBuilder::new()
+                    .title(Some("TaskStatusAborted"))
                     .property(
                         "status",
                         ObjectBuilder::new()
@@ -211,6 +214,7 @@ impl PartialSchema for TaskStatus {
             )
             .item(
                 ObjectBuilder::new()
+                    .title(Some("TaskStatusFailed"))
                     .property(
                         "status",
                         ObjectBuilder::new()

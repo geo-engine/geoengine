@@ -31,13 +31,15 @@ impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
             crate::datasets::storage::MetaDataDefinition::MockMetaData(x) => {
                 Self::MockMetaData(MockMetaData {
                     r#type: Default::default(),
-                    inner: x.into(),
+                    loading_info: x.loading_info.into(),
+                    result_descriptor: x.result_descriptor.into(),
                 })
             }
             crate::datasets::storage::MetaDataDefinition::OgrMetaData(x) => {
                 Self::OgrMetaData(OgrMetaData {
                     r#type: Default::default(),
-                    inner: x.into(),
+                    loading_info: x.loading_info.into(),
+                    result_descriptor: x.result_descriptor.into(),
                 })
             }
             crate::datasets::storage::MetaDataDefinition::GdalMetaDataRegular(x) => {
