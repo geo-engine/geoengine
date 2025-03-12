@@ -14,7 +14,7 @@ This workspace contains the Geo Engine server.
 
 ## Build
 
-We currently only support Ubuntu Linux 22.04 LTS.
+We currently only support Ubuntu Linux 24.04 LTS.
 
 You need to have a Rust compiler and the package manager Cargo installed.
 We recommend [rustup.rs](https://rustup.rs) to manage both.
