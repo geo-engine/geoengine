@@ -92,7 +92,7 @@ impl Permission {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 #[serde(tag = "type", content = "id")]
 pub enum ResourceId {
     Layer(LayerId),                     // TODO: UUID?
@@ -140,7 +140,7 @@ impl From<DatasetId> for ResourceId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionListing {
     pub resource_id: ResourceId,

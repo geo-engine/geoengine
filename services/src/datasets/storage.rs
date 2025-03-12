@@ -27,10 +27,12 @@ pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
 #[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
+    #[schema(value_type = crate::api::model::datatypes::DatasetId)]
     pub id: DatasetId,
     pub name: DatasetName,
     pub display_name: String,
     pub description: String,
+    #[schema(value_type = crate::api::model::operators::TypedResultDescriptor)]
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
     pub symbology: Option<Symbology>,
@@ -53,7 +55,7 @@ impl Dataset {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct AddDataset {
     pub name: Option<DatasetName>,
@@ -65,7 +67,7 @@ pub struct AddDataset {
     pub tags: Option<Vec<String>>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetDefinition {
     pub properties: AddDataset,
@@ -120,7 +122,7 @@ pub struct SuggestMetaData {
     pub layer_name: Option<String>,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct MetaDataSuggestion {
     pub main_file: String,
@@ -128,7 +130,7 @@ pub struct MetaDataSuggestion {
 }
 
 #[allow(clippy::large_enum_variant)]
-#[derive(PartialEq, Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(PartialEq, Deserialize, Serialize, Debug, Clone)]
 #[serde(tag = "type")]
 pub enum MetaDataDefinition {
     MockMetaData(
@@ -141,6 +143,7 @@ pub enum MetaDataDefinition {
     OgrMetaData(StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>),
     GdalMetaDataRegular(GdalMetaDataRegular),
     GdalStatic(GdalMetaDataStatic),
+
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
     GdalMetaDataList(GdalMetaDataList),
 }

@@ -883,7 +883,7 @@ pub(crate) async fn get_role_descriptions<C: ApplicationContext<Session = UserSe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::RasterColorizer;
+    use crate::api::model::datatypes::{RasterColorizer, SingleBandRasterColorizer};
     use crate::api::model::responses::ErrorResponse;
     use crate::config::Oidc;
     use crate::contexts::PostgresContext;
@@ -1936,10 +1936,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),

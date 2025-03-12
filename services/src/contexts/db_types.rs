@@ -19,14 +19,15 @@ use crate::{
     layers::external::TypedDataProviderDefinition,
     projects::{
         ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
-        PolygonSymbology, RasterSymbology, Symbology,
+        PolygonSymbology, RasterSymbology, StaticColor, StaticNumber, StrokeParam, Symbology,
+        TextSymbology,
     },
     util::postgres::DatabaseConnectionConfig,
 };
 use geoengine_datatypes::{
     dataset::DataProviderId,
     delegate_from_to_sql,
-    operations::image::{Colorizer, RgbaColor},
+    operations::image::{Colorizer, RasterColorizer, RgbaColor},
     primitives::{CacheTtlSeconds, VectorQueryRectangle},
     util::StringPair,
 };
@@ -51,7 +52,7 @@ pub struct ColorParamDbType {
 impl From<&ColorParam> for ColorParamDbType {
     fn from(value: &ColorParam) -> Self {
         match value {
-            ColorParam::Static { color } => Self {
+            ColorParam::Static(StaticColor { color, .. }) => Self {
                 color: Some(*color),
                 attribute: None,
                 colorizer: None,
@@ -59,6 +60,7 @@ impl From<&ColorParam> for ColorParamDbType {
             ColorParam::Derived(DerivedColor {
                 attribute,
                 colorizer,
+                ..
             }) => Self {
                 color: None,
                 attribute: Some(attribute.clone()),
@@ -77,12 +79,16 @@ impl TryFrom<ColorParamDbType> for ColorParam {
                 color: Some(color),
                 attribute: None,
                 colorizer: None,
-            } => Ok(Self::Static { color }),
+            } => Ok(Self::Static(StaticColor {
+                r#type: Default::default(),
+                color,
+            })),
             ColorParamDbType {
                 color: None,
                 attribute: Some(attribute),
                 colorizer: Some(colorizer),
             } => Ok(Self::Derived(DerivedColor {
+                r#type: Default::default(),
                 attribute,
                 colorizer,
             })),
@@ -103,7 +109,7 @@ pub struct NumberParamDbType {
 impl From<&NumberParam> for NumberParamDbType {
     fn from(value: &NumberParam) -> Self {
         match value {
-            NumberParam::Static { value } => Self {
+            NumberParam::Static(StaticNumber { value, .. }) => Self {
                 value: Some(*value as i64),
                 attribute: None,
                 factor: None,
@@ -113,6 +119,7 @@ impl From<&NumberParam> for NumberParamDbType {
                 attribute,
                 factor,
                 default_value,
+                ..
             }) => Self {
                 value: None,
                 attribute: Some(attribute.clone()),
@@ -133,15 +140,17 @@ impl TryFrom<NumberParamDbType> for NumberParam {
                 attribute: None,
                 factor: None,
                 default_value: None,
-            } => Ok(Self::Static {
+            } => Ok(Self::Static(StaticNumber {
+                r#type: Default::default(),
                 value: value as usize,
-            }),
+            })),
             NumberParamDbType {
                 value: None,
                 attribute: Some(attribute),
                 factor: Some(factor),
                 default_value: Some(default_value),
             } => Ok(Self::Derived(DerivedNumber {
+                r#type: Default::default(),
                 attribute,
                 factor,
                 default_value,
@@ -222,6 +231,133 @@ impl TryFrom<SymbologyDbType> for Symbology {
             } => Ok(Self::Polygon(polygon)),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "RasterSymbology")]
+pub struct RasterSymbologyDbType {
+    opacity: f64,
+    raster_colorizer: RasterColorizer,
+}
+
+impl From<&RasterSymbology> for RasterSymbologyDbType {
+    fn from(symbology: &RasterSymbology) -> Self {
+        Self {
+            opacity: symbology.opacity,
+            raster_colorizer: symbology.raster_colorizer.clone(),
+        }
+    }
+}
+
+impl TryFrom<RasterSymbologyDbType> for RasterSymbology {
+    type Error = Error;
+
+    fn try_from(symbology: RasterSymbologyDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            opacity: symbology.opacity,
+            raster_colorizer: symbology.raster_colorizer.clone(),
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "PointSymbology")]
+pub struct PointSymbologyDbType {
+    radius: NumberParam,
+    fill_color: ColorParam,
+    stroke: StrokeParam,
+    text: Option<TextSymbology>,
+}
+
+impl From<&PointSymbology> for PointSymbologyDbType {
+    fn from(symbology: &PointSymbology) -> Self {
+        Self {
+            radius: symbology.radius.clone(),
+            fill_color: symbology.fill_color.clone(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+        }
+    }
+}
+
+impl TryFrom<PointSymbologyDbType> for PointSymbology {
+    type Error = Error;
+
+    fn try_from(symbology: PointSymbologyDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            radius: symbology.radius.clone(),
+            fill_color: symbology.fill_color.clone(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "LineSymbology")]
+pub struct LineSymbologyDbType {
+    stroke: StrokeParam,
+    text: Option<TextSymbology>,
+    auto_simplified: bool,
+}
+
+impl From<&LineSymbology> for LineSymbologyDbType {
+    fn from(symbology: &LineSymbology) -> Self {
+        Self {
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+            auto_simplified: symbology.auto_simplified,
+        }
+    }
+}
+
+impl TryFrom<LineSymbologyDbType> for LineSymbology {
+    type Error = Error;
+
+    fn try_from(symbology: LineSymbologyDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+            auto_simplified: symbology.auto_simplified,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "PolygonSymbology")]
+pub struct PolygonSymbologyDbType {
+    fill_color: ColorParam,
+    stroke: StrokeParam,
+    text: Option<TextSymbology>,
+    auto_simplified: bool,
+}
+
+impl From<&PolygonSymbology> for PolygonSymbologyDbType {
+    fn from(symbology: &PolygonSymbology) -> Self {
+        Self {
+            fill_color: symbology.fill_color.clone(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+            auto_simplified: symbology.auto_simplified,
+        }
+    }
+}
+
+impl TryFrom<PolygonSymbologyDbType> for PolygonSymbology {
+    type Error = Error;
+
+    fn try_from(symbology: PolygonSymbologyDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            fill_color: symbology.fill_color.clone(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+            auto_simplified: symbology.auto_simplified,
+        })
     }
 }
 
@@ -1163,6 +1299,10 @@ delegate_from_to_sql!(
     CopernicusDataspaceDataProviderDefinition,
     CopernicusDataspaceDataProviderDefinitionDbType
 );
+delegate_from_to_sql!(RasterSymbology, RasterSymbologyDbType);
+delegate_from_to_sql!(PointSymbology, PointSymbologyDbType);
+delegate_from_to_sql!(LineSymbology, LineSymbologyDbType);
+delegate_from_to_sql!(PolygonSymbology, PolygonSymbologyDbType);
 
 #[cfg(test)]
 mod tests {

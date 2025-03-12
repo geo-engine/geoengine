@@ -53,6 +53,7 @@ opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 ordered-float = { workspace = true }
+paste = { workspace = true }
 pbkdf2 = { workspace = true }
 postgres-types = { workspace = true }
 proj = { workspace = true }

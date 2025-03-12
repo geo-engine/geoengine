@@ -481,6 +481,8 @@ fn default_time_from_config() -> TimeInterval {
 mod tests {
 
     use super::*;
+    use crate::api::model::datatypes::MultiBandRasterColorizer;
+    use crate::api::model::datatypes::SingleBandRasterColorizer;
     use crate::api::model::responses::ErrorResponse;
     use crate::contexts::PostgresContext;
     use crate::contexts::Session;
@@ -823,10 +825,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -875,7 +878,8 @@ mod tests {
 
         let (_, id) = register_ne2_multiband_workflow(&app_ctx).await;
 
-        let raster_colorizer = RasterColorizer::MultiBand {
+        let raster_colorizer = RasterColorizer::MultiBand(MultiBandRasterColorizer {
+            r#type: Default::default(),
             red_band: 2,
             red_min: 0.,
             red_max: 255.,
@@ -889,7 +893,7 @@ mod tests {
             blue_max: 255.,
             blue_scale: 1.0,
             no_data_color: RgbaColor::transparent().into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -940,7 +944,8 @@ mod tests {
 
         let (_, id) = register_ne2_multiband_workflow(&app_ctx).await;
 
-        let raster_colorizer = RasterColorizer::MultiBand {
+        let raster_colorizer = RasterColorizer::MultiBand(MultiBandRasterColorizer {
+            r#type: Default::default(),
             red_band: 1,
             red_min: 0.,
             red_max: 255.,
@@ -954,7 +959,7 @@ mod tests {
             blue_max: 255.,
             blue_scale: 1.0,
             no_data_color: RgbaColor::transparent().into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -1018,10 +1023,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -1078,10 +1084,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -1149,10 +1156,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),

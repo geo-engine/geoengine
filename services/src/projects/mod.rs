@@ -8,6 +8,6 @@ pub use project::{
     LayerType, LayerUpdate, LayerVisibility, LineSymbology, LoadVersion, NumberParam, OrderBy,
     Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project, ProjectId, ProjectLayer,
     ProjectListOptions, ProjectListing, ProjectVersion, ProjectVersionId, RasterSymbology,
-    STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
+    STRectangle, StaticColor, StaticNumber, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 pub use projectdb::ProjectDb;

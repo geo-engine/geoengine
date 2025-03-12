@@ -1,7 +1,10 @@
 use crate::{
     api::model::{
         operators::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
-        responses::datasets::{errors::*, DatasetNameResponse},
+        responses::{
+            datasets::{errors::*, DatasetNameResponse},
+            ErrorResponse,
+        },
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
             MetaDataSuggestion, Provenances, UpdateDataset,
@@ -10,8 +13,8 @@ use crate::{
     config::{get_config_element, Data},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
-        listing::{DatasetListOptions, DatasetProvider},
-        storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
+        listing::{DatasetListOptions, DatasetListing, DatasetProvider},
+        storage::{AutoCreateDataset, Dataset, DatasetStore, SuggestMetaData},
         upload::{
             AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName, Volumes,
         },
@@ -28,7 +31,7 @@ use crate::{
 use actix_web::{web, FromRequest, HttpResponse, HttpResponseBuilder, Responder};
 use gdal::{
     vector::{Layer, LayerAccess, OGRFieldType},
-    Dataset, DatasetOptions,
+    DatasetOptions,
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
@@ -317,7 +320,7 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
     dataset: web::Path<DatasetName>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<MetaDataDefinition>> {
     let session_ctx = app_ctx.session_context(session).db();
 
     let real_dataset = dataset.into_inner();
@@ -333,7 +336,7 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
 
     let dataset = session_ctx.load_loading_info(&dataset_id).await?;
 
-    Ok(web::Json(dataset))
+    Ok(web::Json(dataset.into()))
 }
 
 /// Updates the dataset's loading info
@@ -626,7 +629,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
             example = json!({
                 "mainFile": "germany_polygon.gpkg",
                 "metaData": {
-                    "type": "OgrMetaData",
+                    "type": "ogrMetaData",
                     "loadingInfo": {
                         "fileName": "upload/23c9ea9e-15d6-453b-a243-1390967a5669/germany_polygon.gpkg",
                         "layerName": "test_germany",
@@ -765,6 +768,7 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
             main_file,
             layer_name: String::new(),
             meta_data: MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+                r#type: Default::default(),
                 result_descriptor: result_descriptor.into(),
                 params: vec![GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::default().into(),
@@ -796,7 +800,7 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 
 #[allow(clippy::ref_option)]
 fn select_layer_from_dataset<'a>(
-    dataset: &'a Dataset,
+    dataset: &'a gdal::Dataset,
     layer_name: &Option<String>,
 ) -> Result<Layer<'a>> {
     if let Some(ref layer_name) = layer_name {
@@ -824,7 +828,7 @@ fn auto_detect_vector_meta_data_definition(
 
 #[allow(clippy::ref_option)]
 fn auto_detect_vector_meta_data_definition_from_dataset(
-    dataset: &Dataset,
+    dataset: &gdal::Dataset,
     main_file_path: &Path,
     layer_name: &Option<String>,
 ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
@@ -1082,7 +1086,7 @@ fn detect_vector_geometry(layer: &Layer) -> DetectedGeometry {
 }
 
 struct GdalAutoDetect {
-    dataset: Dataset,
+    dataset: gdal::Dataset,
     x: String,
     y: Option<String>,
 }
@@ -1606,7 +1610,7 @@ mod tests {
                     "sourceOperator": "OgrSource"
                 },
                 "metaData": {
-                    "type": "OgrMetaData",
+                    "type": "ogrMetaData",
                     "loadingInfo": {
                         "fileName": "ne_10m_ports.shp",
                         "layerName": "ne_10m_ports",
@@ -2403,7 +2407,7 @@ mod tests {
               "mainFile": "test.json",
               "layerName": "test",
               "metaData": {
-                "type": "OgrMetaData",
+                "type": "ogrMetaData",
                 "loadingInfo": {
                   "fileName": format!("test_upload/{}/test.json", upload.id),
                   "layerName": "test",
@@ -2606,7 +2610,7 @@ mod tests {
                     "spatialReference": "",
                     "time": null
                 },
-                "type": "OgrMetaData"
+                "type": "ogrMetaData"
             })
         );
 
@@ -2661,24 +2665,26 @@ mod tests {
             name: dataset_name,
         } = db.add_dataset(ds.into(), meta).await?;
 
-        let update = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
-            loading_info: OgrSourceDataset {
-                file_name: "foo.bar".into(),
-                layer_name: "baz".to_string(),
-                data_type: None,
-                time: Default::default(),
-                default_geometry: None,
-                columns: None,
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: None,
-                attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
-            },
-            result_descriptor: descriptor,
-            phantom: Default::default(),
-        });
+        let update: MetaDataDefinition =
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "foo.bar".into(),
+                    layer_name: "baz".to_string(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
+                },
+                result_descriptor: descriptor,
+                phantom: Default::default(),
+            })
+            .into();
 
         let req = actix_web::test::TestRequest::put()
             .uri(&format!("/dataset/{dataset_name}/loadingInfo"))
@@ -2689,7 +2695,7 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
-        let loading_info = db.load_loading_info(&id).await.unwrap();
+        let loading_info: MetaDataDefinition = db.load_loading_info(&id).await.unwrap().into();
 
         assert_eq!(loading_info, update);
 
@@ -2707,6 +2713,7 @@ mod tests {
         } = add_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json")).await;
 
         let symbology = Symbology::Raster(RasterSymbology {
+            r#type: Default::default(),
             opacity: 1.0,
             raster_colorizer: RasterColorizer::SingleBand {
                 band: 0,
