@@ -2,6 +2,7 @@ use super::listing::LayerCollectionId;
 use crate::config::{get_config_element, LayerService};
 use crate::{projects::Symbology, workflows::workflow::Workflow};
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
@@ -41,6 +42,7 @@ pub struct Layer {
     pub metadata: HashMap<String, String>,
 }
 
+#[type_tag(tag = "layer")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 pub struct LayerListing {
     pub id: ProviderLayerId,
@@ -238,6 +240,7 @@ mod psql {
     }
 }
 
+#[type_tag(tag = "collection")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerCollectionListing {
@@ -249,7 +252,8 @@ pub struct LayerCollectionListing {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum CollectionItem {
     Collection(LayerCollectionListing),
     Layer(LayerListing),

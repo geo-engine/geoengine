@@ -177,6 +177,7 @@ async fn get_layer_providers<C: ApplicationContext>(
     let mut providers = vec![];
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
                 collection_id: LayerCollectionId(
@@ -228,6 +229,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         };
 
         providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: provider_listing.id,
                 collection_id,

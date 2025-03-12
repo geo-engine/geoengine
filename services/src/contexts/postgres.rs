@@ -1851,6 +1851,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -1860,6 +1861,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
@@ -1869,6 +1871,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer1,
@@ -1905,6 +1908,7 @@ mod tests {
                 description: "Collection 1".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id,
@@ -1914,6 +1918,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2,
@@ -2027,6 +2032,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2036,6 +2042,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2045,6 +2052,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -2056,6 +2064,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer1.clone(),
@@ -2065,6 +2074,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2103,6 +2113,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2112,6 +2123,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2150,6 +2162,7 @@ mod tests {
                 description: "Collection 1".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2159,6 +2172,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2196,6 +2210,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: layer2.clone(),
@@ -2260,6 +2275,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: layer2.clone(),
@@ -2439,6 +2455,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2448,6 +2465,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2457,6 +2475,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection3_id.clone(),
@@ -2466,6 +2485,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -2477,6 +2497,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer1.clone(),
@@ -2486,6 +2507,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2495,6 +2517,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer3.clone(),
@@ -2533,6 +2556,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2542,6 +2566,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2551,6 +2576,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -2562,6 +2588,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer1.clone(),
@@ -2571,6 +2598,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2609,6 +2637,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2618,6 +2647,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2656,6 +2686,7 @@ mod tests {
                 description: "Collection 1".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2665,6 +2696,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2702,6 +2734,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: layer2.clone(),
@@ -2766,6 +2799,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: layer2.clone(),
@@ -3556,6 +3590,7 @@ mod tests {
                 description: "description".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: empty_c_id.clone(),
@@ -3565,6 +3600,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: l_id.clone(),
@@ -3603,6 +3639,7 @@ mod tests {
                 name: "top collection".to_string(),
                 description: "description".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: l_id.clone(),

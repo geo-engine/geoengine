@@ -329,7 +329,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             .datasets
             .values()
             .map(|d| {
-                Ok(CollectionItem::Layer(LayerListing {
+                Ok(CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),

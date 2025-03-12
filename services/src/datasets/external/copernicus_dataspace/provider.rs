@@ -144,7 +144,7 @@ impl CopernicusDataspaceDataProvider {
             description: "Datasets from the Copernicus Dataspace".to_string(),
             items: Datasets::iter()
                 .map(|item| {
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: LayerCollectionId(format!("datasets/{item}")),
@@ -183,7 +183,7 @@ impl CopernicusDataspaceDataProvider {
             description: "Sentinel-2 Products".to_string(),
             items: Sentinel2Product::iter()
                 .map(|product| {
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: CopernicusDataspaceLayerCollectionId::Sentinel2(
@@ -212,7 +212,7 @@ impl CopernicusDataspaceDataProvider {
             description: "Zones".to_string(),
             items: UtmZone::zones()
                 .map(|zone| {
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: CopernicusDataspaceLayerCollectionId::Sentinel2(
@@ -246,7 +246,7 @@ impl CopernicusDataspaceDataProvider {
             items: product
                 .product_bands()
                 .map(|product_band| {
-                    CollectionItem::Layer(LayerListing {
+                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: CopernicusDataspaceLayerId::Sentinel2(Sentinel2LayerId {

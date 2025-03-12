@@ -504,6 +504,7 @@ where
 
                 if is_layer {
                     Ok(CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: LayerId(row.get(0)),
@@ -514,6 +515,7 @@ where
                     }))
                 } else {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(row.get(0)),
@@ -609,6 +611,7 @@ where
 
                 if is_layer {
                     Ok(CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: LayerId(row.get(0)),
@@ -619,6 +622,7 @@ where
                     }))
                 } else {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(row.get(0)),
