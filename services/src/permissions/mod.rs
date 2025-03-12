@@ -92,14 +92,12 @@ impl Permission {
     }
 }
 
-#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone, ToSchema)]
+#[derive(Debug, Deserialize, Serialize, PartialEq, Eq, Clone)]
 #[serde(tag = "type", content = "id")]
 pub enum ResourceId {
-    #[schema(value_type = crate::api::model::datatypes::LayerId)]
-    Layer(LayerId), // TODO: UUID?
+    Layer(LayerId),                     // TODO: UUID?
     LayerCollection(LayerCollectionId), // TODO: UUID?
     Project(ProjectId),
-    #[schema(value_type = crate::api::model::datatypes::DatasetId)]
     DatasetId(DatasetId),
     MlModel(MlModelId),
 }
@@ -142,7 +140,7 @@ impl From<DatasetId> for ResourceId {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionListing {
     pub resource_id: ResourceId,

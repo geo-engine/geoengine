@@ -59,7 +59,7 @@ use crate::layers::listing::{
 };
 use crate::machine_learning::name::MlModelName;
 use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
-use crate::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
+use crate::permissions::{Permission, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -410,7 +410,6 @@ use utoipa::{Modify, OpenApi};
 
             PermissionRequest,
             Resource,
-            ResourceId,
             Permission,
             PermissionListing,
             PermissionListOptions,
