@@ -430,6 +430,7 @@ pub struct StaticMetaData<L, R, Q> {
 #[serde(rename_all = "camelCase")]
 pub struct MockMetaData {
     #[schema(inline)]
+    #[serde(flatten)]
     pub inner: StaticMetaData<
         MockDatasetDataSourceLoadingInfo,
         VectorResultDescriptor,
@@ -441,6 +442,7 @@ pub struct MockMetaData {
 #[serde(rename_all = "camelCase")]
 pub struct OgrMetaData {
     #[schema(inline)]
+    #[serde(flatten)]
     pub inner: StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
 }
 

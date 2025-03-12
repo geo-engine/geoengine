@@ -12,7 +12,7 @@ use crate::datasets::external::netcdfcf::{
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
-use crate::util::apidoc::{OpenApiServerInfo, TransformSchemasWithTag};
+use crate::util::apidoc::OpenApiServerInfo;
 use crate::{contexts::SessionContext, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     web::{self, ServiceConfig},
@@ -50,7 +50,7 @@ pub const EBV_REMOVE_OVERVIEW_TASK_TYPE: &str = "ebv-remove-overview";
             ResamplingMethod
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag)
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo)
 )]
 pub struct ApiDoc;
 

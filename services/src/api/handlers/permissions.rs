@@ -81,35 +81,35 @@ pub enum Resource {
     MlModel(MlModelResource),
 }
 
-#[type_tag(tag = "type")]
+#[type_tag(tag = "layer")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerResource {
     pub id: LayerId,
 }
 
-#[type_tag(tag = "type")]
+#[type_tag(tag = "layerCollection")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerCollectionResource {
     pub id: LayerCollectionId,
 }
 
-#[type_tag(tag = "type")]
+#[type_tag(tag = "project")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectResource {
     pub id: ProjectId,
 }
 
-#[type_tag(tag = "type")]
+#[type_tag(tag = "dataset")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetResource {
     pub id: DatasetName,
 }
 
-#[type_tag(tag = "type")]
+#[type_tag(tag = "mlModel")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MlModelResource {
@@ -469,42 +469,41 @@ mod tests {
         let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
         assert_eq!(res_status, 200, "{res_body}");
 
-        assert_eq!(
-            res_body,
-            json!([{
-                   "permission":"Owner",
-                   "resource":  {
-                       "id": dataset_name.to_string(),
-                       "type": "dataset"
-                   },
-                   "role": {
-                       "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
-                       "name":
-                       "admin"
-                   }
-               }, {
-                   "permission": "Read",
-                   "resource": {
-                       "id": dataset_name.to_string(),
-                       "type": "dataset"
-                   },
-                   "role": {
-                       "id": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
-                       "name": "anonymous"
-                   }
-               }, {
-                   "permission": "Read",
-                   "resource": {
-                       "id": dataset_name.to_string(),
-                       "type": "dataset",
-                   },
-                   "role": {
-                       "id": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
-                       "name": "user"
-                   }
-               }]
-            )
+        let expected_result = json!([{
+               "permission":"Owner",
+               "resource":  {
+                   "id": dataset_name.to_string(),
+                   "type": "dataset"
+               },
+               "role": {
+                   "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
+                   "name":
+                   "admin"
+               }
+           }, {
+               "permission": "Read",
+               "resource": {
+                   "id": dataset_name.to_string(),
+                   "type": "dataset"
+               },
+               "role": {
+                   "id": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
+                   "name": "anonymous"
+               }
+           }, {
+               "permission": "Read",
+               "resource": {
+                   "id": dataset_name.to_string(),
+                   "type": "dataset",
+               },
+               "role": {
+                   "id": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
+                   "name": "user"
+               }
+           }]
         );
+
+        assert_eq!(res_body, expected_result, "{res_body} != {expected_result}");
     }
 
     #[ge_context::test]

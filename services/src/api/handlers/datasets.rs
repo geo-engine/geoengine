@@ -320,7 +320,7 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
     dataset: web::Path<DatasetName>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<MetaDataDefinition>> {
     let session_ctx = app_ctx.session_context(session).db();
 
     let real_dataset = dataset.into_inner();
@@ -336,7 +336,7 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
 
     let dataset = session_ctx.load_loading_info(&dataset_id).await?;
 
-    Ok(web::Json(dataset))
+    Ok(web::Json(dataset.into()))
 }
 
 /// Updates the dataset's loading info
@@ -630,7 +630,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
             example = json!({
                 "mainFile": "germany_polygon.gpkg",
                 "metaData": {
-                    "type": "OgrMetaData",
+                    "type": "ogrMetaData",
                     "loadingInfo": {
                         "fileName": "upload/23c9ea9e-15d6-453b-a243-1390967a5669/germany_polygon.gpkg",
                         "layerName": "test_germany",
@@ -1611,7 +1611,7 @@ mod tests {
                     "sourceOperator": "OgrSource"
                 },
                 "metaData": {
-                    "type": "OgrMetaData",
+                    "type": "ogrMetaData",
                     "loadingInfo": {
                         "fileName": "ne_10m_ports.shp",
                         "layerName": "ne_10m_ports",
@@ -2408,7 +2408,7 @@ mod tests {
               "mainFile": "test.json",
               "layerName": "test",
               "metaData": {
-                "type": "OgrMetaData",
+                "type": "ogrMetaData",
                 "loadingInfo": {
                   "fileName": format!("test_upload/{}/test.json", upload.id),
                   "layerName": "test",
@@ -2611,7 +2611,7 @@ mod tests {
                     "spatialReference": "",
                     "time": null
                 },
-                "type": "OgrMetaData"
+                "type": "ogrMetaData"
             })
         );
 
@@ -2666,24 +2666,26 @@ mod tests {
             name: dataset_name,
         } = db.add_dataset(ds.into(), meta).await?;
 
-        let update = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
-            loading_info: OgrSourceDataset {
-                file_name: "foo.bar".into(),
-                layer_name: "baz".to_string(),
-                data_type: None,
-                time: Default::default(),
-                default_geometry: None,
-                columns: None,
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: None,
-                attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
-            },
-            result_descriptor: descriptor,
-            phantom: Default::default(),
-        });
+        let update: MetaDataDefinition =
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "foo.bar".into(),
+                    layer_name: "baz".to_string(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
+                },
+                result_descriptor: descriptor,
+                phantom: Default::default(),
+            })
+            .into();
 
         let req = actix_web::test::TestRequest::put()
             .uri(&format!("/dataset/{dataset_name}/loadingInfo"))
@@ -2694,7 +2696,7 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
-        let loading_info = db.load_loading_info(&id).await.unwrap();
+        let loading_info: MetaDataDefinition = db.load_loading_info(&id).await.unwrap().into();
 
         assert_eq!(loading_info, update);
 
