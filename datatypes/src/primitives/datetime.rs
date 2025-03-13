@@ -586,7 +586,7 @@ impl Sub<Duration> for DateTime {
 mod sql {
     use super::*;
     use postgres_types::{
-        accepts, private::BytesMut, to_sql_checked, FromSql, IsNull, ToSql, Type,
+        FromSql, IsNull, ToSql, Type, accepts, private::BytesMut, to_sql_checked,
     };
     use std::error::Error;
 

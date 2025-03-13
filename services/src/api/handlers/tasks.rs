@@ -3,7 +3,7 @@ use crate::error::Result;
 use crate::tasks::{TaskListOptions, TaskManager, TaskStatusWithId};
 use crate::util::extractors::ValidatedQuery;
 use crate::{contexts::SessionContext, tasks::TaskId};
-use actix_web::{web, FromRequest, HttpResponse, Responder};
+use actix_web::{FromRequest, HttpResponse, Responder, web};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
@@ -172,7 +172,7 @@ mod tests {
     use crate::contexts::Session;
     use crate::ge_context;
     use crate::tasks::{
-        util::test::wait_for_task_to_finish, Task, TaskContext, TaskStatus, TaskStatusInfo,
+        Task, TaskContext, TaskStatus, TaskStatusInfo, util::test::wait_for_task_to_finish,
     };
     use crate::users::UserAuth;
     use crate::util::tests::{read_body_json, send_test_request};

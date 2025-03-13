@@ -25,7 +25,7 @@ use geoengine_datatypes::raster::{
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::{Snafu, ensure};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -209,11 +209,11 @@ where
 impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialBounds = SpatialPartition2D,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialBounds = SpatialPartition2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
     I: InterpolationAlgorithm<P>,
 {
@@ -380,7 +380,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<T>>(
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
-) -> impl Future<Output = Result<InterpolationAccu<T, I>>> {
+) -> impl Future<Output = Result<InterpolationAccu<T, I>>> + use<T, I> {
     // create an accumulator as a single tile that fits all the input tiles
     let spatial_bounds = query_rect.spatial_bounds;
     let spatial_resolution = query_rect.spatial_resolution;

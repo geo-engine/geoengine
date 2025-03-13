@@ -1,12 +1,12 @@
-use std::future::{ready, Ready};
+use std::future::{Ready, ready};
 
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
-    http::header::{HeaderName, HeaderValue},
     Error, HttpMessage,
+    dev::{Service, ServiceRequest, ServiceResponse, Transform, forward_ready},
+    http::header::{HeaderName, HeaderValue},
 };
 use futures_util::future::LocalBoxFuture;
-use tracing::{event_enabled, Level};
+use tracing::{Level, event_enabled};
 use tracing_actix_web::RequestId;
 
 const REQUEST_ID_HEADER: &str = "x-request-id";

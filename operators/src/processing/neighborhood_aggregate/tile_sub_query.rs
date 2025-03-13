@@ -337,8 +337,8 @@ mod tests {
     use crate::{
         engine::MockExecutionContext,
         processing::neighborhood_aggregate::{
-            aggregate::{StandardDeviation, Sum},
             NeighborhoodParams,
+            aggregate::{StandardDeviation, Sum},
         },
     };
     use geoengine_datatypes::{

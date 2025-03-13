@@ -64,7 +64,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
 
 fn random_points<T: Rng>(rng: &mut T, num_points: usize) -> MultiPointCollection {
     let coordinates = (0..num_points)
-        .map(|_| (rng.gen_range(0.0..100.0), rng.gen_range(0.0..100.0)))
+        .map(|_| (rng.random_range(0.0..100.0), rng.random_range(0.0..100.0)))
         .collect::<Vec<_>>();
 
     let time = vec![TimeInterval::default(); num_points];

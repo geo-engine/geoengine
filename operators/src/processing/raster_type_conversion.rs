@@ -1,5 +1,5 @@
 use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{StreamExt, TryFutureExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     primitives::{BandSelection, RasterQueryRectangle, SpatialPartition2D},
     raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},

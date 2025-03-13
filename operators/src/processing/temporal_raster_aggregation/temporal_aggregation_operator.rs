@@ -6,7 +6,7 @@ use super::aggregators::{
     TemporalRasterPixelAggregator,
 };
 use super::first_last_subquery::{
-    first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
+    TemporalRasterAggregationSubQueryNoDataOnly, first_tile_fold_future, last_tile_fold_future,
 };
 use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
 use crate::adapters::stack_individual_aligned_raster_bands;
@@ -470,11 +470,11 @@ where
 impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialBounds = SpatialPartition2D,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialBounds = SpatialPartition2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
@@ -517,8 +517,8 @@ mod tests {
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
-            raster_stacker::{RasterStacker, RasterStackerParams},
             Expression, ExpressionParams,
+            raster_stacker::{RasterStacker, RasterStackerParams},
         },
     };
 
@@ -1184,26 +1184,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1285,26 +1287,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1372,26 +1376,28 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, false, true, true, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, false, true, true, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
 
         assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
@@ -1487,26 +1493,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1588,26 +1596,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1689,26 +1699,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1774,60 +1786,62 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&[
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            )
-        ]));
+        assert!(
+            result.tiles_equal_ignoring_cache_hint(&[
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                )
+            ])
+        );
     }
 
     #[tokio::test]
@@ -1909,26 +1923,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap(),
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap(),
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -2010,26 +2026,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -2106,72 +2124,74 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&[
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+        assert!(
+            result.tiles_equal_ignoring_cache_hint(&[
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                    CacheHint::default()
                 )
-                .unwrap()
-                .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
-                )
-                .unwrap()
-                .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
-                )
-                .unwrap()
-                .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
-                )
-                .unwrap()
-                .into(),
-                CacheHint::default()
-            )
-        ]),);
+            ]),
+        );
     }
 
     #[tokio::test]
@@ -2237,60 +2257,62 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&[
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            )
-        ]));
+        assert!(
+            result.tiles_equal_ignoring_cache_hint(&[
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                )
+            ])
+        );
     }
 
     #[tokio::test]
@@ -2372,26 +2394,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -2473,26 +2497,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -2862,112 +2888,114 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&[
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                1,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                1,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                1,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                1,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            )
-        ]));
+        assert!(
+            result.tiles_equal_ignoring_cache_hint(&[
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    1,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    1,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    1,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    1,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                )
+            ])
+        );
     }
 
     #[tokio::test]

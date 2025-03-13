@@ -1,5 +1,5 @@
 use crate::api::model::services::Volume;
-use crate::config::{get_config_element, Cache, QuotaTrackingMode};
+use crate::config::{Cache, QuotaTrackingMode, get_config_element};
 use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
@@ -33,8 +33,8 @@ use tokio::sync::RwLock;
 use uuid::Uuid;
 
 pub use migrations::{
-    initialize_database, migrate_database, CurrentSchemaMigration, DatabaseVersion, Migration,
-    MigrationResult,
+    CurrentSchemaMigration, DatabaseVersion, Migration, MigrationResult, initialize_database,
+    migrate_database,
 };
 pub use postgres::PostgresDb;
 pub use postgres::{PostgresContext, PostgresSessionContext};
@@ -357,10 +357,10 @@ where
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {

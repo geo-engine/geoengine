@@ -1,8 +1,8 @@
 use crate::error::{self, Error};
 use crate::operations::image::RgbaTransmutable;
 use crate::raster::Pixel;
-use crate::util::test::TestDefault;
 use crate::util::Result;
+use crate::util::test::TestDefault;
 use ordered_float::{FloatIsNan, NotNan};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};

@@ -12,7 +12,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, BandSelection, RasterQueryRectangle, SpatialResolution,
+    BandSelection, RasterQueryRectangle, SpatialResolution, partitions_extent, time_interval_extent,
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D, RenameBands};
 use serde::{Deserialize, Serialize};

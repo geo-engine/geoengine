@@ -42,8 +42,8 @@ use geoengine_operators::{
     },
     source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     util::{
-        gdal::{add_ndvi_dataset, add_ports_dataset},
         Result,
+        gdal::{add_ndvi_dataset, add_ports_dataset},
     },
 };
 use std::{
@@ -142,10 +142,12 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                         },
                     }
                     .boxed(),
-                    rasters: vec![GdalSource {
-                        params: GdalSourceParameters { data: ndvi_id },
-                    }
-                    .boxed()],
+                    rasters: vec![
+                        GdalSource {
+                            params: GdalSourceParameters { data: ndvi_id },
+                        }
+                        .boxed(),
+                    ],
                 },
             }
             .boxed(),

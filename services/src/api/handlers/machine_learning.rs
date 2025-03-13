@@ -1,10 +1,10 @@
-use actix_web::{web, FromRequest, HttpResponse, ResponseError};
+use actix_web::{FromRequest, HttpResponse, ResponseError, web};
 
 use crate::{
-    api::model::responses::{ml_models::MlModelNameResponse, ErrorResponse},
+    api::model::responses::{ErrorResponse, ml_models::MlModelNameResponse},
     contexts::{ApplicationContext, SessionContext},
     machine_learning::{
-        error::MachineLearningError, name::MlModelName, MlModel, MlModelDb, MlModelListOptions,
+        MlModel, MlModelDb, MlModelListOptions, error::MachineLearningError, name::MlModelName,
     },
 };
 
@@ -138,7 +138,7 @@ mod tests {
         ge_context,
         machine_learning::MlModelMetadata,
         users::UserAuth,
-        util::tests::{send_test_request, SetMultipartBody, TestDataUploads},
+        util::tests::{SetMultipartBody, TestDataUploads, send_test_request},
     };
     use actix_http::header;
     use actix_web::test;

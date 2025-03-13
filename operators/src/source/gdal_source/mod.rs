@@ -4,10 +4,10 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
+use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::retry::retry;
-use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -18,12 +18,12 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-use float_cmp::{approx_eq, ApproxEq};
-use futures::{
-    stream::{self, BoxStream, StreamExt},
-    Stream,
-};
+use float_cmp::{ApproxEq, approx_eq};
 use futures::{Future, TryStreamExt};
+use futures::{
+    Stream,
+    stream::{self, BoxStream, StreamExt},
+};
 use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
@@ -55,7 +55,7 @@ use log::debug;
 use num::FromPrimitive;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::CString;
@@ -72,31 +72,6 @@ static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
 static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 /// Parameters for the GDAL Source Operator
-///
-/// # Examples
-///
-/// ```rust
-/// use serde_json::{Result, Value};
-/// use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-/// use geoengine_datatypes::dataset::{NamedData};
-/// use geoengine_datatypes::util::Identifier;
-///
-/// let json_string = r#"
-///     {
-///         "type": "GdalSource",
-///         "params": {
-///             "data": "ns:dataset"
-///         }
-///     }"#;
-///
-/// let operator: GdalSource = serde_json::from_str(json_string).unwrap();
-///
-/// assert_eq!(operator, GdalSource {
-///     params: GdalSourceParameters {
-///         data: NamedData::with_namespaced_name("ns", "dataset"),
-///     },
-/// });
-/// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 pub struct GdalSourceParameters {
     pub data: NamedData,
@@ -596,20 +571,18 @@ impl GdalRasterLoader {
     /// A stream of futures producing `RasterTile2D` for a single slice in time
     ///
     fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-        query: &RasterQueryRectangle,
+        spatial_bounds: SpatialPartition2D,
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
-    ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
-        stream::iter(tiling_strategy.tile_information_iterator(query.spatial_bounds)).map(
-            move |tile| {
-                GdalRasterLoader::load_tile_async(
-                    info.params.clone(),
-                    tile,
-                    info.time,
-                    info.cache_ttl.into(),
-                )
-            },
-        )
+    ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
+        stream::iter(tiling_strategy.tile_information_iterator(spatial_bounds)).map(move |tile| {
+            GdalRasterLoader::load_tile_async(
+                info.params.clone(),
+                tile,
+                info.time,
+                info.cache_ttl.into(),
+            )
+        })
     }
 
     fn loading_info_to_tile_stream<
@@ -617,13 +590,18 @@ impl GdalRasterLoader {
         S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>>,
     >(
         loading_info_stream: S,
-        query: RasterQueryRectangle,
+        query: &RasterQueryRectangle,
         tiling_strategy: TilingStrategy,
-    ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
+    ) -> impl Stream<Item = Result<RasterTile2D<T>>> + use<S, T> {
+        let spatial_bounds = query.spatial_bounds;
         loading_info_stream
             .map_ok(move |info| {
-                GdalRasterLoader::temporal_slice_tile_future_stream(&query, info, tiling_strategy)
-                    .map(Result::Ok)
+                GdalRasterLoader::temporal_slice_tile_future_stream(
+                    spatial_bounds,
+                    info,
+                    tiling_strategy,
+                )
+                .map(Result::Ok)
             })
             .try_flatten()
             .try_buffered(16) // TODO: make this configurable
@@ -746,15 +724,21 @@ where
         ) {
             (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
             (None, None) => {
-                log::warn!("The provider did not provide a time range that covers the query. Falling back to query time range. ");
+                log::warn!(
+                    "The provider did not provide a time range that covers the query. Falling back to query time range. "
+                );
                 FillerTimeBounds::new(query.time_interval.start(), query.time_interval.end())
             }
             (Some(start), None) => {
-                log::warn!("The provider did only provide a time range start that covers the query. Falling back to query time end. ");
+                log::warn!(
+                    "The provider did only provide a time range start that covers the query. Falling back to query time end. "
+                );
                 FillerTimeBounds::new(start, query.time_interval.end())
             }
             (None, Some(end)) => {
-                log::warn!("The provider did only provide a time range end that covers the query. Falling back to query time start. ");
+                log::warn!(
+                    "The provider did only provide a time range end that covers the query. Falling back to query time start. "
+                );
                 FillerTimeBounds::new(query.time_interval.start(), end)
             }
         };
@@ -766,11 +750,8 @@ where
 
         let source_stream = stream::iter(skipping_loading_info);
 
-        let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
-            source_stream,
-            query.clone(),
-            tiling_strategy,
-        );
+        let source_stream =
+            GdalRasterLoader::loading_info_to_tile_stream(source_stream, &query, tiling_strategy);
 
         // use SparseTilesFillAdapter to fill all the gaps
         let filled_stream = SparseTilesFillAdapter::new(
@@ -872,12 +853,12 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::U64 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::U64,
-                })?
+                })?;
             }
             RasterDataType::I8 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::I8,
-                })?
+                })?;
             }
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(
                 GdalSourceProcessor {
@@ -900,7 +881,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::I64 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::I64,
-                })?
+                })?;
             }
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(
                 GdalSourceProcessor {
@@ -1249,8 +1230,8 @@ mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::test_data;
-    use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
+    use crate::util::gdal::add_ndvi_dataset;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{
@@ -1260,7 +1241,7 @@ mod tests {
     use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use geoengine_datatypes::{primitives::SpatialResolution, raster::GridShape2D};
     use httptest::matchers::request;
-    use httptest::{responders, Expectation, Server};
+    use httptest::{Expectation, Server, responders};
 
     async fn query_gdal_source(
         exe_ctx: &MockExecutionContext,
@@ -1354,6 +1335,28 @@ mod tests {
             TimeInterval::default(),
             CacheHint::default(),
         )
+    }
+
+    #[test]
+    fn it_deserializes() {
+        let json_string = r#"
+            {
+                "type": "GdalSource",
+                "params": {
+                    "data": "ns:dataset"
+                }
+            }"#;
+
+        let operator: GdalSource = serde_json::from_str(json_string).unwrap();
+
+        assert_eq!(
+            operator,
+            GdalSource {
+                params: GdalSourceParameters {
+                    data: NamedData::with_namespaced_name("ns", "dataset"),
+                },
+            }
+        );
     }
 
     #[test]

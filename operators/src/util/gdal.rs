@@ -118,8 +118,8 @@ pub fn add_ndvi_dataset(ctx: &mut MockExecutionContext) -> NamedData {
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn create_ports_meta_data(
-) -> StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle> {
+pub fn create_ports_meta_data()
+-> StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle> {
     StaticMetaData {
         loading_info: OgrSourceDataset {
             file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),

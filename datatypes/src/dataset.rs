@@ -1,5 +1,5 @@
 use crate::identifier;
-use serde::{de::Visitor, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Visitor};
 
 identifier!(DataProviderId);
 

@@ -6,19 +6,19 @@ use super::{
         Branch, ExpressionAst, Identifier, Parameter,
     },
     error::{self, ExpressionSemanticError},
-    functions::{init_functions, FUNCTIONS},
+    functions::{FUNCTIONS, init_functions},
     util::duplicate_or_empty_str_slice,
 };
 use pest::{
+    Parser,
     iterators::{Pair, Pairs},
     pratt_parser::{Assoc, Op, PrattParser},
-    Parser,
 };
 use pest_derive::Parser;
 use snafu::{OptionExt, ResultExt};
 use std::{
     cell::RefCell,
-    collections::{hash_map, BTreeSet, HashMap},
+    collections::{BTreeSet, HashMap, hash_map},
     rc::Rc,
     sync::OnceLock,
 };
@@ -336,7 +336,7 @@ impl ExpressionParser {
                 return Err(ExpressionSemanticError::UnexpectedOperator {
                     found: op.as_str().to_string(),
                 }
-                .into_parser_error(op.as_span()))
+                .into_parser_error(op.as_span()));
             }
         };
 
@@ -446,7 +446,7 @@ impl ExpressionParser {
                         return Err(ExpressionSemanticError::UnexpectedComparator {
                             comparator: format!("{:?}", second_pair.as_rule()),
                         }
-                        .into_parser_error(span))
+                        .into_parser_error(span));
                     }
                 };
                 let right_expression = self.build_ast(third_pair.into_inner(), variables)?;
@@ -504,7 +504,7 @@ mod tests {
     use crate::codegen::Prelude;
     use pretty_assertions::assert_str_eq;
     use proc_macro2::TokenStream;
-    use quote::{quote, ToTokens};
+    use quote::{ToTokens, quote};
 
     fn parse(name: &str, parameters: &[&str], input: &str) -> String {
         let parameters: Vec<Parameter> = parameters
@@ -615,7 +615,7 @@ mod tests {
             quote! {
                 #Prelude
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     Some(1f64)
                 }
@@ -630,7 +630,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn foo() -> Option<f64> {
                     expression_fn_add__n_n(Some(1f64), Some(2f64))
                 }
@@ -645,7 +645,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn bar() -> Option<f64> {
                     expression_fn_add__n_n(Some(-1f64), Some(2f64))
                 }
@@ -660,7 +660,7 @@ mod tests {
 
                 #SUB_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn baz() -> Option<f64> {
                     expression_fn_sub__n_n(Some(1f64), Some(-2f64))
                 }
@@ -683,7 +683,7 @@ mod tests {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     expression_fn_add__n_n(
                         Some(1f64),
@@ -701,7 +701,7 @@ mod tests {
 
                 #POW_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     expression_fn_pow__n_n(Some(2f64) , Some(4f64))
                 }
@@ -719,7 +719,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     expression_fn_add__n_n(a, Some(1f64))
                 }
@@ -736,7 +736,7 @@ mod tests {
                 #DIV_FN
                 #SUB_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn ndvi(a: Option<f64>, b: Option<f64>) -> Option<f64> {
                     expression_fn_div__n_n(
                         expression_fn_sub__n_n(a, b),
@@ -764,7 +764,7 @@ mod tests {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     expression_fn_max__n_n(a, Some(0f64))
                 }
@@ -789,7 +789,7 @@ mod tests {
                     a.map(f64::sqrt)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     expression_fn_pow__n_n(expression_fn_sqrt__n(a), Some(2f64))
                 }
@@ -827,7 +827,7 @@ mod tests {
                     a.map(f64::tan)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn waves() -> Option<f64> {
                     expression_fn_cos__n(expression_fn_sin__n(expression_fn_tan__n(expression_fn_acos__n(expression_fn_asin__n(expression_fn_atan__n(Some(1f64)))))))
                 }
@@ -853,7 +853,7 @@ mod tests {
                     Some(std::f64::consts::PI)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn non_linear() -> Option<f64> {
                     expression_fn_ln__n(expression_fn_log10__n(expression_fn_pi_()))
                 }
@@ -880,7 +880,7 @@ mod tests {
                     a.map(f64::round)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn rounding() -> Option<f64> {
                     expression_fn_add__n_n(
                         expression_fn_add__n_n(
@@ -909,7 +909,7 @@ mod tests {
                     a.map(f64::to_radians)
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn radians() -> Option<f64> {
                     expression_fn_add__n_n(expression_fn_to_radians__n(Some(1.3f64)), expression_fn_to_degrees__n(Some(1.3f64)))
                 }
@@ -934,7 +934,7 @@ mod tests {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn mod_e() -> Option<f64> {
                     expression_fn_mod__n_n(Some(5f64), expression_fn_e_())
                 }
@@ -946,7 +946,7 @@ mod tests {
             try_parse("will_not_compile", &[], DataType::Number, "max(1, 2, 3)")
                 .unwrap_err()
                 .to_string(),
-                " --> 1:1\n  |\n1 | max(1, 2, 3)\n  | ^----------^\n  |\n  = Invalid function arguments for function `max`: expected [number, number], got [number, number, number]"
+            " --> 1:1\n  |\n1 | max(1, 2, 3)\n  | ^----------^\n  |\n  = Invalid function arguments for function `max`: expected [number, number], got [number, number, number]"
         );
     }
 
@@ -957,7 +957,7 @@ mod tests {
             quote! {
                 #Prelude
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(a: Option<f64>) -> Option<f64> {
                     if ((a) == (None)) {
                         Some(0f64)
@@ -986,7 +986,7 @@ mod tests {
 
                 #MUL_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression(A: Option<f64>, B: Option<f64>) -> Option<f64> {
                     if ((A) == (None)) {
                         expression_fn_mul__n_n(B, Some(2f64))
@@ -1009,7 +1009,7 @@ mod tests {
             quote! {
                 #Prelude
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
                         Some(1f64)
@@ -1032,7 +1032,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if true {
                         Some(1f64)
@@ -1058,7 +1058,7 @@ mod tests {
                 #ADD_FN
                 #SUB_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((Some(1f64)) < (Some(2f64))) {
                         Some(1f64)
@@ -1095,7 +1095,7 @@ mod tests {
                     }
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     if ((true) && (false)) {
                         Some(1f64)
@@ -1125,7 +1125,7 @@ mod tests {
 
                 #ADD_FN
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn expression() -> Option<f64> {
                     let a = Some(1.2f64);
                     let b = Some(2f64);
@@ -1148,10 +1148,10 @@ mod tests {
                 let c = 2;
                 a + b",
             )
-                .unwrap_err()
-                .to_string(),
-                " --> 2:25\n  |\n2 |                 let b = C;\n  |                         ^\n  |\n  = The variable `C` was not defined",
-                "no access before declaration"
+            .unwrap_err()
+            .to_string(),
+            " --> 2:25\n  |\n2 |                 let b = C;\n  |                         ^\n  |\n  = The variable `C` was not defined",
+            "no access before declaration"
         );
 
         assert_eq!(
@@ -1162,10 +1162,10 @@ mod tests {
                 "let A = 2;
                 a",
             )
-                .unwrap_err()
-                .to_string(),
-                " --> 1:1\n  |\n1 | let A = 2;\n2 |                 a\n  | ^---------------^\n  |\n  = The variable `A` was already defined",
-                "no shadowing"
+            .unwrap_err()
+            .to_string(),
+            " --> 1:1\n  |\n1 | let A = 2;\n2 |                 a\n  | ^---------------^\n  |\n  = The variable `A` was already defined",
+            "no shadowing"
         );
     }
 
@@ -1233,7 +1233,7 @@ mod tests {
             try_parse("expression", &[], DataType::MultiPoint, "1",)
                 .unwrap_err()
                 .to_string(),
-                " --> 1:1\n  |\n1 | \n  | ^---\n  |\n  = The expression was expected to output `geometry (multipoint)`, but it outputs `number`",
+            " --> 1:1\n  |\n1 | \n  | ^---\n  |\n  = The expression was expected to output `geometry (multipoint)`, but it outputs `number`",
             "cannot call with wrong output"
         );
     }
@@ -1257,7 +1257,7 @@ mod tests {
                     geom.centroid()
                 }
 
-                #[no_mangle]
+                #[unsafe(no_mangle)]
                 pub extern "Rust" fn make_centroid(
                     geom: Option<MultiPolygon>
                 ) -> Option<MultiPoint> {

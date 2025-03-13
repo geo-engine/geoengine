@@ -491,11 +491,7 @@ mod tests {
 
         let scaled_r1 = t1.map_elements(|p| {
             if let Some(p) = p {
-                if p == 7 {
-                    Some(p * 2 + 1)
-                } else {
-                    None
-                }
+                if p == 7 { Some(p * 2 + 1) } else { None }
             } else {
                 None
             }

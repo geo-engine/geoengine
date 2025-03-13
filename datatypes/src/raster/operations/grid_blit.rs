@@ -1,7 +1,7 @@
 use crate::raster::{
-    empty_grid::EmptyGrid, masked_grid::MaskedGrid, BoundedGrid, Grid, Grid1D, Grid2D, Grid3D,
-    GridBoundingBox, GridBounds, GridIdx, GridIndexAccessMut, GridIntersection, GridOrEmpty,
-    GridSize, GridSpaceToLinearSpace,
+    BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox, GridBounds, GridIdx,
+    GridIndexAccessMut, GridIntersection, GridOrEmpty, GridSize, GridSpaceToLinearSpace,
+    empty_grid::EmptyGrid, masked_grid::MaskedGrid,
 };
 
 pub trait GridBlit<O, T>
@@ -239,8 +239,8 @@ where
 #[cfg(test)]
 mod tests {
     use crate::raster::{
-        masked_grid::{MaskedGrid2D, MaskedGrid3D},
         EmptyGrid2D, EmptyGrid3D, Grid, Grid2D, Grid3D, GridBlit, GridBoundingBox, GridIdx,
+        masked_grid::{MaskedGrid2D, MaskedGrid3D},
     };
 
     #[test]

@@ -177,7 +177,7 @@ where
         None
     };
 
-    gdal_config_options
+    let option_vars = gdal_config_options
         .as_deref()
         .map(TemporaryGdalThreadLocalConfigOptions::new);
 
@@ -196,7 +196,9 @@ where
         if let Some(no_data) = gdal_tiff_metadata.no_data_value {
             band.set_no_data_value(Some(no_data))?;
         } else {
-            band.create_mask_band(false)?;
+            // only allowed option for internal masks
+            band.create_mask_band(true)?;
+            break;
         }
     }
 
@@ -210,6 +212,8 @@ where
         window_start,
         window_end,
     };
+
+    drop(option_vars);
 
     Ok((initial_tile_time, file_path, dataset, writer))
 }
@@ -694,7 +698,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         if self
             .intermediate_dataset
             .as_ref()
-            .map_or(true, |x| x.time_interval != time_interval)
+            .is_none_or(|x| x.time_interval != time_interval)
         {
             if let Some(intermediate_dataset) = self.intermediate_dataset.take() {
                 self.dataset_writer.finish_dataset(intermediate_dataset)?;
@@ -858,10 +862,9 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         // No-data masks are described by the rasterio docs as:
         // "One is the the valid data mask from GDAL, an unsigned byte array with the same number of rows and columns as the dataset in which non-zero elements (typically 255) indicate that the corresponding data elements are valid. Other elements are invalid, or nodata elements."
 
-        let mask_grid_gdal_values =
-            masked_grid
-                .validity_mask
-                .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
+        let mask_grid_gdal_values = masked_grid
+            .validity_mask
+            .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
         let mut mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
 
         let mut mask_band = raster_band.open_mask_band()?;
@@ -1008,26 +1011,27 @@ fn geotiff_to_cog(
 
 #[cfg(test)]
 mod tests {
-    use std::marker::PhantomData;
-    use std::ops::Add;
-
-    use geoengine_datatypes::primitives::CacheHint;
-    use geoengine_datatypes::primitives::{DateTime, Duration};
-    use geoengine_datatypes::raster::{Grid, RasterDataType};
-    use geoengine_datatypes::{
-        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::TilingSpecification,
-        util::test::TestDefault,
-    };
-
+    use super::*;
     use crate::engine::RasterResultDescriptor;
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
     use crate::{
         engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
     };
-
-    use super::*;
+    use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::{DateTime, Duration};
+    use geoengine_datatypes::raster::{Grid, RasterDataType};
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::{
+        ImageFormat, assert_image_equals, assert_image_equals_with_format,
+    };
+    use geoengine_datatypes::{
+        primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
+        raster::TilingSpecification,
+        util::test::TestDefault,
+    };
+    use std::marker::PhantomData;
+    use std::ops::Add;
 
     #[tokio::test]
     async fn geotiff_with_no_data_from_stream() {
@@ -1083,10 +1087,9 @@ mod tests {
         //    "../test_data/raster/geotiff_from_stream_compressed.tiff",
         // );
 
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            bytes.as_slice()
+        assert_image_equals(
+            test_data!("raster/geotiff_from_stream_compressed.tiff"),
+            &bytes,
         );
     }
 
@@ -1139,11 +1142,9 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            include_bytes!(
-                "../../../test_data/raster/geotiff_with_mask_from_stream_compressed.tiff"
-            ) as &[u8],
-            bytes.as_slice()
+        assert_image_equals(
+            test_data!("raster/geotiff_with_mask_from_stream_compressed.tiff"),
+            &bytes,
         );
     }
 
@@ -1201,10 +1202,10 @@ mod tests {
         //    "../test_data/raster/geotiff_big_tiff_from_stream_compressed.tiff",
         // );
 
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_big_tiff_from_stream_compressed.tiff")
-                as &[u8],
-            bytes.as_slice()
+        assert_image_equals_with_format(
+            test_data!("raster/geotiff_big_tiff_from_stream_compressed.tiff"),
+            &bytes,
+            ImageFormat::Tiff,
         );
     }
 
@@ -1258,15 +1259,14 @@ mod tests {
         .unwrap();
 
         // geoengine_datatypes::util::test::save_test_bytes(
-        //    &bytes,
-        //    "../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff",
-        //);
+        //     &bytes,
+        //     "../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff",
+        // );
 
-        assert_eq!(
-            include_bytes!(
-                "../../../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff"
-            ) as &[u8],
-            bytes.as_slice()
+        assert_image_equals_with_format(
+            test_data!("raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff"),
+            &bytes,
+            ImageFormat::Tiff,
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1326,11 +1326,9 @@ mod tests {
         //     "../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff",
         // );
 
-        assert_eq!(
-            include_bytes!(
-                "../../../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff"
-            ) as &[u8],
-            bytes.as_slice()
+        assert_image_equals(
+            test_data!("raster/cloud_optimized_geotiff_from_stream_compressed.tiff"),
+            &bytes,
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1401,17 +1399,19 @@ mod tests {
         //     );
         // }
 
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_0_from_stream_compressed.tiff") as &[u8],
-            bytes.pop().expect("bytes should have length 3").as_slice()
+        assert_image_equals(
+            test_data!("raster/cloud_optimized_geotiff_timestep_0_from_stream_compressed.tiff"),
+            bytes.pop().expect("bytes should have length 3").as_slice(),
         );
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_1_from_stream_compressed.tiff") as &[u8],
-            bytes.pop().expect("bytes should have length 3").as_slice()
+
+        assert_image_equals(
+            test_data!("raster/cloud_optimized_geotiff_timestep_1_from_stream_compressed.tiff"),
+            bytes.pop().expect("bytes should have length 3").as_slice(),
         );
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_2_from_stream_compressed.tiff") as &[u8],
-            bytes.pop().expect("bytes should have length 3").as_slice()
+
+        assert_image_equals(
+            test_data!("raster/cloud_optimized_geotiff_timestep_2_from_stream_compressed.tiff"),
+            bytes.pop().expect("bytes should have length 3").as_slice(),
         );
 
         // TODO: check programmatically that intermediate file is gone

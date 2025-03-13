@@ -3,11 +3,11 @@ use super::{
     TaskListOptions, TaskManager, TaskStatus, TaskStatusInfo, TaskStatusWithId,
 };
 use crate::{contexts::Db, error::Result};
-use futures::channel::oneshot;
 use futures::StreamExt;
+use futures::channel::oneshot;
 use geoengine_datatypes::{
     error::ErrorSource,
-    util::{helpers::ge_report, Identifier},
+    util::{Identifier, helpers::ge_report},
 };
 use log::warn;
 use std::{

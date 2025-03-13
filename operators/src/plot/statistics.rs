@@ -7,17 +7,17 @@ use crate::engine::{
 };
 use crate::error;
 use crate::error::Error;
+use crate::util::Result;
 use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::statistics::{SafePSquareQuantileEstimator, StatisticsError};
-use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, AxisAlignedRectangle, BandSelection, BoundingBox2D,
-    PlotQueryRectangle, RasterQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, PlotQueryRectangle, RasterQueryRectangle,
+    partitions_extent, time_interval_extent,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
@@ -1048,8 +1048,8 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -1079,8 +1079,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1147,8 +1148,8 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -1178,8 +1179,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1238,8 +1240,8 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -1269,8 +1271,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1424,8 +1427,8 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -1455,8 +1458,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let statistics = Statistics {
             params: StatisticsParams {

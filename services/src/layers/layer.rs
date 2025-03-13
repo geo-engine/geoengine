@@ -1,5 +1,5 @@
 use super::listing::LayerCollectionId;
-use crate::config::{get_config_element, LayerService};
+use crate::config::{LayerService, get_config_element};
 use crate::{projects::Symbology, workflows::workflow::Workflow};
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use serde::{Deserialize, Serialize};

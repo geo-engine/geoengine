@@ -619,8 +619,8 @@ pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
 mod tests {
 
     use crate::primitives::{
-        bounding_box::bboxes_extent, AxisAlignedRectangle, BoundingBox2D, Coordinate2D,
-        SpatialBounded,
+        AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialBounded,
+        bounding_box::bboxes_extent,
     };
 
     #[test]

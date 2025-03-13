@@ -9,7 +9,7 @@ env:
 
 jobs:
   clear-cache:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Clear all caches
@@ -21,7 +21,7 @@ jobs:
             const [owner, repo] = GITHUB_REPOSITORY.split('/')
 
             console.log(`Clearing all caches for ${owner}/${repo}`)
-            
+
             let caches = [];
 
             do {

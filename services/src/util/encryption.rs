@@ -5,7 +5,7 @@ use aes_gcm::aead::{Aead, OsRng};
 use aes_gcm::{AeadCore, Aes256Gcm, Key, KeyInit, Nonce};
 use bytes::BytesMut;
 use pbkdf2::pbkdf2_hmac_array;
-use postgres_types::{accepts, FromSql, IsNull, ToSql, Type};
+use postgres_types::{FromSql, IsNull, ToSql, Type, accepts};
 use sha2::Sha256;
 use snafu::Snafu;
 use std::error::Error;
