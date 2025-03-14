@@ -1001,20 +1001,28 @@ impl From<SpatialPartition2D> for geoengine_datatypes::primitives::SpatialPartit
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-// #[aliases( // TODO: find solution?
-//     VectorQueryRectangle = QueryRectangle<BoundingBox2D>,
-//     RasterQueryRectangle = QueryRectangle<SpatialPartition2D>,
-//     PlotQueryRectangle = QueryRectangle<BoundingBox2D>)
-// ]
-pub struct QueryRectangle<SpatialBounds> {
-    pub spatial_bounds: SpatialBounds,
+pub struct RasterQueryRectangle {
+    pub spatial_bounds: SpatialPartition2D,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
 
-pub type RasterQueryRectangle = QueryRectangle<SpatialPartition2D>;
-pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D>;
-pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D>;
+/// A spatio-temporal rectangle with a specified resolution
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorQueryRectangle {
+    pub spatial_bounds: BoundingBox2D,
+    pub time_interval: TimeInterval,
+    pub spatial_resolution: SpatialResolution,
+}
+/// A spatio-temporal rectangle with a specified resolution
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PlotQueryRectangle {
+    pub spatial_bounds: BoundingBox2D,
+    pub time_interval: TimeInterval,
+    pub spatial_resolution: SpatialResolution,
+}
 
 impl
     From<
@@ -1038,10 +1046,8 @@ impl
     }
 }
 
-impl From<QueryRectangle<SpatialPartition2D>>
-    for geoengine_datatypes::primitives::RasterQueryRectangle
-{
-    fn from(value: QueryRectangle<SpatialPartition2D>) -> Self {
+impl From<RasterQueryRectangle> for geoengine_datatypes::primitives::RasterQueryRectangle {
+    fn from(value: RasterQueryRectangle) -> Self {
         Self {
             spatial_bounds: value.spatial_bounds.into(),
             time_interval: value.time_interval.into(),

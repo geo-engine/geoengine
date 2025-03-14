@@ -1,14 +1,12 @@
 use crate::datasets::DatasetName;
 use serde::{Deserialize, Serialize};
-use utoipa::ToResponse;
+use utoipa::ToSchema;
 
 pub mod errors;
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToResponse)]
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[response(description = "Name of generated resource", example = json!({
-    "name": "ns:name"
-}))]
+#[schema(title = "Dataset Name Response")]
 pub struct DatasetNameResponse {
     pub dataset_name: DatasetName,
 }

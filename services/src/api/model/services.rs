@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, MockMetaData,
     OgrMetaData,
@@ -209,4 +211,13 @@ pub struct ProvenanceOutput {
 pub struct Volume {
     pub name: String,
     pub path: Option<String>,
+}
+
+impl From<&Volume> for crate::datasets::upload::Volume {
+    fn from(value: &Volume) -> Self {
+        Self {
+            name: VolumeName(value.name.clone()),
+            path: value.path.as_ref().map_or_else(PathBuf::new, PathBuf::from),
+        }
+    }
 }

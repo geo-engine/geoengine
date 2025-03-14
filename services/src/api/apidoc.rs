@@ -180,13 +180,11 @@ use utoipa::{Modify, OpenApi};
             IdResponse::<LayerCollectionId>,
             IdResponse::<ProjectId>,
             IdResponse::<RoleId>,
-            DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
             PngResponse,
             ZipResponse,
-            AuthCodeRequestURL
         ),
         schemas(
             ErrorResponse,
@@ -209,6 +207,7 @@ use utoipa::{Modify, OpenApi};
             DataProviderId,
             DatasetId,
             DatasetName,
+            DatasetNameResponse,
             NamedData,
             ExternalDataId,
             LayerId,

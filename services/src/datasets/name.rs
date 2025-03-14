@@ -208,6 +208,7 @@ impl PartialSchema for DatasetName {
         use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
         ObjectBuilder::new()
             .schema_type(SchemaType::Type(Type::String))
+            .examples([serde_json::json!("ns:name")])
             .into()
     }
 }

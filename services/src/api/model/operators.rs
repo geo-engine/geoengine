@@ -411,14 +411,14 @@ impl From<MockDatasetDataSourceLoadingInfo>
     }
 }
 
-#[type_tag(tag = "mockMetaData")]
+#[type_tag(tag = "MockMetaData")]
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MockMetaData {
     pub loading_info: MockDatasetDataSourceLoadingInfo,
     pub result_descriptor: VectorResultDescriptor,
 }
-#[type_tag(tag = "ogrMetaData")]
+#[type_tag(tag = "OgrMetaData")]
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrMetaData {
@@ -544,7 +544,7 @@ impl From<OgrMetaData>
     }
 }
 
-#[type_tag(tag = "gdalStatic")]
+#[type_tag(tag = "GdalStatic")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
@@ -1046,7 +1046,7 @@ impl From<OgrSourceColumnSpec> for geoengine_operators::source::OgrSourceColumnS
     }
 }
 
-#[type_tag(tag = "gdalMetaDataRegular")]
+#[type_tag(tag = "GdalMetaDataRegular")]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataRegular {
@@ -1293,7 +1293,7 @@ impl From<TimeReference> for geoengine_operators::source::TimeReference {
 }
 
 /// Meta data for 4D `NetCDF` CF datasets
-#[type_tag(tag = "gdalMetaDataNetCdfCf")]
+#[type_tag(tag = "GdalMetaDataNetCdfCf")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataNetCdfCf {
@@ -1341,7 +1341,7 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
     }
 }
 
-#[type_tag(tag = "gdalMetaDataList")]
+#[type_tag(tag = "GdalMetaDataList")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {

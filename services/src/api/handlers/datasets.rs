@@ -7,7 +7,7 @@ use crate::{
         },
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
-            MetaDataSuggestion, Provenances, UpdateDataset,
+            MetaDataSuggestion, Provenances, UpdateDataset, Volume,
         },
     },
     config::{get_config_element, Data},
@@ -15,9 +15,7 @@ use crate::{
     datasets::{
         listing::{DatasetListOptions, DatasetListing, DatasetProvider},
         storage::{AutoCreateDataset, Dataset, DatasetStore, SuggestMetaData},
-        upload::{
-            AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName, Volumes,
-        },
+        upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, VolumeName, Volumes},
         DatasetName,
     },
     error::{self, Error, Result},
@@ -549,7 +547,7 @@ pub fn add_tag(properties: &mut AddDataset, tag: String) {
     path = "/dataset/auto",
     request_body = AutoCreateDataset,
     responses(
-        (status = 200, response = DatasetNameResponse),
+        (status = 200, body = DatasetNameResponse),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Body is invalid json" = (value = json!({
                 "error": "BodyDeserializeError",
@@ -629,7 +627,7 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
             example = json!({
                 "mainFile": "germany_polygon.gpkg",
                 "metaData": {
-                    "type": "ogrMetaData",
+                    "type": "OgrMetaData",
                     "loadingInfo": {
                         "fileName": "upload/23c9ea9e-15d6-453b-a243-1390967a5669/germany_polygon.gpkg",
                         "layerName": "test_germany",
@@ -1299,7 +1297,7 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
     path = "/dataset", 
     request_body = CreateDataset,
     responses(
-        (status = 200, response = DatasetNameResponse),
+        (status = 200, body = DatasetNameResponse),
     ),
     security(
         ("session_token" = [])
@@ -1336,12 +1334,15 @@ async fn create_system_dataset<C: ApplicationContext>(
         .get(&volume_name)
         .ok_or(CreateDatasetError::UnknownVolume)?;
     let volume = Volume {
-        name: volume_name,
-        path: volume_path.clone(),
+        name: volume_name.to_string(),
+        path: Some(volume_path.to_string_lossy().into()),
     };
 
-    adjust_meta_data_path(&mut definition.meta_data, &volume)
-        .context(CannotResolveUploadFilePath)?;
+    adjust_meta_data_path(
+        &mut definition.meta_data,
+        &crate::datasets::upload::Volume::from(&volume),
+    )
+    .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
 
@@ -1610,7 +1611,7 @@ mod tests {
                     "sourceOperator": "OgrSource"
                 },
                 "metaData": {
-                    "type": "ogrMetaData",
+                    "type": "OgrMetaData",
                     "loadingInfo": {
                         "fileName": "ne_10m_ports.shp",
                         "layerName": "ne_10m_ports",
@@ -2407,7 +2408,7 @@ mod tests {
               "mainFile": "test.json",
               "layerName": "test",
               "metaData": {
-                "type": "ogrMetaData",
+                "type": "OgrMetaData",
                 "loadingInfo": {
                   "fileName": format!("test_upload/{}/test.json", upload.id),
                   "layerName": "test",
@@ -2610,7 +2611,7 @@ mod tests {
                     "spatialReference": "",
                     "time": null
                 },
-                "type": "ogrMetaData"
+                "type": "OgrMetaData"
             })
         );
 
