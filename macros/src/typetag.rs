@@ -42,7 +42,8 @@ pub fn type_tag(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, sy
         None => DEFAULT_DISCRIMINATOR.into(),
     };
 
-    let newtype_name = Ident::new(&format!("{}TypeTag", ast.ident), ast.ident.span());
+    let type_name = &ast.ident;
+    let newtype_name = Ident::new(&format!("{type_name}TypeTag"), type_name.span());
 
     let type_def = quote! {
         #[derive(

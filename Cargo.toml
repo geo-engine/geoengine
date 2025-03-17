@@ -71,7 +71,6 @@ arrow-array = "54.0"
 arrow-ord = "54.0"
 arrow-schema = { version = "54", features = ["serde"] }
 aruna-rust-api = "2.0.0-beta.12"
-assert-json-diff = "2.0.2"
 assert_cmd = "2.0"
 async-stream = "0.3"
 async-trait = "0.1"
@@ -192,6 +191,7 @@ url = { version = "2.5", features = ["serde"] }
 utoipa = { version = "5.3", features = [
     "actix_extras",
     "chrono",
+    "debug",
     "url",
     "uuid",
 ] }
