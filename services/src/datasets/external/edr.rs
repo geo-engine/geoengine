@@ -1218,6 +1218,7 @@ mod tests {
         contexts::{PostgresDb, PostgresSessionContext},
         ge_context,
     };
+    use futures::FutureExt;
     use geoengine_datatypes::{
         dataset::ExternalDataId,
         hashmap,
@@ -1684,69 +1685,61 @@ mod tests {
     }
 
     #[ge_context::test]
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::used_underscore_items)]
     async fn generate_gdal_metadata(ctx: PostgresSessionContext<NoTls>) {
-        hide_gdal_errors(); //hide GTIFF_HONOUR_NEGATIVE_SCALEY warning
+        /// TODO: This test is flaky in the CI, so we run it multiple times to increase the chance of success
+        /// The error is in `GDALOpenEx`: "TIFFReadDirectory:Failed to read directory at offset 109658"
+        async fn _generate_gdal_metadata(ctx: PostgresSessionContext<NoTls>) {
+            // we do not use it after unwinding
+            let mut server = Server::run();
+            setup_url(
+                &mut server,
+                "/collections/GFS_isobaric/cube",
+                "image/tiff",
+                "edr_raster.tif",
+                1..2,
+            )
+            .await;
+            server.expect(
+                Expectation::matching(all_of![
+                    request::method_path("HEAD", "/collections/GFS_isobaric/cube"),
+                    request::query(url_decoded(contains((
+                        "parameter-name",
+                        "temperature.aux.xml"
+                    ))))
+                ])
+                .times(0..2)
+                .respond_with(status_code(404)),
+            );
 
-        let mut server = Server::run();
-        setup_url(
-            &mut server,
-            "/collections/GFS_isobaric/cube",
-            "image/tiff",
-            "edr_raster.tif",
-            1..2,
-        )
-        .await;
-        server.expect(
-            Expectation::matching(all_of![
-                request::method_path("HEAD", "/collections/GFS_isobaric/cube"),
-                request::query(url_decoded(contains((
-                    "parameter-name",
-                    "temperature.aux.xml"
-                ))))
-            ])
-            .times(0..2)
-            .respond_with(status_code(404)),
-        );
-
-        // TODO: This test is flaky in the CI, so we run it multiple times to increase the chance of success
-        // The error is in `GDALOpenEx`: "TIFFReadDirectory:Failed to read directory at offset 109658"
-        let mut number_of_retries = 10;
-        let meta = loop {
             let meta = load_metadata::<
                 GdalLoadingInfo,
                 RasterResultDescriptor,
                 RasterQueryRectangle,
                 PostgresDb<NoTls>,
             >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
-            .await;
-
-            if let Ok(meta) = meta {
-                break meta;
-            }
-
-            number_of_retries -= 1;
-            if number_of_retries == 0 {
-                meta.unwrap();
-            }
-        };
-
-        let loading_info_parts = meta
-            .loading_info(RasterQueryRectangle {
-                spatial_bounds: SpatialPartition2D::new_unchecked(
-                    (0., 90.).into(),
-                    (360., -90.).into(),
-                ),
-                time_interval: TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000),
-                spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
-                attributes: BandSelection::first(),
-            })
             .await
-            .unwrap()
-            .info
-            .map(Result::unwrap)
-            .collect::<Vec<_>>();
-        assert_eq!(
+            .unwrap();
+
+            let loading_info_parts = meta
+                .loading_info(RasterQueryRectangle {
+                    spatial_bounds: SpatialPartition2D::new_unchecked(
+                        (0., 90.).into(),
+                        (360., -90.).into(),
+                    ),
+                    time_interval: TimeInterval::new_unchecked(
+                        1_692_144_000_000,
+                        1_692_500_400_000,
+                    ),
+                    spatial_resolution: SpatialResolution::new_unchecked(1., 1.),
+                    attributes: BandSelection::first(),
+                })
+                .await
+                .unwrap()
+                .info
+                .map(Result::unwrap)
+                .collect::<Vec<_>>();
+            assert_eq!(
             loading_info_parts,
             vec![
                 GdalLoadingInfoTemporalSlice {
@@ -1812,23 +1805,46 @@ mod tests {
             ]
         );
 
-        let result_descriptor = meta.result_descriptor().await.unwrap();
-        assert_eq!(
-            result_descriptor,
-            RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                time: Some(TimeInterval::new_unchecked(
-                    1_692_144_000_000,
-                    1_692_500_400_000
-                )),
-                bbox: Some(SpatialPartition2D::new_unchecked(
-                    (0., 90.).into(),
-                    (359.500_000_000_000_06, -90.).into()
-                )),
-                resolution: None,
-                bands: RasterBandDescriptors::new_single_band(),
+            let result_descriptor = meta.result_descriptor().await.unwrap();
+            assert_eq!(
+                result_descriptor,
+                RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: Some(TimeInterval::new_unchecked(
+                        1_692_144_000_000,
+                        1_692_500_400_000
+                    )),
+                    bbox: Some(SpatialPartition2D::new_unchecked(
+                        (0., 90.).into(),
+                        (359.500_000_000_000_06, -90.).into()
+                    )),
+                    resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
+                }
+            );
+        }
+
+        hide_gdal_errors(); //hide GTIFF_HONOUR_NEGATIVE_SCALEY warning
+
+        let number_of_retries = 10;
+        let mut result = Ok(());
+
+        for _ in 0..number_of_retries {
+            let ctx = ctx.clone();
+            result = async move {
+                // AssertUnwindSafe moved to the future
+                std::panic::AssertUnwindSafe(_generate_gdal_metadata(ctx))
+                    .catch_unwind()
+                    .await
             }
-        );
+            .await;
+
+            if result.is_ok() {
+                break;
+            }
+        }
+
+        result.unwrap();
     }
 }
