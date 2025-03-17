@@ -7,10 +7,10 @@ use crate::engine::{
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
+use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use async_trait::async_trait;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
-use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
 use futures::stream::BoxStream;
@@ -88,7 +88,7 @@ impl RasterOperator for Reflectance {
                     return Err(Error::InvalidMeasurement {
                         expected: "radiance".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Classification(ClassificationMeasurement {
                     measurement: m,
@@ -97,13 +97,13 @@ impl RasterOperator for Reflectance {
                     return Err(Error::InvalidMeasurement {
                         expected: "radiance".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Unitless => {
                     return Err(Error::InvalidMeasurement {
                         expected: "radiance".into(),
                         found: "unitless".into(),
-                    })
+                    });
                 }
                 // OK Case
                 Measurement::Continuous(ContinuousMeasurement {
@@ -297,11 +297,11 @@ fn calculate_esd(timestamp: &DateTime) -> f64 {
 impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<PixelOut>,
-        SpatialBounds = SpatialPartition2D,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<PixelOut>,
+            SpatialBounds = SpatialPartition2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
 {
     type Output = RasterTile2D<PixelOut>;
     type SpatialBounds = SpatialPartition2D;

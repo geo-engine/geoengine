@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 use utoipa::{
-    openapi::{RefOr, Schema},
     Modify,
+    openapi::{Discriminator, OneOfBuilder, Ref, RefOr, Schema},
+    openapi::{RefOr, Schema},
 };
 
 pub struct OpenApiServerInfo;
@@ -14,9 +15,9 @@ impl Modify for OpenApiServerInfo {
         let mut api_url = web_config.api_url().expect("external address").to_string();
         api_url.pop(); //remove trailing slash because codegen requires it
 
-        openapi.servers = Some(vec![utoipa::openapi::ServerBuilder::new()
-            .url(api_url)
-            .build()]);
+        openapi.servers = Some(vec![
+            utoipa::openapi::ServerBuilder::new().url(api_url).build(),
+        ]);
     }
 }
 
@@ -153,8 +154,8 @@ mod tests {
     use pretty_assertions::assert_eq;
     use serde::Serialize;
     use utoipa::{
-        openapi::{ComponentsBuilder, OpenApiBuilder},
         ToSchema,
+        openapi::{ComponentsBuilder, OpenApiBuilder},
     };
 
     #[test]

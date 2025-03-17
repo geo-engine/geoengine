@@ -1,6 +1,6 @@
 use crate::collections::{FeatureCollection, FeatureCollectionInfos};
 use crate::raster::Pixel;
-use std::collections::{hash_map::RandomState, HashMap};
+use std::collections::{HashMap, hash_map::RandomState};
 
 /// A trait for types that have a size in bytes
 /// that it takes up in memory

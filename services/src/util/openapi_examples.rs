@@ -3,7 +3,7 @@ use crate::contexts::PostgresContext;
 use crate::contexts::SessionId;
 use crate::users::UserAuth;
 use actix_web::dev::ServiceResponse;
-use actix_web::http::{header, Method};
+use actix_web::http::{Method, header};
 use actix_web::test::TestRequest;
 use actix_web_httpauth::headers::authorization::Bearer;
 use std::collections::HashMap;
@@ -241,7 +241,9 @@ pub async fn can_run_examples<F, Fut>(
                                 RefOr::Ref(_reference) => {
                                     // This never happened during testing.
                                     // It is undocumented how the references would look like.
-                                    panic!("checking pro examples with references is not yet implemented")
+                                    panic!(
+                                        "checking pro examples with references is not yet implemented"
+                                    )
                                 }
                                 RefOr::T(concrete) => {
                                     if let Some(body) = concrete.value {
@@ -281,9 +283,10 @@ mod tests {
     use crate::api::model::services::Volume;
     use crate::ge_context;
     use crate::util::server::{configure_extractors, render_404, render_405};
-    use actix_web::{http, middleware, post, web, App, HttpResponse, Responder};
+    use actix_web::{App, HttpResponse, Responder, http, middleware, post, web};
     use serde::Deserialize;
     use serde_json::json;
+    use utoipa::ToSchema;
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
     use utoipa::openapi::{

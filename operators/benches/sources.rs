@@ -302,7 +302,9 @@ fn bench_tile_size() {
 }
 
 fn main() {
-    println!("Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
+    println!(
+        "Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) "
+    );
 
     bench_no_data_tiles();
     bench_tile_size();

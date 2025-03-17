@@ -700,19 +700,21 @@ mod tests {
     #[tokio::test]
     async fn it_checks_sref() {
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
-            vec![MultiPointCollection::from_data(
-                MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
+            vec![
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    vec![TimeInterval::default(); 4],
+                    Default::default(),
+                    CacheHint::default(),
+                )
                 .unwrap(),
-                vec![TimeInterval::default(); 4],
-                Default::default(),
-                CacheHint::default(),
-            )
-            .unwrap()],
+            ],
             SpatialReference::from_str("EPSG:3857").unwrap(),
         )
         .boxed();
@@ -750,19 +752,21 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn it_includes_bands_in_result_descriptor() {
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
-            vec![MultiPointCollection::from_data(
-                MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
+            vec![
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    vec![TimeInterval::default(); 4],
+                    Default::default(),
+                    CacheHint::default(),
+                )
                 .unwrap(),
-                vec![TimeInterval::default(); 4],
-                Default::default(),
-                CacheHint::default(),
-            )
-            .unwrap()],
+            ],
             SpatialReference::from_str("EPSG:4326").unwrap(),
         )
         .boxed();

@@ -6,8 +6,8 @@ use super::tasks::TaskResponse;
 use crate::api::model::datatypes::ResamplingMethod;
 use crate::contexts::ApplicationContext;
 use crate::datasets::external::netcdfcf::{
-    error, EbvPortalDataProvider, NetCdfCf4DProviderError, OverviewGeneration, EBV_PROVIDER_ID,
-    NETCDF_CF_PROVIDER_ID,
+    EBV_PROVIDER_ID, EbvPortalDataProvider, NETCDF_CF_PROVIDER_ID, NetCdfCf4DProviderError,
+    OverviewGeneration, error,
 };
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
@@ -15,8 +15,8 @@ use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatu
 use crate::util::apidoc::OpenApiServerInfo;
 use crate::{contexts::SessionContext, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
-    web::{self, ServiceConfig},
     FromRequest, Responder,
+    web::{self, ServiceConfig},
 };
 use futures::channel::oneshot;
 use futures::lock::Mutex;
@@ -305,7 +305,9 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
                     }
                     TaskStatus::Running(_) => {
                         // must not happen, since we used the callback
-                        debug!("Ran into task status that must not happend: running/aborted after finish");
+                        debug!(
+                            "Ran into task status that must not happend: running/aborted after finish"
+                        );
                     }
                 }
             } else {
@@ -674,7 +676,7 @@ mod tests {
         util::server::{configure_extractors, render_404, render_405},
         util::tests::read_body_string,
     };
-    use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
+    use actix_web::{App, dev::ServiceResponse, http, http::header, middleware, test, web};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::gdal::hide_gdal_errors;
@@ -791,11 +793,12 @@ mod tests {
 
         assert!(is_empty(overview_folder.path()));
 
-        assert!(!ctx
-            .db()
-            .overviews_exist(provider_id, "dataset_m.nc")
-            .await
-            .unwrap());
+        assert!(
+            !ctx.db()
+                .overviews_exist(provider_id, "dataset_m.nc")
+                .await
+                .unwrap()
+        );
     }
 
     #[ge_context::test]

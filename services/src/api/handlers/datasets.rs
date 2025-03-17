@@ -2,21 +2,21 @@ use crate::{
     api::model::{
         operators::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
         responses::{
-            datasets::{errors::*, DatasetNameResponse},
             ErrorResponse,
+            datasets::{DatasetNameResponse, errors::*},
         },
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
             MetaDataSuggestion, Provenances, UpdateDataset, Volume,
         },
     },
-    config::{get_config_element, Data},
+    config::{Data, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
+        DatasetName,
         listing::{DatasetListOptions, DatasetListing, DatasetProvider},
         storage::{AutoCreateDataset, Dataset, DatasetStore, SuggestMetaData},
         upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, VolumeName, Volumes},
-        DatasetName,
     },
     error::{self, Error, Result},
     permissions::{Permission, PermissionDb, Role},
@@ -26,10 +26,10 @@ use crate::{
         path_with_base_path,
     },
 };
-use actix_web::{web, FromRequest, HttpResponse, HttpResponseBuilder, Responder};
+use actix_web::{FromRequest, HttpResponse, HttpResponseBuilder, Responder, web};
 use gdal::{
-    vector::{Layer, LayerAccess, OGRFieldType},
     DatasetOptions,
+    vector::{Layer, LayerAccess, OGRFieldType},
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
@@ -62,7 +62,6 @@ use utoipa::{ToResponse, ToSchema};
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext,
-
     C::Session: FromRequest,
 {
     cfg.service(
@@ -801,7 +800,7 @@ fn select_layer_from_dataset<'a>(
     dataset: &'a gdal::Dataset,
     layer_name: &Option<String>,
 ) -> Result<Layer<'a>> {
-    if let Some(ref layer_name) = layer_name {
+    if let Some(layer_name) = layer_name {
         dataset.layer_by_name(layer_name).map_err(|_| {
             crate::error::Error::DatasetInvalidLayerName {
                 layer_name: layer_name.clone(),
@@ -1372,14 +1371,14 @@ async fn create_system_dataset<C: ApplicationContext>(
 mod tests {
     use super::*;
     use crate::api::model::datatypes::NamedData;
-    use crate::api::model::responses::datasets::DatasetNameResponse;
     use crate::api::model::responses::IdResponse;
+    use crate::api::model::responses::datasets::DatasetNameResponse;
     use crate::api::model::services::{DatasetDefinition, Provenance};
     use crate::contexts::PostgresContext;
     use crate::contexts::{Session, SessionId};
+    use crate::datasets::DatasetIdAndName;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
-    use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
     use crate::ge_context;
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
@@ -1387,8 +1386,8 @@ mod tests {
     use crate::users::UserAuth;
     use crate::util::tests::admin_login;
     use crate::util::tests::{
-        add_file_definition_to_datasets, read_body_json, read_body_string, send_test_request,
-        MockQueryContext, SetMultipartBody, TestDataUploads,
+        MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
+        read_body_json, read_body_string, send_test_request,
     };
     use actix_web;
     use actix_web::http::header;
@@ -1409,7 +1408,7 @@ mod tests {
         OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
     };
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tokio_postgres::NoTls;
 
     #[ge_context::test]

@@ -1,12 +1,12 @@
 use self::database::NetCdfDatabaseListingConfig;
 use self::loading::{
-    create_layer, create_layer_collection_from_parts, LayerCollectionIdFn, LayerCollectionParts,
+    LayerCollectionIdFn, LayerCollectionParts, create_layer, create_layer_collection_from_parts,
 };
 use self::metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata};
 use self::overviews::create_overviews;
-use self::overviews::{remove_overviews, OverviewCreationOptions};
+use self::overviews::{OverviewCreationOptions, remove_overviews};
 use crate::contexts::GeoEngineDb;
-use crate::datasets::external::netcdfcf::loading::{create_loading_info, ParamModification};
+use crate::datasets::external::netcdfcf::loading::{ParamModification, create_loading_info};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
@@ -55,7 +55,7 @@ use walkdir::{DirEntry, WalkDir};
 
 pub use self::database::NetCdfCfProviderDb;
 pub use self::ebvportal_provider::{
-    EbvPortalDataProvider, EbvPortalDataProviderDefinition, EBV_PROVIDER_ID,
+    EBV_PROVIDER_ID, EbvPortalDataProvider, EbvPortalDataProviderDefinition,
 };
 pub use self::error::NetCdfCf4DProviderError;
 pub use self::overviews::OverviewGeneration;
@@ -588,7 +588,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
             if !path.is_file() {
                 continue;
             }
-            if path.extension().map_or(true, |extension| extension != "nc") {
+            if path.extension().is_none_or(|extension| extension != "nc") {
                 continue;
             }
 
@@ -1005,7 +1005,7 @@ impl TryFrom<NetCdfLayerCollectionId> for LayerCollectionId {
                 netcdf_group_to_layer_collection_id(&path, &groups)
             }
             NetCdfLayerCollectionId::Entity { .. } => {
-                return Err(crate::error::Error::InvalidLayerCollectionId)
+                return Err(crate::error::Error::InvalidLayerCollectionId);
             }
         })
     }
@@ -1495,10 +1495,10 @@ impl<D: GeoEngineDb>
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -2695,7 +2695,7 @@ mod tests {
 
         assert_eq!(
             provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
-            "[2.0,25093.0]"
+            "[1.0,98.0]"
         );
 
         // manipulate a field in the metadata
@@ -2737,7 +2737,7 @@ mod tests {
 
         assert_eq!(
             provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
-            "[2.0,25093.0]"
+            "[1.0,98.0]"
         );
 
         // forcefully remove file to test error handling

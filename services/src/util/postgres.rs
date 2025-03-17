@@ -1,4 +1,4 @@
-use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
+use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Config;
 

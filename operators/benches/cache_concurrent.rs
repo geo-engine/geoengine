@@ -17,8 +17,8 @@ use rand::rngs::SmallRng;
 use rand::{Rng, SeedableRng};
 use serde_json::json;
 use std::hint::black_box;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 static WRITTEN_ELEMENTS: AtomicUsize = AtomicUsize::new(0);
 
@@ -99,7 +99,7 @@ async fn read_cache(tile_cache: &SharedCache, op_no: usize) -> ReadMeasurement {
     // as it is not predictable which queries are already written, this means the benchmark may run differently each times
     let mut rng: SmallRng = SeedableRng::seed_from_u64(op_no as u64);
 
-    let op = op(rng.gen_range(0..WRITTEN_ELEMENTS.load(Ordering::SeqCst)));
+    let op = op(rng.random_range(0..WRITTEN_ELEMENTS.load(Ordering::SeqCst)));
 
     let query = query_rect();
 

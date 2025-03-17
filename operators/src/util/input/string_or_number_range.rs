@@ -1,8 +1,8 @@
 use std::{convert::TryFrom, ops::RangeInclusive};
 
 use crate::error;
-use crate::util::input::StringOrNumber;
 use crate::util::Result;
+use crate::util::input::StringOrNumber;
 use geoengine_datatypes::primitives::FeatureDataValue;
 use num_traits::AsPrimitive;
 use serde::de::{Error, SeqAccess, Visitor};
@@ -357,13 +357,17 @@ mod tests {
         );
         assert!(RangeInclusive::<String>::try_from(StringOrNumberRange::Int(42..=43)).is_err());
 
-        assert!(RangeInclusive::<i64>::try_from(StringOrNumberRange::String(
-            "foo".to_string()..="bar".to_string()
-        ))
-        .is_err());
-        assert!(RangeInclusive::<f64>::try_from(StringOrNumberRange::String(
-            "foo".to_string()..="bar".to_string()
-        ))
-        .is_err());
+        assert!(
+            RangeInclusive::<i64>::try_from(StringOrNumberRange::String(
+                "foo".to_string()..="bar".to_string()
+            ))
+            .is_err()
+        );
+        assert!(
+            RangeInclusive::<f64>::try_from(StringOrNumberRange::String(
+                "foo".to_string()..="bar".to_string()
+            ))
+            .is_err()
+        );
     }
 }

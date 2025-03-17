@@ -19,8 +19,8 @@ use geoengine_operators::{
         NeighborhoodParams,
     },
     source::{GdalSource, GdalSourceParameters},
-    util::gdal::add_ndvi_dataset,
     util::Result,
+    util::gdal::add_ndvi_dataset,
 };
 use std::sync::Arc;
 

@@ -1,7 +1,7 @@
 use utoipa::openapi::{
+    Components, HttpMethod, OpenApi, PathItem, Ref, RefOr, Response, Schema,
     path::Operation,
     schema::{AdditionalProperties, ArrayItems},
-    Components, HttpMethod, OpenApi, PathItem, Ref, RefOr, Response, Schema,
 };
 
 pub trait OpenapiVisitor {

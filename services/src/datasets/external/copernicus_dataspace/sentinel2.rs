@@ -18,8 +18,8 @@ use geoengine_operators::{
         GdalLoadingInfoTemporalSliceIterator,
     },
     util::{
-        gdal::{gdal_open_dataset_ex, gdal_parameters_from_dataset},
         TemporaryGdalThreadLocalConfigOptions,
+        gdal::{gdal_open_dataset_ex, gdal_parameters_from_dataset},
     },
 };
 
@@ -293,10 +293,9 @@ mod tests {
     };
     use geoengine_operators::source::{FileNotFoundHandling, GdalDatasetGeoTransform};
     use httptest::{
-        all_of,
+        Expectation, Server, all_of,
         matchers::{contains, request, url_decoded},
         responders::status_code,
-        Expectation, Server,
     };
 
     use crate::datasets::external::copernicus_dataspace::ids::{L2ABand, UtmZoneDirection};
@@ -440,12 +439,12 @@ mod tests {
              .unwrap();
 
         add_partial_responses(
-             &mock_server,
-             "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2",
-             &[(0, 16383)],
-             132_214_802,
-             b02_jp2_head_body,
-         );
+            &mock_server,
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2",
+            &[(0, 16383)],
+            132_214_802,
+            b02_jp2_head_body,
+        );
 
         // B08
         let b08_jp2_head_body = tokio::fs::read(test_data!(

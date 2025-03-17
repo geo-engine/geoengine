@@ -4,7 +4,7 @@ use crate::projects::project::{
 
 use async_trait::async_trait;
 
-use super::{error::ProjectDbError, LoadVersion, ProjectVersion};
+use super::{LoadVersion, ProjectVersion, error::ProjectDbError};
 
 /// Storage of user projects
 #[async_trait]

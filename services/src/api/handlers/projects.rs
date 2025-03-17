@@ -7,10 +7,10 @@ use crate::projects::{
     ProjectVersion, ProjectVersionId, UpdateProject,
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
-use actix_web::{web, FromRequest, HttpResponse, Responder, ResponseError};
+use actix_web::{FromRequest, HttpResponse, Responder, ResponseError, web};
 use geoengine_datatypes::util::helpers::ge_report;
-use snafu::prelude::*;
 use snafu::ResultExt;
+use snafu::prelude::*;
 use std::fmt;
 use strum::IntoStaticStr;
 
@@ -405,13 +405,13 @@ mod tests {
         ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
     };
     use crate::users::{UserAuth, UserSession};
+    use crate::util::Identifier;
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
-    use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
     use actix_web::dev::ServiceResponse;
-    use actix_web::{http::header, http::Method, test};
+    use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer};
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};

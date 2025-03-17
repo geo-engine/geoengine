@@ -1,7 +1,7 @@
 use clap::{Parser, Subcommand};
 use geoengine_services::cli::{
-    check_heartbeat, check_successful_startup, output_openapi_json, CheckSuccessfulStartup,
-    Heartbeat, OpenAPIGenerate,
+    CheckSuccessfulStartup, Heartbeat, OpenAPIGenerate, check_heartbeat, check_successful_startup,
+    output_openapi_json,
 };
 
 /// CLI for Geo Engine Utilities

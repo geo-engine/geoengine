@@ -1,7 +1,7 @@
 use super::{
-    grid_traits::{ChangeGridBounds, GridShapeAccess},
     GridBoundingBox, GridBounds, GridIdx, GridShape, GridShape1D, GridShape2D, GridShape3D,
     GridSize, GridSpaceToLinearSpace,
+    grid_traits::{ChangeGridBounds, GridShapeAccess},
 };
 use crate::util::{ByteSize, Result};
 use serde::{Deserialize, Serialize};

@@ -22,7 +22,7 @@ pub trait CoordinateProjection {
 
     /// project a set of coords
     fn project_coordinates<A: AsRef<[Coordinate2D]>>(&self, coords: A)
-        -> Result<Vec<Coordinate2D>>;
+    -> Result<Vec<Coordinate2D>>;
 
     fn source_srs(&self) -> SpatialReference;
 
@@ -38,7 +38,7 @@ pub struct CoordinateProjector {
 impl CoordinateProjection for CoordinateProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
         let p = Proj::new_known_crs(&from.proj_string()?, &to.proj_string()?, None)
-            .ok_or(error::Error::NoCoordinateProjector { from, to })?;
+            .map_err(|_| error::Error::NoCoordinateProjector { from, to })?;
         Ok(CoordinateProjector { from, to, p })
     }
 
@@ -504,8 +504,8 @@ mod tests {
     use crate::primitives::{BoundingBox2D, SpatialPartition2D};
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
-        COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
-        MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
+        MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
     };
     use float_cmp::approx_eq;
 

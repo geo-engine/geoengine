@@ -2,7 +2,7 @@ pub mod datasets;
 pub mod ml_models;
 
 use actix_http::StatusCode;
-use actix_web::{dev::ServiceResponse, HttpResponse};
+use actix_web::{HttpResponse, dev::ServiceResponse};
 use convert_case::{Converter, Pattern};
 use serde::{Deserialize, Serialize};
 use std::fmt;

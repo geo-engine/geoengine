@@ -1,12 +1,12 @@
-use crate::collections::{error, FeatureCollectionError, TypedFeatureCollection};
 use crate::collections::{FeatureCollection, VectorDataType};
+use crate::collections::{FeatureCollectionError, TypedFeatureCollection, error};
 use crate::primitives::CacheHint;
 use crate::primitives::{
     Coordinate2D, FeatureDataType, Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
     TimeInterval,
 };
-use crate::util::arrow::ArrowTyped;
 use crate::util::Result;
+use crate::util::arrow::ArrowTyped;
 use arrow::array::{
     ArrayData, ArrayRef, FixedSizeListArray, ListArray, PrimitiveArray, StructArray,
 };

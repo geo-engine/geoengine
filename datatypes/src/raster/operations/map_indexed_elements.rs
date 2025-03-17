@@ -685,11 +685,7 @@ mod tests {
         );
         let r2 = r1.map_indexed_elements(
             |idx: usize, p: Option<i32>| {
-                if p.is_some() {
-                    None
-                } else {
-                    Some(idx as i32)
-                }
+                if p.is_some() { None } else { Some(idx as i32) }
             },
         );
 
@@ -808,11 +804,7 @@ mod tests {
         let r2 =
             r1.map_indexed_elements_parallel(
                 |idx: usize, p: Option<i32>| {
-                    if p.is_some() {
-                        None
-                    } else {
-                        Some(idx as i32)
-                    }
+                    if p.is_some() { None } else { Some(idx as i32) }
                 },
             );
 

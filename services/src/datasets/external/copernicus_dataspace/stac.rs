@@ -151,7 +151,9 @@ pub async fn load_stac_items(
         // there may be more items available, so go to next page, if possible
 
         if page >= MAX_NUM_PAGES {
-            log::warn!("Copernicus Data Provider reached maximum number of pages of the STAC API and there may be more items available. This may lead to incomplete results. Try shorter queries.");
+            log::warn!(
+                "Copernicus Data Provider reached maximum number of pages of the STAC API and there may be more items available. This may lead to incomplete results. Try shorter queries."
+            );
             break;
         }
 

@@ -417,8 +417,7 @@ impl Iterator for DynamicGdalLoadingInfoPartIterator {
                             time: time_interval,
                             params: Some(loading_info_part_params),
                             cache_ttl: self.cache_ttl,
-                        })
-                        .map_err(Into::into);
+                        });
 
                     Some(loading_info_part)
                 } else {

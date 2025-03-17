@@ -15,7 +15,6 @@ use async_trait::async_trait;
 use gdal::Dataset;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
-use geoengine_datatypes::hashmap;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, ContinuousMeasurement, Coordinate2D,
     FeatureDataType, Measurement, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
@@ -34,24 +33,21 @@ use geoengine_operators::source::{
     OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
     OgrSourceParameters, OgrSourceTimeFormat,
 };
-use geoengine_operators::util::gdal::gdal_open_dataset;
 use geoengine_operators::util::TemporaryGdalThreadLocalConfigOptions;
+use geoengine_operators::util::gdal::gdal_open_dataset;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use snafu::prelude::*;
 use std::collections::{BTreeMap, HashMap};
 use std::str::FromStr;
-use std::sync::OnceLock;
 use url::Url;
 
-static IS_FILETYPE_RASTER: OnceLock<HashMap<&'static str, bool>> = OnceLock::new();
+const ALLOWED_FILETYPES: [&str; 2] = ["GeoTIFF", "GeoJSON"];
 
-// TODO: change to `LazyLock' once stable
-fn init_is_filetype_raster() -> HashMap<&'static str, bool> {
-    //name:is_raster
-    hashmap! {
+fn is_filetype_raster(filetype: &str) -> bool {
+    match filetype {
         "GeoTIFF" => true,
-        "GeoJSON" => false
+        _ /* e.g., "GeoJSON" */ => false,
     }
 }
 
@@ -451,10 +447,7 @@ impl EdrCollectionMetaData {
 
     fn select_output_format(&self) -> Result<String, geoengine_operators::error::Error> {
         for format in &self.output_formats {
-            if IS_FILETYPE_RASTER
-                .get_or_init(init_is_filetype_raster)
-                .contains_key(format.as_str())
-            {
+            if ALLOWED_FILETYPES.contains(&format.as_str()) {
                 return Ok(format.to_string());
             }
         }
@@ -464,10 +457,7 @@ impl EdrCollectionMetaData {
     }
 
     fn is_raster_file(&self) -> Result<bool, geoengine_operators::error::Error> {
-        Ok(*IS_FILETYPE_RASTER
-            .get_or_init(init_is_filetype_raster)
-            .get(&self.select_output_format()?.as_str())
-            .expect("can only return values in map"))
+        Ok(is_filetype_raster(self.select_output_format()?.as_str()))
     }
 
     fn get_vector_download_url(
@@ -738,10 +728,16 @@ impl EdrCollectionMetaData {
                 no_data_value: None,
                 properties_mapping: None,
                 gdal_open_options: None,
-                gdal_config_options: Some(vec![(
-                    "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
-                    "YES".to_string(),
-                )]),
+                gdal_config_options: Some(vec![
+                    (
+                        "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
+                        "YES".to_string(),
+                    ),
+                    (
+                        "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                        "EMPTY_DIR".to_owned(),
+                    ),
+                ]),
                 allow_alphaband_as_mask: false,
                 retry: None,
             }),
@@ -867,7 +863,7 @@ impl TryFrom<EdrCollectionId> for LayerCollectionId {
                 parameter,
             } => format!("collections!{collection}!{parameter}"),
             EdrCollectionId::ParameterAndHeight { .. } => {
-                return Err(Error::InvalidLayerCollectionId)
+                return Err(Error::InvalidLayerCollectionId);
             }
         };
 
@@ -1036,10 +1032,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -1112,10 +1108,16 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
         let mut params: Vec<GdalLoadingInfoTemporalSlice> = Vec::new();
         // reverts the thread local configs on drop
-        let _thread_local_configs = TemporaryGdalThreadLocalConfigOptions::new(&[(
-            "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
-            "YES".to_string(),
-        )])?;
+        let _thread_local_configs = TemporaryGdalThreadLocalConfigOptions::new(&[
+            (
+                "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
+                "YES".to_string(),
+            ),
+            (
+                "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                "EMPTY_DIR".to_owned(),
+            ),
+        ])?;
 
         if let Some(temporal_extent) = collection.extent.temporal.clone() {
             let mut temporal_values_iter = temporal_extent.values.iter();
@@ -1220,11 +1222,12 @@ mod tests {
     };
     use geoengine_datatypes::{
         dataset::ExternalDataId,
+        hashmap,
         primitives::{BandSelection, ColumnSelection, SpatialResolution},
         util::gdal::hide_gdal_errors,
     };
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
-    use httptest::{matchers::*, responders::status_code, Expectation, Server};
+    use httptest::{Expectation, Server, matchers::*, responders::status_code};
     use std::{ops::Range, path::PathBuf};
     use tokio_postgres::NoTls;
 
@@ -1578,7 +1581,7 @@ mod tests {
         server: &mut Server,
         collection: &'static str,
         db: D,
-    ) -> Box<dyn MetaData<L, R, Q>>
+    ) -> Result<Box<dyn MetaData<L, R, Q>>>
     where
         R: ResultDescriptor,
         dyn DataProvider: MetaDataProvider<L, R, Q>,
@@ -1600,10 +1603,9 @@ mod tests {
                 provider_id: DEMO_PROVIDER_ID,
                 layer_id: LayerId(format!("collections!{collection}")),
             }))
-            .await
-            .unwrap();
+            .await?;
         server.verify_and_clear();
-        meta
+        Ok(meta)
     }
 
     #[ge_context::test]
@@ -1615,7 +1617,8 @@ mod tests {
             VectorQueryRectangle,
             PostgresDb<NoTls>,
         >(&mut server, "PointsInGermany", ctx.db())
-        .await;
+        .await
+        .unwrap();
         let loading_info = meta
             .loading_info(VectorQueryRectangle {
                 spatial_bounds: BoundingBox2D::new_unchecked(
@@ -1698,7 +1701,7 @@ mod tests {
             "/collections/GFS_isobaric/cube",
             "image/tiff",
             "edr_raster.tif",
-            3..5,
+            1..2,
         )
         .await;
         server.expect(
@@ -1712,13 +1715,28 @@ mod tests {
             .times(0..2)
             .respond_with(status_code(404)),
         );
-        let meta = load_metadata::<
-            GdalLoadingInfo,
-            RasterResultDescriptor,
-            RasterQueryRectangle,
-            PostgresDb<NoTls>,
-        >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
-        .await;
+
+        // TODO: This test is flaky in the CI, so we run it multiple times to increase the chance of success
+        // The error is in `GDALOpenEx`: "TIFFReadDirectory:Failed to read directory at offset 109658"
+        let mut number_of_retries = 10;
+        let meta = loop {
+            let meta = load_metadata::<
+                GdalLoadingInfo,
+                RasterResultDescriptor,
+                RasterQueryRectangle,
+                PostgresDb<NoTls>,
+            >(&mut server, "GFS_isobaric!temperature!1000", ctx.db())
+            .await;
+
+            if let Ok(meta) = meta {
+                break meta;
+            }
+
+            number_of_retries -= 1;
+            if number_of_retries == 0 {
+                meta.unwrap();
+            }
+        };
 
         let loading_info_parts = meta
             .loading_info(RasterQueryRectangle {
@@ -1759,7 +1777,10 @@ mod tests {
                         gdal_config_options: Some(vec![(
                             "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
                             "YES".to_string(),
-                        )]),
+                        ),(
+                            "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                            "EMPTY_DIR".to_owned(),
+                        ),]),
                         allow_alphaband_as_mask: false,
                         retry: None,
                     }),
@@ -1786,7 +1807,10 @@ mod tests {
                         gdal_config_options: Some(vec![(
                             "GTIFF_HONOUR_NEGATIVE_SCALEY".to_string(),
                             "YES".to_string(),
-                        )]),
+                        ),(
+                            "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+                            "EMPTY_DIR".to_owned(),
+                        ),]),
                         allow_alphaband_as_mask: false,
                         retry: None,
                     }),

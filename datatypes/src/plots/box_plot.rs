@@ -62,7 +62,9 @@ impl BoxPlotAttribute {
         ensure!(
             min <= q1 && q1 <= median && median <= q3 && q3 <= max,
             error::Plot {
-                details: format!("Illegal box plot values. min: {min}, q1: {q1}, median: {median}, q3: {q3}, max: {max}")
+                details: format!(
+                    "Illegal box plot values. min: {min}, q1: {q1}, median: {median}, q3: {q3}, max: {max}"
+                )
             }
         );
 

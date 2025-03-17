@@ -1490,17 +1490,19 @@ mod tests {
             .unwrap()
         );
 
-        assert!(serde_json::from_value::<RasterBandDescriptors>(json!([{
-            "name": "foo",
-            "measurement": {
-                "type": "unitless"
-            }
-        },{
-            "name": "foo",
-            "measurement": {
-                "type": "unitless"
-            }
-        }]))
-        .is_err());
+        assert!(
+            serde_json::from_value::<RasterBandDescriptors>(json!([{
+                "name": "foo",
+                "measurement": {
+                    "type": "unitless"
+                }
+            },{
+                "name": "foo",
+                "measurement": {
+                    "type": "unitless"
+                }
+            }]))
+            .is_err()
+        );
     }
 }

@@ -7,8 +7,8 @@ use crate::error;
 use crate::machine_learning::error::{InputBandsMismatch, InputTypeMismatch, Ort};
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
@@ -17,7 +17,7 @@ use geoengine_datatypes::raster::{
 use ndarray::Array2;
 use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -167,14 +167,12 @@ impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
-    ort::value::Value: std::convert::TryFrom<
-        ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
-    >,
+    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>>,
     ort::Error: std::convert::From<
-        <ort::value::Value as std::convert::TryFrom<
-            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
-        >>::Error,
-    >,
+            <ort::value::Value as std::convert::TryFrom<
+                ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
+            >>::Error,
+        >,
 {
     type RasterType = TOut;
 
@@ -347,7 +345,7 @@ mod tests {
         test_data,
         util::test::TestDefault,
     };
-    use ndarray::{arr2, array, Array1, Array2};
+    use ndarray::{Array1, Array2, arr2, array};
 
     use super::*;
 

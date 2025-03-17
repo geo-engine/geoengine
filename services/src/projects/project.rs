@@ -1,5 +1,5 @@
-use crate::config::get_config_element;
 use crate::config::ProjectService;
+use crate::config::get_config_element;
 use crate::error::Result;
 use crate::identifier;
 use crate::projects::error::ProjectDbError;
@@ -666,28 +666,30 @@ mod tests {
 
     #[test]
     fn strectangle_serialization() {
-        assert!(serde_json::from_str::<STRectangle>(
-            &json!({
-                "spatialReference": "EPSG:4326",
-                "boundingBox": {
-                  "lowerLeftCoordinate": {
-                    "x": -180,
-                    "y": -90
-                  },
-                  "upperRightCoordinate": {
-                    "x": 180,
-                    "y": 90
+        assert!(
+            serde_json::from_str::<STRectangle>(
+                &json!({
+                    "spatialReference": "EPSG:4326",
+                    "boundingBox": {
+                      "lowerLeftCoordinate": {
+                        "x": -180,
+                        "y": -90
+                      },
+                      "upperRightCoordinate": {
+                        "x": 180,
+                        "y": 90
+                      }
+                    },
+                    "timeInterval": {
+                      "start": 0,
+                      "end": 0
+                    }
                   }
-                },
-                "timeInterval": {
-                  "start": 0,
-                  "end": 0
-                }
-              }
+                )
+                .to_string(),
             )
-            .to_string(),
-        )
-        .is_ok());
+            .is_ok()
+        );
     }
 
     #[test]

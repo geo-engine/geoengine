@@ -1,5 +1,5 @@
 use crate::util::Result;
-use futures::{ready, Stream};
+use futures::{Stream, ready};
 use geoengine_datatypes::{
     primitives::{
         CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
@@ -277,8 +277,11 @@ impl<T: Pixel> StateContainer<T> {
 
         if requested_start < first_tile_time.start() {
             log::debug!(
-                    "The initial tile starts ({}) after the requested start bound ({}), setting the current time to the data start bound ({}) --> filling", first_tile_time.start(), requested_start, start_data_bound
-                );
+                "The initial tile starts ({}) after the requested start bound ({}), setting the current time to the data start bound ({}) --> filling",
+                first_tile_time.start(),
+                requested_start,
+                start_data_bound
+            );
             self.current_time = Some(TimeInterval::new_unchecked(
                 start_data_bound,
                 first_tile_time.start(),
@@ -287,10 +290,10 @@ impl<T: Pixel> StateContainer<T> {
         }
         if start_data_bound > first_tile_time.start() {
             log::debug!(
-                    "The initial tile time start ({}) is before the exprected time bounds ({}). This means the data overflows the filler start bound.",
-                    first_tile_time.start(),
-                    start_data_bound
-                );
+                "The initial tile time start ({}) is before the exprected time bounds ({}). This means the data overflows the filler start bound.",
+                first_tile_time.start(),
+                start_data_bound
+            );
         }
         self.current_time = Some(first_tile_time);
     }
@@ -348,10 +351,10 @@ impl<T: Pixel> StateContainer<T> {
         }
         if current_time.end() > time_bounds_end {
             log::debug!(
-                    "The current time end ({}) is after the exprected time bounds ({}). This means the data overflows the filler end bound.",
-                    current_time.end(),
-                    time_bounds_end
-                );
+                "The current time end ({}) is after the exprected time bounds ({}). This means the data overflows the filler end bound.",
+                current_time.end(),
+                time_bounds_end
+            );
         }
 
         true
@@ -527,10 +530,10 @@ where
                         }
                         if tile.time.start() >= this.sc.requested_time_bounds.end() {
                             log::warn!(
-                                    "The tile time start ({}) is outside of the requested time bounds ({})!",
-                                    tile.time.start(),
-                                    this.sc.requested_time_bounds.end()
-                                );
+                                "The tile time start ({}) is outside of the requested time bounds ({})!",
+                                tile.time.start(),
+                                this.sc.requested_time_bounds.end()
+                            );
                         }
 
                         // 1. b) This is a new grid run but the time is not increased
@@ -861,7 +864,7 @@ impl From<FillerTileCacheExpirationStrategy> for FillerTileCacheHintProvider {
 
 #[cfg(test)]
 mod tests {
-    use futures::{stream, StreamExt};
+    use futures::{StreamExt, stream};
     use geoengine_datatypes::{
         primitives::{CacheHint, TimeInterval},
         raster::Grid,

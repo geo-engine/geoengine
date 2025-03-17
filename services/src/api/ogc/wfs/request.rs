@@ -1,6 +1,6 @@
 use crate::api::model::datatypes::TimeInterval;
 use crate::api::ogc::util::{
-    parse_ogc_bbox, parse_time_option, parse_wfs_resolution_option, OgcBoundingBox,
+    OgcBoundingBox, parse_ogc_bbox, parse_time_option, parse_wfs_resolution_option,
 };
 use crate::util::from_str_option;
 use geoengine_datatypes::primitives::SpatialResolution;
