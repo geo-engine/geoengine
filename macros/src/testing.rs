@@ -1,8 +1,8 @@
-use crate::{util::parse_config_args, Result};
+use crate::{Result, util::parse_config_args};
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use std::collections::HashMap;
-use syn::{parse::Parser, punctuated::Punctuated, FnArg, Ident, ItemFn, Lit, Pat, TypePath};
+use syn::{FnArg, Ident, ItemFn, Lit, Pat, TypePath, punctuated::Punctuated};
 
 pub type AttributeArgs = syn::punctuated::Punctuated<syn::Meta, syn::Token![,]>;
 pub type ConfigArgs = HashMap<String, Lit>;

@@ -9,12 +9,12 @@ use actix_web_httpauth::headers::authorization::Bearer;
 use std::collections::HashMap;
 use std::future::Future;
 use tokio_postgres::NoTls;
+use utoipa::PartialSchema;
 use utoipa::openapi::path::{Parameter, ParameterIn};
 use utoipa::openapi::schema::SchemaType;
 use utoipa::openapi::{
     Components, HttpMethod, KnownFormat, OpenApi, RefOr, Schema, SchemaFormat, Type,
 };
-use utoipa::PartialSchema;
 use uuid::Uuid;
 
 use super::openapi_visitor::operations_from_path;
@@ -286,7 +286,6 @@ mod tests {
     use actix_web::{App, HttpResponse, Responder, http, middleware, post, web};
     use serde::Deserialize;
     use serde_json::json;
-    use utoipa::ToSchema;
     use utoipa::openapi::path::{OperationBuilder, ParameterBuilder, PathItemBuilder};
     use utoipa::openapi::request_body::RequestBodyBuilder;
     use utoipa::openapi::{

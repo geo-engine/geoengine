@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 use utoipa::{
     Modify,
-    openapi::{Discriminator, OneOfBuilder, Ref, RefOr, Schema},
     openapi::{RefOr, Schema},
 };
 

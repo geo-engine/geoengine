@@ -42,7 +42,7 @@ pub fn visit_schema<T: OpenapiVisitor>(
                     visit_schema(property, components, visitor, source_location);
                 }
                 if let Some(additional_properties) = &obj.additional_properties {
-                    if let AdditionalProperties::RefOr(ref properties_schema) =
+                    if let AdditionalProperties::RefOr(properties_schema) =
                         additional_properties.as_ref()
                     {
                         visit_schema(properties_schema, components, visitor, source_location);
@@ -167,7 +167,7 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
 
             for response in operation.responses.responses.values() {
                 match response {
-                    RefOr::Ref(ref reference) => {
+                    RefOr::Ref(reference) => {
                         visit_reference(reference, components, visitor, source_location);
                     }
                     RefOr::T(concrete) => {
