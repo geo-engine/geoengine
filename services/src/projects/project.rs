@@ -570,8 +570,8 @@ impl ToSchema for Delete {
 
 impl PartialSchema for Delete {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
-        use utoipa::openapi::schema::{SchemaType, Type};
         use utoipa::openapi::ObjectBuilder;
+        use utoipa::openapi::schema::{SchemaType, Type};
         ObjectBuilder::new()
             .schema_type(SchemaType::Type(Type::String))
             .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))

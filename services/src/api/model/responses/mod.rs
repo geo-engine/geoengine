@@ -6,7 +6,7 @@ use actix_web::{HttpResponse, dev::ServiceResponse};
 use convert_case::{Converter, Pattern};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use utoipa::{openapi::schema::SchemaType, ToResponse, ToSchema};
+use utoipa::{ToResponse, ToSchema, openapi::schema::SchemaType};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct IdResponse<T> {
@@ -260,8 +260,8 @@ mod bytes_fix {
     use super::*;
     use std::marker::PhantomData;
     use utoipa::{
-        openapi::{ContentBuilder, RefOr, Response, ResponseBuilder},
         PartialSchema,
+        openapi::{ContentBuilder, RefOr, Response, ResponseBuilder},
     };
 
     #[derive(ToSchema)]

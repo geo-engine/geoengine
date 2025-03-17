@@ -6,8 +6,8 @@ use crate::util::from_str_option;
 use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
-use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
 use utoipa::openapi::Type;
+use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
 use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]

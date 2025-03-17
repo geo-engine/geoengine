@@ -1081,7 +1081,8 @@ async fn listing_from_dir(
         }
 
         if entry.path().is_dir() {
-            items.push(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id,
                     collection_id: NetCdfLayerCollectionId::Path {
@@ -1113,7 +1114,8 @@ async fn listing_from_dir(
             })
             .await??;
 
-            items.push(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id,
                     collection_id: NetCdfLayerCollectionId::Path {

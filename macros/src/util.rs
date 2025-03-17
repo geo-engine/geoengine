@@ -1,7 +1,7 @@
-use crate::{testing::AttributeArgs, Result};
+use crate::{Result, testing::AttributeArgs};
 use proc_macro2::TokenStream;
 use std::collections::HashMap;
-use syn::{parse::Parser, Lit};
+use syn::{Lit, parse::Parser};
 
 pub fn parse_config_args(attr: TokenStream) -> Result<HashMap<String, Lit>> {
     let inputs = AttributeArgs::parse_terminated.parse2(attr)?;

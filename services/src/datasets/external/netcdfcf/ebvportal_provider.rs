@@ -257,7 +257,8 @@ impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .map(|c| {
-                Ok(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                Ok(CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: EBV_PROVIDER_ID,
                         collection_id: EbvCollectionId::Class {
@@ -305,7 +306,8 @@ impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .map(|ebv| {
-                Ok(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                Ok(CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: EBV_PROVIDER_ID,
                         collection_id: EbvCollectionId::Ebv {
@@ -349,7 +351,8 @@ impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .map(|d| {
-                Ok(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                Ok(CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: EBV_PROVIDER_ID,
                         collection_id: EbvCollectionId::Dataset {
@@ -889,7 +892,8 @@ mod tests {
                 name: "EBV Portal".to_string(),
                 description: "EbvPortalProviderDefinition".to_string(),
                 items: vec![
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -903,7 +907,8 @@ mod tests {
                         description: String::new(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -917,7 +922,8 @@ mod tests {
                         description: String::new(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -929,7 +935,8 @@ mod tests {
                         description: String::new(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -1028,7 +1035,8 @@ mod tests {
                 name: "Ecosystem functioning".to_string(),
                 description: String::new(),
                 items: vec![
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -1042,7 +1050,8 @@ mod tests {
                         description: String::new(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"

@@ -218,7 +218,8 @@ impl EdrDataProvider {
                         properties: vec![],
                     }))
                 } else {
-                    Ok(CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    Ok(CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: EdrCollectionId::Collection {
@@ -275,7 +276,8 @@ impl EdrDataProvider {
                         properties: vec![],
                     }))
                 } else {
-                    Ok(CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    Ok(CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: EdrCollectionId::ParameterOrHeight {
@@ -320,7 +322,8 @@ impl EdrDataProvider {
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .map(|height| {
-                Ok(CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                Ok(CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: EdrCollectionId::ParameterOrHeight {
@@ -365,7 +368,8 @@ impl EdrDataProvider {
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .map(|height| {
-                Ok(CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                Ok(CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: EdrCollectionId::ParameterAndHeight {
@@ -1377,7 +1381,8 @@ mod tests {
                         description: String::new(),
                         properties: vec![],
                     }),
-                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId("collections!PointsInGermany".to_string())
@@ -1458,7 +1463,8 @@ mod tests {
                 name: "PointsInFrance".to_owned(),
                 description: "Height selection of PointsInFrance".to_owned(),
                 items: vec![
-                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId("collections!PointsInFrance!0\\10cm".to_string())
@@ -1467,7 +1473,8 @@ mod tests {
                         description: String::new(),
                         properties: vec![],
                     }),
-                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId("collections!PointsInFrance!10\\40cm".to_string())
@@ -1508,7 +1515,8 @@ mod tests {
                 name: "GFS_isobaric".to_owned(),
                 description: "Height selection of GFS_isobaric".to_owned(),
                 items: vec![
-                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId(
@@ -1519,7 +1527,8 @@ mod tests {
                         description: String::new(),
                         properties: vec![],
                     }),
-                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId(

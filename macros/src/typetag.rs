@@ -1,7 +1,7 @@
-use crate::{util::parse_config_args, Result};
+use crate::{Result, util::parse_config_args};
 use proc_macro2::TokenStream;
 use quote::quote;
-use syn::{parse2, parse_quote, spanned::Spanned, DeriveInput, Field, FieldMutability, Ident, Lit};
+use syn::{DeriveInput, Field, FieldMutability, Ident, Lit, parse_quote, parse2, spanned::Spanned};
 
 const DEFAULT_DISCRIMINATOR: &str = "type";
 

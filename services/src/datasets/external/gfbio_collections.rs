@@ -384,7 +384,8 @@ impl GfbioCollectionsDataProvider {
             LayerStatus::Unavailable
         };
 
-        Ok(CollectionItem::Layer(LayerListing { r#type: Default::default(),
+        Ok(CollectionItem::Layer(LayerListing {
+            r#type: Default::default(),
             id: ProviderLayerId {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                 layer_id: GfBioCollectionId::AbcdLayer {
@@ -408,7 +409,8 @@ impl GfbioCollectionsDataProvider {
             LayerStatus::Unavailable
         };
 
-        CollectionItem::Layer(LayerListing { r#type: Default::default(),
+        CollectionItem::Layer(LayerListing {
+            r#type: Default::default(),
             id: ProviderLayerId {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                 layer_id: GfBioCollectionId::PangaeaLayer {

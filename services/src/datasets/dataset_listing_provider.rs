@@ -195,7 +195,8 @@ where
         datasets
             .iter()
             .map(|d| {
-                CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: LayerId(d.id.to_string()),

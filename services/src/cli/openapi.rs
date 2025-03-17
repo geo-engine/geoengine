@@ -18,15 +18,17 @@ fn _output_openapi_json() -> Result<(), anyhow::Error> {
     let mut spec = ApiDoc::openapi();
 
     // make server a wildcard
-    spec.servers = Some(vec![utoipa::openapi::ServerBuilder::new()
-        .url("{server}/api")
-        .parameter(
-            "server",
-            utoipa::openapi::ServerVariableBuilder::new()
-                .default_value("https://geoengine.io")
-                .build(),
-        )
-        .build()]);
+    spec.servers = Some(vec![
+        utoipa::openapi::ServerBuilder::new()
+            .url("{server}/api")
+            .parameter(
+                "server",
+                utoipa::openapi::ServerVariableBuilder::new()
+                    .default_value("https://geoengine.io")
+                    .build(),
+            )
+            .build(),
+    ]);
 
     println!("{}", serde_json::to_string_pretty(&spec)?);
 

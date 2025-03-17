@@ -837,7 +837,8 @@ impl LayerCollectionProvider for ArunaDataProvider {
             .await?
             .into_iter()
             .map(|col| {
-                CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: LayerId(col.id),

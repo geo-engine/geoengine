@@ -326,7 +326,8 @@ impl GbifDataProvider {
                 let canonicalname = row.get::<usize, String>(0);
                 let num_points = row.get::<usize, i64>(1);
 
-                CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
                         layer_id: LayerId(taxonrank.clone() + "/" + canonicalname.as_str()),
@@ -415,7 +416,8 @@ impl GbifDataProvider {
                 let name = row.get::<usize, String>(1);
                 let rank = row.get::<usize, String>(2);
 
-                CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
                         layer_id: LayerId(rank.clone() + "/" + name.as_str()),
@@ -527,7 +529,8 @@ impl GbifDataProvider {
                 let new_path = GbifDataProvider::extend_path((*path).to_string(), &name);
                 let new_id = "select/".to_string() + &new_path;
 
-                CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: GBIF_PROVIDER_ID,
                         collection_id: LayerCollectionId(new_id),
@@ -556,7 +559,8 @@ impl GbifDataProvider {
                 let new_path = GbifDataProvider::extend_path((*path).to_string(), &name);
                 let new_id = "select/".to_string() + &new_path;
 
-                CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: GBIF_PROVIDER_ID,
                         collection_id: LayerCollectionId(new_id),
@@ -642,7 +646,8 @@ impl GbifDataProvider {
         let mut items = vec![];
 
         if !GbifDataProvider::LEVELS[6..].contains(&level_name.as_str()) {
-            items.push(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id: GBIF_PROVIDER_ID,
                     collection_id: LayerCollectionId("filter/".to_string() + path),
@@ -653,7 +658,8 @@ impl GbifDataProvider {
             }));
         }
         if !GbifDataProvider::LEVELS[5..].contains(&level_name.as_str()) {
-            items.push(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id: GBIF_PROVIDER_ID,
                     collection_id: LayerCollectionId("datasets/family/".to_string() + path),
@@ -664,7 +670,8 @@ impl GbifDataProvider {
             }));
         }
         if !GbifDataProvider::LEVELS[6..].contains(&level_name.as_str()) {
-            items.push(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+            items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id: GBIF_PROVIDER_ID,
                     collection_id: LayerCollectionId("datasets/genus/".to_string() + path),
@@ -674,7 +681,8 @@ impl GbifDataProvider {
                 properties: Default::default(),
             }));
         }
-        items.push(CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+        items.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: GBIF_PROVIDER_ID,
                 collection_id: LayerCollectionId("datasets/species/".to_string() + path),
@@ -1614,7 +1622,8 @@ mod tests {
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
                 items: vec![
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
                             collection_id: LayerCollectionId("filter/".to_string()),
@@ -1623,7 +1632,8 @@ mod tests {
                         description: "Refine the current filter".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
                             collection_id: LayerCollectionId("datasets/family/".to_string()),
@@ -1632,7 +1642,8 @@ mod tests {
                         description: "Apply the current filter".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
                             collection_id: LayerCollectionId("datasets/genus/".to_string()),
@@ -1641,7 +1652,8 @@ mod tests {
                         description: "Apply the current filter".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
                             collection_id: LayerCollectionId("datasets/species/".to_string()),
@@ -1699,7 +1711,8 @@ mod tests {
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
                 items: vec![
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -1710,7 +1723,8 @@ mod tests {
                         description: "Refine the current filter".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -1721,7 +1735,8 @@ mod tests {
                         description: "Apply the current filter".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -1732,7 +1747,8 @@ mod tests {
                         description: "Apply the current filter".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                    CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: GBIF_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -1897,7 +1913,8 @@ mod tests {
                 },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                items: vec![CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
                         layer_id: LayerId("family/Limoniidae".to_string()),
@@ -2005,7 +2022,8 @@ mod tests {
                 },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: GBIF_PROVIDER_ID,
                         collection_id: LayerCollectionId("select/Animalia".to_string()),
@@ -3698,7 +3716,8 @@ mod tests {
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
                 items: vec![
-                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GBIF_PROVIDER_ID,
                             layer_id: LayerId("family/Limoniidae".to_string()),
@@ -3707,7 +3726,8 @@ mod tests {
                         description: "Family, 3 occurrences".to_string(),
                         properties: vec![]
                     }),
-                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GBIF_PROVIDER_ID,
                             layer_id: LayerId("genus/Rhipidia".to_string()),
@@ -3716,7 +3736,8 @@ mod tests {
                         description: "Genus, 3 occurrences".to_string(),
                         properties: vec![]
                     }),
-                    CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GBIF_PROVIDER_ID,
                             layer_id: LayerId("species/Rhipidia willistoniana".to_string()),
@@ -3865,7 +3886,8 @@ mod tests {
                 },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: GBIF_PROVIDER_ID,
                         collection_id: LayerCollectionId("select/Animalia".to_string()),
@@ -3929,7 +3951,8 @@ mod tests {
                 },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: GBIF_PROVIDER_ID,
                         collection_id: LayerCollectionId("select/Animalia".to_string()),
@@ -4100,7 +4123,8 @@ mod tests {
                 },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: GBIF_PROVIDER_ID,
                         collection_id: LayerCollectionId("select/Animalia/Arthropoda".to_string()),
@@ -4164,7 +4188,8 @@ mod tests {
                 },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
+                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: GBIF_PROVIDER_ID,
                         collection_id: LayerCollectionId("select/Animalia/Arthropoda".to_string()),
@@ -4335,7 +4360,8 @@ mod tests {
                 },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                items: vec![CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
                         layer_id: LayerId("family/Limoniidae".to_string()),
@@ -4399,7 +4425,8 @@ mod tests {
                 },
                 name: "GBIF".to_string(),
                 description: "GBIF occurrence datasets".to_string(),
-                items: vec![CollectionItem::Layer(LayerListing { r#type: Default::default(),
+                items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GBIF_PROVIDER_ID,
                         layer_id: LayerId("family/Limoniidae".to_string()),
