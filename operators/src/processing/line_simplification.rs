@@ -458,6 +458,8 @@ mod tests {
                 sources: MockFeatureCollectionSource::<MultiPolygon>::single(
                     MultiPolygonCollection::empty()
                 )
+                .boxed()
+                .into(),
             }
             .boxed()
             .initialize(
@@ -478,6 +480,8 @@ mod tests {
                 sources: MockFeatureCollectionSource::<MultiPoint>::single(
                     MultiPointCollection::empty()
                 )
+                .boxed()
+                .into(),
             }
             .boxed()
             .initialize(

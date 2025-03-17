@@ -1,7 +1,6 @@
 use crate::api::model::datatypes::RasterQueryRectangle;
 use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
-use crate::datasets::AddDataset;
 use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};

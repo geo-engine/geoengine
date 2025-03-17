@@ -1252,6 +1252,7 @@ mod tests {
     };
     use geoengine_datatypes::{
         dataset::ExternalDataId,
+        hashmap,
         primitives::{BandSelection, ColumnSelection},
         raster::GridBoundingBox2D,
         util::gdal::hide_gdal_errors,

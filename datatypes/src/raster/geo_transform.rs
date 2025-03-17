@@ -6,6 +6,7 @@ use crate::{
     util::test::TestDefault,
 };
 use float_cmp::{ApproxEq, F64Margin, approx_eq};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Deserializer, Serialize, de};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.

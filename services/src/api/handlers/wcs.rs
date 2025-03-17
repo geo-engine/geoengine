@@ -482,6 +482,9 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::raster::GridShape2D;
     use geoengine_datatypes::raster::TilingSpecification;
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::ImageFormat;
+    use geoengine_datatypes::util::assert_image_equals_with_format;
     use tokio_postgres::NoTls;
 
     fn tiling_spec() -> TilingSpecification {

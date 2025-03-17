@@ -972,7 +972,11 @@ mod tests {
         BandSelection, CacheHint, DateTime, Duration, TimeInterval,
     };
     use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::util::{
+        ImageFormat, assert_image_equals, assert_image_equals_with_format,
+    };
 
     use super::*;
 

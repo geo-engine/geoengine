@@ -1,4 +1,5 @@
 use super::DatasetName;
+use super::storage::MetaDataDefinition;
 use crate::api::model::operators::TypedResultDescriptor;
 use crate::config::{DatasetService, get_config_element};
 use crate::datasets::storage::{Dataset, validate_tags};

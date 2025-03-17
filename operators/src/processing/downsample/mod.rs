@@ -23,7 +23,7 @@ use geoengine_datatypes::raster::{
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::{Snafu, ensure};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
@@ -239,11 +239,11 @@ where
 impl<Q, P> QueryProcessor for DownsampleProcessor<Q, P>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialQuery = RasterSpatialQueryRectangle,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
@@ -437,7 +437,7 @@ pub fn create_accu<T: Pixel>(
     _query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     _tiling_specification: TilingSpecification,
-) -> impl Future<Output = Result<DownsampleAccu<T>>> {
+) -> impl Future<Output = Result<DownsampleAccu<T>>> + use<T> {
     crate::util::spawn_blocking(move || {
         DownsampleAccu::new(
             tile_info,

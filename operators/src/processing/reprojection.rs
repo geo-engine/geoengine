@@ -703,7 +703,6 @@ mod tests {
         GeoTransform, GridBoundingBox2D, GridShape2D, GridSize, SpatialGridDefinition,
         TilesEqualIgnoringCacheHint,
     };
-    use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::{
         collections::{
             GeometryCollection, MultiLineStringCollection, MultiPointCollection,

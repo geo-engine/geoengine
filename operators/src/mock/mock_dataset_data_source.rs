@@ -192,7 +192,6 @@ mod tests {
     use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection};
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
     async fn test() {

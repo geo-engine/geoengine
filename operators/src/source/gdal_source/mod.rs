@@ -30,6 +30,7 @@ use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
+use geoengine_datatypes::primitives::SpatialGridQueryRectangle;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
@@ -532,14 +533,14 @@ impl GdalRasterLoader {
     /// A stream of futures producing `RasterTile2D` for a single slice in time
     ///
     fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-        spatial_bounds: SpatialPartition2D,
+        spatial_query: SpatialGridQueryRectangle,
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
         reader_mode: GdalReaderMode,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
         stream::iter(
             tiling_strategy
-                .tile_information_iterator_from_grid_bounds(query.spatial_query().grid_bounds())
+                .tile_information_iterator_from_grid_bounds(spatial_query.grid_bounds())
                 .map(move |tile| {
                     GdalRasterLoader::load_tile_async(
                         info.params.clone(),
@@ -557,14 +558,14 @@ impl GdalRasterLoader {
         S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>>,
     >(
         loading_info_stream: S,
-        query: &RasterQueryRectangle,
+        spatial_query: SpatialGridQueryRectangle,
         tiling_strategy: TilingStrategy,
         reader_mode: GdalReaderMode,
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> + use<S, T> {
         loading_info_stream
             .map_ok(move |info| {
                 GdalRasterLoader::temporal_slice_tile_future_stream(
-                    &query,
+                    spatial_query,
                     info,
                     tiling_strategy,
                     reader_mode,
@@ -737,7 +738,7 @@ where
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             source_stream,
-            query.clone(),
+            query.spatial_query(),
             tiling_strategy,
             reader_mode,
         );
@@ -1268,6 +1269,7 @@ mod tests {
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::test_data;
     use crate::util::Result;
+    use crate::util::gdal::add_ndvi_dataset;
     use float_cmp::assert_approx_eq;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{
@@ -1387,9 +1389,7 @@ mod tests {
         assert_eq!(
             operator,
             GdalSource {
-                params: GdalSourceParameters {
-                    data: NamedData::with_namespaced_name("ns", "dataset"),
-                },
+                params: GdalSourceParameters::new(NamedData::with_namespaced_name("ns", "dataset")),
             }
         );
     }

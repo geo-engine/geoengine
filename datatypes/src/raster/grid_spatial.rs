@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     operations::reproject::{
-        suggest_output_spatial_grid_like_gdal, CoordinateProjection, Reproject, ReprojectClipped,
+        CoordinateProjection, Reproject, ReprojectClipped, suggest_output_spatial_grid_like_gdal,
     },
     primitives::{
         AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned,

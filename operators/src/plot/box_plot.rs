@@ -1,15 +1,14 @@
-use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
-    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-    WorkflowOperatorPath,
+use crate::{
+    engine::{
+        CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+        InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
+        PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+        TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+        WorkflowOperatorPath,
+    },
+    error::{self, Error},
+    util::{Result, input::MultiRasterOrVectorOperator, statistics::PSquareQuantileEstimator},
 };
-use crate::error::{self, Error};
-use crate::util::Result;
-use crate::util::Result;
-use crate::util::input::MultiRasterOrVectorOperator;
-use crate::util::statistics::PSquareQuantileEstimator;
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;

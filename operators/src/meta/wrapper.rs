@@ -8,6 +8,7 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{Level, span};

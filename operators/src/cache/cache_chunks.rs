@@ -182,7 +182,7 @@ where
             .is_none_or(|tb| tb.intersects(&query.time_interval));
 
         // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
-        let spatial_hit = self.spatial_bounds.map_or(true, |sb| {
+        let spatial_hit = self.spatial_bounds.is_none_or(|sb| {
             sb.intersects_bbox(&query.spatial_query.spatial_bounds)
         });
 

@@ -84,8 +84,8 @@ pub enum SpatialGridDescriptorState {
 }
 
 impl SpatialGridDescriptorState {
-    pub fn merge(&self, other: Self) -> Self {
-        match (*self, other) {
+    pub fn merge(self, other: Self) -> Self {
+        match (self, other) {
             (SpatialGridDescriptorState::Source, SpatialGridDescriptorState::Source) => {
                 SpatialGridDescriptorState::Source
             }
@@ -93,11 +93,11 @@ impl SpatialGridDescriptorState {
         }
     }
 
-    pub fn is_source(&self) -> bool {
-        *self == SpatialGridDescriptorState::Source
+    pub fn is_source(self) -> bool {
+        self == SpatialGridDescriptorState::Source
     }
 
-    pub fn is_derived(&self) -> bool {
+    pub fn is_derived(self) -> bool {
         !self.is_source()
     }
 }

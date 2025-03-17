@@ -27,7 +27,6 @@ use geoengine_datatypes::{
 };
 use num;
 use rayon::ThreadPool;
-use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::{ParallelSlice, ParallelSliceMut};
 use tracing::debug;

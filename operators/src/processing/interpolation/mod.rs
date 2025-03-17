@@ -483,7 +483,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     _tiling_specification: TilingSpecification,
-) -> impl Future<Output = Result<InterpolationAccu<T, I>>> {
+) -> impl Future<Output = Result<InterpolationAccu<T, I>>> + use<T, I> {
     let query_rect = query_rect.clone();
 
     // create an accumulator as a single tile that fits all the input tiles
