@@ -12,6 +12,7 @@ use crate::{
         listing::LayerCollectionId,
     },
     projects::RasterSymbology,
+    util::sentinel_2_utm_zones::UtmZone,
     workflows::workflow::Workflow,
 };
 use async_trait::async_trait;
@@ -44,7 +45,6 @@ use super::{
     ids::{
         CopernicusDataId, CopernicusDataspaceLayerCollectionId, CopernicusDataspaceLayerId,
         Sentinel2LayerCollectionId, Sentinel2LayerId, Sentinel2Product, Sentinel2ProductBand,
-        UtmZone,
     },
     sentinel2::Sentinel2Metadata,
 };

@@ -2062,6 +2062,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn read_up_side_down_raster() {
         let up_side_down_params = GdalDatasetParameters {
             file_path: test_data!(

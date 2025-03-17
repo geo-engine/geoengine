@@ -1,8 +1,6 @@
 use geoengine_datatypes::{
     dataset::{DataId, DataProviderId, ExternalDataId, LayerId, NamedData},
-    primitives::SpatialPartition2D,
     raster::RasterDataType,
-    spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use std::str::FromStr;
 use strum::IntoEnumIterator;
@@ -11,6 +9,7 @@ use strum_macros::{EnumIter, EnumString};
 use crate::{
     error::{Error, Result},
     layers::listing::LayerCollectionId,
+    util::sentinel_2_utm_zones::UtmZone,
 };
 
 #[derive(Debug, Clone)]
@@ -143,18 +142,6 @@ pub enum L2ABand {
     SCL_60M,
     SNW_60M,
     WVP_60M,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub struct UtmZone {
-    pub zone: u8,
-    pub direction: UtmZoneDirection,
-}
-
-#[derive(Debug, Clone, Copy)]
-pub enum UtmZoneDirection {
-    North,
-    South,
 }
 
 impl Sentinel2ProductBand {
@@ -334,28 +321,6 @@ impl Sentinel2Band for Sentinel2ProductBand {
     }
 }
 
-impl UtmZone {
-    pub fn epsg_code(self) -> u32 {
-        match self.direction {
-            UtmZoneDirection::North => 32600 + u32::from(self.zone),
-            UtmZoneDirection::South => 32700 + u32::from(self.zone),
-        }
-    }
-
-    pub fn spatial_reference(self) -> SpatialReference {
-        SpatialReference::new(SpatialReferenceAuthority::Epsg, self.epsg_code())
-    }
-
-    pub fn extent(self) -> Option<SpatialPartition2D> {
-        // TODO: as Sentinel uses enlarged grids, we could return a larger extent
-        self.spatial_reference().area_of_use().ok()
-    }
-
-    pub fn native_extent(self) -> Option<SpatialPartition2D> {
-        self.spatial_reference().area_of_use_projected().ok()
-    }
-}
-
 impl FromStr for CopernicusDataspaceLayerCollectionId {
     type Err = crate::error::Error;
 
@@ -484,7 +449,7 @@ impl FromStr for Sentinel2LayerCollectionId {
             [product, zone] => Self::ProductZone {
                 product: Sentinel2Product::from_str(product)
                     .map_err(|_| Error::InvalidLayerCollectionId)?,
-                zone: UtmZone::from_str(zone)?,
+                zone: UtmZone::from_str(zone).map_err(|_| Error::InvalidLayerCollectionId)?,
             },
             _ => return Err(Error::InvalidLayerCollectionId),
         })
@@ -533,7 +498,7 @@ impl FromStr for Sentinel2LayerId {
             [product, zone, band] => Self {
                 product_band: Sentinel2ProductBand::with_product_and_band_as_str(product, band)
                     .map_err(|_| Error::InvalidLayerId)?,
-                zone: UtmZone::from_str(zone)?,
+                zone: UtmZone::from_str(zone).map_err(|_| Error::InvalidLayerId)?,
             },
             _ => return Err(Error::InvalidLayerId),
         })
@@ -563,65 +528,6 @@ impl From<Sentinel2DataId> for DataId {
                 id.0.zone,
                 id.0.product_band.band_name()
             )),
-        })
-    }
-}
-
-impl FromStr for UtmZone {
-    type Err = crate::error::Error;
-
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        if s.len() < 5 || &s[..3] != "UTM" {
-            return Err(Error::InvalidLayerCollectionId);
-        }
-
-        let (zone_str, dir_char) = s[3..].split_at(s.len() - 4);
-        let zone = zone_str
-            .parse::<u8>()
-            .map_err(|_| Error::InvalidLayerCollectionId)?;
-
-        // TODO: check if zone is in valid range
-
-        let north = match dir_char {
-            "N" => UtmZoneDirection::North,
-            "S" => UtmZoneDirection::South,
-            _ => return Err(Error::InvalidLayerCollectionId),
-        };
-
-        Ok(Self {
-            zone,
-            direction: north,
-        })
-    }
-}
-
-impl std::fmt::Display for UtmZone {
-    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            f,
-            "UTM{}{}",
-            self.zone,
-            match self.direction {
-                UtmZoneDirection::North => "N",
-                UtmZoneDirection::South => "S",
-            }
-        )
-    }
-}
-
-impl UtmZone {
-    pub fn zones() -> impl Iterator<Item = Self> {
-        (1..=60).flat_map(|zone| {
-            vec![
-                UtmZone {
-                    zone,
-                    direction: UtmZoneDirection::North,
-                },
-                UtmZone {
-                    zone,
-                    direction: UtmZoneDirection::South,
-                },
-            ]
         })
     }
 }

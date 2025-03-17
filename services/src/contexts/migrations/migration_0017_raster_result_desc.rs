@@ -20,6 +20,9 @@ impl Migration for Migration0017RasterResultDesc {
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
+        tx.batch_execute(include_str!("migration_0017_remove_stack_zone_band.sql"))
+            .await?;
+
         tx.batch_execute(include_str!("migration_0017_raster_result_desc.sql"))
             .await?;
         Ok(())

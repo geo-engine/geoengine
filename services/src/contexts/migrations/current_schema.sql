@@ -610,17 +610,6 @@ CREATE TYPE "DatasetLayerListingProviderDefinition" AS (
     collections "DatasetLayerListingCollection" [],
     priority smallint
 );
-CREATE TYPE "StacBand" AS (
-    "name" text,
-    no_data_value double precision,
-    data_type "RasterDataType",
-    pixel_size double precision
-);
-CREATE TYPE "StacZone" AS (
-    "name" text,
-    epsg oid,
-    global_native_bounds "SpatialPartition2D"
-);
 CREATE TYPE "StacApiRetries" AS (
     number_of_retries bigint,
     initial_delay_ms bigint,
@@ -635,8 +624,6 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     "name" text,
     id uuid,
     api_url text,
-    bands "StacBand" [],
-    zones "StacZone" [],
     stac_api_retries "StacApiRetries",
     gdal_retries "GdalRetries",
     cache_ttl int,

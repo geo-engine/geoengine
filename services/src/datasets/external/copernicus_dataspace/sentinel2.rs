@@ -1,7 +1,10 @@
 use std::path::PathBuf;
 
-use crate::datasets::external::copernicus_dataspace::stac::{
-    load_stac_items, resolve_datetime_duplicates,
+use crate::{
+    datasets::external::copernicus_dataspace::stac::{
+        load_stac_items, resolve_datetime_duplicates,
+    },
+    util::sentinel_2_utm_zones::UtmZone,
 };
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::{
@@ -29,7 +32,7 @@ use snafu::{ResultExt, Snafu};
 use url::Url;
 
 use super::{
-    ids::{Sentinel2Band, Sentinel2ProductBand, UtmZone},
+    ids::{Sentinel2Band, Sentinel2ProductBand},
     stac::{CopernicusStacError, StacItemExt},
 };
 
@@ -242,10 +245,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         &self,
         query: RasterQueryRectangle,
     ) -> geoengine_operators::util::Result<GdalLoadingInfo> {
-        let utm_extent = self
-            .zone
-            .native_extent()
-            .expect("UTM zone must have bounds"); // TODO throw an error here
+        let utm_extent = self.zone.native_extent();
         let px_size = self.product_band.resolution_meters() as f64;
         let geo_transform = GeoTransform::new(utm_extent.upper_left(), px_size, -px_size);
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
@@ -273,10 +273,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
-        let utm_extent = self
-            .zone
-            .native_extent()
-            .expect("UTM zone must have bounds"); // TODO throw an error here
+        let utm_extent = self.zone.native_extent();
         let px_size = self.product_band.resolution_meters() as f64;
         let geo_transform = GeoTransform::new(utm_extent.upper_left(), px_size, -px_size);
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
@@ -317,7 +314,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::datasets::external::copernicus_dataspace::ids::{L2ABand, UtmZoneDirection};
+    use crate::{
+        datasets::external::copernicus_dataspace::ids::L2ABand,
+        util::sentinel_2_utm_zones::UtmZoneDirection,
+    };
     use geoengine_datatypes::{
         primitives::{Coordinate2D, DateTime, SpatialPartition2D},
         test_data,

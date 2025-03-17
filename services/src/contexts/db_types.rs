@@ -1167,16 +1167,12 @@ delegate_from_to_sql!(
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        dataset::DataProviderId,
-        primitives::{CacheTtlSeconds, SpatialPartition2D},
-        util::Identifier,
+        dataset::DataProviderId, primitives::CacheTtlSeconds, util::Identifier,
     };
 
     use super::*;
     use crate::{
-        datasets::external::{
-            SentinelS2L2ACogsProviderDefinition, StacBand, StacQueryBuffer, StacZone,
-        },
+        datasets::external::{SentinelS2L2ACogsProviderDefinition, StacQueryBuffer},
         layers::external::TypedDataProviderDefinition,
         util::{postgres::assert_sql_type, tests::with_temp_context},
     };
@@ -1209,32 +1205,6 @@ mod tests {
 
             assert_sql_type(
                 &pool,
-                "StacBand",
-                [StacBand {
-                    name: "band".to_owned(),
-                    no_data_value: Some(133.7),
-                    data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                    pixel_size: 10.0,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "StacZone",
-                [StacZone {
-                    name: "zone".to_owned(),
-                    epsg: 4326,
-                    global_native_bounds: SpatialPartition2D::new_unchecked(
-                        (-180., 90.).into(),
-                        (180., -90.).into(),
-                    ),
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
                 "SentinelS2L2ACogsProviderDefinition",
                 [SentinelS2L2ACogsProviderDefinition {
                     name: "foo".to_owned(),
@@ -1242,20 +1212,6 @@ mod tests {
                     description: "A provider".to_owned(),
                     priority: Some(1),
                     api_url: "http://api.url".to_owned(),
-                    bands: vec![StacBand {
-                        name: "band".to_owned(),
-                        no_data_value: Some(133.7),
-                        data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                        pixel_size: 10.0,
-                    }],
-                    zones: vec![StacZone {
-                        name: "zone".to_owned(),
-                        epsg: 4326,
-                        global_native_bounds: SpatialPartition2D::new_unchecked(
-                            (-180., 90.).into(),
-                            (180., -90.).into(),
-                        ),
-                    }],
                     stac_api_retries: StacApiRetries {
                         number_of_retries: 3,
                         initial_delay_ms: 4,
@@ -1314,20 +1270,6 @@ mod tests {
                             priority: Some(3),
                             id: DataProviderId::new(),
                             api_url: "http://api.url".to_owned(),
-                            bands: vec![StacBand {
-                                name: "band".to_owned(),
-                                no_data_value: Some(133.7),
-                                data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                                pixel_size: 10.,
-                            }],
-                            zones: vec![StacZone {
-                                name: "zone".to_owned(),
-                                epsg: 4326,
-                                global_native_bounds: SpatialPartition2D::new_unchecked(
-                                    (-180., 90.).into(),
-                                    (180., -90.).into(),
-                                ),
-                            }],
                             stac_api_retries: StacApiRetries {
                                 number_of_retries: 3,
                                 initial_delay_ms: 4,

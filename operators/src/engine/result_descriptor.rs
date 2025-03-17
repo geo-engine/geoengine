@@ -76,7 +76,6 @@ pub trait ResultDescriptor: Clone + Serialize {
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
-
 pub enum SpatialGridDescriptorState {
     /// The spatial grid represents a native dataset
     Source,

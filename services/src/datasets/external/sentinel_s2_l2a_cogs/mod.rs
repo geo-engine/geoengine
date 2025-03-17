@@ -12,6 +12,7 @@ use crate::layers::listing::{
 use crate::projects::{RasterSymbology, Symbology};
 use crate::stac::{Feature as StacFeature, FeatureCollection as StacCollection, StacAsset};
 use crate::util::operators::source_operator_from_dataset;
+use crate::util::sentinel_2_utm_zones::UtmZone;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
@@ -19,11 +20,11 @@ use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
 use geoengine_datatypes::operations::reproject::{
     CoordinateProjection, CoordinateProjector, Reproject,
 };
-use geoengine_datatypes::primitives::{AxisAlignedRectangle, CacheTtlSeconds, SpatialPartition2D};
+use geoengine_datatypes::primitives::{AxisAlignedRectangle, CacheTtlSeconds};
 use geoengine_datatypes::primitives::{
     DateTime, Duration, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{GeoTransform, RasterDataType, SpatialGridDefinition};
+use geoengine_datatypes::raster::{GeoTransform, SpatialGridDefinition};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
@@ -39,6 +40,7 @@ use geoengine_operators::util::retry::retry;
 use log::debug;
 use postgres_types::{FromSql, ToSql};
 use reqwest::Client;
+use sentinel_2_l2a_bands::{ImageProduct, ImageProductpec};
 use serde::{Deserialize, Serialize};
 use snafu::{ensure, ResultExt};
 use std::collections::HashMap;
@@ -47,7 +49,27 @@ use std::fmt::Debug;
 use std::ops::Neg;
 use std::path::PathBuf;
 
+mod sentinel_2_l2a_bands;
+
 static STAC_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
+static ELEMENT_84_STAC_SENTINEL2_L2A_PRODUCTS: &[ImageProduct] = &[
+    ImageProduct::B01,
+    ImageProduct::B02,
+    ImageProduct::B03,
+    ImageProduct::B04,
+    ImageProduct::B05,
+    ImageProduct::B06,
+    ImageProduct::B07,
+    ImageProduct::B08,
+    ImageProduct::B8A,
+    ImageProduct::B09,
+    ImageProduct::B10,
+    ImageProduct::B11,
+    ImageProduct::B12,
+    ImageProduct::AOT,
+    ImageProduct::WVP,
+    ImageProduct::SCL,
+];
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
@@ -57,8 +79,6 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     pub description: String,
     pub priority: Option<i16>,
     pub api_url: String,
-    pub bands: Vec<StacBand>,
-    pub zones: Vec<StacZone>,
     #[serde(default)]
     pub stac_api_retries: StacApiRetries,
     #[serde(default)]
@@ -129,8 +149,6 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for SentinelS2L2ACogsProviderDefi
             self.name,
             self.description,
             self.api_url,
-            &self.bands,
-            &self.zones,
             self.stac_api_retries,
             self.gdal_retries,
             self.cache_ttl,
@@ -155,27 +173,10 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for SentinelS2L2ACogsProviderDefi
     }
 }
 
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
-pub struct StacBand {
-    pub name: String,
-    pub no_data_value: Option<f64>,
-    pub data_type: RasterDataType,
-    pub pixel_size: f64,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
-pub struct StacZone {
-    pub name: String,
-    pub epsg: u32,
-    pub global_native_bounds: SpatialPartition2D,
-}
-
 #[derive(Debug, Clone, PartialEq)]
 pub struct SentinelDataset {
-    band: StacBand,
-    zone: StacZone,
+    band: ImageProduct,
+    zone: UtmZone,
     listing: Layer,
 }
 
@@ -205,8 +206,6 @@ impl SentinelS2L2aCogsDataProvider {
         name: String,
         description: String,
         api_url: String,
-        bands: &[StacBand],
-        zones: &[StacZone],
         stac_api_retries: StacApiRetries,
         gdal_retries: GdalRetries,
         cache_ttl: CacheTtlSeconds,
@@ -217,7 +216,7 @@ impl SentinelS2L2aCogsDataProvider {
             name,
             description,
             api_url,
-            datasets: Self::create_datasets(&id, bands, zones),
+            datasets: Self::create_datasets(&id),
             stac_api_retries,
             gdal_retries,
             cache_ttl,
@@ -225,22 +224,19 @@ impl SentinelS2L2aCogsDataProvider {
         }
     }
 
-    fn create_datasets(
-        id: &DataProviderId,
-        bands: &[StacBand],
-        zones: &[StacZone],
-    ) -> HashMap<LayerId, SentinelDataset> {
-        zones
-            .iter()
+    fn create_datasets(id: &DataProviderId) -> HashMap<LayerId, SentinelDataset> {
+        UtmZone::zones()
             .flat_map(|zone| {
-                bands.iter().map(move |band| {
-                    let layer_id = LayerId(format!("{}:{}", zone.name, band.name));
-                    let listing = Layer {
+                ELEMENT_84_STAC_SENTINEL2_L2A_PRODUCTS
+                    .iter()
+                    .map(move |band| {
+                        let layer_id = LayerId(format!("{}:{}", zone, band.name()));
+                        let listing = Layer {
                         id: ProviderLayerId {
                             provider_id: *id,
                             layer_id: layer_id.clone(),
                         },
-                        name: format!("Sentinel S2 L2A COGS {}:{}", zone.name, band.name),
+                        name: format!("Sentinel S2 L2A COGS {}:{} ({})", zone, band.long_name(), band.name()),
                         description: String::new(),
                         workflow: Workflow {
                             operator: source_operator_from_dataset(
@@ -276,14 +272,14 @@ impl SentinelS2L2aCogsDataProvider {
                         metadata: HashMap::new(),
                     };
 
-                    let dataset = SentinelDataset {
-                        zone: zone.clone(),
-                        band: band.clone(),
-                        listing,
-                    };
+                        let dataset = SentinelDataset {
+                            zone,
+                            band: *band,
+                            listing,
+                        };
 
-                    (layer_id, dataset)
-                })
+                        (layer_id, dataset)
+                    })
             })
             .collect()
     }
@@ -397,8 +393,8 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
 #[derive(Debug, Clone)]
 pub struct SentinelS2L2aCogsMetaData {
     api_url: String,
-    zone: StacZone,
-    band: StacBand,
+    zone: UtmZone,
+    band: ImageProduct,
     stac_api_retries: StacApiRetries,
     gdal_retries: GdalRetries,
     cache_ttl: CacheTtlSeconds,
@@ -437,7 +433,7 @@ impl SentinelS2L2aCogsMetaData {
             .filter(|f| {
                 f.properties
                     .proj_epsg
-                    .is_some_and(|epsg| epsg == self.zone.epsg)
+                    .is_some_and(|epsg| epsg == self.zone.epsg_code())
             })
             .collect();
 
@@ -540,16 +536,16 @@ impl SentinelS2L2aCogsMetaData {
                     time_interval,
                     feature
                         .assets
-                        .get(&self.band.name)
+                        .get(self.band.name())
                         .map_or(&"n/a".to_string(), |a| &a.href)
                 );
 
                 let asset =
                     feature
                         .assets
-                        .get(&self.band.name)
+                        .get(self.band.name())
                         .ok_or(error::Error::StacNoSuchBand {
-                            band_name: self.band.name.clone(),
+                            band_name: self.band.name().to_owned(),
                         })?;
 
                 parts.push(self.create_loading_info_part(time_interval, asset, self.cache_ttl)?);
@@ -623,7 +619,7 @@ impl SentinelS2L2aCogsMetaData {
                 width: stac_shape_x as usize,
                 height: stac_shape_y as usize,
                 file_not_found_handling: geoengine_operators::source::FileNotFoundHandling::NoData,
-                no_data_value: self.band.no_data_value,
+                no_data_value: self.band.no_data_value(),
                 properties_mapping: None,
                 gdal_open_options: None,
                 gdal_config_options: Some(vec![
@@ -661,10 +657,10 @@ impl SentinelS2L2aCogsMetaData {
         let t_end = t_end + Duration::seconds(self.stac_query_buffer.end_seconds);
 
         let native_spatial_ref =
-            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg);
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg_code());
         let epsg_4326_ref = SpatialReference::epsg_4326();
         let projector = CoordinateProjector::from_known_srs(native_spatial_ref, epsg_4326_ref)?;
-        let native_bounds = self.zone.global_native_bounds;
+        let native_bounds = self.zone.native_extent();
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile
         let bbox = native_bounds
@@ -804,18 +800,18 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
         let geo_transform = GeoTransform::new(
-            self.zone.global_native_bounds.upper_left(),
-            self.band.pixel_size,
-            self.band.pixel_size.neg(),
+            self.zone.native_extent().upper_left(),
+            self.band.resolution_m(),
+            self.band.resolution_m().neg(),
         );
-        let grid_bounds = geo_transform.spatial_to_grid_bounds(&self.zone.global_native_bounds);
+        let grid_bounds = geo_transform.spatial_to_grid_bounds(&self.zone.native_extent());
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
         Ok(RasterResultDescriptor {
-            data_type: self.band.data_type,
+            data_type: self.band.data_type(),
             spatial_reference: SpatialReference::new(
                 SpatialReferenceAuthority::Epsg,
-                self.zone.epsg,
+                self.zone.epsg_code(),
             )
             .into(),
             time: None,
@@ -857,8 +853,8 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
 
         Ok(Box::new(SentinelS2L2aCogsMetaData {
             api_url: self.api_url.clone(),
-            zone: dataset.zone.clone(),
-            band: dataset.band.clone(),
+            zone: dataset.zone,
+            band: dataset.band,
             stac_api_retries: self.stac_api_retries,
             gdal_retries: self.gdal_retries,
             cache_ttl: self.cache_ttl,
@@ -1208,7 +1204,8 @@ mod tests {
             responders::status_code(206)
                 .append_header("Content-Type", "application/json")
                 .body(
-                    include_bytes!("../../../../test_data/stac_responses/cog-header.bin").to_vec(),
+                    include_bytes!("../../../../../test_data/stac_responses/cog-header.bin")
+                        .to_vec(),
                 )
                 .append_header(
                     "x-amz-id-2",
@@ -1276,7 +1273,7 @@ mod tests {
                     .append_header("Content-Type", "application/json")
                     .body(
                         include_bytes!(
-                            "../../../../test_data/stac_responses/cog-tile.bin"
+                            "../../../../../test_data/stac_responses/cog-tile.bin"
                         )[0..2]
                         .to_vec()
                     ).append_header(
@@ -1301,7 +1298,7 @@ mod tests {
                     .append_header("Content-Type", "application/json")
                     .body(
                         include_bytes!(
-                            "../../../../test_data/stac_responses/cog-tile.bin"
+                            "../../../../../test_data/stac_responses/cog-tile.bin"
                         )
                         .to_vec()
                     ).append_header(
@@ -1333,20 +1330,6 @@ mod tests {
                 description: "Access to Sentinel 2 L2A COGs on AWS".into(),
                 priority: Some(22),
                 api_url: server.url_str("/v0/collections/sentinel-s2-l2a-cogs/items"),
-                bands: vec![StacBand {
-                    name: "B04".into(),
-                    no_data_value: Some(0.),
-                    data_type: RasterDataType::U16,
-                    pixel_size: 10.0,
-                }],
-                zones: vec![StacZone {
-                    name: "UTM36S".into(),
-                    epsg: 32736,
-                    global_native_bounds: SpatialPartition2D::new_unchecked(
-                        (199_980.0, 10_000_000.0).into(),
-                        (909_780.0, 690_220.).into(),
-                    ),
-                }],
                 stac_api_retries: Default::default(),
                 gdal_retries: GdalRetries {
                     number_of_retries: 999,
