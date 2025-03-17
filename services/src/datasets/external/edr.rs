@@ -1228,6 +1228,7 @@ mod tests {
     use geoengine_operators::{engine::ResultDescriptor, source::GdalDatasetGeoTransform};
     use httptest::{Expectation, Server, matchers::*, responders::status_code};
     use std::{ops::Range, path::PathBuf};
+    use tokio::time::{Duration, sleep};
     use tokio_postgres::NoTls;
 
     const DEMO_PROVIDER_ID: DataProviderId =
@@ -1684,7 +1685,7 @@ mod tests {
         );
     }
 
-    #[ge_context::test]
+    #[ge_context::test(test_execution = "serial")]
     #[allow(clippy::too_many_lines, clippy::used_underscore_items)]
     async fn generate_gdal_metadata(ctx: PostgresSessionContext<NoTls>) {
         /// TODO: This test is flaky in the CI, so we run it multiple times to increase the chance of success
@@ -1697,7 +1698,7 @@ mod tests {
                 "/collections/GFS_isobaric/cube",
                 "image/tiff",
                 "edr_raster.tif",
-                1..2,
+                1..5,
             )
             .await;
             server.expect(
@@ -1830,7 +1831,7 @@ mod tests {
         let number_of_retries = 10;
         let mut result = Ok(());
 
-        for _ in 0..number_of_retries {
+        for i in 1..=number_of_retries {
             let ctx = ctx.clone();
             result = async move {
                 // AssertUnwindSafe moved to the future
@@ -1843,6 +1844,8 @@ mod tests {
             if result.is_ok() {
                 break;
             }
+
+            sleep(Duration::from_millis(i * 100)).await;
         }
 
         result.unwrap();
