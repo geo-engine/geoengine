@@ -1,6 +1,6 @@
 use super::{
-    database_migration::{DatabaseVersion, Migration},
     Migration0015LogQuota,
+    database_migration::{DatabaseVersion, Migration},
 };
 use crate::error::Result;
 use async_trait::async_trait;
@@ -31,7 +31,7 @@ mod tests {
     use crate::contexts::migrations::all_migrations;
     use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{config::get_config_element, contexts::migrate_database};
-    use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+    use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
     use tokio_postgres::NoTls;
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]

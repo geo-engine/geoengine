@@ -1,21 +1,21 @@
 use super::{
-    build_netcdf_tree, database::InProgressFlag, error, gdal_netcdf_open, metadata::DataRange,
-    NetCdfCf4DProviderError, NetCdfCfProviderDb, NetCdfOverview, TimeCoverage,
+    NetCdfCf4DProviderError, NetCdfCfProviderDb, NetCdfOverview, TimeCoverage, build_netcdf_tree,
+    database::InProgressFlag, error, gdal_netcdf_open, metadata::DataRange,
 };
 use crate::{
     config::get_config_element,
-    datasets::external::netcdfcf::loading::{create_loading_info, ParamModification},
+    datasets::external::netcdfcf::loading::{ParamModification, create_loading_info},
     tasks::{TaskContext, TaskStatusInfo},
     util::path_with_base_path,
 };
 use gdal::{
+    Dataset,
     cpl::CslStringList,
     errors::GdalError,
     programs::raster::{
-        multi_dim_translate, MultiDimTranslateDestination, MultiDimTranslateOptions,
+        MultiDimTranslateDestination, MultiDimTranslateOptions, multi_dim_translate,
     },
     raster::{Group, RasterCreationOptions},
-    Dataset,
 };
 use geoengine_datatypes::{
     dataset::DataProviderId, error::BoxedResultExt, primitives::TimeInstance,
@@ -763,8 +763,8 @@ pub async fn remove_overviews<D: NetCdfCfProviderDb + 'static + std::fmt::Debug>
 mod tests {
     use super::*;
     use crate::contexts::{PostgresDb, PostgresSessionContext};
-    use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
+    use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
@@ -919,15 +919,21 @@ mod tests {
 
         for metric in ["metric_1", "metric_2"] {
             for entity in 0..3 {
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2000-01-01T00:00:00.000Z.tiff"))
-                    .exists());
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2001-01-01T00:00:00.000Z.tiff"))
-                    .exists());
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2002-01-01T00:00:00.000Z.tiff"))
-                    .exists());
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2000-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2001-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2002-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
             }
         }
     }
@@ -962,15 +968,21 @@ mod tests {
 
         for metric in ["metric_1", "metric_2"] {
             for entity in 0..3 {
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/1900-01-01T00:00:00.000Z.tiff"))
-                    .exists());
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2015-01-01T00:00:00.000Z.tiff"))
-                    .exists());
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2055-01-01T00:00:00.000Z.tiff"))
-                    .exists());
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/1900-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2015-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2055-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
             }
         }
 
@@ -1098,13 +1110,14 @@ mod tests {
 
         let db = Arc::new(ctx.db());
 
-        assert!(!db
-            .overviews_exist(
+        assert!(
+            !db.overviews_exist(
                 NETCDF_CF_PROVIDER_ID,
                 dataset_path.to_string_lossy().as_ref()
             )
             .await
-            .unwrap());
+            .unwrap()
+        );
 
         create_overviews(
             NopTaskContext,
@@ -1135,12 +1148,13 @@ mod tests {
 
         assert!(is_empty(overview_folder.path()));
 
-        assert!(!db
-            .overviews_exist(
+        assert!(
+            !db.overviews_exist(
                 NETCDF_CF_PROVIDER_ID,
                 dataset_path.to_string_lossy().as_ref()
             )
             .await
-            .unwrap());
+            .unwrap()
+        );
     }
 }

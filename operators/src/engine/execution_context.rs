@@ -11,7 +11,7 @@ use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
-use crate::util::{create_rayon_thread_pool, Result};
+use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};

@@ -398,7 +398,7 @@ impl From<CopernicusDataId> for NamedData {
         match id.0 {
             CopernicusDataspaceLayerId::Sentinel2(sentinel2) => NamedData {
                 namespace: None,
-                provider: Some(id.1 .0.to_string()),
+                provider: Some(id.1.0.to_string()),
                 name: format!("datasets/{sentinel2}"),
             },
         }

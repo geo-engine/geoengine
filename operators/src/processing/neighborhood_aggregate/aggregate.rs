@@ -1,4 +1,4 @@
-use super::{error, NeighborhoodAggregateError};
+use super::{NeighborhoodAggregateError, error};
 use crate::util::number_statistics::NumberStatistics;
 use geoengine_datatypes::raster::{Grid2D, GridShape2D, GridSize, Pixel};
 use num::Integer;

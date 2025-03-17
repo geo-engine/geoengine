@@ -288,7 +288,7 @@ mod tests {
         plots::PlotMetaData,
         primitives::{BoundingBox2D, DateTime, FeatureData, MultiPoint, TimeInterval},
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]

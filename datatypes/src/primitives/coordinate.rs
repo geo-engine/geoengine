@@ -1,4 +1,4 @@
-use crate::util::arrow::{padded_buffer_size, ArrowTyped};
+use crate::util::arrow::{ArrowTyped, padded_buffer_size};
 use arrow::array::{ArrayBuilder, BooleanArray, Float64Array, Float64Builder};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;

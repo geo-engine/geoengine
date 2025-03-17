@@ -1,8 +1,8 @@
 use super::masked_grid::MaskedGrid;
 use super::{
-    grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D,
-    GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster,
-    TileInformation,
+    GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D, GridIndexAccess, GridShape,
+    GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster, TileInformation,
+    grid_or_empty::GridOrEmpty,
 };
 use super::{
     BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,

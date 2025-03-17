@@ -18,7 +18,7 @@ use geoengine_datatypes::{
         GeometryCollection, IntoGeometryIterator,
     },
     primitives::{Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry},
-    util::{arrow::ArrowTyped, ByteSize},
+    util::{ByteSize, arrow::ArrowTyped},
 };
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -179,7 +179,7 @@ where
         // If the chunk has no time bounds it must be empty so we can skip the temporal check and return true.
         let temporal_hit = self
             .time_interval
-            .map_or(true, |tb| tb.intersects(&query.time_interval));
+            .is_none_or(|tb| tb.intersects(&query.time_interval));
 
         // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
         let spatial_hit = self.spatial_bounds.map_or(true, |sb| {
@@ -320,10 +320,10 @@ impl<G> CacheElement for FeatureCollection<G>
 where
     G: Geometry + ArrowTyped + 'static,
     CompressedFeatureCollection<G>: CacheBackendElementExt<
-        Query = VectorQueryRectangle,
-        LandingZoneContainer = LandingZoneQueryFeatures,
-        CacheContainer = CachedFeatures,
-    >,
+            Query = VectorQueryRectangle,
+            LandingZoneContainer = LandingZoneQueryFeatures,
+            CacheContainer = CachedFeatures,
+        >,
     FeatureCollection<G>: ByteSize + CacheElementSpatialBounds,
 {
     type StoredCacheElement = CompressedFeatureCollection<G>;

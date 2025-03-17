@@ -3,8 +3,8 @@
 
 use super::{AttributeFilter, CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
 use crate::error::{self};
-use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
+use crate::util::gdal::gdal_open_dataset_ex;
 use gdal::vector::sql::Dialect;
 use gdal::vector::{Feature, LayerAccess};
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};

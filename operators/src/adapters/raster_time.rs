@@ -1,9 +1,8 @@
 use crate::engine::{QueryContext, RasterQueryProcessor};
-use crate::util::stream_zip::StreamArrayZip;
 use crate::util::Result;
+use crate::util::stream_zip::StreamArrayZip;
 use futures::future::{self, BoxFuture, Join, JoinAll};
 use futures::stream::{BoxStream, FusedStream, Zip};
-use futures::{ready, StreamExt};
 use futures::{Future, Stream};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{

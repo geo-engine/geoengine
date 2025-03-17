@@ -1,27 +1,30 @@
 use super::util::{CoveredPixels, FeatureTimeSpanIter, PixelCoverCreator};
-use super::{create_feature_aggregator, FeatureAggregationMethod, RasterInput};
-use crate::engine::{
-    QueryContext, QueryProcessor, RasterQueryProcessor, VectorQueryProcessor,
-    VectorResultDescriptor,
+use super::{FeatureAggregationMethod, RasterInput, create_feature_aggregator};
+use crate::{
+    engine::{
+        QueryContext, QueryProcessor, RasterQueryProcessor, VectorQueryProcessor,
+        VectorResultDescriptor,
+    },
+    processing::raster_vector_join::{
+        TemporalAggregationMethod,
+        aggregator::{
+            Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
+            TypedAggregator,
+        },
+    },
+    util::Result,
 };
-use crate::processing::raster_vector_join::aggregator::{
-    Aggregator, FirstValueFloatAggregator, FirstValueIntAggregator, MeanValueAggregator,
-    TypedAggregator,
-};
-use crate::processing::raster_vector_join::TemporalAggregationMethod;
-use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
-use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::collections::{
-    FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
+use futures::{StreamExt, TryStreamExt, stream::BoxStream};
+use geoengine_datatypes::{
+    collections::{FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications},
+    primitives::{
+        BandSelection, CacheHint, ColumnSelection, Geometry, RasterQueryRectangle, SpatialBounded,
+        VectorQueryRectangle, VectorSpatialQueryRectangle,
+    },
+    raster::{GridIndexAccess, Pixel, RasterDataType},
+    util::arrow::ArrowTyped,
 };
-use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, ColumnSelection, Geometry, RasterQueryRectangle, SpatialBounded,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
-};
-use geoengine_datatypes::raster::{GridIndexAccess, Pixel, RasterDataType};
-use geoengine_datatypes::util::arrow::ArrowTyped;
 
 pub struct RasterVectorAggregateJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
@@ -744,13 +747,15 @@ mod tests {
             .unwrap();
 
         let polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.5, -0.5).into(),
-                (4., -1.).into(),
-                (0.5, -2.5).into(),
-                (0.5, -0.5).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.5, -0.5).into(),
+                    (4., -1.).into(),
+                    (0.5, -2.5).into(),
+                    (0.5, -0.5).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::new(0, 20).unwrap(); 1],
             Default::default(),
             CacheHint::default(),
@@ -995,13 +1000,15 @@ mod tests {
             .unwrap();
 
         let polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.5, -0.5).into(),
-                (4., -1.).into(),
-                (0.5, -2.5).into(),
-                (0.5, -0.5).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.5, -0.5).into(),
+                    (4., -1.).into(),
+                    (0.5, -2.5).into(),
+                    (0.5, -0.5).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::new(0, 20).unwrap(); 1],
             Default::default(),
             CacheHint::default(),
@@ -1065,36 +1072,38 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPolygonCollection::from_slices(
-                &[MultiPolygon::new(vec![vec![vec![
-                    (0.5, -0.5).into(),
-                    (4., -1.).into(),
-                    (0.5, -2.5).into(),
-                    (0.5, -0.5).into(),
-                ]]])
-                .unwrap(),],
-                &[TimeInterval::new(0, 20).unwrap()],
-                &[
-                    (
-                        "foo",
-                        FeatureData::Float(vec![
-                            (((3. + 1. + 40. + 30. + 400.) / 5.)
-                                + ((4. + 6. + 30. + 40. + 300.) / 5.))
-                                / 2.
-                        ])
-                    ),
-                    (
-                        "foo_1",
-                        FeatureData::Float(vec![
-                            (((251. + 249. + 140. + 130. + 410.) / 5.)
-                                + ((44. + 66. + 300. + 400. + 301.) / 5.))
-                                / 2.
-                        ])
-                    )
-                ],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPolygonCollection::from_slices(
+                    &[MultiPolygon::new(vec![vec![vec![
+                        (0.5, -0.5).into(),
+                        (4., -1.).into(),
+                        (0.5, -2.5).into(),
+                        (0.5, -0.5).into(),
+                    ]]])
+                    .unwrap(),],
+                    &[TimeInterval::new(0, 20).unwrap()],
+                    &[
+                        (
+                            "foo",
+                            FeatureData::Float(vec![
+                                (((3. + 1. + 40. + 30. + 400.) / 5.)
+                                    + ((4. + 6. + 30. + 40. + 300.) / 5.))
+                                    / 2.
+                            ])
+                        ),
+                        (
+                            "foo_1",
+                            FeatureData::Float(vec![
+                                (((251. + 249. + 140. + 130. + 410.) / 5.)
+                                    + ((44. + 66. + 300. + 400. + 301.) / 5.))
+                                    / 2.
+                            ])
+                        )
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 }

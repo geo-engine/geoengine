@@ -7,12 +7,12 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::str::FromStr;
-use utoipa::openapi::{ObjectBuilder, SchemaType};
 use utoipa::ToSchema;
+use utoipa::openapi::{ObjectBuilder, SchemaType};
 
 use super::wcs::request::WcsBoundingbox;
 use super::wfs::request::WfsResolution;
-use crate::api::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
+use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result};
 use crate::workflows::workflow::WorkflowId;
@@ -183,7 +183,7 @@ where
         _ => {
             return Err(D::Error::custom(format!(
                 "cannot parse bbox from string: {s}"
-            )))
+            )));
         }
     };
 
@@ -322,8 +322,8 @@ impl Guard for OgcRequestGuard<'_> {
 #[cfg(test)]
 mod tests {
     use crate::api::model::datatypes::SpatialReferenceAuthority;
-    use serde::de::value::StringDeserializer;
     use serde::de::IntoDeserializer;
+    use serde::de::value::StringDeserializer;
 
     use super::*;
 

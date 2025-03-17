@@ -8,11 +8,11 @@ use crate::users::UserSession;
 use crate::util::middleware::OutputRequestId;
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::util::server::{
-    calculate_max_blocking_threads_per_worker, configure_extractors, connection_init,
-    log_server_info, render_404, render_405, serve_openapi_json, CustomRootSpanBuilder,
+    CustomRootSpanBuilder, calculate_max_blocking_threads_per_worker, configure_extractors,
+    connection_init, log_server_info, render_404, render_405, serve_openapi_json,
 };
 use actix_files::Files;
-use actix_web::{http, middleware, web, App, FromRequest, HttpServer};
+use actix_web::{App, FromRequest, HttpServer, http, middleware, web};
 use bb8_postgres::tokio_postgres::NoTls;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::engine::ChunkByteSize;

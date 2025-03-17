@@ -310,8 +310,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, VectorQueryRectangle};
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::{DataCollection, VectorDataType},
         primitives::MultiPoint,
@@ -441,22 +441,24 @@ mod tests {
         let measurement = Measurement::continuous("foo".to_string(), None);
 
         let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
-            vec![DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[TimeInterval::default(); 6],
-                &[(
-                    "foo",
-                    FeatureData::NullableFloat(vec![
-                        Some(1.),
-                        Some(2.),
-                        None,
-                        Some(1.),
-                        None,
-                        Some(3.),
-                    ]),
-                )],
-            )
-            .unwrap()],
+            vec![
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[TimeInterval::default(); 6],
+                    &[(
+                        "foo",
+                        FeatureData::NullableFloat(vec![
+                            Some(1.),
+                            Some(2.),
+                            None,
+                            Some(1.),
+                            None,
+                            Some(3.),
+                        ]),
+                    )],
+                )
+                .unwrap(),
+            ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();
@@ -722,12 +724,14 @@ mod tests {
         );
 
         let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
-            vec![DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[] as &[TimeInterval],
-                &[("foo", FeatureData::Float(vec![]))],
-            )
-            .unwrap()],
+            vec![
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[] as &[TimeInterval],
+                    &[("foo", FeatureData::Float(vec![]))],
+                )
+                .unwrap(),
+            ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();
@@ -785,12 +789,14 @@ mod tests {
         );
 
         let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
-            vec![DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[TimeInterval::default()],
-                &[("foo", FeatureData::Float(vec![5.0]))],
-            )
-            .unwrap()],
+            vec![
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[TimeInterval::default()],
+                    &[("foo", FeatureData::Float(vec![5.0]))],
+                )
+                .unwrap(),
+            ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();

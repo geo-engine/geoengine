@@ -1,21 +1,21 @@
 use crate::{
     api::model::{
         operators::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
-        responses::datasets::{errors::*, DatasetNameResponse},
+        responses::datasets::{DatasetNameResponse, errors::*},
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
             MetaDataSuggestion, Provenances, UpdateDataset,
         },
     },
-    config::{get_config_element, Data},
+    config::{Data, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
+        DatasetName,
         listing::{DatasetListOptions, DatasetProvider},
         storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{
             AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName, Volumes,
         },
-        DatasetName,
     },
     error::{self, Error, Result},
     permissions::{Permission, PermissionDb, Role},
@@ -25,10 +25,10 @@ use crate::{
         path_with_base_path,
     },
 };
-use actix_web::{web, FromRequest, HttpResponse, HttpResponseBuilder, Responder};
+use actix_web::{FromRequest, HttpResponse, HttpResponseBuilder, Responder, web};
 use gdal::{
-    vector::{Layer, LayerAccess, OGRFieldType},
     Dataset, DatasetOptions,
+    vector::{Layer, LayerAccess, OGRFieldType},
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
@@ -61,7 +61,6 @@ use utoipa::{ToResponse, ToSchema};
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext,
-
     C::Session: FromRequest,
 {
     cfg.service(
@@ -799,7 +798,7 @@ fn select_layer_from_dataset<'a>(
     dataset: &'a Dataset,
     layer_name: &Option<String>,
 ) -> Result<Layer<'a>> {
-    if let Some(ref layer_name) = layer_name {
+    if let Some(layer_name) = layer_name {
         dataset.layer_by_name(layer_name).map_err(|_| {
             crate::error::Error::DatasetInvalidLayerName {
                 layer_name: layer_name.clone(),
@@ -1370,14 +1369,14 @@ mod tests {
     use crate::{
         api::model::{
             datatypes::NamedData,
-            responses::{datasets::DatasetNameResponse, IdResponse},
+            responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
         },
         contexts::{PostgresContext, Session, SessionId},
         datasets::{
+            DatasetIdAndName,
             storage::DatasetStore,
             upload::{UploadId, VolumeName},
-            DatasetIdAndName,
         },
         error::Result,
         ge_context,
@@ -1385,8 +1384,8 @@ mod tests {
         test_data,
         users::UserAuth,
         util::tests::{
-            add_file_definition_to_datasets, admin_login, read_body_json, read_body_string,
-            send_test_request, MockQueryContext, SetMultipartBody, TestDataUploads,
+            MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
+            admin_login, read_body_json, read_body_string, send_test_request,
         },
     };
     use actix_web;
@@ -1408,7 +1407,7 @@ mod tests {
         source::{OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters},
         util::gdal::create_ndvi_meta_data,
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tokio_postgres::NoTls;
     use uuid::Uuid;
 

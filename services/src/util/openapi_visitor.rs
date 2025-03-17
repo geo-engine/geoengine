@@ -1,5 +1,5 @@
 use utoipa::openapi::{
-    schema::AdditionalProperties, Components, OpenApi, Ref, RefOr, Response, Schema,
+    Components, OpenApi, Ref, RefOr, Response, Schema, schema::AdditionalProperties,
 };
 
 pub trait OpenapiVisitor {

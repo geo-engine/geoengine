@@ -1,10 +1,10 @@
 use crate::{contexts::SessionContext, error::Result};
 use actix::{
-    fut::wrap_future, Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler,
+    Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler, fut::wrap_future,
 };
 use actix_http::ws::{CloseCode, CloseReason};
 use actix_web_actors::ws;
-use futures::{stream::BoxStream, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     primitives::RasterQueryRectangle, raster::raster_tile_2d_to_arrow_ipc_file,
 };

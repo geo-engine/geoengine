@@ -26,9 +26,10 @@ use geoengine_datatypes::{
     raster::{CoordinatePixelAccess, GridIdx2D, Pixel, RasterTile2D, TileInformation},
 };
 use num;
+use rayon::ThreadPool;
+use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::{ParallelSlice, ParallelSliceMut};
-use rayon::ThreadPool;
 use tracing::debug;
 
 use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
@@ -145,7 +146,7 @@ fn build_accu<T: Pixel>(
     state: TileReprojectionSubqueryGridInfo,
     out_srs: SpatialReference,
     in_srs: SpatialReference,
-) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> {
+) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> + use<T> {
     let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels);

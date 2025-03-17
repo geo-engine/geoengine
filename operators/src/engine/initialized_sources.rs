@@ -3,8 +3,8 @@ use async_trait::async_trait;
 use crate::{
     error::Error,
     util::{
-        input::{MultiRasterOrVectorOperator, RasterOrVectorOperator},
         Result,
+        input::{MultiRasterOrVectorOperator, RasterOrVectorOperator},
     },
 };
 

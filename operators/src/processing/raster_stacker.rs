@@ -11,7 +11,7 @@ use crate::error::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{time_interval_extent, BandSelection, RasterQueryRectangle};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, time_interval_extent};
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;

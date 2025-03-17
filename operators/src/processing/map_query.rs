@@ -7,8 +7,8 @@ use crate::engine::{
 };
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::{RasterTile2D, TilingSpecification};
 

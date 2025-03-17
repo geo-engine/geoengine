@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use float_cmp::approx_eq;
-use futures::stream::{self, BoxStream};
 use futures::StreamExt;
+use futures::stream::{self, BoxStream};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, DataCollection, FeatureCollection, FeatureCollectionBuilder,

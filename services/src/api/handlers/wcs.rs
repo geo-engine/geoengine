@@ -1,15 +1,15 @@
-use crate::api::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
-use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
+use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
 use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::config;
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
+use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
@@ -20,7 +20,7 @@ use geoengine_operators::engine::{
     ExecutionContext, InitializedRasterOperator, WorkflowOperatorPath,
 };
 use geoengine_operators::util::raster_stream_to_geotiff::{
-    raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+    GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
 };
 use log::info;
 use snafu::ensure;
@@ -687,10 +687,10 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
-        assert_eq!(
-            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            test::read_body(res).await.as_ref()
+        assert_image_equals_with_format(
+            test_data!("raster/geotiff_from_stream_compressed.tiff"),
+            test::read_body(res).await.as_ref(),
+            ImageFormat::Tiff,
         );
     }
 

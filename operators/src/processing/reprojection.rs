@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{
-        fold_by_coordinate_lookup_future, FillerTileCacheExpirationStrategy, RasterSubQueryAdapter,
-        TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
+        FillerTileCacheExpirationStrategy, RasterSubQueryAdapter, TileReprojectionSubQuery,
+        TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
     },
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
@@ -18,12 +18,12 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     operations::reproject::{
-        reproject_spatial_query, CoordinateProjection, CoordinateProjector, Reproject,
-        ReprojectClipped,
+        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
+        reproject_spatial_query,
     },
     primitives::{
         BandSelection, ColumnSelection, Geometry, RasterQueryRectangle,
@@ -345,11 +345,11 @@ where
 impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
     Q: QueryProcessor<
-        Output = FeatureCollection<G>,
-        SpatialQuery = VectorSpatialQueryRectangle,
-        Selection = ColumnSelection,
-        ResultDescription = VectorResultDescriptor,
-    >,
+            Output = FeatureCollection<G>,
+            SpatialQuery = VectorSpatialQueryRectangle,
+            Selection = ColumnSelection,
+            ResultDescription = VectorResultDescriptor,
+        >,
     FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
     G: Geometry + ArrowTyped,
 {
@@ -592,11 +592,11 @@ where
 impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialQuery = SpatialGridQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialQuery = SpatialGridQueryRectangle,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
 {
     pub fn new(
@@ -621,11 +621,11 @@ where
 impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialQuery = RasterSpatialQueryRectangle,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
@@ -713,10 +713,11 @@ mod tests {
         raster::{Grid, RasterDataType, RasterTile2D},
         spatial_reference::SpatialReferenceAuthority,
         util::{
+            Identifier,
             test::TestDefault,
             well_known_data::{
-                COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
-                MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+                COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
+                MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
             },
         },
     };
@@ -801,12 +802,14 @@ mod tests {
     #[tokio::test]
     async fn multi_lines() -> Result<()> {
         let lines = MultiLineStringCollection::from_data(
-            vec![MultiLineString::new(vec![vec![
-                MARBURG_EPSG_4326,
-                COLOGNE_EPSG_4326,
-                HAMBURG_EPSG_4326,
-            ]])
-            .unwrap()],
+            vec![
+                MultiLineString::new(vec![vec![
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                ]])
+                .unwrap(),
+            ],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
             CacheHint::default(),
@@ -880,13 +883,15 @@ mod tests {
     #[tokio::test]
     async fn multi_polygons() -> Result<()> {
         let polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                MARBURG_EPSG_4326,
-                COLOGNE_EPSG_4326,
-                HAMBURG_EPSG_4326,
-                MARBURG_EPSG_4326,
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    MARBURG_EPSG_4326,
+                    COLOGNE_EPSG_4326,
+                    HAMBURG_EPSG_4326,
+                    MARBURG_EPSG_4326,
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::new_unchecked(0, 1); 1],
             Default::default(),
             CacheHint::default(),
@@ -1216,10 +1221,16 @@ mod tests {
 
         assert_eq!(
             include_bytes!(
-               "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20_v6.rst"
-          ) as &[u8],
-          res[0].clone().into_materialized_tile().grid_array.inner_grid.data.as_slice()
-         );
+                "../../../test_data/raster/modis_ndvi/projected_3857/MOD13A2_M_NDVI_2014-04-01_tile-20_v6.rst"
+            ) as &[u8],
+            res[0]
+                .clone()
+                .into_materialized_tile()
+                .grid_array
+                .inner_grid
+                .data
+                .as_slice()
+        );
 
         Ok(())
     }
@@ -1556,18 +1567,20 @@ mod tests {
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
-            vec![MultiPointCollection::from_data(
-                MultiPoint::many(vec![
-                    vec![(166_021.443_080_538_42, 0.0)],
-                    vec![(534_994.655_061_136_1, 9_329_005.182_447_437)],
-                    vec![(499_999.999_999_999_5, 4_649_776.224_819_178)],
-                ])
+            vec![
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![
+                        vec![(166_021.443_080_538_42, 0.0)],
+                        vec![(534_994.655_061_136_1, 9_329_005.182_447_437)],
+                        vec![(499_999.999_999_999_5, 4_649_776.224_819_178)],
+                    ])
+                    .unwrap(),
+                    vec![TimeInterval::default(); 3],
+                    HashMap::default(),
+                    CacheHint::default(),
+                )
                 .unwrap(),
-                vec![TimeInterval::default(); 3],
-                HashMap::default(),
-                CacheHint::default(),
-            )
-            .unwrap()],
+            ],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
         )
         .boxed();
@@ -1637,16 +1650,18 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
-            vec![MultiPointCollection::from_data(
-                MultiPoint::many(vec![
-                    vec![(758_565., 4_928_353.)], // (12.25, 44,46)
-                ])
+            vec![
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![
+                        vec![(758_565., 4_928_353.)], // (12.25, 44,46)
+                    ])
+                    .unwrap(),
+                    vec![TimeInterval::default(); 1],
+                    HashMap::default(),
+                    CacheHint::default(),
+                )
                 .unwrap(),
-                vec![TimeInterval::default(); 1],
-                HashMap::default(),
-                CacheHint::default(),
-            )
-            .unwrap()],
+            ],
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636), //utm36n
         )
         .boxed();

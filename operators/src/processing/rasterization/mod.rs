@@ -11,7 +11,7 @@ use crate::util;
 use crate::util::spawn_blocking;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use futures::{stream, StreamExt};
+use futures::{StreamExt, stream};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,

@@ -8,8 +8,8 @@ use crate::engine::{
 };
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
@@ -727,11 +727,13 @@ mod tests {
 
         let expected = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0., 0.)]).unwrap(),
-            vec![TimeInterval::new(
-                DateTime::new_utc(2009, 1, 1, 0, 0, 0),
-                DateTime::new_utc_with_millis(2013, 8, 1, 23, 59, 59, 999),
-            )
-            .unwrap()],
+            vec![
+                TimeInterval::new(
+                    DateTime::new_utc(2009, 1, 1, 0, 0, 0),
+                    DateTime::new_utc_with_millis(2013, 8, 1, 23, 59, 59, 999),
+                )
+                .unwrap(),
+            ],
             Default::default(),
             CacheHint::default(),
         )

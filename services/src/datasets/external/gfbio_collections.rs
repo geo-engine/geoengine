@@ -15,9 +15,9 @@ use crate::layers::listing::{
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::NoTls;
-use bb8_postgres::PostgresConnectionManager;
 use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
@@ -38,7 +38,7 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
-use reqwest::{header, Client};
+use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -744,10 +744,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -823,10 +823,9 @@ mod tests {
         test_data,
     };
     use httptest::{
-        all_of,
+        Expectation, Server, all_of,
         matchers::{contains, lowercase, request},
         responders::status_code,
-        Expectation, Server,
     };
     use rand::RngCore;
     use std::{fs::File, io::Read, path::PathBuf};
@@ -849,7 +848,7 @@ mod tests {
             .read_to_string(&mut sql)
             .unwrap();
 
-        let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
+        let schema = format!("geoengine_test_{}", rand::rng().next_u64());
 
         // basic schema
         conn.batch_execute(&format!(

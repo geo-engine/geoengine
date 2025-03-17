@@ -12,7 +12,7 @@ use geoengine_operators::{
     source::{GdalSource, GdalSourceParameters},
 };
 use geoengine_services::{
-    config::{get_config_element, Quota, QuotaTrackingMode},
+    config::{Quota, QuotaTrackingMode, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     users::{UserAuth, UserDb},
     util::tests::{add_ndvi_to_datasets2, send_test_request, with_temp_context},

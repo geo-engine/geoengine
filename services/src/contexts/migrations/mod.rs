@@ -3,7 +3,7 @@ pub use crate::contexts::migrations::{
     migration_0016_merge_providers::Migration0016MergeProviders,
 };
 pub use database_migration::{
-    initialize_database, migrate_database, DatabaseVersion, Migration, MigrationResult,
+    DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
 };
 
 mod current_schema;
@@ -17,7 +17,7 @@ mod schema_info;
 
 use migration_0017_raster_result_desc::Migration0017RasterResultDesc;
 #[cfg(test)]
-pub(crate) use schema_info::{assert_migration_schema_eq, AssertSchemaEqPopulationConfig};
+pub(crate) use schema_info::{AssertSchemaEqPopulationConfig, assert_migration_schema_eq};
 
 /// All migrations that are available. The migrations are applied in the order they are defined here, starting from the current version of the database.
 ///

@@ -122,7 +122,7 @@ impl TilingStrategy {
     pub fn tile_idx_iterator_from_grid_bounds(
         &self,
         grid_bounds: GridBoundingBox2D,
-    ) -> impl Iterator<Item = GridIdx2D> {
+    ) -> impl Iterator<Item = GridIdx2D> + use<> {
         let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
 
         let y_range = tile_bounds.y_min()..=tile_bounds.y_max();
@@ -136,7 +136,7 @@ impl TilingStrategy {
     pub fn tile_information_iterator_from_grid_bounds(
         &self,
         grid_bounds: GridBoundingBox2D,
-    ) -> impl Iterator<Item = TileInformation> {
+    ) -> impl Iterator<Item = TileInformation> + use<> {
         let tile_pixel_size = self.tile_size_in_pixels;
         let geo_transform = self.geo_transform;
         self.tile_idx_iterator_from_grid_bounds(grid_bounds)

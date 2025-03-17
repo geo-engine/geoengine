@@ -13,8 +13,8 @@ use crate::layers::listing::{
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
-use bb8_postgres::bb8::Pool;
 use bb8_postgres::PostgresConnectionManager;
+use bb8_postgres::bb8::Pool;
 use chrono::NaiveDateTime;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
@@ -38,7 +38,7 @@ use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::fmt::Write;
-use tokio::time::{timeout, Duration};
+use tokio::time::{Duration, timeout};
 use tokio_postgres::NoTls;
 
 pub const GBIF_PROVIDER_ID: DataProviderId =
@@ -933,10 +933,10 @@ impl
     ) -> geoengine_operators::util::Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)
@@ -2211,91 +2211,91 @@ mod tests {
                 .sort();
 
             let expected = OgrSourceDataset {
-                    file_name: PathBuf::from(ogr_pg_string),
-                    layer_name: format!("{0}.occurrences", db_config.schema),
-                    data_type: Some(VectorDataType::MultiPoint),
-                    time: OgrSourceDatasetTimeType::Start {
-                        start_field: "eventdate".to_string(),
-                        start_format: OgrSourceTimeFormat::Auto,
-                        duration: OgrSourceDurationSpec::Zero,
-                    },
-                    default_geometry: None,
-                    columns: Some(OgrSourceColumnSpec {
-                        format_specifics: None,
-                        x: String::new(),
-                        y: None,
-                        int: vec![
-                            "gbifid".to_string(),
-                            "individualcount".to_string(),
-                            "day".to_string(),
-                            "month".to_string(),
-                            "year".to_string(),
-                            "taxonkey".to_string(),
-                        ],
-                        float: vec![
-                            "decimallatitude".to_string(),
-                            "decimallongitude".to_string(),
-                            "coordinateuncertaintyinmeters".to_string(),
-                            "elevation".to_string(),
-                        ],
-                        text: vec![
-                            "basisofrecord".to_string(),
-                            "catalognumber".to_string(),
-                            "class".to_string(),
-                            "collectioncode".to_string(),
-                            "coordinateprecision".to_string(),
-                            "countrycode".to_string(),
-                            "datasetkey".to_string(),
-                            "dateidentified".to_string(),
-                            "depthaccuracy".to_string(),
-                            "elevationaccuracy".to_string(),
-                            "establishmentmeans".to_string(),
-                            "family".to_string(),
-                            "genus".to_string(),
-                            "identifiedby".to_string(),
-                            "infraspecificepithet".to_string(),
-                            "institutioncode".to_string(),
-                            "issue".to_string(),
-                            "kingdom".to_string(),
-                            "lastinterpreted".to_string(),
-                            "license".to_string(),
-                            "locality".to_string(),
-                            "mediatype".to_string(),
-                            "occurrenceid".to_string(),
-                            "occurrencestatus".to_string(),
-                            "order".to_string(),
-                            "phylum".to_string(),
-                            "publishingorgkey".to_string(),
-                            "recordedby".to_string(),
-                            "recordnumber".to_string(),
-                            "rightsholder".to_string(),
-                            "scientificname".to_string(),
-                            "species".to_string(),
-                            "specieskey".to_string(),
-                            "stateprovince".to_string(),
-                            "taxonrank".to_string(),
-                            "typestatus".to_string(),
-                            "verbatimscientificname".to_string(),
-                            "verbatimscientificnameauthorship".to_string(),
-                        ],
-                        bool: vec![],
-                        datetime: vec![],
-                        rename: None,
-                    }),
-                    force_ogr_time_filter: true,
-                    force_ogr_spatial_filter: false,
-                    on_error: OgrSourceErrorSpec::Ignore,
-                    sql_query: Some(format!(
-                        "SELECT {} geom, eventdate FROM {}.occurrences WHERE species = 'Rhipidia willistoniana'",
-                        GbifDataProvider::all_columns()
-                            .iter()
-                            .map(|column| format!(r#""{column}","#))
-                            .join(""),
-                        db_config.schema
-                    )),
-                    attribute_query: None,
-                    cache_ttl: CacheTtlSeconds::default(),
-                };
+                file_name: PathBuf::from(ogr_pg_string),
+                layer_name: format!("{0}.occurrences", db_config.schema),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "eventdate".to_string(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero,
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
+                    x: String::new(),
+                    y: None,
+                    int: vec![
+                        "gbifid".to_string(),
+                        "individualcount".to_string(),
+                        "day".to_string(),
+                        "month".to_string(),
+                        "year".to_string(),
+                        "taxonkey".to_string(),
+                    ],
+                    float: vec![
+                        "decimallatitude".to_string(),
+                        "decimallongitude".to_string(),
+                        "coordinateuncertaintyinmeters".to_string(),
+                        "elevation".to_string(),
+                    ],
+                    text: vec![
+                        "basisofrecord".to_string(),
+                        "catalognumber".to_string(),
+                        "class".to_string(),
+                        "collectioncode".to_string(),
+                        "coordinateprecision".to_string(),
+                        "countrycode".to_string(),
+                        "datasetkey".to_string(),
+                        "dateidentified".to_string(),
+                        "depthaccuracy".to_string(),
+                        "elevationaccuracy".to_string(),
+                        "establishmentmeans".to_string(),
+                        "family".to_string(),
+                        "genus".to_string(),
+                        "identifiedby".to_string(),
+                        "infraspecificepithet".to_string(),
+                        "institutioncode".to_string(),
+                        "issue".to_string(),
+                        "kingdom".to_string(),
+                        "lastinterpreted".to_string(),
+                        "license".to_string(),
+                        "locality".to_string(),
+                        "mediatype".to_string(),
+                        "occurrenceid".to_string(),
+                        "occurrencestatus".to_string(),
+                        "order".to_string(),
+                        "phylum".to_string(),
+                        "publishingorgkey".to_string(),
+                        "recordedby".to_string(),
+                        "recordnumber".to_string(),
+                        "rightsholder".to_string(),
+                        "scientificname".to_string(),
+                        "species".to_string(),
+                        "specieskey".to_string(),
+                        "stateprovince".to_string(),
+                        "taxonrank".to_string(),
+                        "typestatus".to_string(),
+                        "verbatimscientificname".to_string(),
+                        "verbatimscientificnameauthorship".to_string(),
+                    ],
+                    bool: vec![],
+                    datetime: vec![],
+                    rename: None,
+                }),
+                force_ogr_time_filter: true,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Ignore,
+                sql_query: Some(format!(
+                    "SELECT {} geom, eventdate FROM {}.occurrences WHERE species = 'Rhipidia willistoniana'",
+                    GbifDataProvider::all_columns()
+                        .iter()
+                        .map(|column| format!(r#""{column}","#))
+                        .join(""),
+                    db_config.schema
+                )),
+                attribute_query: None,
+                cache_ttl: CacheTtlSeconds::default(),
+            };
 
             if loading_info != expected {
                 return Err(format!("{result_descriptor:?} != {expected:?}"));

@@ -8,7 +8,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     collections::{
         FeatureCollection, GeoFeatureCollectionModifications, IntoGeometryIterator, VectorDataType,
@@ -193,9 +193,9 @@ where
     G: Geometry,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c>,
     for<'c> A: LineSimplificationAlgorithmImpl<
-        <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
-        G,
-    >,
+            <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
+            G,
+        >,
 {
     source: P,
     _algorithm: A,
@@ -273,9 +273,9 @@ where
     G: Geometry,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c> + GeoFeatureCollectionModifications<G>,
     for<'c> A: LineSimplificationAlgorithmImpl<
-        <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
-        G,
-    >,
+            <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
+            G,
+        >,
 {
     fn simplify(collection: &FeatureCollection<G>, epsilon: f64) -> Result<FeatureCollection<G>> {
         // TODO: chunk within parallelization to reduce overhead if necessary
@@ -296,17 +296,17 @@ where
 impl<P, G, A> QueryProcessor for LineSimplificationProcessor<P, G, A>
 where
     P: QueryProcessor<
-        Output = FeatureCollection<G>,
-        SpatialQuery = VectorSpatialQueryRectangle,
-        Selection = ColumnSelection,
-        ResultDescription = VectorResultDescriptor,
-    >,
+            Output = FeatureCollection<G>,
+            SpatialQuery = VectorSpatialQueryRectangle,
+            Selection = ColumnSelection,
+            ResultDescription = VectorResultDescriptor,
+        >,
     G: Geometry + ArrowTyped + 'static,
     for<'c> FeatureCollection<G>: IntoGeometryIterator<'c> + GeoFeatureCollectionModifications<G>,
     for<'c> A: LineSimplificationAlgorithmImpl<
-        <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
-        G,
-    >,
+            <FeatureCollection<G> as IntoGeometryIterator<'c>>::GeometryType,
+            G,
+        >,
 {
     type Output = FeatureCollection<G>;
     type SpatialQuery = VectorSpatialQueryRectangle;
@@ -380,7 +380,7 @@ mod tests {
         },
         spatial_reference::SpatialReference,
         test_data,
-        util::{test::TestDefault, Identifier},
+        util::{Identifier, test::TestDefault},
     };
 
     #[tokio::test]
@@ -427,64 +427,66 @@ mod tests {
     #[tokio::test]
     async fn test_errors() {
         // zero epsilon
-        assert!(LineSimplification {
-            params: LineSimplificationParams {
-                epsilon: EpsilonOrResolution::Epsilon(0.0),
-                algorithm: LineSimplificationAlgorithm::DouglasPeucker,
-            },
-            sources: MockFeatureCollectionSource::<MultiPolygon>::single(
-                MultiPolygonCollection::empty()
-            )
+        assert!(
+            LineSimplification {
+                params: LineSimplificationParams {
+                    epsilon: EpsilonOrResolution::Epsilon(0.0),
+                    algorithm: LineSimplificationAlgorithm::DouglasPeucker,
+                },
+                sources: MockFeatureCollectionSource::<MultiPolygon>::single(
+                    MultiPolygonCollection::empty()
+                )
+                .boxed()
+                .into(),
+            }
             .boxed()
-            .into(),
-        }
-        .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default()
-        )
-        .await
-        .is_err());
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default()
+            )
+            .await
+            .is_err()
+        );
 
         // invalid epsilon
-        assert!(LineSimplification {
-            params: LineSimplificationParams {
-                epsilon: EpsilonOrResolution::Epsilon(f64::NAN),
-                algorithm: LineSimplificationAlgorithm::Visvalingam,
-            },
-            sources: MockFeatureCollectionSource::<MultiPolygon>::single(
-                MultiPolygonCollection::empty()
-            )
+        assert!(
+            LineSimplification {
+                params: LineSimplificationParams {
+                    epsilon: EpsilonOrResolution::Epsilon(f64::NAN),
+                    algorithm: LineSimplificationAlgorithm::Visvalingam,
+                },
+                sources: MockFeatureCollectionSource::<MultiPolygon>::single(
+                    MultiPolygonCollection::empty()
+                )
+            }
             .boxed()
-            .into(),
-        }
-        .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default()
-        )
-        .await
-        .is_err());
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default()
+            )
+            .await
+            .is_err()
+        );
 
         // not lines or polygons
-        assert!(LineSimplification {
-            params: LineSimplificationParams {
-                epsilon: EpsilonOrResolution::Epsilon(0.1),
-                algorithm: LineSimplificationAlgorithm::DouglasPeucker,
-            },
-            sources: MockFeatureCollectionSource::<MultiPoint>::single(
-                MultiPointCollection::empty()
-            )
+        assert!(
+            LineSimplification {
+                params: LineSimplificationParams {
+                    epsilon: EpsilonOrResolution::Epsilon(0.1),
+                    algorithm: LineSimplificationAlgorithm::DouglasPeucker,
+                },
+                sources: MockFeatureCollectionSource::<MultiPoint>::single(
+                    MultiPointCollection::empty()
+                )
+            }
             .boxed()
-            .into(),
-        }
-        .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default()
-        )
-        .await
-        .is_err());
+            .initialize(
+                WorkflowOperatorPath::initialize_root(),
+                &MockExecutionContext::test_default()
+            )
+            .await
+            .is_err()
+        );
     }
 
     #[tokio::test]

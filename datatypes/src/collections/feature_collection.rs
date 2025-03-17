@@ -2,8 +2,8 @@ use arrow::datatypes::{DataType, Date64Type, Field, Float64Type, Int64Type};
 use arrow::error::ArrowError;
 use arrow::{
     array::{
-        as_boolean_array, as_primitive_array, as_string_array, Array, ArrayRef, BooleanArray,
-        ListArray, StructArray,
+        Array, ArrayRef, BooleanArray, ListArray, StructArray, as_boolean_array,
+        as_primitive_array, as_string_array,
     },
     buffer::Buffer,
 };
@@ -28,20 +28,20 @@ use crate::primitives::{
     CategoryDataRef, FeatureData, FeatureDataRef, FeatureDataType, FeatureDataValue, FloatDataRef,
     Geometry, IntDataRef, TextDataRef, TimeInterval,
 };
-use crate::util::arrow::{downcast_array, ArrowTyped};
-use crate::util::helpers::SomeIter;
 use crate::util::Result;
-use crate::{
-    collections::{error, IntoGeometryIterator, VectorDataType, VectorDataTyped},
-    operations::reproject::Reproject,
-};
+use crate::util::arrow::{ArrowTyped, downcast_array};
+use crate::util::helpers::SomeIter;
 use crate::{
     collections::{FeatureCollectionError, IntoGeometryOptionsIterator},
     operations::reproject::CoordinateProjection,
 };
+use crate::{
+    collections::{IntoGeometryIterator, VectorDataType, VectorDataTyped, error},
+    operations::reproject::Reproject,
+};
 use std::iter::FromIterator;
 
-use super::{geo_feature_collection::ReplaceRawArrayCoords, GeometryCollection};
+use super::{GeometryCollection, geo_feature_collection::ReplaceRawArrayCoords};
 
 #[allow(clippy::unsafe_derive_deserialize)]
 #[derive(Debug, Deserialize, Serialize)]
@@ -1851,9 +1851,11 @@ mod tests {
         )
         .unwrap();
 
-        assert!(collection
-            .rename_columns(&[("foo", "baz"), ("bar", "baz")])
-            .is_err());
+        assert!(
+            collection
+                .rename_columns(&[("foo", "baz"), ("bar", "baz")])
+                .is_err()
+        );
     }
 
     /// If this test fails, change serialization to JSON (cf. methods below) instead of IPC.

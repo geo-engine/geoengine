@@ -1,8 +1,7 @@
-use super::storage::MetaDataDefinition;
 use super::DatasetName;
 use crate::api::model::operators::TypedResultDescriptor;
-use crate::config::{get_config_element, DatasetService};
-use crate::datasets::storage::{validate_tags, Dataset};
+use crate::config::{DatasetService, get_config_element};
+use crate::datasets::storage::{Dataset, validate_tags};
 use crate::error::Result;
 use crate::projects::Symbology;
 use async_trait::async_trait;

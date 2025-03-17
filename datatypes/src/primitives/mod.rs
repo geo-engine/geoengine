@@ -21,7 +21,7 @@ mod time_interval;
 mod time_step;
 mod ttl;
 
-pub use bounding_box::{bboxes_extent, BoundingBox2D};
+pub use bounding_box::{BoundingBox2D, bboxes_extent};
 pub use circle::Circle;
 pub use coordinate::Coordinate2D;
 pub use datetime::{DateTime, DateTimeError, DateTimeParseFormat, Duration};
@@ -45,11 +45,11 @@ pub use query_rectangle::{
     VectorQueryRectangle, VectorSpatialQueryRectangle,
 };
 pub use spatial_partition::{
-    partitions_extent, AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned,
+    AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned, partitions_extent,
 };
 pub use spatial_resolution::SpatialResolution;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_instance::TimeInstance;
-pub use time_interval::{time_interval_extent, TimeInterval};
+pub use time_interval::{TimeInterval, time_interval_extent};
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};
 pub use ttl::{CacheExpiration, CacheHint, CacheTtlSeconds};

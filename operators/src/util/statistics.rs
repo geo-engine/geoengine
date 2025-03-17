@@ -741,7 +741,7 @@ mod tests {
             data.push(v);
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         data.shuffle(&mut rng);
 
         let estimator = PSquareQuantileEstimator::new(0.5, data.as_slice()).unwrap();

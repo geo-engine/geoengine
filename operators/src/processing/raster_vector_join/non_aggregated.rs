@@ -10,7 +10,7 @@ use crate::processing::raster_vector_join::create_feature_aggregator;
 use crate::util::Result;
 use crate::{adapters::RasterStreamExt, error::Error};
 use async_trait::async_trait;
-use futures::stream::{once as once_stream, BoxStream};
+use futures::stream::{BoxStream, once as once_stream};
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
@@ -542,22 +542,24 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    vec![(-13.95, 20.05)],
-                    vec![(-14.05, 20.05)],
-                    vec![(-13.95, 19.95)],
-                    vec![(-14.05, 19.95)],
-                    vec![(-13.95, 19.95), (-14.05, 19.95)],
-                ])
-                .unwrap(),
-                &[time_instant; 5],
-                // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55, 51]))],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        vec![(-13.95, 20.05)],
+                        vec![(-14.05, 20.05)],
+                        vec![(-13.95, 19.95)],
+                        vec![(-14.05, 19.95)],
+                        vec![(-13.95, 19.95), (-14.05, 19.95)],
+                    ])
+                    .unwrap(),
+                    &[time_instant; 5],
+                    // these values are taken from loading the tiff in QGIS
+                    &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55, 51]))],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -650,21 +652,24 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
-                .unwrap(),
-                &[TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(); 4],
-                // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    &[TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap();
+                        4],
+                    // these values are taken from loading the tiff in QGIS
+                    &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -761,25 +766,27 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
-                .unwrap(),
-                &[TimeInterval::new(
-                    DateTime::new_utc(2014, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    &[TimeInterval::new(
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                    )
+                    .unwrap(); 4],
+                    // these values are taken from loading the tiff in QGIS
+                    &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
                 )
-                .unwrap(); 4],
-                // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[allow(clippy::too_many_lines)]
@@ -890,28 +897,30 @@ mod tests {
             DateTime::new_utc(2014, 3, 1, 0, 0, 0),
         )
         .unwrap();
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
-                .unwrap(),
-                &[t1, t1, t1, t1, t2, t2, t2, t2],
-                // these values are taken from loading the tiff in QGIS
-                &[(
-                    "ndvi",
-                    FeatureData::Int(vec![54, 55, 51, 55, 52, 55, 50, 53])
-                )],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    &[t1, t1, t1, t1, t2, t2, t2, t2],
+                    // these values are taken from loading the tiff in QGIS
+                    &[(
+                        "ndvi",
+                        FeatureData::Int(vec![54, 55, 51, 55, 52, 55, 50, 53])
+                    )],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1075,28 +1084,30 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    vec![(0.0, 0.0), (2.0, 0.0)],
-                    vec![(1.0, 0.0), (3.0, 0.0)],
-                    vec![(0.0, 0.0), (2.0, 0.0)],
-                    vec![(1.0, 0.0), (3.0, 0.0)],
-                ])
-                .unwrap(),
-                &[t1, t1, t2, t2],
-                &[(
-                    "ndvi",
-                    FeatureData::Float(vec![
-                        (6. + 60.) / 2.,
-                        (5. + 50.) / 2.,
-                        (1. + 10.) / 2.,
-                        (2. + 20.) / 2.
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        vec![(0.0, 0.0), (2.0, 0.0)],
+                        vec![(1.0, 0.0), (3.0, 0.0)],
+                        vec![(0.0, 0.0), (2.0, 0.0)],
+                        vec![(1.0, 0.0), (3.0, 0.0)],
                     ])
-                )],
+                    .unwrap(),
+                    &[t1, t1, t2, t2],
+                    &[(
+                        "ndvi",
+                        FeatureData::Float(vec![
+                            (6. + 60.) / 2.,
+                            (5. + 50.) / 2.,
+                            (1. + 10.) / 2.,
+                            (2. + 20.) / 2.
+                        ])
+                    )],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1220,13 +1231,15 @@ mod tests {
             .unwrap();
 
         let polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.5, -0.5).into(),
-                (4., -1.).into(),
-                (0.5, -2.5).into(),
-                (0.5, -0.5).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.5, -0.5).into(),
+                    (4., -1.).into(),
+                    (0.5, -2.5).into(),
+                    (0.5, -0.5).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::default(); 1],
             Default::default(),
             CacheHint::default(),
@@ -1291,35 +1304,37 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPolygonCollection::from_slices(
-                &[
-                    MultiPolygon::new(vec![vec![vec![
-                        (0.5, -0.5).into(),
-                        (4., -1.).into(),
-                        (0.5, -2.5).into(),
-                        (0.5, -0.5).into(),
-                    ]]])
-                    .unwrap(),
-                    MultiPolygon::new(vec![vec![vec![
-                        (0.5, -0.5).into(),
-                        (4., -1.).into(),
-                        (0.5, -2.5).into(),
-                        (0.5, -0.5).into(),
-                    ]]])
-                    .unwrap()
-                ],
-                &[t1, t2],
-                &[(
-                    "ndvi",
-                    FeatureData::Float(vec![
-                        (3. + 1. + 40. + 30. + 400.) / 5.,
-                        (4. + 6. + 30. + 40. + 300.) / 5.
-                    ])
-                )],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPolygonCollection::from_slices(
+                    &[
+                        MultiPolygon::new(vec![vec![vec![
+                            (0.5, -0.5).into(),
+                            (4., -1.).into(),
+                            (0.5, -2.5).into(),
+                            (0.5, -0.5).into(),
+                        ]]])
+                        .unwrap(),
+                        MultiPolygon::new(vec![vec![vec![
+                            (0.5, -0.5).into(),
+                            (4., -1.).into(),
+                            (0.5, -2.5).into(),
+                            (0.5, -0.5).into(),
+                        ]]])
+                        .unwrap()
+                    ],
+                    &[t1, t2],
+                    &[(
+                        "ndvi",
+                        FeatureData::Float(vec![
+                            (3. + 1. + 40. + 30. + 400.) / 5.,
+                            (4. + 6. + 30. + 40. + 300.) / 5.
+                        ])
+                    )],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1532,13 +1547,15 @@ mod tests {
             .unwrap();
 
         let polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.5, -0.5).into(),
-                (4., -1.).into(),
-                (0.5, -2.5).into(),
-                (0.5, -0.5).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.5, -0.5).into(),
+                    (4., -1.).into(),
+                    (0.5, -2.5).into(),
+                    (0.5, -0.5).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::default(); 1],
             Default::default(),
             CacheHint::default(),
@@ -1603,43 +1620,45 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPolygonCollection::from_slices(
-                &[
-                    MultiPolygon::new(vec![vec![vec![
-                        (0.5, -0.5).into(),
-                        (4., -1.).into(),
-                        (0.5, -2.5).into(),
-                        (0.5, -0.5).into(),
-                    ]]])
-                    .unwrap(),
-                    MultiPolygon::new(vec![vec![vec![
-                        (0.5, -0.5).into(),
-                        (4., -1.).into(),
-                        (0.5, -2.5).into(),
-                        (0.5, -0.5).into(),
-                    ]]])
-                    .unwrap()
-                ],
-                &[t1, t2],
-                &[
-                    (
-                        "foo",
-                        FeatureData::Float(vec![
-                            (3. + 1. + 40. + 30. + 400.) / 5.,
-                            (4. + 6. + 30. + 40. + 300.) / 5.
-                        ])
-                    ),
-                    (
-                        "foo_1",
-                        FeatureData::Float(vec![
-                            (251. + 249. + 140. + 130. + 410.) / 5.,
-                            (44. + 66. + 300. + 400. + 301.) / 5.
-                        ])
-                    )
-                ],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPolygonCollection::from_slices(
+                    &[
+                        MultiPolygon::new(vec![vec![vec![
+                            (0.5, -0.5).into(),
+                            (4., -1.).into(),
+                            (0.5, -2.5).into(),
+                            (0.5, -0.5).into(),
+                        ]]])
+                        .unwrap(),
+                        MultiPolygon::new(vec![vec![vec![
+                            (0.5, -0.5).into(),
+                            (4., -1.).into(),
+                            (0.5, -2.5).into(),
+                            (0.5, -0.5).into(),
+                        ]]])
+                        .unwrap()
+                    ],
+                    &[t1, t2],
+                    &[
+                        (
+                            "foo",
+                            FeatureData::Float(vec![
+                                (3. + 1. + 40. + 30. + 400.) / 5.,
+                                (4. + 6. + 30. + 40. + 300.) / 5.
+                            ])
+                        ),
+                        (
+                            "foo_1",
+                            FeatureData::Float(vec![
+                                (251. + 249. + 140. + 130. + 410.) / 5.,
+                                (44. + 66. + 300. + 400. + 301.) / 5.
+                            ])
+                        )
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 }

@@ -6,8 +6,8 @@ use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
 use crate::datasets::{
-    schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow,
-    RasterDatasetFromWorkflowParams,
+    RasterDatasetFromWorkflow, RasterDatasetFromWorkflowParams,
+    schedule_raster_dataset_from_workflow_task,
 };
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
@@ -16,7 +16,7 @@ use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
+use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
@@ -31,7 +31,7 @@ use std::io::{Cursor, Write};
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
-use zip::{write::SimpleFileOptions, ZipWriter};
+use zip::{ZipWriter, write::SimpleFileOptions};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -692,12 +692,13 @@ mod tests {
     use crate::users::UserAuth;
     use crate::util::tests::admin_login;
     use crate::util::tests::{
-        add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
-        read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
+        TestDataUploads, add_ndvi_to_datasets, check_allowed_http_methods,
+        check_allowed_http_methods2, read_body_string, register_ndvi_workflow_helper,
+        send_test_request,
     };
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
-    use actix_web::{http::header, http::Method, test};
+    use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::CacheHint;
@@ -727,8 +728,8 @@ mod tests {
     use std::io::Read;
     use std::sync::Arc;
     use tokio_postgres::NoTls;
-    use zip::read::ZipFile;
     use zip::ZipArchive;
+    use zip::read::ZipFile;
 
     async fn register_test_helper(
         app_ctx: PostgresContext<NoTls>,

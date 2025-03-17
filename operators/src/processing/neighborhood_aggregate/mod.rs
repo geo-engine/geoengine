@@ -3,8 +3,8 @@ mod tile_sub_query;
 
 use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
-use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::adapters::RasterSubQueryAdapter;
+use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
@@ -22,7 +22,7 @@ use geoengine_datatypes::raster::{
 use num::Integer;
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::{Snafu, ensure};
 use std::marker::PhantomData;
 
 /// A neighborhood aggregate operator applies an aggregate function to each raster pixel and its surrounding.
@@ -253,11 +253,11 @@ where
 impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialQuery = RasterSpatialQueryRectangle,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
     f64: AsPrimitive<P>,
     A: AggregateFunction + 'static,

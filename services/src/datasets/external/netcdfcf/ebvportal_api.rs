@@ -2,7 +2,7 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
-use crate::datasets::external::netcdfcf::{error, NetCdfOverview};
+use crate::datasets::external::netcdfcf::{NetCdfOverview, error};
 use crate::error::Result;
 use error::NetCdfCf4DProviderError;
 use geoengine_datatypes::dataset::DataProviderId;

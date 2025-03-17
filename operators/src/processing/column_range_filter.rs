@@ -4,12 +4,12 @@ use crate::engine::{
     VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
+use crate::util::input::StringOrNumberRange;
 use crate::{adapters::FeatureCollectionChunkMerger, engine::SingleVectorSource};
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };

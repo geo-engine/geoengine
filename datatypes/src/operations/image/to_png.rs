@@ -11,8 +11,8 @@ use crate::{
 };
 use image::{DynamicImage, ImageBuffer, ImageFormat, RgbaImage};
 
-use super::colorizer::ColorMapper;
 use super::RgbaColor;
+use super::colorizer::ColorMapper;
 
 pub trait ToPng {
     /// Outputs png bytes of an image of size width x height

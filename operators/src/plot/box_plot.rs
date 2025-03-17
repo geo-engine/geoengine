@@ -6,16 +6,17 @@ use crate::engine::{
     WorkflowOperatorPath,
 };
 use crate::error::{self, Error};
+use crate::util::Result;
+use crate::util::Result;
 use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::statistics::PSquareQuantileEstimator;
-use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, AxisAlignedRectangle, BandSelection, BoundingBox2D,
-    ColumnSelection, PlotQueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
+    RasterQueryRectangle, VectorQueryRectangle, partitions_extent, time_interval_extent,
 };
 use geoengine_datatypes::raster::GridOrEmpty;
 use num_traits::AsPrimitive;
@@ -394,7 +395,7 @@ enum BoxPlotAccumKind {
 impl BoxPlotAccumKind {
     fn update(&mut self, values: impl Iterator<Item = f64>) -> crate::util::Result<()> {
         match self {
-            Self::Exact(ref mut x) => {
+            Self::Exact(x) => {
                 x.extend(values.filter(|x| x.is_finite()));
 
                 if x.len() > EXACT_CALC_BOUND {
@@ -403,7 +404,7 @@ impl BoxPlotAccumKind {
                 }
                 Ok(())
             }
-            Self::Estimated(ref mut est) => {
+            Self::Estimated(est) => {
                 for v in values {
                     est.update(v);
                 }
@@ -780,14 +781,15 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_single_feature() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 1],
                 &[("foo", FeatureData::Int(vec![1]))],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -830,14 +832,15 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_empty() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[] as &[TimeInterval],
                 &[("foo", FeatureData::Int(vec![]))],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {
@@ -882,14 +885,15 @@ mod tests {
             data.push(i);
         }
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 2 * super::EXACT_CALC_BOUND],
                 &[("foo", FeatureData::Int(data))],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = BoxPlot {
             params: BoxPlotParams {

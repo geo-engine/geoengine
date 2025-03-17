@@ -179,11 +179,14 @@ impl RasterDataType {
 
     pub fn from_gdal_data_type(gdal_data_type: GdalDataType) -> Result<Self> {
         match gdal_data_type {
+            GdalDataType::Int8 => Ok(Self::I8),
             GdalDataType::UInt8 => Ok(Self::U8),
             GdalDataType::UInt16 => Ok(Self::U16),
             GdalDataType::Int16 => Ok(Self::I16),
             GdalDataType::UInt32 => Ok(Self::U32),
             GdalDataType::Int32 => Ok(Self::I32),
+            GdalDataType::Int64 => Ok(Self::I64),
+            GdalDataType::UInt64 => Ok(Self::U64),
             GdalDataType::Float32 => Ok(Self::F32),
             GdalDataType::Float64 => Ok(Self::F64),
             GdalDataType::Unknown => Err(Error::GdalRasterDataTypeNotSupported),

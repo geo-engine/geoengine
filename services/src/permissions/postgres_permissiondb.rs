@@ -9,10 +9,10 @@ use crate::permissions::{
     MustBeAdminPermissionDbError, PermissionDeniedPermissionDbError, Role,
 };
 use async_trait::async_trait;
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use tokio_postgres::{
-    tls::{MakeTlsConnect, TlsConnect},
     Socket,
+    tls::{MakeTlsConnect, TlsConnect},
 };
 use uuid::Uuid;
 

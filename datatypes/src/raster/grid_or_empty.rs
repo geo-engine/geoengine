@@ -1,11 +1,11 @@
 use std::ops::Add;
 
 use super::{
+    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
+    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Pixel,
     empty_grid::EmptyGrid,
     grid_traits::{ChangeGridBounds, GridShapeAccess},
     masked_grid::MaskedGrid,
-    Grid, GridBoundingBox, GridBounds, GridIdx, GridIndexAccess, GridShape, GridShape1D,
-    GridShape2D, GridShape3D, GridSize, GridSpaceToLinearSpace, Pixel,
 };
 
 use crate::util::{ByteSize, Result};

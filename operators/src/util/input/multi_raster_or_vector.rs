@@ -66,10 +66,12 @@ mod tests {
 
     #[test]
     fn it_serializes() {
-        let operator = MultiRasterOrVectorOperator::Raster(vec![GdalSource {
-            params: GdalSourceParameters::new(NamedData::with_namespaced_name("foo", "bar")),
-        }
-        .boxed()]);
+        let operator = MultiRasterOrVectorOperator::Raster(vec![
+            GdalSource {
+                params: GdalSourceParameters::new(NamedData::with_namespaced_name("foo", "bar")),
+            }
+            .boxed(),
+        ]);
 
         assert_eq!(
             serde_json::to_value(&operator).unwrap(),

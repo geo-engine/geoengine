@@ -1,18 +1,17 @@
+use crate::adapters::SparseTilesFillAdapter;
 use crate::adapters::sparse_tiles_fill_adapter::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds,
 };
-use crate::adapters::SparseTilesFillAdapter;
 use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
+use futures::{Future, stream::FusedStream};
 use futures::{
-    ready,
+    FutureExt, TryFuture, TryStreamExt, ready,
     stream::{BoxStream, TryFold},
-    FutureExt, TryFuture, TryStreamExt,
 };
-use futures::{stream::FusedStream, Future};
 use futures::{Stream, StreamExt, TryFutureExt};
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
@@ -209,11 +208,11 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> FusedStream
 where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
-        Output = RasterTile2D<PixelType>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<PixelType>,
+            SpatialQuery = RasterSpatialQueryRectangle,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     fn is_terminated(&self) -> bool {
@@ -226,11 +225,11 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
 where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
-        Output = RasterTile2D<PixelType>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<PixelType>,
+            SpatialQuery = RasterSpatialQueryRectangle,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     type Item = Result<Option<RasterTile2D<PixelType>>>;
@@ -579,7 +578,7 @@ pub fn identity_accu<T: Pixel>(
     tile_info: TileInformation,
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
-) -> impl Future<Output = Result<RasterTileAccu2D<T>>> {
+) -> impl Future<Output = Result<RasterTileAccu2D<T>>> + use<T> {
     let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();

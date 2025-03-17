@@ -7,7 +7,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::GridBounds;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
-use serde::{de::Visitor, Deserialize, Deserializer, Serialize, Serializer};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
 use snafu::ResultExt;
 use std::{
     collections::{BTreeMap, HashMap},
@@ -330,7 +330,7 @@ impl FromStr for SpatialReferenceAuthority {
             _ => {
                 return Err(error::Error::InvalidSpatialReferenceString {
                     spatial_reference_string: s.into(),
-                })
+                });
             }
         })
     }
@@ -2122,7 +2122,7 @@ impl From<StringPair> for (String, String) {
 
 impl From<StringPair> for geoengine_datatypes::util::StringPair {
     fn from(value: StringPair) -> Self {
-        Self::new(value.0 .0, value.0 .1)
+        Self::new(value.0.0, value.0.1)
     }
 }
 

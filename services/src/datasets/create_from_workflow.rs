@@ -1,6 +1,7 @@
 use crate::api::model::datatypes::RasterQueryRectangle;
 use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
+use crate::datasets::AddDataset;
 use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
@@ -21,11 +22,11 @@ use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
 };
 use geoengine_operators::util::raster_stream_to_geotiff::{
-    raster_stream_to_geotiff, GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata,
-    GdalGeoTiffOptions,
+    GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+    raster_stream_to_geotiff,
 };
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;

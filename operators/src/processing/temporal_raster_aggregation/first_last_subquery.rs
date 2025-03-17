@@ -3,7 +3,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::{future::BoxFuture, Future, FutureExt, TryFuture, TryFutureExt};
+use futures::{Future, FutureExt, TryFuture, TryFutureExt, future::BoxFuture};
 use geoengine_datatypes::{
     primitives::{CacheHint, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep},
     raster::{EmptyGrid2D, Pixel, RasterTile2D, TileInformation},
@@ -171,7 +171,7 @@ fn build_temporal_accu<T: Pixel>(
     query_rect: &RasterQueryRectangle,
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
-) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
+) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> + use<T> {
     let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || TemporalRasterAggregationTileAccu {
         accu_tile: RasterTile2D::new_with_tile_info(
@@ -246,7 +246,7 @@ fn build_temporal_no_data_accu<T: Pixel>(
     query_rect: &RasterQueryRectangle,
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
-) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> {
+) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> + use<T> {
     let time_interval = query_rect.time_interval;
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();

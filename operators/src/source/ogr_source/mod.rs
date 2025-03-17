@@ -1,10 +1,10 @@
 mod dataset_iterator;
 
+use futures::FutureExt;
 use futures::future::{BoxFuture, Future};
 use futures::stream::{BoxStream, FusedStream};
 use futures::task::Context;
-use futures::FutureExt;
-use futures::{ready, Stream, StreamExt};
+use futures::{Stream, StreamExt, ready};
 use gdal::vector::sql::ResultSet;
 use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
 use geoengine_datatypes::collections::{
@@ -40,8 +40,8 @@ use crate::engine::{
     CanonicOperatorName, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
-use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
+use crate::util::input::StringOrNumberRange;
 use crate::{
     engine::{
         InitializedVectorOperator, MetaData, QueryContext, SourceOperator,
@@ -782,7 +782,6 @@ impl FeaturesProvider<'_> {
                     "{attribute} = {start}",
                     attribute = attribute,
                     start = escape_literal(s.start()),
-
                 )
             }
             #[allow(clippy::float_cmp)]
@@ -795,7 +794,6 @@ impl FeaturesProvider<'_> {
                 "CAST({attribute} as bigint) = {start}",
                 attribute = attribute,
                 start = n.start(),
-
             ),
             StringOrNumberRange::String(s) => {
                 format!(
@@ -1285,7 +1283,7 @@ where
                 None => {
                     return Err(Error::Gdal {
                         source: GdalError::InvalidFieldIndex { method_name, index },
-                    })
+                    });
                 }
             },
             Err(e) => return Err(e),
@@ -1971,8 +1969,8 @@ mod tests {
     };
     use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     #[test]
@@ -7053,12 +7051,14 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn creates_time_filter_string() -> Result<()> {
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::None, // Unsupported time type
-            TimeInterval::new_instant(0)?,
-            "PostgreSQL"
-        )
-        .is_none());
+        assert!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::None, // Unsupported time type
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .is_none()
+        );
 
         assert_eq!(
             FeaturesProvider::create_time_filter_string(
@@ -7118,32 +7118,36 @@ mod tests {
                 .to_string()
         );
 
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::Start {
-                start_field: "start".to_string(),
-                start_format: Default::default(),
-                duration: OgrSourceDurationSpec::Value(TimeStep {
-                    // Unsupported duration spec
-                    granularity: TimeGranularity::Millis,
-                    step: 10
-                }),
-            },
-            TimeInterval::new_instant(0)?,
-            "PostgreSQL"
-        )
-        .is_none());
+        assert!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Value(TimeStep {
+                        // Unsupported duration spec
+                        granularity: TimeGranularity::Millis,
+                        step: 10
+                    }),
+                },
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .is_none()
+        );
 
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::StartDuration {
-                // Unsupported time type
-                start_field: "start".to_string(),
-                start_format: Default::default(),
-                duration_field: "duration".to_string(),
-            },
-            TimeInterval::new_instant(0)?,
-            "PostgreSQL"
-        )
-        .is_none());
+        assert!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::StartDuration {
+                    // Unsupported time type
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration_field: "duration".to_string(),
+                },
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .is_none()
+        );
 
         assert_eq!(
             FeaturesProvider::create_time_filter_string(
@@ -7191,40 +7195,46 @@ mod tests {
             r#""start" < '+262142-12-31T23:59:59.999Z'"#.to_string()
         );
 
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::Start {
-                start_field: "start".to_string(),
-                start_format: Default::default(),
-                duration: OgrSourceDurationSpec::Infinite,
-            },
-            TimeInterval::new_unchecked(-210_895_056_000_001, 8_210_266_876_799_999), // Exceeds Postgres range lower bound
-            "PostgreSQL"
-        )
-        .is_none());
-
-        assert!(std::panic::catch_unwind(|| {
+        assert!(
             FeaturesProvider::create_time_filter_string(
                 OgrSourceDatasetTimeType::Start {
                     start_field: "start".to_string(),
                     start_format: Default::default(),
                     duration: OgrSourceDurationSpec::Infinite,
                 },
-                TimeInterval::new_unchecked(-210_895_056_000_000, 8_210_266_876_800_000), // Exceeds Postgres range upper bound (limited by TimeInstance upper bound, panics)
-                "PostgreSQL",
+                TimeInterval::new_unchecked(-210_895_056_000_001, 8_210_266_876_799_999), // Exceeds Postgres range lower bound
+                "PostgreSQL"
             )
-        })
-        .is_err());
+            .is_none()
+        );
 
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::Start {
-                start_field: "start".to_string(),
-                start_format: Default::default(),
-                duration: OgrSourceDurationSpec::Infinite,
-            },
-            TimeInterval::new_instant(0)?,
-            "Unsupported driver"
-        )
-        .is_none());
+        assert!(
+            std::panic::catch_unwind(|| {
+                FeaturesProvider::create_time_filter_string(
+                    OgrSourceDatasetTimeType::Start {
+                        start_field: "start".to_string(),
+                        start_format: Default::default(),
+                        duration: OgrSourceDurationSpec::Infinite,
+                    },
+                    TimeInterval::new_unchecked(-210_895_056_000_000, 8_210_266_876_800_000), // Exceeds Postgres range upper bound (limited by TimeInstance upper bound, panics)
+                    "PostgreSQL",
+                )
+            })
+            .is_err()
+        );
+
+        assert!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Infinite,
+                },
+                TimeInterval::new_instant(0)?,
+                "Unsupported driver"
+            )
+            .is_none()
+        );
 
         Ok(())
     }

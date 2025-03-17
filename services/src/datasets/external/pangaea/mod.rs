@@ -247,10 +247,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -262,7 +262,7 @@ impl
 mod tests {
     use crate::contexts::{GeoEngineDb, SessionContext};
     use crate::contexts::{PostgresContext, PostgresSessionContext};
-    use crate::datasets::external::pangaea::{PangaeaDataProviderDefinition, PANGAEA_PROVIDER_ID};
+    use crate::datasets::external::pangaea::{PANGAEA_PROVIDER_ID, PangaeaDataProviderDefinition};
     use crate::error::Error;
     use crate::ge_context;
     use crate::layers::external::{DataProvider, DataProviderDefinition};
@@ -284,10 +284,9 @@ mod tests {
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::{
-        all_of,
+        Expectation, Server, all_of,
         matchers::{contains, request, url_decoded},
         responders::status_code,
-        Expectation, Server,
     };
     use std::ops::RangeInclusive;
     use std::path::PathBuf;

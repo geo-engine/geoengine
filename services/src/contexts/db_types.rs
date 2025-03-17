@@ -2,6 +2,8 @@ use crate::{
     datasets::{
         dataset_listing_provider::DatasetLayerListingProviderDefinition,
         external::{
+            CopernicusDataspaceDataProviderDefinition, GdalRetries,
+            SentinelS2L2ACogsProviderDefinition, StacApiRetries,
             aruna::ArunaDataProviderDefinition,
             edr::{EdrDataProviderDefinition, EdrVectorSpec},
             gbif::GbifDataProviderDefinition,
@@ -9,8 +11,6 @@ use crate::{
             gfbio_collections::GfbioCollectionsDataProviderDefinition,
             netcdfcf::{EbvPortalDataProviderDefinition, NetCdfCfDataProviderDefinition},
             pangaea::PangaeaDataProviderDefinition,
-            CopernicusDataspaceDataProviderDefinition, GdalRetries,
-            SentinelS2L2ACogsProviderDefinition, StacApiRetries,
         },
         listing::Provenance,
         storage::MetaDataDefinition,

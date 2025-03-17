@@ -3,7 +3,7 @@ use crate::machine_learning::error::{
     InvalidInputDimensions, InvalidOutputDimensions, MultipleInputsNotSupported, Ort,
 };
 use geoengine_datatypes::{machine_learning::MlModelMetadata, raster::RasterDataType};
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use std::path::Path;
 
 pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearningError> {

@@ -1,8 +1,8 @@
 use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
-use futures::stream::{BoxStream, FuturesUnordered};
 use futures::StreamExt;
+use futures::stream::{BoxStream, FuturesUnordered};
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
@@ -162,7 +162,7 @@ impl VectorOperator for VisualPointClustering {
                     return Err(Error::InvalidType {
                         expected: "not null".to_string(),
                         found: "null".to_string(),
-                    })
+                    });
                 }
             };
 
@@ -590,20 +590,22 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
-                &[TimeInterval::default(); 2],
-                &[
-                    ("count", FeatureData::Int(vec![9, 1])),
-                    (
-                        "radius",
-                        FeatureData::Float(vec![10.197_224_577_336_218, 8.])
-                    )
-                ],
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
+                    &[TimeInterval::default(); 2],
+                    &[
+                        ("count", FeatureData::Int(vec![9, 1])),
+                        (
+                            "radius",
+                            FeatureData::Float(vec![10.197_224_577_336_218, 8.])
+                        )
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -675,21 +677,23 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
-                &[TimeInterval::default(); 2],
-                &[
-                    ("count", FeatureData::Int(vec![9, 1])),
-                    (
-                        "radius",
-                        FeatureData::Float(vec![10.197_224_577_336_218, 8.])
-                    ),
-                    ("bar", FeatureData::Float(vec![5., 10.]))
-                ],
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
+                    &[TimeInterval::default(); 2],
+                    &[
+                        ("count", FeatureData::Int(vec![9, 1])),
+                        (
+                            "radius",
+                            FeatureData::Float(vec![10.197_224_577_336_218, 8.])
+                        ),
+                        ("bar", FeatureData::Float(vec![5., 10.]))
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -761,21 +765,23 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &[(0.0, 0.1), (50.0, 50.1)],
-                &[TimeInterval::default(); 2],
-                &[
-                    ("count", FeatureData::Int(vec![2, 2])),
-                    (
-                        "radius",
-                        FeatureData::Float(vec![8.693_147_180_559_945, 8.693_147_180_559_945])
-                    ),
-                    ("foo", FeatureData::NullableFloat(vec![Some(1.), None]))
-                ],
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &[(0.0, 0.1), (50.0, 50.1)],
+                    &[TimeInterval::default(); 2],
+                    &[
+                        ("count", FeatureData::Int(vec![2, 2])),
+                        (
+                            "radius",
+                            FeatureData::Float(vec![8.693_147_180_559_945, 8.693_147_180_559_945])
+                        ),
+                        ("foo", FeatureData::NullableFloat(vec![Some(1.), None]))
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -855,32 +861,34 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &[(0.0, 0.1), (50.0, 50.1), (25.0, 25.1)],
-                &[TimeInterval::default(); 3],
-                &[
-                    ("count", FeatureData::Int(vec![2, 2, 2])),
-                    (
-                        "radius",
-                        FeatureData::Float(vec![
-                            8.693_147_180_559_945,
-                            8.693_147_180_559_945,
-                            8.693_147_180_559_945
-                        ])
-                    ),
-                    (
-                        "text",
-                        FeatureData::NullableText(vec![
-                            Some("foo, bar".to_string()),
-                            Some("foo".to_string()),
-                            None
-                        ])
-                    )
-                ],
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &[(0.0, 0.1), (50.0, 50.1), (25.0, 25.1)],
+                    &[TimeInterval::default(); 3],
+                    &[
+                        ("count", FeatureData::Int(vec![2, 2, 2])),
+                        (
+                            "radius",
+                            FeatureData::Float(vec![
+                                8.693_147_180_559_945,
+                                8.693_147_180_559_945,
+                                8.693_147_180_559_945
+                            ])
+                        ),
+                        (
+                            "text",
+                            FeatureData::NullableText(vec![
+                                Some("foo, bar".to_string()),
+                                Some("foo".to_string()),
+                                None
+                            ])
+                        )
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]

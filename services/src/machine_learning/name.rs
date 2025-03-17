@@ -1,5 +1,5 @@
 use postgres_types::{FromSql, ToSql};
-use serde::{de::Visitor, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Visitor};
 use utoipa::ToSchema;
 
 const NAME_DELIMITER: char = ':';

@@ -4,7 +4,7 @@ use bytes::BytesMut;
 use geoengine_datatypes::operations::image::Colorizer;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use postgres_types::{to_sql_checked, FromSql, IsNull, ToSql};
+use postgres_types::{FromSql, IsNull, ToSql, to_sql_checked};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq)]

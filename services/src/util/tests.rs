@@ -2,17 +2,17 @@
 
 use super::postgres::DatabaseConnectionConfig;
 use crate::api::model::responses::ErrorResponse;
-use crate::config::{get_config_element, Postgres};
+use crate::config::{Postgres, get_config_element};
 use crate::contexts::ApplicationContext;
 use crate::contexts::GeoEngineDb;
 use crate::contexts::PostgresContext;
+use crate::datasets::AddDataset;
+use crate::datasets::DatasetIdAndName;
+use crate::datasets::DatasetName;
 use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
-use crate::datasets::AddDataset;
-use crate::datasets::DatasetIdAndName;
-use crate::datasets::DatasetName;
 use crate::permissions::Permission;
 use crate::permissions::PermissionDb;
 use crate::permissions::Role;
@@ -21,9 +21,9 @@ use crate::projects::{
     Symbology, UpdateProject,
 };
 use crate::users::OidcManager;
+use crate::util::Identifier;
 use crate::util::middleware::OutputRequestId;
 use crate::util::server::{configure_extractors, render_404, render_405};
-use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
@@ -38,10 +38,10 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{
-    http, http::header, http::Method, middleware, test, web, App, HttpResponse, Responder,
+    App, HttpResponse, Responder, http, http::Method, http::header, middleware, test, web,
 };
-use bb8_postgres::bb8::ManageConnection;
 use bb8_postgres::PostgresConnectionManager;
+use bb8_postgres::bb8::ManageConnection;
 use flexi_logger::Logger;
 use futures_util::Future;
 use geoengine_datatypes::dataset::DatasetId;
@@ -436,29 +436,35 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
     // rewrite metadata to use the correct file path
     def.meta_data = match def.meta_data {
         MetaDataDefinition::GdalStatic(mut meta_data) => {
-            meta_data.params.file_path = test_data!(meta_data
-                .params
-                .file_path
-                .strip_prefix("test_data/")
-                .unwrap())
+            meta_data.params.file_path = test_data!(
+                meta_data
+                    .params
+                    .file_path
+                    .strip_prefix("test_data/")
+                    .unwrap()
+            )
             .into();
             MetaDataDefinition::GdalStatic(meta_data)
         }
         MetaDataDefinition::GdalMetaDataRegular(mut meta_data) => {
-            meta_data.params.file_path = test_data!(meta_data
-                .params
-                .file_path
-                .strip_prefix("test_data/")
-                .unwrap())
+            meta_data.params.file_path = test_data!(
+                meta_data
+                    .params
+                    .file_path
+                    .strip_prefix("test_data/")
+                    .unwrap()
+            )
             .into();
             MetaDataDefinition::GdalMetaDataRegular(meta_data)
         }
         MetaDataDefinition::OgrMetaData(mut meta_data) => {
-            meta_data.loading_info.file_name = test_data!(meta_data
-                .loading_info
-                .file_name
-                .strip_prefix("test_data/")
-                .unwrap())
+            meta_data.loading_info.file_name = test_data!(
+                meta_data
+                    .loading_info
+                    .file_name
+                    .strip_prefix("test_data/")
+                    .unwrap()
+            )
             .into();
             MetaDataDefinition::OgrMetaData(meta_data)
         }
@@ -690,7 +696,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, DatabaseConnectionConfi
         .unwrap();
 
     let mut db_config = get_config_element::<Postgres>().unwrap();
-    db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
+    db_config.schema = format!("geoengine_test_{}", rand::rng().next_u64()); // generate random temp schema
 
     let db_config = DatabaseConnectionConfig {
         host: db_config.host,
@@ -1051,7 +1057,7 @@ pub(crate) mod mock_oidc {
     use chrono::{Duration, Utc};
     use httptest::matchers::{matches, request};
     use httptest::responders::status_code;
-    use httptest::{all_of, Expectation, Server};
+    use httptest::{Expectation, Server, all_of};
     use oauth2::basic::BasicTokenType;
     use oauth2::{
         AccessToken, AuthUrl, EmptyExtraTokenFields, RefreshToken, Scope, StandardTokenResponse,

@@ -1,6 +1,6 @@
 use bb8_postgres::{
-    bb8::{Pool, PooledConnection},
     PostgresConnectionManager,
+    bb8::{Pool, PooledConnection},
 };
 use futures::future::BoxFuture;
 use tokio_postgres::{NoTls, Transaction};

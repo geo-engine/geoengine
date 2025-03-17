@@ -1,7 +1,6 @@
 use super::{
-    get_expression_dependencies,
+    RasterExpressionError, get_expression_dependencies,
     raster_query_processor::{ExpressionInput, ExpressionQueryProcessor},
-    RasterExpressionError,
 };
 use crate::{
     engine::{
@@ -110,10 +109,11 @@ impl RasterOperator for Expression {
             spatial_reference: in_descriptor.spatial_reference,
             time: in_descriptor.time,
             spatial_grid: in_descriptor.spatial_grid,
-            bands: RasterBandDescriptors::new(vec![self
-                .params
-                .output_band
-                .unwrap_or(RasterBandDescriptor::new_unitless("expression".into()))])?,
+            bands: RasterBandDescriptors::new(vec![
+                self.params
+                    .output_band
+                    .unwrap_or(RasterBandDescriptor::new_unitless("expression".into())),
+            ])?,
         };
 
         let initialized_operator = InitializedExpression {
