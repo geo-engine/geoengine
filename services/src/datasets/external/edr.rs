@@ -1709,7 +1709,7 @@ mod tests {
                         "temperature.aux.xml"
                     ))))
                 ])
-                .times(0..2)
+                .times(0..3)
                 .respond_with(status_code(404)),
             );
 
