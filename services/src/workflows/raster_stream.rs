@@ -10,10 +10,9 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
-    engine::{
-        QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator, WorkflowOperatorPath,
-    },
+    engine::{InitializedRasterOperator, QueryAbortTrigger, QueryContext, QueryProcessorExt},
 };
+use tracing::debug;
 
 pub struct RasterWebsocketStreamHandler {
     state: RasterWebsocketStreamHandlerState,
@@ -27,6 +26,16 @@ enum RasterWebsocketStreamHandlerState {
     Closed,
     Idle { stream: ByteStream },
     Processing { _fut: SpawnHandle },
+}
+
+impl std::fmt::Debug for RasterWebsocketStreamHandlerState {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Closed => write!(f, "Closed"),
+            Self::Idle { stream: _ } => write!(f, "Idle"),
+            Self::Processing { _fut: _ } => write!(f, "Processing"),
+        }
+    }
 }
 
 impl Default for RasterWebsocketStreamHandlerState {
@@ -44,7 +53,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
 
     fn finished(&mut self, ctx: &mut Self::Context) {
         ctx.stop();
-
+        debug!("Stream finished.");
         self.abort_processing();
     }
 
@@ -53,6 +62,7 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
             Ok(ws::Message::Ping(msg)) => ctx.pong(&msg),
             Ok(ws::Message::Text(text)) if &text == "NEXT" => self.next_tile(ctx),
             Ok(ws::Message::Close(reason)) => {
+                debug!("Stream was closed. Reason: {:?}", reason);
                 ctx.close(reason);
 
                 self.finished(ctx);
@@ -65,20 +75,15 @@ impl StreamHandler<Result<ws::Message, ws::ProtocolError>> for RasterWebsocketSt
 
 impl RasterWebsocketStreamHandler {
     pub async fn new<C: SessionContext>(
-        raster_operator: Box<dyn RasterOperator>,
+        initialized_raster_operator: Box<dyn InitializedRasterOperator>,
         query_rectangle: RasterQueryRectangle,
-        execution_ctx: C::ExecutionContext,
         mut query_ctx: C::QueryContext,
     ) -> Result<Self> {
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+        let spatial_reference = initialized_raster_operator
+            .result_descriptor()
+            .spatial_reference;
 
-        let initialized_operator = raster_operator
-            .initialize(workflow_operator_path_root, &execution_ctx)
-            .await?;
-
-        let spatial_reference = initialized_operator.result_descriptor().spatial_reference;
-
-        let query_processor = initialized_operator.query_processor()?;
+        let query_processor = initialized_raster_operator.query_processor()?;
 
         let abort_handle = query_ctx.abort_trigger().ok();
 
@@ -147,6 +152,7 @@ fn send_result(
         }
         Some(Err(e)) => {
             // on error, send the error and close the connection
+            debug!("Tile error in stream: {e}");
             actor.state = RasterWebsocketStreamHandlerState::Closed;
             ctx.close(Some(CloseReason {
                 code: CloseCode::Error,
@@ -157,6 +163,7 @@ fn send_result(
         None => {
             // stream ended
             actor.state = RasterWebsocketStreamHandlerState::Closed;
+            debug!("Sttream is empty --> ended.");
             ctx.close(Some(CloseReason {
                 code: CloseCode::Normal,
                 description: None,
@@ -181,11 +188,12 @@ mod tests {
     use bytes::{Bytes, BytesMut};
     use futures::channel::mpsc::UnboundedSender;
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
+        primitives::{BandSelection, DateTime, TimeInterval},
+        raster::GridBoundingBox2D,
         util::arrow::arrow_ipc_file_to_record_batches,
     };
+
+    use geoengine_operators::engine::WorkflowOperatorPath;
     use tokio_postgres::NoTls;
     use uuid::Uuid;
 
@@ -209,19 +217,24 @@ mod tests {
 
         let (workflow, workflow_id) = register_ndvi_workflow_helper(&app_ctx).await;
 
-        let query_rectangle = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
-                .unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let workflow_root_path = WorkflowOperatorPath::initialize_root();
+        let initialized_operator = workflow
+            .operator
+            .get_raster()
+            .unwrap()
+            .initialize(workflow_root_path, &ctx.execution_context().unwrap())
+            .await
+            .unwrap();
+
+        let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(), // This is just a part of the raster but the original test used a resolution of 1.0 instead of the 0.1 the data actually has
+            TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+            BandSelection::first(),
+        );
 
         let handler = RasterWebsocketStreamHandler::new::<PostgresSessionContext<NoTls>>(
-            workflow.operator.get_raster().unwrap(),
+            initialized_operator,
             query_rectangle,
-            ctx.execution_context().unwrap(),
             ctx.query_context(workflow_id.0, Uuid::new_v4()).unwrap(),
         )
         .await

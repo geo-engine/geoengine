@@ -1,7 +1,17 @@
+use crate::error::{
+    Error, RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique,
+};
+use crate::util::Result;
+use geoengine_datatypes::operations::reproject::{CoordinateProjection, ReprojectClipped};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, FeatureDataType,
-    Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle, SpatialPartition2D,
-    SpatialResolution, TimeInterval,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, Coordinate2D,
+    FeatureDataType, Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle,
+    SpatialGridQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
+    VectorSpatialQueryRectangle,
+};
+use geoengine_datatypes::raster::{
+    GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
+    SpatialGridDefinition, TilingSpatialGridDefinition, TilingSpecification,
 };
 use geoengine_datatypes::util::ByteSize;
 use geoengine_datatypes::{
@@ -13,16 +23,11 @@ use snafu::ensure;
 use std::collections::{HashMap, HashSet};
 use std::ops::Index;
 
-use crate::error::{
-    Error, RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique,
-};
-use crate::util::Result;
-
 /// A descriptor that contains information about the query result, for instance, the data type
 /// and spatial reference.
 pub trait ResultDescriptor: Clone + Serialize {
     type DataType;
-    type QueryRectangleSpatialBounds: AxisAlignedRectangle;
+    type QueryRectangleSpatialBounds;
     type QueryRectangleAttributeSelection: QueryAttributeSelection;
 
     // Check the `query` against the `ResultDescriptor` and return `true` if the query is valid
@@ -69,28 +74,548 @@ pub trait ResultDescriptor: Clone + Serialize {
         F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>;
 }
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum SpatialGridDescriptorState {
+    /// The spatial grid represents a native dataset
+    Source,
+    /// The spatial grid was created by merging two non equal spatial grids
+    Merged,
+}
+
+impl SpatialGridDescriptorState {
+    #[must_use]
+    pub fn merge(self, other: Self) -> Self {
+        match (self, other) {
+            (SpatialGridDescriptorState::Source, SpatialGridDescriptorState::Source) => {
+                SpatialGridDescriptorState::Source
+            }
+            _ => SpatialGridDescriptorState::Merged,
+        }
+    }
+
+    pub fn is_source(self) -> bool {
+        self == SpatialGridDescriptorState::Source
+    }
+
+    pub fn is_derived(self) -> bool {
+        !self.is_source()
+    }
+}
+
 /// A `ResultDescriptor` for raster queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SpatialGridDescriptor {
+    spatial_grid: SpatialGridDefinition,
+    state: SpatialGridDescriptorState,
+}
+
+impl SpatialGridDescriptor {
+    pub fn new_source(spatial_grid_def: SpatialGridDefinition) -> Self {
+        Self {
+            spatial_grid: spatial_grid_def,
+            state: SpatialGridDescriptorState::Source,
+        }
+    }
+
+    pub fn source_from_parts(geo_transform: GeoTransform, grid_bounds: GridBoundingBox2D) -> Self {
+        Self::new_source(SpatialGridDefinition::new(geo_transform, grid_bounds))
+    }
+
+    #[must_use]
+    pub fn as_derived(self) -> Self {
+        Self {
+            state: SpatialGridDescriptorState::Merged,
+            ..self
+        }
+    }
+
+    pub fn merge(&self, other: &SpatialGridDescriptor) -> Option<Self> {
+        // TODO: merge directly to tiling origin?
+        let merged_grid = self.spatial_grid.merge(&other.spatial_grid)?;
+        let state = if self.spatial_grid.grid_bounds == merged_grid.grid_bounds
+            && other.spatial_grid.grid_bounds == merged_grid.grid_bounds
+        {
+            self.state.merge(other.state)
+        } else {
+            SpatialGridDescriptorState::Merged
+        };
+
+        Some(Self {
+            spatial_grid: merged_grid,
+            state,
+        })
+    }
+
+    #[must_use]
+    pub fn map<F: Fn(&SpatialGridDefinition) -> SpatialGridDefinition>(&self, map_fn: F) -> Self {
+        Self {
+            spatial_grid: map_fn(&self.spatial_grid),
+            ..*self
+        }
+    }
+
+    pub fn try_map<F: Fn(&SpatialGridDefinition) -> Result<SpatialGridDefinition>>(
+        &self,
+        map_fn: F,
+    ) -> Result<Self> {
+        Ok(Self {
+            spatial_grid: map_fn(&self.spatial_grid)?,
+            ..*self
+        })
+    }
+
+    pub fn is_compatible_grid_generic<G: GeoTransformAccess>(&self, g: &G) -> bool {
+        self.spatial_grid.is_compatible_grid_generic(g)
+    }
+
+    pub fn is_compatible_grid(&self, other: &Self) -> bool {
+        self.is_compatible_grid_generic(&other.spatial_grid)
+    }
+
+    pub fn tiling_grid_definition(
+        &self,
+        tiling_specification: TilingSpecification,
+    ) -> TilingSpatialGridDefinition {
+        // TODO: we could also store the tiling_origin_reference and then use that directly?
+        TilingSpatialGridDefinition::new(self.spatial_grid, tiling_specification)
+    }
+
+    pub fn is_source(&self) -> bool {
+        self.state == SpatialGridDescriptorState::Source
+    }
+
+    pub fn source_spatial_grid_definition(&self) -> Option<SpatialGridDefinition> {
+        match self.state {
+            SpatialGridDescriptorState::Source => Some(self.spatial_grid),
+            SpatialGridDescriptorState::Merged => None,
+        }
+    }
+
+    pub fn derived_spatial_grid_definition(&self) -> Option<SpatialGridDefinition> {
+        match self.state {
+            SpatialGridDescriptorState::Merged => Some(self.spatial_grid),
+            SpatialGridDescriptorState::Source => None,
+        }
+    }
+
+    pub fn spatial_partition(&self) -> SpatialPartition2D {
+        self.spatial_grid.spatial_partition()
+    }
+
+    pub fn spatial_resolution(&self) -> SpatialResolution {
+        self.spatial_grid.geo_transform.spatial_resolution()
+    }
+
+    pub fn grid_shape(&self) -> GridShape2D {
+        self.spatial_grid.grid_bounds().grid_shape()
+    }
+
+    #[must_use]
+    pub fn with_changed_resolution(&self, new_res: SpatialResolution) -> Self {
+        self.map(|x| x.with_changed_resolution(new_res))
+    }
+
+    #[must_use]
+    pub fn replace_origin(&self, new_origin: Coordinate2D) -> Self {
+        self.map(|x| x.replace_origin(new_origin))
+    }
+
+    #[must_use]
+    pub fn with_moved_origin_to_nearest_grid_edge(
+        &self,
+        new_origin_referece: Coordinate2D,
+    ) -> Self {
+        self.map(|x| x.with_moved_origin_to_nearest_grid_edge(new_origin_referece))
+    }
+
+    pub fn reproject_clipped<P: CoordinateProjection>(
+        &self,
+        projector: &P,
+    ) -> Result<Option<Self>> {
+        let projected = self.spatial_grid.reproject_clipped(projector)?;
+        match projected {
+            Some(p) => Ok(Some(Self {
+                spatial_grid: p,
+                state: SpatialGridDescriptorState::Merged,
+            })),
+            None => Ok(None),
+        }
+    }
+
+    pub fn generate_coord_grid_pixel_center(&self) -> Grid<GridBoundingBox2D, Coordinate2D> {
+        self.spatial_grid.generate_coord_grid_pixel_center()
+    }
+
+    #[must_use]
+    pub fn spatial_bounds_to_compatible_spatial_grid(
+        &self,
+        spatial_partition: SpatialPartition2D,
+    ) -> Self {
+        self.map(|x| x.spatial_bounds_to_compatible_spatial_grid(spatial_partition))
+    }
+
+    pub fn intersection_with_tiling_grid(
+        &self,
+        tiling_grid: &TilingSpatialGridDefinition,
+    ) -> Option<Self> {
+        let tiling_spatial_grid = tiling_grid.tiling_spatial_grid_definition();
+        let intersection = self.spatial_grid.intersection(&tiling_spatial_grid)?;
+
+        let descriptor = if self.spatial_grid.grid_bounds == intersection.grid_bounds {
+            self.state
+        } else {
+            SpatialGridDescriptorState::Merged
+        };
+
+        Some(Self {
+            spatial_grid: intersection,
+            state: descriptor,
+        })
+    }
+
+    pub fn as_parts(&self) -> (SpatialGridDescriptorState, SpatialGridDefinition) {
+        let SpatialGridDescriptor {
+            spatial_grid,
+            state,
+        } = *self;
+        (state, spatial_grid)
+    }
+}
+
+/// A `ResultDescriptor` for raster queries
+#[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
-    pub bbox: Option<SpatialPartition2D>,
-    pub resolution: Option<SpatialResolution>,
+    pub spatial_grid: SpatialGridDescriptor,
     pub bands: RasterBandDescriptors,
 }
 
+impl ResultDescriptor for RasterResultDescriptor {
+    type DataType = RasterDataType;
+    type QueryRectangleSpatialBounds = SpatialGridQueryRectangle;
+    type QueryRectangleAttributeSelection = BandSelection;
+
+    fn data_type(&self) -> Self::DataType {
+        self.data_type
+    }
+
+    fn spatial_reference(&self) -> SpatialReferenceOption {
+        self.spatial_reference
+    }
+
+    fn map_data_type<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Self::DataType) -> Self::DataType,
+    {
+        Self {
+            data_type: f(&self.data_type),
+            bands: self.bands.clone(),
+            ..*self
+        }
+    }
+
+    fn map_spatial_reference<F>(&self, f: F) -> Self
+    where
+        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
+    {
+        Self {
+            spatial_reference: f(&self.spatial_reference),
+            bands: self.bands.clone(),
+            ..*self
+        }
+    }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
+            bands: self.bands.clone(),
+            ..*self
+        }
+    }
+
+    fn validate_query(
+        &self,
+        query: &QueryRectangle<
+            Self::QueryRectangleSpatialBounds,
+            Self::QueryRectangleAttributeSelection,
+        >,
+    ) -> Result<()> {
+        for band in query.attributes.as_slice() {
+            if *band as usize >= self.bands.len() {
+                return Err(Error::BandDoesNotExist { band_idx: *band });
+            }
+        }
+
+        Ok(())
+    }
+}
+
 impl RasterResultDescriptor {
-    pub fn with_datatype_and_num_bands(data_type: RasterDataType, num_bands: u32) -> Self {
+    /// create a new `RasterResultDescriptor`
+    pub fn new(
+        data_type: RasterDataType,
+        spatial_reference: SpatialReferenceOption,
+        time: Option<TimeInterval>,
+        spatial_grid: SpatialGridDescriptor,
+        bands: RasterBandDescriptors,
+    ) -> Self {
+        Self {
+            data_type,
+            spatial_reference,
+            time,
+            spatial_grid,
+            bands,
+        }
+    }
+
+    pub fn spatial_grid_descriptor(&self) -> &SpatialGridDescriptor {
+        &self.spatial_grid
+    }
+
+    /// Returns tiling grid definition of the data.
+    pub fn tiling_grid_definition(
+        &self,
+        tiling_specification: TilingSpecification,
+    ) -> TilingSpatialGridDefinition {
+        self.spatial_grid
+            .tiling_grid_definition(tiling_specification)
+    }
+
+    pub fn spatial_bounds(&self) -> SpatialPartition2D {
+        self.spatial_grid.spatial_partition()
+    }
+
+    pub fn with_datatype_and_num_bands(
+        data_type: RasterDataType,
+        num_bands: u32,
+        pixel_bounds: GridBoundingBox2D,
+        geo_transform: GeoTransform,
+    ) -> Self {
         Self {
             data_type,
             spatial_reference: SpatialReferenceOption::Unreferenced,
             time: None,
-            bbox: None,
-            resolution: None,
+            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                geo_transform,
+                pixel_bounds,
+            )),
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         }
+    }
+}
+
+/// A `ResultDescriptor` for vector queries
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorResultDescriptor {
+    pub data_type: VectorDataType,
+    pub spatial_reference: SpatialReferenceOption,
+    pub columns: HashMap<String, VectorColumnInfo>,
+    pub time: Option<TimeInterval>,
+    pub bbox: Option<BoundingBox2D>,
+}
+
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorColumnInfo {
+    pub data_type: FeatureDataType,
+    pub measurement: Measurement,
+}
+
+impl VectorResultDescriptor {
+    /// Create a new `VectorResultDescriptor` by only modifying the columns
+    #[must_use]
+    pub fn map_columns<F>(&self, f: F) -> Self
+    where
+        F: Fn(&HashMap<String, VectorColumnInfo>) -> HashMap<String, VectorColumnInfo>,
+    {
+        Self {
+            data_type: self.data_type,
+            spatial_reference: self.spatial_reference,
+            columns: f(&self.columns),
+            ..*self
+        }
+    }
+
+    pub fn column_data_type(&self, column: &str) -> Option<FeatureDataType> {
+        self.columns.get(column).map(|c| c.data_type)
+    }
+
+    pub fn column_measurement(&self, column: &str) -> Option<&Measurement> {
+        self.columns.get(column).map(|c| &c.measurement)
+    }
+}
+
+impl ResultDescriptor for VectorResultDescriptor {
+    type DataType = VectorDataType;
+    type QueryRectangleSpatialBounds = VectorSpatialQueryRectangle;
+    type QueryRectangleAttributeSelection = ColumnSelection;
+
+    fn data_type(&self) -> Self::DataType {
+        self.data_type
+    }
+
+    fn spatial_reference(&self) -> SpatialReferenceOption {
+        self.spatial_reference
+    }
+
+    fn map_data_type<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Self::DataType) -> Self::DataType,
+    {
+        Self {
+            data_type: f(&self.data_type),
+            spatial_reference: self.spatial_reference,
+            columns: self.columns.clone(),
+            ..*self
+        }
+    }
+
+    fn map_spatial_reference<F>(&self, f: F) -> Self
+    where
+        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
+    {
+        Self {
+            data_type: self.data_type,
+            spatial_reference: f(&self.spatial_reference),
+            columns: self.columns.clone(),
+            ..*self
+        }
+    }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
+            columns: self.columns.clone(),
+            ..*self
+        }
+    }
+
+    fn validate_query(
+        &self,
+        _query: &QueryRectangle<
+            Self::QueryRectangleSpatialBounds,
+            Self::QueryRectangleAttributeSelection,
+        >,
+    ) -> Result<()> {
+        Ok(())
+    }
+}
+
+/// A `ResultDescriptor` for plot queries
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
+#[serde(rename_all = "camelCase")]
+pub struct PlotResultDescriptor {
+    pub spatial_reference: SpatialReferenceOption,
+    pub time: Option<TimeInterval>,
+    pub bbox: Option<BoundingBox2D>,
+}
+
+impl ResultDescriptor for PlotResultDescriptor {
+    type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
+    type QueryRectangleSpatialBounds = BoundingBox2D;
+    type QueryRectangleAttributeSelection = PlotSeriesSelection;
+
+    fn data_type(&self) -> Self::DataType {}
+
+    fn spatial_reference(&self) -> SpatialReferenceOption {
+        self.spatial_reference
+    }
+
+    fn map_data_type<F>(&self, _f: F) -> Self
+    where
+        F: Fn(&Self::DataType) -> Self::DataType,
+    {
+        *self
+    }
+
+    fn map_spatial_reference<F>(&self, _f: F) -> Self
+    where
+        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
+    {
+        *self
+    }
+
+    fn map_time<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            time: f(&self.time),
+            ..*self
+        }
+    }
+
+    fn validate_query(
+        &self,
+        _query: &QueryRectangle<
+            Self::QueryRectangleSpatialBounds,
+            Self::QueryRectangleAttributeSelection,
+        >,
+    ) -> Result<()> {
+        Ok(())
+    }
+}
+
+// implementing `From` is possible here because we don't need any additional information, while we would need
+// a measurement and a no data value to convert it into a `RasterResultDescriptor`
+impl From<VectorResultDescriptor> for PlotResultDescriptor {
+    fn from(descriptor: VectorResultDescriptor) -> Self {
+        Self {
+            spatial_reference: descriptor.spatial_reference,
+            time: descriptor.time,
+            bbox: descriptor.bbox,
+        }
+    }
+}
+
+// implementing `From` is possible here because we don't need any additional information, while we would need
+// to know the `columns` to convert it into a `VectorResultDescriptor`
+impl From<RasterResultDescriptor> for PlotResultDescriptor {
+    fn from(descriptor: RasterResultDescriptor) -> Self {
+        Self {
+            spatial_reference: descriptor.spatial_reference,
+            time: descriptor.time,
+            // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
+            bbox: Some(descriptor.spatial_bounds().as_bbox()),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum TypedResultDescriptor {
+    Plot(PlotResultDescriptor),
+    Raster(RasterResultDescriptor),
+    Vector(VectorResultDescriptor),
+}
+
+impl From<PlotResultDescriptor> for TypedResultDescriptor {
+    fn from(value: PlotResultDescriptor) -> Self {
+        Self::Plot(value)
+    }
+}
+
+impl From<RasterResultDescriptor> for TypedResultDescriptor {
+    fn from(value: RasterResultDescriptor) -> Self {
+        Self::Raster(value)
+    }
+}
+
+impl From<VectorResultDescriptor> for TypedResultDescriptor {
+    fn from(value: VectorResultDescriptor) -> Self {
+        Self::Vector(value)
     }
 }
 
@@ -257,280 +782,6 @@ impl RasterBandDescriptor {
     }
 }
 
-impl ResultDescriptor for RasterResultDescriptor {
-    type DataType = RasterDataType;
-    type QueryRectangleSpatialBounds = SpatialPartition2D;
-    type QueryRectangleAttributeSelection = BandSelection;
-
-    fn data_type(&self) -> Self::DataType {
-        self.data_type
-    }
-
-    fn spatial_reference(&self) -> SpatialReferenceOption {
-        self.spatial_reference
-    }
-
-    fn map_data_type<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        Self {
-            data_type: f(&self.data_type),
-            bands: self.bands.clone(),
-            ..*self
-        }
-    }
-
-    fn map_spatial_reference<F>(&self, f: F) -> Self
-    where
-        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
-    {
-        Self {
-            spatial_reference: f(&self.spatial_reference),
-            bands: self.bands.clone(),
-            ..*self
-        }
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
-    {
-        Self {
-            time: f(&self.time),
-            bands: self.bands.clone(),
-            ..*self
-        }
-    }
-
-    fn validate_query(
-        &self,
-        query: &QueryRectangle<
-            Self::QueryRectangleSpatialBounds,
-            Self::QueryRectangleAttributeSelection,
-        >,
-    ) -> Result<()> {
-        for band in query.attributes.as_slice() {
-            if *band as usize >= self.bands.len() {
-                return Err(Error::BandDoesNotExist { band_idx: *band });
-            }
-        }
-
-        Ok(())
-    }
-}
-
-impl RasterResultDescriptor {}
-
-/// A `ResultDescriptor` for vector queries
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VectorResultDescriptor {
-    pub data_type: VectorDataType,
-    pub spatial_reference: SpatialReferenceOption,
-    pub columns: HashMap<String, VectorColumnInfo>,
-    pub time: Option<TimeInterval>,
-    pub bbox: Option<BoundingBox2D>,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct VectorColumnInfo {
-    pub data_type: FeatureDataType,
-    pub measurement: Measurement,
-}
-
-impl VectorResultDescriptor {
-    /// Create a new `VectorResultDescriptor` by only modifying the columns
-    #[must_use]
-    pub fn map_columns<F>(&self, f: F) -> Self
-    where
-        F: Fn(&HashMap<String, VectorColumnInfo>) -> HashMap<String, VectorColumnInfo>,
-    {
-        Self {
-            data_type: self.data_type,
-            spatial_reference: self.spatial_reference,
-            columns: f(&self.columns),
-            ..*self
-        }
-    }
-
-    pub fn column_data_type(&self, column: &str) -> Option<FeatureDataType> {
-        self.columns.get(column).map(|c| c.data_type)
-    }
-
-    pub fn column_measurement(&self, column: &str) -> Option<&Measurement> {
-        self.columns.get(column).map(|c| &c.measurement)
-    }
-}
-
-impl ResultDescriptor for VectorResultDescriptor {
-    type DataType = VectorDataType;
-    type QueryRectangleSpatialBounds = BoundingBox2D;
-    type QueryRectangleAttributeSelection = ColumnSelection;
-
-    fn data_type(&self) -> Self::DataType {
-        self.data_type
-    }
-
-    fn spatial_reference(&self) -> SpatialReferenceOption {
-        self.spatial_reference
-    }
-
-    fn map_data_type<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        Self {
-            data_type: f(&self.data_type),
-            spatial_reference: self.spatial_reference,
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-
-    fn map_spatial_reference<F>(&self, f: F) -> Self
-    where
-        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
-    {
-        Self {
-            data_type: self.data_type,
-            spatial_reference: f(&self.spatial_reference),
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
-    {
-        Self {
-            time: f(&self.time),
-            columns: self.columns.clone(),
-            ..*self
-        }
-    }
-
-    fn validate_query(
-        &self,
-        _query: &QueryRectangle<
-            Self::QueryRectangleSpatialBounds,
-            Self::QueryRectangleAttributeSelection,
-        >,
-    ) -> Result<()> {
-        Ok(())
-    }
-}
-
-/// A `ResultDescriptor` for plot queries
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize, ToSql, FromSql)]
-#[serde(rename_all = "camelCase")]
-pub struct PlotResultDescriptor {
-    pub spatial_reference: SpatialReferenceOption,
-    pub time: Option<TimeInterval>,
-    pub bbox: Option<BoundingBox2D>,
-}
-
-impl ResultDescriptor for PlotResultDescriptor {
-    type DataType = (); // TODO: maybe distinguish between image, interactive plot, etc.
-    type QueryRectangleSpatialBounds = BoundingBox2D;
-    type QueryRectangleAttributeSelection = PlotSeriesSelection;
-
-    fn data_type(&self) -> Self::DataType {}
-
-    fn spatial_reference(&self) -> SpatialReferenceOption {
-        self.spatial_reference
-    }
-
-    fn map_data_type<F>(&self, _f: F) -> Self
-    where
-        F: Fn(&Self::DataType) -> Self::DataType,
-    {
-        *self
-    }
-
-    fn map_spatial_reference<F>(&self, _f: F) -> Self
-    where
-        F: Fn(&SpatialReferenceOption) -> SpatialReferenceOption,
-    {
-        *self
-    }
-
-    fn map_time<F>(&self, f: F) -> Self
-    where
-        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
-    {
-        Self {
-            time: f(&self.time),
-            ..*self
-        }
-    }
-
-    fn validate_query(
-        &self,
-        _query: &QueryRectangle<
-            Self::QueryRectangleSpatialBounds,
-            Self::QueryRectangleAttributeSelection,
-        >,
-    ) -> Result<()> {
-        Ok(())
-    }
-}
-
-// implementing `From` is possible here because we don't need any additional information, while we would need
-// a measurement and a no data value to convert it into a `RasterResultDescriptor`
-impl From<VectorResultDescriptor> for PlotResultDescriptor {
-    fn from(descriptor: VectorResultDescriptor) -> Self {
-        Self {
-            spatial_reference: descriptor.spatial_reference,
-            time: descriptor.time,
-            bbox: descriptor.bbox,
-        }
-    }
-}
-
-// implementing `From` is possible here because we don't need any additional information, while we would need
-// to know the `columns` to convert it into a `VectorResultDescriptor`
-impl From<RasterResultDescriptor> for PlotResultDescriptor {
-    fn from(descriptor: RasterResultDescriptor) -> Self {
-        Self {
-            spatial_reference: descriptor.spatial_reference,
-            time: descriptor.time,
-            // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
-            bbox: descriptor
-                .bbox
-                .and_then(|p| BoundingBox2D::new(p.lower_left(), p.upper_right()).ok()),
-        }
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
-#[serde(rename_all = "camelCase", tag = "type")]
-pub enum TypedResultDescriptor {
-    Plot(PlotResultDescriptor),
-    Raster(RasterResultDescriptor),
-    Vector(VectorResultDescriptor),
-}
-
-impl From<PlotResultDescriptor> for TypedResultDescriptor {
-    fn from(value: PlotResultDescriptor) -> Self {
-        Self::Plot(value)
-    }
-}
-
-impl From<RasterResultDescriptor> for TypedResultDescriptor {
-    fn from(value: RasterResultDescriptor) -> Self {
-        Self::Raster(value)
-    }
-}
-
-impl From<VectorResultDescriptor> for TypedResultDescriptor {
-    fn from(value: VectorResultDescriptor) -> Self {
-        Self::Vector(value)
-    }
-}
-
 mod db_types {
     use super::*;
     use crate::error::Error;
@@ -658,6 +909,59 @@ mod db_types {
         }
     }
 
+    #[derive(Debug, ToSql, FromSql)]
+    #[postgres(name = "SpatialGridDescriptorState")]
+    pub enum SpatialGridDescriptorStateDbType {
+        /// The spatial grid represents the original data
+        Source,
+        /// The spatial grid was created by merging two non equal spatial grids
+        Merged,
+    }
+
+    impl From<&SpatialGridDescriptorState> for SpatialGridDescriptorStateDbType {
+        fn from(value: &SpatialGridDescriptorState) -> Self {
+            match value {
+                SpatialGridDescriptorState::Source => SpatialGridDescriptorStateDbType::Source,
+                SpatialGridDescriptorState::Merged => SpatialGridDescriptorStateDbType::Merged,
+            }
+        }
+    }
+
+    impl From<SpatialGridDescriptorStateDbType> for SpatialGridDescriptorState {
+        fn from(value: SpatialGridDescriptorStateDbType) -> Self {
+            match value {
+                SpatialGridDescriptorStateDbType::Source => SpatialGridDescriptorState::Source,
+                SpatialGridDescriptorStateDbType::Merged => SpatialGridDescriptorState::Merged,
+            }
+        }
+    }
+
+    #[derive(Debug, ToSql, FromSql)]
+    #[postgres(name = "SpatialGridDescriptor")]
+    pub struct SpatialGridDescriptorDbType {
+        state: SpatialGridDescriptorStateDbType,
+        spatial_grid: SpatialGridDefinition,
+    }
+
+    impl From<&SpatialGridDescriptor> for SpatialGridDescriptorDbType {
+        fn from(value: &SpatialGridDescriptor) -> Self {
+            Self {
+                spatial_grid: value.spatial_grid,
+                state: SpatialGridDescriptorStateDbType::from(&value.state),
+            }
+        }
+    }
+
+    impl From<SpatialGridDescriptorDbType> for SpatialGridDescriptor {
+        fn from(value: SpatialGridDescriptorDbType) -> Self {
+            Self {
+                spatial_grid: value.spatial_grid,
+                state: SpatialGridDescriptorState::from(value.state),
+            }
+        }
+    }
+
+    delegate_from_to_sql!(SpatialGridDescriptor, SpatialGridDescriptorDbType);
     delegate_from_to_sql!(VectorResultDescriptor, VectorResultDescriptorDbType);
     delegate_from_to_sql!(TypedResultDescriptor, TypedResultDescriptorDbType);
 }
@@ -707,6 +1011,59 @@ mod tests {
         );
     }
 
+    /* FIXME: bring back?
+        #[test]
+        fn raster_tiling_origin() {
+            let descriptor = RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                time: None,
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.3, -0.3),
+                pixel_bounds_x: GridShape2D::new([36, 30]).bounding_box(),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                    "foo".into(),
+                    Measurement::Unitless,
+                )])
+                .unwrap(),
+            };
+
+            let to = descriptor.tiling_origin();
+
+            assert_approx_eq!(f64, to.x, -0.09999, epsilon = 0.00001); // we are only interested in a number thats smaller then the pixel size
+            assert_approx_eq!(f64, to.y, 0.09999, epsilon = 0.00001);
+        }
+
+        #[test]
+        fn raster_tiling_equals() {
+            let descriptor = RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                time: None,
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(-15., 15.), 0.5, -0.5),
+                pixel_bounds_x: GridShape2D::new([50, 50]).bounding_box(),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                    "foo".into(),
+                    Measurement::Unitless,
+                )])
+                .unwrap(),
+            };
+
+            let descriptor2 = RasterResultDescriptor {
+                data_type: RasterDataType::U8,
+                spatial_reference: SpatialReferenceOption::Unreferenced,
+                time: None,
+                geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.5, -0.5),
+                pixel_bounds_x: GridShape2D::new([9, 11]).bounding_box(),
+                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                    "foo".into(),
+                    Measurement::Unitless,
+                )])
+                .unwrap(),
+            };
+
+            assert!(descriptor.spatial_tiling_equals(&descriptor2));
+        }
+    */
     #[test]
     fn it_checks_duplicate_bands() {
         assert!(

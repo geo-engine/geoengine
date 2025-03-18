@@ -1172,9 +1172,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        datasets::external::{
-            SentinelS2L2ACogsProviderDefinition, StacBand, StacQueryBuffer, StacZone,
-        },
+        datasets::external::{SentinelS2L2ACogsProviderDefinition, StacQueryBuffer},
         layers::external::TypedDataProviderDefinition,
         util::{postgres::assert_sql_type, tests::with_temp_context},
     };
@@ -1207,27 +1205,6 @@ mod tests {
 
             assert_sql_type(
                 &pool,
-                "StacBand",
-                [StacBand {
-                    name: "band".to_owned(),
-                    no_data_value: Some(133.7),
-                    data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "StacZone",
-                [StacZone {
-                    name: "zone".to_owned(),
-                    epsg: 4326,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
                 "SentinelS2L2ACogsProviderDefinition",
                 [SentinelS2L2ACogsProviderDefinition {
                     name: "foo".to_owned(),
@@ -1235,15 +1212,6 @@ mod tests {
                     description: "A provider".to_owned(),
                     priority: Some(1),
                     api_url: "http://api.url".to_owned(),
-                    bands: vec![StacBand {
-                        name: "band".to_owned(),
-                        no_data_value: Some(133.7),
-                        data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                    }],
-                    zones: vec![StacZone {
-                        name: "zone".to_owned(),
-                        epsg: 4326,
-                    }],
                     stac_api_retries: StacApiRetries {
                         number_of_retries: 3,
                         initial_delay_ms: 4,
@@ -1302,15 +1270,6 @@ mod tests {
                             priority: Some(3),
                             id: DataProviderId::new(),
                             api_url: "http://api.url".to_owned(),
-                            bands: vec![StacBand {
-                                name: "band".to_owned(),
-                                no_data_value: Some(133.7),
-                                data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                            }],
-                            zones: vec![StacZone {
-                                name: "zone".to_owned(),
-                                epsg: 4326,
-                            }],
                             stac_api_retries: StacApiRetries {
                                 number_of_retries: 3,
                                 initial_delay_ms: 4,

@@ -7,7 +7,7 @@ use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     primitives::{
-        BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval,
+        BandSelection, CacheHint, RasterQueryRectangle, RasterSpatialQueryRectangle, TimeInterval,
     },
     raster::{
         ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
@@ -62,7 +62,7 @@ where
     Tuple: ExpressionTupleProcessor<TO>,
 {
     type Output = RasterTile2D<TO>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -73,9 +73,8 @@ where
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
         // rewrite query to request all input bands from the source. They are all combined in the single output band by means of the expression.
         let source_query = RasterQueryRectangle {
-            spatial_bounds: query.spatial_bounds,
+            spatial_query: query.spatial_query,
             time_interval: query.time_interval,
-            spatial_resolution: query.spatial_resolution,
             attributes: BandSelection::first_n(Tuple::num_bands()),
         };
 

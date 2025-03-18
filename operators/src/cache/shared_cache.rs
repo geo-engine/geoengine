@@ -11,7 +11,7 @@ use futures::Stream;
 use geoengine_datatypes::{
     identifier,
     primitives::{CacheHint, Geometry, RasterQueryRectangle, VectorQueryRectangle},
-    raster::Pixel,
+    raster::{GridContains, Pixel},
     util::{ByteSize, Identifier, arrow::ArrowTyped, test::TestDefault},
 };
 use log::{debug, log_enabled};
@@ -853,23 +853,26 @@ pub trait CacheQueryMatch<RHS = Self> {
 
 impl CacheQueryMatch for RasterQueryRectangle {
     fn is_match(&self, query: &RasterQueryRectangle) -> bool {
-        self.spatial_bounds.contains(&query.spatial_bounds)
+        let cache_spatial_query = self.spatial_query();
+        let query_spatial_query = query.spatial_query();
+
+        cache_spatial_query
+            .grid_bounds()
+            .contains(&query_spatial_query.grid_bounds())
             && self.time_interval.contains(&query.time_interval)
-            && self.spatial_resolution == query.spatial_resolution
-            && query
-                .attributes
-                .as_slice()
-                .iter()
-                .all(|b| self.attributes.as_slice().contains(b))
     }
 }
 
 impl CacheQueryMatch for VectorQueryRectangle {
-    // TODO: check if that is what we need
     fn is_match(&self, query: &VectorQueryRectangle) -> bool {
-        self.spatial_bounds.contains_bbox(&query.spatial_bounds)
+        let cache_spatial_query = self.spatial_query();
+        let query_spatial_query = query.spatial_query();
+
+        cache_spatial_query
+            .spatial_bounds
+            .contains_bbox(&query_spatial_query.spatial_bounds)
             && self.time_interval.contains(&query.time_interval)
-            && self.spatial_resolution == query.spatial_resolution
+            && self.attributes == query.attributes
     }
 }
 
@@ -1025,10 +1028,8 @@ where
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{
-            BandSelection, CacheHint, DateTime, SpatialPartition2D, SpatialResolution, TimeInterval,
-        },
-        raster::{Grid, RasterProperties, RasterTile2D},
+        primitives::{BandSelection, CacheHint, DateTime, TimeInterval},
+        raster::{Grid, GridBoundingBox2D, RasterProperties, RasterTile2D},
     };
     use serde_json::json;
     use std::sync::Arc;
@@ -1108,16 +1109,11 @@ mod tests {
     }
 
     fn query_rect() -> RasterQueryRectangle {
-        RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            ),
-            time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0))
-                .unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        }
+        RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+            TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+            BandSelection::first(),
+        )
     }
 
     fn op(idx: usize) -> CanonicOperatorName {

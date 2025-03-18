@@ -713,10 +713,8 @@ mod tests {
             ChunksEqualIgnoringCacheHint, IntoGeometryIterator, MultiPointCollection,
             MultiPolygonCollection,
         },
-        primitives::{
-            BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, SpatialResolution,
-            TimeInterval,
-        },
+        primitives::{BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, TimeInterval},
+        raster::TilingSpecification,
         util::test::TestDefault,
     };
 
@@ -780,6 +778,8 @@ mod tests {
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
+        let exe_ctx = MockExecutionContext::test_default();
+
         let operator = VectorExpression {
             params: VectorExpressionParams {
                 input_columns: vec!["foo".into()],
@@ -791,22 +791,18 @@ mod tests {
             sources: point_source.into(),
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -870,6 +866,7 @@ mod tests {
         .unwrap();
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let exe_ctx = MockExecutionContext::test_default();
 
         let operator = VectorExpression {
             params: VectorExpressionParams {
@@ -882,22 +879,18 @@ mod tests {
             sources: point_source.into(),
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -982,12 +975,11 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            },
+            VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            ),
         )
         .await;
 
@@ -1065,12 +1057,11 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            },
+            VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            ),
         )
         .await;
 
@@ -1162,16 +1153,15 @@ mod tests {
                     .boxed()
                     .into(),
             },
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
+            VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new(
                     (0., 0.).into(),
                     (NUMBER_OF_ROWS as f64, NUMBER_OF_ROWS as f64).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            },
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            ),
         )
         .await;
 
@@ -1209,7 +1199,7 @@ mod tests {
         let query_processor: Box<dyn VectorQueryProcessor<VectorType = C>> =
             operator.query_processor().unwrap().try_into().unwrap();
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
