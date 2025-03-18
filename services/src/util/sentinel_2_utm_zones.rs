@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
 use geoengine_datatypes::{
-    primitives::SpatialPartition2D,
+    primitives::{Coordinate2D, SpatialPartition2D},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use snafu::Snafu;
@@ -44,7 +44,34 @@ impl UtmZone {
     }
 
     pub fn native_extent(self) -> SpatialPartition2D {
-        self.spatial_reference().area_of_use_projected().unwrap() // TODO: replace with real real bounds
+        match (self.zone, self.direction) {
+            (32, UtmZoneDirection::North)
+            | (34, UtmZoneDirection::North)
+            | (36, UtmZoneDirection::North) => SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(199980.0, 8000040.0),
+                Coordinate2D::new(909780.0, -9780.0),
+            ),
+            (60, UtmZoneDirection::North) => SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(199980.0, 9100020.0),
+                Coordinate2D::new(809760.0, -9780.0),
+            ),
+            (_, UtmZoneDirection::North) => SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(199980.0, 9400020.0),
+                Coordinate2D::new(909780.0, -9780.0),
+            ),
+            (1, UtmZoneDirection::South) => SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(99960.0, 10000000.0),
+                Coordinate2D::new(909780.0, 690220.0),
+            ),
+            (60, UtmZoneDirection::South) => SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(199980.0, 10000000.0),
+                Coordinate2D::new(809760.0, 890200.0),
+            ),
+            (_, UtmZoneDirection::South) => SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(199980.0, 10000000.0),
+                Coordinate2D::new(909780.0, 690220.0),
+            ),
+        }
     }
 }
 
