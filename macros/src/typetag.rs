@@ -134,4 +134,32 @@ mod tests {
             output.to_string()
         );
     }
+
+    #[test]
+    fn it_fails() {
+        assert!(type_tag(quote! {}, &quote! {}).is_err()); // no tag
+        assert!(type_tag(quote! {discriminator = 5}, &quote! {}).is_err()); // wrong type
+        assert!(
+            type_tag(
+                quote! {tag = "asd"},
+                &quote! {
+                    #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
+                    enum Foo {
+                        Bar,
+                    }
+                }
+            )
+            .is_err()
+        ); // no struct
+        assert!(
+            type_tag(
+                quote! {tag = "asd"},
+                &quote! {
+                    #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
+                    struct Foo(String);
+                }
+            )
+            .is_err()
+        ); // no named struct
+    }
 }
