@@ -84,6 +84,7 @@ pub enum SpatialGridDescriptorState {
 }
 
 impl SpatialGridDescriptorState {
+    #[must_use]
     pub fn merge(self, other: Self) -> Self {
         match (self, other) {
             (SpatialGridDescriptorState::Source, SpatialGridDescriptorState::Source) => {

@@ -618,13 +618,11 @@ where
             query.attributes.as_slice() == [0],
             crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
         );
-
         tracing::debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
             P::TYPE,
             &query
         );
-
         // this is the result descriptor of the operator. It already incorporates the overview level AND shifts the origin to the tiling origin
         let result_descriptor = self.result_descriptor();
 
@@ -734,10 +732,8 @@ where
             .info
             .filter_ok(move |s: &GdalLoadingInfoTemporalSlice| s.time.intersects(&query_time)); // Check that the time slice intersects the query time
 
-        let source_stream = stream::iter(skipping_loading_info);
-
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
-            source_stream,
+            stream::iter(skipping_loading_info),
             query.spatial_query(),
             tiling_strategy,
             reader_mode,

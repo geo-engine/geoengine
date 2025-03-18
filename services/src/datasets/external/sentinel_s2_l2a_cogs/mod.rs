@@ -66,9 +66,9 @@ static ELEMENT_84_STAC_SENTINEL2_L2A_PRODUCTS: &[ImageProduct] = &[
     ImageProduct::B10,
     ImageProduct::B11,
     ImageProduct::B12,
-    ImageProduct::AOT,
-    ImageProduct::WVP,
-    ImageProduct::SCL,
+    ImageProduct::Aot,
+    ImageProduct::Wvp,
+    ImageProduct::Scl,
 ];
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, FromSql, ToSql)]
@@ -1080,11 +1080,10 @@ mod tests {
         .unwrap();
 
         let sp = SpatialPartition2D::new(
-            (600000.000, 5500020.000).into(), // 1830 px
-            (709800.000, 5390220.000).into(), // 1830 px
+            (600_000.000, 5_500_020.000).into(), // 1830 px
+            (709_800.000, 5_390_220.000).into(), // 1830 px
         )
         .unwrap();
-        dbg!(&sp);
 
         let processor = op.query_processor()?.get_u16().unwrap();
         let sp = processor
@@ -1093,7 +1092,6 @@ mod tests {
             .tiling_grid_definition(exe.tiling_specification)
             .tiling_geo_transform()
             .spatial_to_grid_bounds(&sp);
-        dbg!(&sp);
 
         let query = RasterQueryRectangle::new_with_grid_bounds(
             sp,

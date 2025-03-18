@@ -45,31 +45,29 @@ impl UtmZone {
 
     pub fn native_extent(self) -> SpatialPartition2D {
         match (self.zone, self.direction) {
-            (32, UtmZoneDirection::North)
-            | (34, UtmZoneDirection::North)
-            | (36, UtmZoneDirection::North) => SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(199980.0, 8000040.0),
-                Coordinate2D::new(909780.0, -9780.0),
+            (32 | 34 | 36, UtmZoneDirection::North) => SpatialPartition2D::new_unchecked(
+                Coordinate2D::new(199_980.0, 8_000_040.0),
+                Coordinate2D::new(909_780.0, -9_780.0),
             ),
             (60, UtmZoneDirection::North) => SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(199980.0, 9100020.0),
-                Coordinate2D::new(809760.0, -9780.0),
+                Coordinate2D::new(199_980.0, 9_100_020.0),
+                Coordinate2D::new(809_760.0, -9_780.0),
             ),
             (_, UtmZoneDirection::North) => SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(199980.0, 9400020.0),
-                Coordinate2D::new(909780.0, -9780.0),
+                Coordinate2D::new(199_980.0, 9_400_020.0),
+                Coordinate2D::new(909_780.0, -9_780.0),
             ),
             (1, UtmZoneDirection::South) => SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(99960.0, 10000000.0),
-                Coordinate2D::new(909780.0, 690220.0),
+                Coordinate2D::new(99_960.0, 10_000_000.0),
+                Coordinate2D::new(909_780.0, 690_220.0),
             ),
             (60, UtmZoneDirection::South) => SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(199980.0, 10000000.0),
-                Coordinate2D::new(809760.0, 890200.0),
+                Coordinate2D::new(199_980.0, 10_000_000.0),
+                Coordinate2D::new(809_760.0, 890_200.0),
             ),
             (_, UtmZoneDirection::South) => SpatialPartition2D::new_unchecked(
-                Coordinate2D::new(199980.0, 10000000.0),
-                Coordinate2D::new(909780.0, 690220.0),
+                Coordinate2D::new(199_980.0, 10_000_000.0),
+                Coordinate2D::new(909_780.0, 690_220.0),
             ),
         }
     }

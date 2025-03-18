@@ -15,10 +15,10 @@ pub enum ImageProduct {
     B10,
     B11,
     B12,
-    SCL,
-    WVP,
-    AOT,
-    _TCI,
+    Scl,
+    Wvp,
+    Aot,
+    _Tci,
 }
 
 pub trait ImageProductpec {
@@ -40,16 +40,16 @@ impl ImageProductpec for ImageProduct {
             | ImageProduct::B03
             | ImageProduct::B04
             | ImageProduct::B08
-            | ImageProduct::_TCI => 10.,
+            | ImageProduct::_Tci => 10.,
             ImageProduct::B05
             | ImageProduct::B06
             | ImageProduct::B07
             | ImageProduct::B8A
             | ImageProduct::B11
             | ImageProduct::B12
-            | ImageProduct::SCL
-            | ImageProduct::WVP
-            | ImageProduct::AOT => 20.,
+            | ImageProduct::Scl
+            | ImageProduct::Wvp
+            | ImageProduct::Aot => 20.,
             ImageProduct::B01 | ImageProduct::B09 | ImageProduct::B10 => 60.,
         }
     }
@@ -69,26 +69,26 @@ impl ImageProductpec for ImageProduct {
             ImageProduct::B10 => "B10",
             ImageProduct::B11 => "B11",
             ImageProduct::B12 => "B12",
-            ImageProduct::SCL => "SCL",
-            ImageProduct::WVP => "WVP",
-            ImageProduct::AOT => "AOT",
-            ImageProduct::_TCI => "TCI",
+            ImageProduct::Scl => "SCL",
+            ImageProduct::Wvp => "WVP",
+            ImageProduct::Aot => "AOT",
+            ImageProduct::_Tci => "TCI",
         }
     }
 
     fn long_name(&self) -> &str {
         match self {
-            ImageProduct::SCL => "Scene Classification",
-            ImageProduct::WVP => "Water Vapour",
-            ImageProduct::AOT => "Aerosol Optical Thickness",
-            ImageProduct::_TCI => "True Colour Image",
+            ImageProduct::Scl => "Scene Classification",
+            ImageProduct::Wvp => "Water Vapour",
+            ImageProduct::Aot => "Aerosol Optical Thickness",
+            ImageProduct::_Tci => "True Colour Image",
             _ => self.name(),
         }
     }
 
     fn data_type(&self) -> RasterDataType {
         match self {
-            ImageProduct::SCL => RasterDataType::U8,
+            ImageProduct::Scl => RasterDataType::U8,
             _ => RasterDataType::U16,
         }
     }
