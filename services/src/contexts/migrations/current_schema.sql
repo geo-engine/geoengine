@@ -214,8 +214,8 @@ CREATE TYPE "RasterResultDescriptor" AS (
     -- SpatialReferenceOption
     spatial_reference "SpatialReference",
     "time" "TimeInterval",
-    spatial_grid "SpatialGridDescriptor",
-    bands "RasterBandDescriptor" []
+    bands "RasterBandDescriptor" [],
+    spatial_grid "SpatialGridDescriptor"
 );
 CREATE TYPE "VectorResultDescriptor" AS (
     data_type "VectorDataType",

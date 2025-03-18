@@ -1079,9 +1079,12 @@ mod tests {
         .await
         .unwrap();
 
-        let sp =
-            SpatialPartition2D::new((166_021.44, 9_329_005.18).into(), (534_994.66, 0.00).into())
-                .unwrap();
+        let sp = SpatialPartition2D::new(
+            (600000.000, 5500020.000).into(), // 1830 px
+            (709800.000, 5390220.000).into(), // 1830 px
+        )
+        .unwrap();
+        dbg!(&sp);
 
         let processor = op.query_processor()?.get_u16().unwrap();
         let sp = processor
@@ -1090,10 +1093,11 @@ mod tests {
             .tiling_grid_definition(exe.tiling_specification)
             .tiling_geo_transform()
             .spatial_to_grid_bounds(&sp);
+        dbg!(&sp);
 
         let query = RasterQueryRectangle::new_with_grid_bounds(
             sp,
-            TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
+            TimeInterval::new_instant(DateTime::new_utc(2018, 10, 19, 13, 23, 25))?,
             BandSelection::first(),
         );
 
@@ -1105,9 +1109,8 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        // TODO: check actual data
-        // NOTE: this are 3951 NO DATA tiles and one real tile...
-        assert_eq!(result.len(), 3952);
+        // This are 5 x 5 tiles since the sentinel tile intersects 5 x5 geo engine tiles
+        assert_eq!(result.len(), 25); // 
 
         Ok(())
     }
