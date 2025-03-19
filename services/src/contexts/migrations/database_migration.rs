@@ -209,6 +209,7 @@ mod tests {
     use tokio_postgres::NoTls;
 
     #[tokio::test]
+    #[serial_test::parallel]
     async fn it_migrates() -> Result<()> {
         struct TestMigration;
 
@@ -285,6 +286,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::parallel]
     async fn it_performs_all_migrations() -> Result<()> {
         let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
@@ -300,6 +302,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::parallel]
     async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
         let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
@@ -320,6 +323,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial_test::parallel]
     async fn it_migrates_data() -> Result<()> {
         // This test creates the initial schema and fills it with test data.
         // Then, it migrates the database to the newest version.
