@@ -58,8 +58,8 @@ jobs:
         run: |
           podman build \
             --tag ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} \
-            -f container/${{env.CONTAINER_NAME}}/Dockerfile \
             .
+        working-directory: container/${{env.CONTAINER_NAME}}
 
       - name: Push image to quay.io
         run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
