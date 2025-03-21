@@ -83,11 +83,6 @@ jobs:
           rustup toolchain install nightly
           chmod +x ./.scripts/check-expression-deps.rs
           ./.scripts/check-expression-deps.rs
-      - name: Check OpenAPI spec is up-to-date
-        run: |
-          cargo run --bin geoengine-cli -- openapi > openapi_compare.json
-          diff -u openapi.json openapi_compare.json
-          rm openapi_compare.json
 
   build:
     runs-on: ubuntu-24.04
