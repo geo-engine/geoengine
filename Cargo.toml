@@ -78,7 +78,6 @@ arrow-array = "54.2"
 arrow-ord = "54.2"
 arrow-schema = { version = "54.2", features = ["serde"] }
 aruna-rust-api = "2.0.0-beta.12"
-assert-json-diff = "2.0.2"
 assert_cmd = "2.0"
 async-stream = "0.3"
 async-trait = "0.1"
@@ -196,19 +195,20 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 typetag = "0.2"
 url = { version = "2.5", features = ["serde"] }
-utoipa = { version = "4.2", features = [
+utoipa = { version = "5.3", features = [
     "actix_extras",
     "chrono",
+    "debug",
     "url",
     "uuid",
 ] }
-utoipa-swagger-ui = { version = "7.1", features = ["actix-web"] }
+utoipa-swagger-ui = { version = "9", features = ["actix-web"] }
 uuid = { version = "1.12", features = [
     "serde",
     "v4",
     "v5",
 ] } # must be compatible with `bb8-postgres`
-validator = { version = "0.20.0", features = ["derive"] }
+validator = { version = "0.20", features = ["derive"] }
 vergen = "9.0"
 vergen-gitcl = "1.0"
 walkdir = "2.4"

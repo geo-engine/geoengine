@@ -14,13 +14,13 @@ use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResu
 use crate::api::model::datatypes::{
     AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
     ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
-    DataProviderId, DatasetId, DateTime, DateTimeParseFormat, ExternalDataId, FeatureDataType,
-    GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement, MultiLineString,
-    MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle,
-    RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
-    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType, VectorQueryRectangle,
+    DataProviderId, DatasetId, DateTimeParseFormat, DateTimeString, ExternalDataId,
+    FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat,
+    PlotQueryRectangle, RasterColorizer, RasterDataType, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D,
+    SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
+    TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -59,7 +59,7 @@ use crate::layers::listing::{
 };
 use crate::machine_learning::name::MlModelName;
 use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
-use crate::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
+use crate::permissions::{Permission, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -72,10 +72,8 @@ use crate::users::{
     AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
     UserSession,
 };
-use crate::util::{
-    apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
-    server::ServerInfo,
-};
+use crate::util::apidoc::DeriveDiscriminatorMapping;
+use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
@@ -183,20 +181,18 @@ use utoipa::{Modify, OpenApi};
             IdResponse::<LayerCollectionId>,
             IdResponse::<ProjectId>,
             IdResponse::<RoleId>,
-            DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
             PngResponse,
             ZipResponse,
-            AuthCodeRequestURL
         ),
         schemas(
             ErrorResponse,
             UserSession,
             UserCredentials,
             UserRegistration,
-            DateTime,
+            DateTimeString,
             UserInfo,
             Quota,
             UpdateQuota,
@@ -212,6 +208,7 @@ use utoipa::{Modify, OpenApi};
             DataProviderId,
             DatasetId,
             DatasetName,
+            DatasetNameResponse,
             NamedData,
             ExternalDataId,
             LayerId,
@@ -413,7 +410,6 @@ use utoipa::{Modify, OpenApi};
 
             PermissionRequest,
             Resource,
-            ResourceId,
             Permission,
             PermissionListing,
             PermissionListOptions,
@@ -428,7 +424,7 @@ use utoipa::{Modify, OpenApi};
             MlModelNameResponse
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;
@@ -447,7 +443,7 @@ impl Modify for SecurityAddon {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .bearer_format("UUID")
-                    .description(Some("A valid session token can be obtained via the /anonymous or /login (pro only) endpoints. Alternatively, it can be defined as a fixed value in the Settings.toml file."))
+                    .description(Some("A valid session token can be obtained via the /anonymous or /login endpoints."))
                     .build(),
             ),
         );
@@ -493,6 +489,11 @@ mod tests {
 
     #[ge_context::test]
     async fn it_can_run_examples(app_ctx: PostgresContext<NoTls>) {
-        can_run_examples(app_ctx, ApiDoc::openapi(), send_test_request).await;
+        Box::pin(can_run_examples(
+            app_ctx,
+            ApiDoc::openapi(),
+            send_test_request,
+        ))
+        .await;
     }
 }

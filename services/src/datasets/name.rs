@@ -4,7 +4,7 @@ use serde::{Deserialize, Serialize, de::Visitor};
 use snafu::Snafu;
 use std::str::FromStr;
 use strum::IntoStaticStr;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 /// A (optionally namespaced) name for a `Dataset`.
 /// It can be resolved into a [`DataId`] if you know the data provider.
@@ -201,13 +201,15 @@ impl From<DatasetName> for NamedData {
 //     }
 // }
 
-impl<'a> ToSchema<'a> for DatasetName {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "DatasetName",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
+impl ToSchema for DatasetName {}
+
+impl PartialSchema for DatasetName {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .examples([serde_json::json!("ns:name")])
+            .into()
     }
 }
 

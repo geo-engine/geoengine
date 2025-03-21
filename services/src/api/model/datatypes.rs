@@ -4,6 +4,7 @@ use geoengine_datatypes::operations::image::RgbParams;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
+use geoengine_macros::type_tag;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
@@ -13,7 +14,7 @@ use std::{
     fmt::{Debug, Formatter},
     str::FromStr,
 };
-use utoipa::ToSchema;
+use utoipa::{PartialSchema, ToSchema};
 
 identifier!(DataProviderId);
 
@@ -33,25 +34,26 @@ impl From<DatasetId> for geoengine_datatypes::dataset::DatasetId {
 }
 
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 /// The identifier for loadable data. It is used in the source operators to get the loading info (aka parametrization)
 /// for accessing the data. Internal data is loaded from datasets, external from `DataProvider`s.
 pub enum DataId {
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "InternalDataId")]
-    Internal {
-        dataset_id: DatasetId,
-    },
+    Internal(InternalDataId),
     External(ExternalDataId),
+}
+
+#[type_tag(value = "internal")]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct InternalDataId {
+    pub dataset_id: DatasetId,
 }
 
 impl DataId {
     pub fn internal(&self) -> Option<DatasetId> {
-        if let Self::Internal {
-            dataset_id: dataset,
-        } = self
-        {
-            return Some(*dataset);
+        if let Self::Internal(internal) = self {
+            return Some(internal.dataset_id);
         }
         None
     }
@@ -66,7 +68,10 @@ impl DataId {
 
 impl From<DatasetId> for DataId {
     fn from(value: DatasetId) -> Self {
-        Self::Internal { dataset_id: value }
+        Self::Internal(InternalDataId {
+            r#type: Default::default(),
+            dataset_id: value,
+        })
     }
 }
 
@@ -102,9 +107,12 @@ impl From<ExternalDataId> for geoengine_datatypes::dataset::ExternalDataId {
 impl From<geoengine_datatypes::dataset::DataId> for DataId {
     fn from(id: geoengine_datatypes::dataset::DataId) -> Self {
         match id {
-            geoengine_datatypes::dataset::DataId::Internal { dataset_id } => Self::Internal {
-                dataset_id: dataset_id.into(),
-            },
+            geoengine_datatypes::dataset::DataId::Internal { dataset_id } => {
+                Self::Internal(InternalDataId {
+                    r#type: Default::default(),
+                    dataset_id: dataset_id.into(),
+                })
+            }
             geoengine_datatypes::dataset::DataId::External(external_id) => {
                 Self::External(external_id.into())
             }
@@ -115,8 +123,8 @@ impl From<geoengine_datatypes::dataset::DataId> for DataId {
 impl From<DataId> for geoengine_datatypes::dataset::DataId {
     fn from(id: DataId) -> Self {
         match id {
-            DataId::Internal { dataset_id } => Self::Internal {
-                dataset_id: dataset_id.into(),
+            DataId::Internal(internal) => Self::Internal {
+                dataset_id: internal.dataset_id.into(),
             },
             DataId::External(external_id) => Self::External(external_id.into()),
         }
@@ -126,8 +134,8 @@ impl From<DataId> for geoengine_datatypes::dataset::DataId {
 impl From<&DataId> for geoengine_datatypes::dataset::DataId {
     fn from(id: &DataId) -> Self {
         match id {
-            DataId::Internal { dataset_id } => Self::Internal {
-                dataset_id: dataset_id.into(),
+            DataId::Internal(internal) => Self::Internal {
+                dataset_id: internal.dataset_id.into(),
             },
             DataId::External(external_id) => Self::External(external_id.into()),
         }
@@ -213,15 +221,16 @@ impl From<&NamedData> for geoengine_datatypes::dataset::NamedData {
     }
 }
 
-impl<'a> ToSchema<'a> for NamedData {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "NamedData",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
+impl PartialSchema for NamedData {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
     }
 }
+
+impl ToSchema for NamedData {}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, Hash, ToSchema, ToSql, FromSql)]
 pub struct LayerId(pub String); // TODO: differentiate between internal layer ids (UUID) and external layer ids (String)
@@ -238,6 +247,7 @@ impl std::fmt::Display for LayerId {
     }
 }
 
+#[type_tag(value = "external")]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDataId {
@@ -248,6 +258,7 @@ pub struct ExternalDataId {
 impl From<geoengine_datatypes::dataset::ExternalDataId> for ExternalDataId {
     fn from(id: geoengine_datatypes::dataset::ExternalDataId) -> Self {
         Self {
+            r#type: Default::default(),
             provider_id: id.provider_id.into(),
             layer_id: id.layer_id.into(),
         }
@@ -734,12 +745,24 @@ impl From<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
 }
 
 /// An object that composes the date and a timestamp with time zone.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, ToSchema)]
-pub struct DateTime {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct DateTimeString {
     datetime: chrono::DateTime<chrono::Utc>,
 }
 
-impl FromStr for DateTime {
+// TODO: use derive ToSchema when OpenAPI derive does not break
+impl PartialSchema for DateTimeString {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
+    }
+}
+
+impl ToSchema for DateTimeString {}
+
+impl FromStr for DateTimeString {
     type Err = geoengine_datatypes::primitives::DateTimeError;
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
@@ -753,7 +776,7 @@ impl FromStr for DateTime {
     }
 }
 
-impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
+impl From<chrono::DateTime<chrono::FixedOffset>> for DateTimeString {
     fn from(datetime: chrono::DateTime<chrono::FixedOffset>) -> Self {
         Self {
             datetime: datetime.into(),
@@ -761,7 +784,7 @@ impl From<chrono::DateTime<chrono::FixedOffset>> for DateTime {
     }
 }
 
-impl From<geoengine_datatypes::primitives::DateTime> for DateTime {
+impl From<geoengine_datatypes::primitives::DateTime> for DateTimeString {
     fn from(datetime: geoengine_datatypes::primitives::DateTime) -> Self {
         Self {
             datetime: datetime.into(),
@@ -807,10 +830,10 @@ impl From<FeatureDataType> for geoengine_datatypes::primitives::FeatureDataType 
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum Measurement {
-    #[schema(title = "UnitlessMeasurement")]
-    Unitless,
+    Unitless(UnitlessMeasurement),
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
 }
@@ -818,7 +841,11 @@ pub enum Measurement {
 impl From<geoengine_datatypes::primitives::Measurement> for Measurement {
     fn from(value: geoengine_datatypes::primitives::Measurement) -> Self {
         match value {
-            geoengine_datatypes::primitives::Measurement::Unitless => Self::Unitless,
+            geoengine_datatypes::primitives::Measurement::Unitless => {
+                Self::Unitless(UnitlessMeasurement {
+                    r#type: Default::default(),
+                })
+            }
             geoengine_datatypes::primitives::Measurement::Continuous(cm) => {
                 Self::Continuous(cm.into())
             }
@@ -832,13 +859,18 @@ impl From<geoengine_datatypes::primitives::Measurement> for Measurement {
 impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
     fn from(value: Measurement) -> Self {
         match value {
-            Measurement::Unitless => Self::Unitless,
+            Measurement::Unitless { .. } => Self::Unitless,
             Measurement::Continuous(cm) => Self::Continuous(cm.into()),
             Measurement::Classification(cm) => Self::Classification(cm.into()),
         }
     }
 }
 
+#[type_tag(value = "unitless")]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
+pub struct UnitlessMeasurement {}
+
+#[type_tag(value = "continuous")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
@@ -848,6 +880,7 @@ pub struct ContinuousMeasurement {
 impl From<geoengine_datatypes::primitives::ContinuousMeasurement> for ContinuousMeasurement {
     fn from(value: geoengine_datatypes::primitives::ContinuousMeasurement) -> Self {
         Self {
+            r#type: Default::default(),
             measurement: value.measurement,
             unit: value.unit,
         }
@@ -863,6 +896,7 @@ impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::Continuous
     }
 }
 
+#[type_tag(value = "classification")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(
     try_from = "SerializableClassificationMeasurement",
@@ -878,6 +912,7 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
 {
     fn from(value: geoengine_datatypes::primitives::ClassificationMeasurement) -> Self {
         Self {
+            r#type: Default::default(),
             measurement: value.measurement,
             classes: value.classes,
         }
@@ -926,6 +961,7 @@ impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasuremen
             classes.insert(k.parse::<u8>()?, v);
         }
         Ok(Self {
+            r#type: Default::default(),
             measurement: measurement.measurement,
             classes,
         })
@@ -961,13 +997,25 @@ impl From<SpatialPartition2D> for geoengine_datatypes::primitives::SpatialPartit
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-#[aliases(
-    VectorQueryRectangle = QueryRectangle<BoundingBox2D>,
-    RasterQueryRectangle = QueryRectangle<SpatialPartition2D>,
-    PlotQueryRectangle = QueryRectangle<BoundingBox2D>)
-]
-pub struct QueryRectangle<SpatialBounds> {
-    pub spatial_bounds: SpatialBounds,
+pub struct RasterQueryRectangle {
+    pub spatial_bounds: SpatialPartition2D,
+    pub time_interval: TimeInterval,
+    pub spatial_resolution: SpatialResolution,
+}
+
+/// A spatio-temporal rectangle with a specified resolution
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct VectorQueryRectangle {
+    pub spatial_bounds: BoundingBox2D,
+    pub time_interval: TimeInterval,
+    pub spatial_resolution: SpatialResolution,
+}
+/// A spatio-temporal rectangle with a specified resolution
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PlotQueryRectangle {
+    pub spatial_bounds: BoundingBox2D,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
@@ -994,10 +1042,8 @@ impl
     }
 }
 
-impl From<QueryRectangle<SpatialPartition2D>>
-    for geoengine_datatypes::primitives::RasterQueryRectangle
-{
-    fn from(value: QueryRectangle<SpatialPartition2D>) -> Self {
+impl From<RasterQueryRectangle> for geoengine_datatypes::primitives::RasterQueryRectangle {
+    fn from(value: RasterQueryRectangle) -> Self {
         Self {
             spatial_bounds: value.spatial_bounds.into(),
             time_interval: value.time_interval.into(),
@@ -1063,7 +1109,7 @@ impl FromStr for TimeInstance {
     type Err = geoengine_datatypes::primitives::DateTimeError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let date_time = DateTime::from_str(s)?;
+        let date_time = DateTimeString::from_str(s)?;
         Ok(date_time.into())
     }
 }
@@ -1080,14 +1126,14 @@ impl From<TimeInstance> for geoengine_datatypes::primitives::TimeInstance {
     }
 }
 
-impl From<DateTime> for TimeInstance {
-    fn from(datetime: DateTime) -> Self {
+impl From<DateTimeString> for TimeInstance {
+    fn from(datetime: DateTimeString) -> Self {
         Self::from(&datetime)
     }
 }
 
-impl From<&DateTime> for TimeInstance {
-    fn from(datetime: &DateTime) -> Self {
+impl From<&DateTimeString> for TimeInstance {
+    fn from(datetime: &DateTimeString) -> Self {
         geoengine_datatypes::primitives::TimeInstance::from_millis_unchecked(
             datetime.datetime.timestamp_millis(),
         )
@@ -1347,20 +1393,19 @@ impl From<ResamplingMethod> for geoengine_datatypes::util::gdal::ResamplingMetho
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct RgbaColor(pub [u8; 4]);
 
-// manual implementation utoipa generates an integer field
-impl<'a> ToSchema<'a> for RgbaColor {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "RgbaColor",
-            ArrayBuilder::new()
-                .items(ObjectBuilder::new().schema_type(SchemaType::Integer))
-                .min_items(Some(4))
-                .max_items(Some(4))
-                .into(),
-        )
+impl PartialSchema for RgbaColor {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ArrayBuilder, ObjectBuilder, SchemaType, Type};
+        ArrayBuilder::new()
+            .items(ObjectBuilder::new().schema_type(SchemaType::Type(Type::Integer)))
+            .min_items(Some(4))
+            .max_items(Some(4))
+            .into()
     }
 }
+
+// manual implementation utoipa generates an integer field
+impl ToSchema for RgbaColor {}
 
 impl From<geoengine_datatypes::operations::image::RgbaColor> for RgbaColor {
     fn from(color: geoengine_datatypes::operations::image::RgbaColor) -> Self {
@@ -1427,21 +1472,20 @@ impl<'a> FromSql<'a> for NotNanF64 {
     }
 }
 
-// manual implementation because of NotNan
-impl<'a> ToSchema<'a> for Breakpoint {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "Breakpoint",
-            ObjectBuilder::new()
-                .property("value", Object::with_type(SchemaType::Number))
-                .property("color", Ref::from_schema_name("RgbaColor"))
-                .required("value")
-                .required("color")
-                .into(),
-        )
+impl PartialSchema for Breakpoint {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{Object, ObjectBuilder, Ref, SchemaType, Type};
+        ObjectBuilder::new()
+            .property("value", Object::with_type(SchemaType::Type(Type::Number)))
+            .property("color", Ref::from_schema_name("RgbaColor"))
+            .required("value")
+            .required("color")
+            .into()
     }
 }
+
+// manual implementation because of NotNan
+impl ToSchema for Breakpoint {}
 
 impl From<geoengine_datatypes::operations::image::Breakpoint> for Breakpoint {
     fn from(breakpoint: geoengine_datatypes::operations::image::Breakpoint) -> Self {
@@ -1461,6 +1505,7 @@ impl From<Breakpoint> for geoengine_datatypes::operations::image::Breakpoint {
     }
 }
 
+#[type_tag(value = "linearGradient")]
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LinearGradient {
@@ -1470,6 +1515,7 @@ pub struct LinearGradient {
     pub under_color: RgbaColor,
 }
 
+#[type_tag(value = "logarithmicGradient")]
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LogarithmicGradient {
@@ -1479,22 +1525,24 @@ pub struct LogarithmicGradient {
     pub under_color: RgbaColor,
 }
 
+#[type_tag(value = "palette")]
+#[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct PaletteColorizer {
+    pub colors: Palette,
+    pub no_data_color: RgbaColor,
+    pub default_color: RgbaColor,
+}
+
 /// A colorizer specifies a mapping between raster values and an output image
 /// There are different variants that perform different kinds of mapping.
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum Colorizer {
-    #[serde(rename_all = "camelCase")]
     LinearGradient(LinearGradient),
-    #[serde(rename_all = "camelCase")]
     LogarithmicGradient(LogarithmicGradient),
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "PaletteColorizer")]
-    Palette {
-        colors: Palette,
-        no_data_color: RgbaColor,
-        default_color: RgbaColor,
-    },
+    Palette(PaletteColorizer),
 }
 
 impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
@@ -1506,6 +1554,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 over_color,
                 under_color,
             } => Self::LinearGradient(LinearGradient {
+                r#type: Default::default(),
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
@@ -1520,6 +1569,7 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 over_color,
                 under_color,
             } => Self::LogarithmicGradient(LogarithmicGradient {
+                r#type: Default::default(),
                 breakpoints: breakpoints
                     .into_iter()
                     .map(Into::into)
@@ -1532,11 +1582,12 @@ impl From<geoengine_datatypes::operations::image::Colorizer> for Colorizer {
                 colors,
                 no_data_color,
                 default_color,
-            } => Self::Palette {
+            } => Self::Palette(PaletteColorizer {
+                r#type: Default::default(),
                 colors: colors.into(),
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
-            },
+            }),
         }
     }
 }
@@ -1565,11 +1616,12 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
                 under_color: logarithmic_gradient.under_color.into(),
             },
 
-            Colorizer::Palette {
+            Colorizer::Palette(PaletteColorizer {
                 colors,
                 no_data_color,
                 default_color,
-            } => Self::Palette {
+                ..
+            }) => Self::Palette {
                 colors: colors.into(),
                 no_data_color: no_data_color.into(),
                 default_color: default_color.into(),
@@ -1579,52 +1631,59 @@ impl From<Colorizer> for geoengine_datatypes::operations::image::Colorizer {
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum RasterColorizer {
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "SingleBandRasterColorizer")]
-    SingleBand {
-        band: u32,
-        band_colorizer: Colorizer,
-    },
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "MultiBandRasterColorizer")]
-    MultiBand {
-        /// The band index of the red channel.
-        red_band: u32,
-        /// The minimum value for the red channel.
-        red_min: f64,
-        /// The maximum value for the red channel.
-        red_max: f64,
-        /// A scaling factor for the red channel between 0 and 1.
-        #[serde(default = "num_traits::One::one")]
-        red_scale: f64,
+    SingleBand(SingleBandRasterColorizer),
+    MultiBand(MultiBandRasterColorizer),
+}
 
-        /// The band index of the green channel.
-        green_band: u32,
-        /// The minimum value for the red channel.
-        green_min: f64,
-        /// The maximum value for the red channel.
-        green_max: f64,
-        /// A scaling factor for the green channel between 0 and 1.
-        #[serde(default = "num_traits::One::one")]
-        green_scale: f64,
+#[type_tag(value = "singleBand")]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SingleBandRasterColorizer {
+    pub band: u32,
+    pub band_colorizer: Colorizer,
+}
 
-        /// The band index of the blue channel.
-        blue_band: u32,
-        /// The minimum value for the red channel.
-        blue_min: f64,
-        /// The maximum value for the red channel.
-        blue_max: f64,
-        /// A scaling factor for the blue channel between 0 and 1.
-        #[serde(default = "num_traits::One::one")]
-        blue_scale: f64,
+#[type_tag(value = "multiBand")]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MultiBandRasterColorizer {
+    /// The band index of the red channel.
+    pub red_band: u32,
+    /// The minimum value for the red channel.
+    pub red_min: f64,
+    /// The maximum value for the red channel.
+    pub red_max: f64,
+    /// A scaling factor for the red channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub red_scale: f64,
 
-        /// The color to use for no data values.
-        /// If not specified, the no data values will be transparent.
-        #[serde(default = "rgba_transparent")]
-        no_data_color: RgbaColor,
-    },
+    /// The band index of the green channel.
+    pub green_band: u32,
+    /// The minimum value for the red channel.
+    pub green_min: f64,
+    /// The maximum value for the red channel.
+    pub green_max: f64,
+    /// A scaling factor for the green channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub green_scale: f64,
+
+    /// The band index of the blue channel.
+    pub blue_band: u32,
+    /// The minimum value for the red channel.
+    pub blue_min: f64,
+    /// The maximum value for the red channel.
+    pub blue_max: f64,
+    /// A scaling factor for the blue channel between 0 and 1.
+    #[serde(default = "num_traits::One::one")]
+    pub blue_scale: f64,
+
+    /// The color to use for no data values.
+    /// If not specified, the no data values will be transparent.
+    #[serde(default = "rgba_transparent")]
+    pub no_data_color: RgbaColor,
 }
 
 fn rgba_transparent() -> RgbaColor {
@@ -1636,13 +1695,15 @@ impl Eq for RasterColorizer {}
 impl RasterColorizer {
     pub fn band_selection(&self) -> BandSelection {
         match self {
-            RasterColorizer::SingleBand { band, .. } => BandSelection(vec![*band as usize]),
-            RasterColorizer::MultiBand {
+            RasterColorizer::SingleBand(SingleBandRasterColorizer { band, .. }) => {
+                BandSelection(vec![*band as usize])
+            }
+            RasterColorizer::MultiBand(MultiBandRasterColorizer {
                 red_band,
                 green_band,
                 blue_band,
                 ..
-            } => {
+            }) => {
                 let mut bands = Vec::with_capacity(3);
                 for band in [
                     *red_band as usize,
@@ -1666,16 +1727,18 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
             geoengine_datatypes::operations::image::RasterColorizer::SingleBand {
                 band,
                 band_colorizer: colorizer,
-            } => Self::SingleBand {
+            } => Self::SingleBand(SingleBandRasterColorizer {
+                r#type: Default::default(),
                 band,
                 band_colorizer: colorizer.into(),
-            },
+            }),
             geoengine_datatypes::operations::image::RasterColorizer::MultiBand {
                 red_band,
                 green_band,
                 blue_band,
                 rgb_params,
-            } => Self::MultiBand {
+            } => Self::MultiBand(MultiBandRasterColorizer {
+                r#type: Default::default(),
                 red_band,
                 green_band,
                 blue_band,
@@ -1689,7 +1752,7 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
                 blue_max: rgb_params.blue_max,
                 blue_scale: rgb_params.blue_scale,
                 no_data_color: rgb_params.no_data_color.into(),
-            },
+            }),
         }
     }
 }
@@ -1697,14 +1760,15 @@ impl From<geoengine_datatypes::operations::image::RasterColorizer> for RasterCol
 impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterColorizer {
     fn from(v: RasterColorizer) -> Self {
         match v {
-            RasterColorizer::SingleBand {
+            RasterColorizer::SingleBand(SingleBandRasterColorizer {
                 band,
                 band_colorizer: colorizer,
-            } => Self::SingleBand {
+                ..
+            }) => Self::SingleBand {
                 band,
                 band_colorizer: colorizer.into(),
             },
-            RasterColorizer::MultiBand {
+            RasterColorizer::MultiBand(MultiBandRasterColorizer {
                 red_band,
                 red_min,
                 red_max,
@@ -1718,7 +1782,8 @@ impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterCol
                 blue_max,
                 blue_scale,
                 no_data_color,
-            } => Self::MultiBand {
+                ..
+            }) => Self::MultiBand {
                 red_band,
                 green_band,
                 blue_band,
@@ -1744,6 +1809,7 @@ impl From<RasterColorizer> for geoengine_datatypes::operations::image::RasterCol
 /// It is assumed that is has at least one and at most 256 entries.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(try_from = "SerializablePalette", into = "SerializablePalette")]
+#[schema(value_type = HashMap<f64, RgbaColor>)]
 pub struct Palette(pub HashMap<NotNan<f64>, RgbaColor>);
 
 impl From<geoengine_datatypes::operations::image::Palette> for Palette {
@@ -1854,15 +1920,16 @@ pub struct DateTimeParseFormat {
     has_time: bool,
 }
 
-impl<'a> ToSchema<'a> for DateTimeParseFormat {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "DateTimeParseFormat",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
+impl PartialSchema for DateTimeParseFormat {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
     }
 }
+
+impl ToSchema for DateTimeParseFormat {}
 
 impl<'de> Deserialize<'de> for DateTimeParseFormat {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -2015,28 +2082,27 @@ pub struct StringPair((String, String));
 pub type GdalConfigOption = StringPair;
 pub type AxisLabels = StringPair;
 
-impl<'a> ToSchema<'a> for StringPair {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "StringPair",
-            ArrayBuilder::new()
-                .items(Object::with_type(SchemaType::String))
-                .min_items(Some(2))
-                .max_items(Some(2))
-                .into(),
-        )
+impl PartialSchema for StringPair {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ArrayBuilder, Object, SchemaType, Type};
+        ArrayBuilder::new()
+            .items(Object::with_type(SchemaType::Type(Type::String)))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
     }
+}
 
-    fn aliases() -> Vec<(&'a str, utoipa::openapi::Schema)> {
-        let utoipa::openapi::RefOr::T(unpacked_schema) = Self::schema().1 else {
-            unreachable!()
-        };
-        vec![
-            ("GdalConfigOption", unpacked_schema.clone()),
-            ("AxisLabels", unpacked_schema),
-        ]
-    }
+impl ToSchema for StringPair {
+    // fn aliases() -> Vec<(&'a str, utoipa::openapi::Schema)> { // TODO: how to do this?
+    //     let utoipa::openapi::RefOr::T(unpacked_schema) = Self::schema().1 else {
+    //         unreachable!()
+    //     };
+    //     vec![
+    //         ("GdalConfigOption", unpacked_schema.clone()),
+    //         ("AxisLabels", unpacked_schema),
+    //     ]
+    // }
 }
 
 impl From<(String, String)> for StringPair {

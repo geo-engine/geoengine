@@ -385,6 +385,7 @@ impl GfbioCollectionsDataProvider {
         };
 
         Ok(CollectionItem::Layer(LayerListing {
+            r#type: Default::default(),
             id: ProviderLayerId {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                 layer_id: GfBioCollectionId::AbcdLayer {
@@ -409,6 +410,7 @@ impl GfbioCollectionsDataProvider {
         };
 
         CollectionItem::Layer(LayerListing {
+            r#type: Default::default(),
             id: ProviderLayerId {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                 layer_id: GfBioCollectionId::PangaeaLayer {
@@ -980,7 +982,7 @@ mod tests {
             assert_eq!(
             collection.items,
             vec![
-                CollectionItem::Layer(LayerListing {
+                CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string())
@@ -989,7 +991,7 @@ mod tests {
                     description: String::new(),
                     properties: vec![("status".to_string(), "ok".to_string()).into()]
                     }),
-                CollectionItem::Layer(LayerListing {
+                CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0612".to_string())
@@ -998,7 +1000,7 @@ mod tests {
                     description: String::new(),
                     properties: vec![("status".to_string(), "ok".to_string()).into()]
                     }),
-                CollectionItem::Layer(LayerListing {
+                CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747054".to_string())
@@ -1007,7 +1009,7 @@ mod tests {
                     description: String::new(),
                     properties: vec![("status".to_string(), "ok".to_string()).into()]
                     }),
-                CollectionItem::Layer(LayerListing {
+                CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747056".to_string()) 

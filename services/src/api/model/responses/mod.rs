@@ -6,7 +6,7 @@ use actix_web::{HttpResponse, dev::ServiceResponse};
 use convert_case::{Converter, Pattern};
 use serde::{Deserialize, Serialize};
 use std::fmt;
-use utoipa::{ToResponse, ToSchema};
+use utoipa::{ToResponse, ToSchema, openapi::schema::SchemaType};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct IdResponse<T> {
@@ -34,16 +34,17 @@ impl<'a, T> ToResponse<'a> for IdResponse<T> {
                 .content(
                     "application/json",
                     ContentBuilder::new()
-                        .schema(
+                        .schema(Some(
                             ObjectBuilder::new()
+                                .title(Some("IdResponse"))
                                 .property(
                                     "id",
                                     ObjectBuilder::new()
-                                        .schema_type(SchemaType::String)
+                                        .schema_type(SchemaType::Type(Type::String))
                                         .format(Some(SchemaFormat::KnownFormat(KnownFormat::Uuid))),
                                 )
                                 .required("id"),
-                        )
+                        ))
                         .example(Some(serde_json::json!({
                             "id": "36574dc3-560a-4b09-9d22-d5945f2b8093"
                         })))
@@ -241,15 +242,64 @@ pub struct UnauthorizedUserResponse(ErrorResponse);
 #[allow(dead_code)]
 pub struct BadRequestQueryResponse(ErrorResponse);
 
-#[derive(ToResponse)]
-#[response(description = "ZIP Archive", content_type = "application/zip", example = json!("zip bytes"))]
-#[allow(dead_code)]
-pub struct ZipResponse(Vec<u8>);
+// #[derive(ToResponse)]
+// #[response(description = "ZIP Archive", content_type = "application/zip", example = json!("zip bytes"))]
+pub struct ZipResponse(pub Vec<u8>);
 
-#[derive(ToResponse)]
-#[response(description = "PNG Image", content_type = "image/png", example = json!("image bytes"))]
-#[allow(dead_code)]
-pub struct PngResponse(Vec<u8>);
+// #[derive(ToResponse)]
+// #[response(description = "PNG Image", content_type = "image/png", example = json!("image bytes"))]
+pub struct PngResponse(pub Vec<u8>);
+
+// OpenAPI 3.1 allows empty schemas for known content types.
+// However, …
+//  …utoipa generates an array of i32 which is bad and
+//  …the openapi generator generates garbage.
+// TODO: change, when utoipa and openapi-generator are fixed.
+//       cf. https://github.com/juhaku/utoipa/issues/1146
+mod bytes_fix {
+    use super::*;
+    use std::marker::PhantomData;
+    use utoipa::{
+        PartialSchema,
+        openapi::{ContentBuilder, RefOr, Response, ResponseBuilder},
+    };
+
+    #[derive(ToSchema)]
+    #[schema(value_type = String, format = Binary)]
+    struct BinaryFile(PhantomData<Vec<u8>>);
+
+    impl<'r> ToResponse<'r> for PngResponse {
+        fn response() -> (&'r str, RefOr<Response>) {
+            let response = ResponseBuilder::new()
+                .description("PNG Image")
+                .content(
+                    "image/png",
+                    ContentBuilder::new()
+                        .schema(Some(BinaryFile::schema()))
+                        .build(),
+                )
+                .into();
+
+            ("PngResponse", response)
+        }
+    }
+
+    impl<'r> ToResponse<'r> for ZipResponse {
+        fn response() -> (&'r str, RefOr<Response>) {
+            let response = ResponseBuilder::new()
+                .description("ZIP Archive")
+                .content(
+                    "application/zip",
+                    ContentBuilder::new()
+                        .schema(Some(BinaryFile::schema()))
+                        .build(),
+                )
+                .into();
+
+            ("ZipResponse", response)
+        }
+    }
+}
 
 #[cfg(test)]
 mod tests {

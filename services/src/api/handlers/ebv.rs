@@ -12,7 +12,7 @@ use crate::datasets::external::netcdfcf::{
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
-use crate::util::apidoc::{OpenApiServerInfo, TransformSchemasWithTag};
+use crate::util::apidoc::OpenApiServerInfo;
 use crate::{contexts::SessionContext, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
     FromRequest, Responder,
@@ -50,7 +50,7 @@ pub const EBV_REMOVE_OVERVIEW_TASK_TYPE: &str = "ebv-remove-overview";
             ResamplingMethod
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag)
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo)
 )]
 pub struct ApiDoc;
 
@@ -364,7 +364,7 @@ struct CreateOverviewParams {
 
 #[derive(Debug, Deserialize, IntoParams)]
 #[into_params(names("path"))]
-struct EbvPath(PathBuf);
+struct EbvPath(#[param(value_type = String)] PathBuf);
 
 /// Creates overview for a single NetCDF file
 #[utoipa::path(

@@ -1,5 +1,7 @@
 use utoipa::openapi::{
-    Components, OpenApi, Ref, RefOr, Response, Schema, schema::AdditionalProperties,
+    Components, HttpMethod, OpenApi, PathItem, Ref, RefOr, Response, Schema,
+    path::Operation,
+    schema::{AdditionalProperties, ArrayItems},
 };
 
 pub trait OpenapiVisitor {
@@ -31,7 +33,9 @@ pub fn visit_schema<T: OpenapiVisitor>(
         }
         RefOr::T(concrete) => match concrete {
             Schema::Array(arr) => {
-                visit_schema(arr.items.as_ref(), components, visitor, source_location);
+                if let ArrayItems::RefOrSchema(schema) = &arr.items {
+                    visit_schema(schema, components, visitor, source_location);
+                }
             }
             Schema::Object(obj) => {
                 for property in obj.properties.values() {
@@ -77,7 +81,10 @@ fn visit_response<T: OpenapiVisitor>(
         }
         RefOr::T(concrete) => {
             for content in concrete.content.values() {
-                visit_schema(&content.schema, components, visitor, source_location);
+                let Some(content_schema) = &content.schema else {
+                    continue;
+                };
+                visit_schema(content_schema, components, visitor, source_location);
             }
         }
     }
@@ -140,10 +147,13 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
             }
         }
 
-        for operation in path_item.operations.values() {
+        for (_, operation) in operations_from_path(path_item) {
             if let Some(request_body) = operation.request_body.as_ref() {
                 for content in request_body.content.values() {
-                    visit_schema(&content.schema, components, visitor, source_location);
+                    let Some(content_schema) = &content.schema else {
+                        continue;
+                    };
+                    visit_schema(content_schema, components, visitor, source_location);
                 }
             }
 
@@ -162,11 +172,46 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
                     }
                     RefOr::T(concrete) => {
                         for content in concrete.content.values() {
-                            visit_schema(&content.schema, components, visitor, source_location);
+                            let Some(content_schema) = &content.schema else {
+                                continue;
+                            };
+                            visit_schema(content_schema, components, visitor, source_location);
                         }
                     }
                 }
             }
         }
     }
+}
+
+pub fn operations_from_path(
+    path_item: &PathItem,
+) -> impl Iterator<Item = (&HttpMethod, &Operation)> {
+    let mut path_methods = Vec::<(&HttpMethod, &Operation)>::new();
+    if let Some(operation) = &path_item.get {
+        path_methods.push((&HttpMethod::Get, operation));
+    }
+    if let Some(operation) = &path_item.put {
+        path_methods.push((&HttpMethod::Put, operation));
+    }
+    if let Some(operation) = &path_item.post {
+        path_methods.push((&HttpMethod::Post, operation));
+    }
+    if let Some(operation) = &path_item.delete {
+        path_methods.push((&HttpMethod::Delete, operation));
+    }
+    if let Some(operation) = &path_item.options {
+        path_methods.push((&HttpMethod::Options, operation));
+    }
+    if let Some(operation) = &path_item.head {
+        path_methods.push((&HttpMethod::Head, operation));
+    }
+    if let Some(operation) = &path_item.patch {
+        path_methods.push((&HttpMethod::Patch, operation));
+    }
+    if let Some(operation) = &path_item.trace {
+        path_methods.push((&HttpMethod::Trace, operation));
+    }
+
+    path_methods.into_iter()
 }

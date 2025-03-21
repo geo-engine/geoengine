@@ -6,7 +6,7 @@ use crate::datasets::{RasterDatasetFromWorkflow, schedule_raster_dataset_from_wo
 use crate::error::Error::NotImplemented;
 use crate::error::{Error, Result};
 use crate::layers::layer::{
-    AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId, UpdateLayer, UpdateLayerCollection,
 };
 use crate::layers::listing::{
@@ -177,6 +177,7 @@ async fn get_layer_providers<C: ApplicationContext>(
     let mut providers = vec![];
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
                 collection_id: LayerCollectionId(
@@ -228,6 +229,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         };
 
         providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: provider_listing.id,
                 collection_id,
@@ -753,7 +755,7 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
     ),
     params(
         ("provider" = DataProviderId, description = "Data provider id"),
-        ("layer" = LayerCollectionId, description = "Layer id"),
+        ("layer" = LayerId, description = "Layer id"),
     ),
     security(
         ("session_token" = [])

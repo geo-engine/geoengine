@@ -205,6 +205,7 @@ impl EdrDataProvider {
             .map(|collection| {
                 if collection.is_raster_file()? || collection.extent.vertical.is_some() {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: EdrCollectionId::Collection {
@@ -218,6 +219,7 @@ impl EdrDataProvider {
                     }))
                 } else {
                     Ok(CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: EdrCollectionId::Collection {
@@ -260,6 +262,7 @@ impl EdrDataProvider {
             .map(|parameter_name| {
                 if collection_meta.extent.vertical.is_some() {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: EdrCollectionId::ParameterOrHeight {
@@ -274,6 +277,7 @@ impl EdrDataProvider {
                     }))
                 } else {
                     Ok(CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: EdrCollectionId::ParameterOrHeight {
@@ -319,6 +323,7 @@ impl EdrDataProvider {
             .take(options.limit as usize)
             .map(|height| {
                 Ok(CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: EdrCollectionId::ParameterOrHeight {
@@ -364,6 +369,7 @@ impl EdrDataProvider {
             .take(options.limit as usize)
             .map(|height| {
                 Ok(CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: EdrCollectionId::ParameterAndHeight {
@@ -1341,6 +1347,7 @@ mod tests {
                     // Note: The dataset GFS_single-level_50 gets filtered out because there is no extent set.
                     // This means that it contains no data.
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DEMO_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -1352,6 +1359,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DEMO_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -1363,6 +1371,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DEMO_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -1374,6 +1383,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId("collections!PointsInGermany".to_string())
@@ -1383,6 +1393,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DEMO_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -1419,6 +1430,7 @@ mod tests {
                 name: "GFS_isobaric".to_owned(),
                 description: "Parameters of GFS_isobaric".to_owned(),
                 items: vec![CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: DEMO_PROVIDER_ID,
                         collection_id: LayerCollectionId(
@@ -1453,6 +1465,7 @@ mod tests {
                 description: "Height selection of PointsInFrance".to_owned(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId("collections!PointsInFrance!0\\10cm".to_string())
@@ -1462,6 +1475,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId("collections!PointsInFrance!10\\40cm".to_string())
@@ -1503,6 +1517,7 @@ mod tests {
                 description: "Height selection of GFS_isobaric".to_owned(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId(
@@ -1514,6 +1529,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DEMO_PROVIDER_ID,
                             layer_id: LayerId(
