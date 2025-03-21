@@ -760,11 +760,7 @@ impl PartialSchema for DateTimeString {
     }
 }
 
-impl ToSchema for DateTimeString {
-    // fn name() -> Cow<'static, str> {
-    //     "DateTime2".into()
-    // }
-}
+impl ToSchema for DateTimeString {}
 
 impl FromStr for DateTimeString {
     type Err = geoengine_datatypes::primitives::DateTimeError;

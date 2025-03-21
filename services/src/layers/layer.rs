@@ -254,11 +254,6 @@ pub struct LayerCollectionListing {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
-// #[compute_discriminator(tag_field = "type")]
-// #[schema(discriminator(property_name = "type", mapping(
-//     ("collection" = LayerCollectionListing::name()),
-//     ("layer" = LayerListing::name())
-// )))]
 pub enum CollectionItem {
     Collection(LayerCollectionListing),
     Layer(LayerListing),

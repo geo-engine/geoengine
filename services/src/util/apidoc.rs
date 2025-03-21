@@ -46,8 +46,6 @@ impl Modify for DeriveDiscriminatorMapping {
                 continue; // no discriminator -> nothing to do
             };
 
-            // dbg!(name);
-
             if !discriminator.mapping.is_empty() {
                 continue; // values already present
             }
@@ -67,8 +65,6 @@ impl Modify for DeriveDiscriminatorMapping {
 
                 discriminator.mapping.insert(tag_name, ref_or_title);
             }
-
-            // dbg!(&discriminator.mapping);
 
             schemas_to_update.insert(name.clone(), RefOr::T(Schema::OneOf(schema)));
         }
