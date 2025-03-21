@@ -38,8 +38,8 @@ pub fn test(
 /// The type tag is used for serialization and deserialization as well as for schema generation.
 ///
 /// # Parameters
-/// - `tag` - the name of the type tag
-/// - `discriminator` - (optional) the name of the field that is used as a discriminator (default: `"type"`)
+/// - `value` - the value of the type tag
+/// - `tag` - (optional) the name of the field that is used as a tag (default: `"type"`)
 ///
 #[proc_macro_attribute]
 pub fn type_tag(

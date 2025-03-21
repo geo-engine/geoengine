@@ -42,7 +42,7 @@ pub struct Layer {
     pub metadata: HashMap<String, String>,
 }
 
-#[type_tag(tag = "layer")]
+#[type_tag(value = "layer")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 pub struct LayerListing {
     pub id: ProviderLayerId,
@@ -240,7 +240,7 @@ mod psql {
     }
 }
 
-#[type_tag(tag = "collection")]
+#[type_tag(value = "collection")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerCollectionListing {

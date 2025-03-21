@@ -164,12 +164,12 @@ mod tests {
             A(A),
             B(B),
         }
-        #[type_tag(tag = "aaa")]
+        #[type_tag(value = "aaa")]
         #[derive(Serialize, ToSchema)]
         struct A {
             text: String,
         }
-        #[type_tag(tag = "bbb")]
+        #[type_tag(value = "bbb")]
         #[derive(Serialize, ToSchema)]
         struct B {
             #[serde(flatten)]

@@ -80,35 +80,35 @@ pub enum Resource {
     MlModel(MlModelResource),
 }
 
-#[type_tag(tag = "layer")]
+#[type_tag(value = "layer")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerResource {
     pub id: LayerId,
 }
 
-#[type_tag(tag = "layerCollection")]
+#[type_tag(value = "layerCollection")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerCollectionResource {
     pub id: LayerCollectionId,
 }
 
-#[type_tag(tag = "project")]
+#[type_tag(value = "project")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ProjectResource {
     pub id: ProjectId,
 }
 
-#[type_tag(tag = "dataset")]
+#[type_tag(value = "dataset")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetResource {
     pub id: DatasetName,
 }
 
-#[type_tag(tag = "mlModel")]
+#[type_tag(value = "mlModel")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MlModelResource {

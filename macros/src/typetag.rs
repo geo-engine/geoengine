@@ -3,7 +3,7 @@ use proc_macro2::TokenStream;
 use quote::quote;
 use syn::{DeriveInput, Field, FieldMutability, Ident, Lit, parse_quote, parse2, spanned::Spanned};
 
-const DEFAULT_DISCRIMINATOR: &str = "type";
+const DEFAULT_TAG: &str = "type";
 
 pub fn type_tag(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, syn::Error> {
     let mut ast = parse2::<DeriveInput>(item.clone())?;
@@ -24,22 +24,22 @@ pub fn type_tag(attr: TokenStream, item: &TokenStream) -> Result<TokenStream, sy
 
     let inputs = parse_config_args(attr)?;
 
-    let Some(literal) = inputs.get("tag") else {
+    let Some(literal) = inputs.get("value") else {
         return Err(syn::Error::new_spanned(
             &ast,
-            "type tag requires a `tag` argument",
+            "type tag requires a `value` argument",
         ));
     };
 
-    let tag_field = match inputs.get("discriminator") {
+    let tag_field = match inputs.get("tag") {
         Some(Lit::Str(tag_field)) => tag_field.value(),
         Some(_) => {
             return Err(syn::Error::new_spanned(
                 &ast,
-                "the `discriminator` argument must be a string",
+                "the `tag` argument must be a string",
             ));
         }
-        None => DEFAULT_DISCRIMINATOR.into(),
+        None => DEFAULT_TAG.into(),
     };
 
     let type_name = &ast.ident;
@@ -130,18 +130,20 @@ mod tests {
         };
 
         assert_eq_pretty!(
-            type_tag(quote! {tag = "asd"}, &input).unwrap().to_string(),
+            type_tag(quote! {value = "asd"}, &input)
+                .unwrap()
+                .to_string(),
             output.to_string()
         );
     }
 
     #[test]
     fn it_fails() {
-        assert!(type_tag(quote! {}, &quote! {}).is_err()); // no tag
-        assert!(type_tag(quote! {discriminator = 5}, &quote! {}).is_err()); // wrong type
+        assert!(type_tag(quote! {}, &quote! {}).is_err()); // no value
+        assert!(type_tag(quote! {tag = 5}, &quote! {}).is_err()); // wrong type
         assert!(
             type_tag(
-                quote! {tag = "asd"},
+                quote! {value = "asd"},
                 &quote! {
                     #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
                     enum Foo {
@@ -153,7 +155,7 @@ mod tests {
         ); // no struct
         assert!(
             type_tag(
-                quote! {tag = "asd"},
+                quote! {value = "asd"},
                 &quote! {
                     #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
                     struct Foo(String);

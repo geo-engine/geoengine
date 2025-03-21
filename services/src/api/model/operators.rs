@@ -283,7 +283,7 @@ pub enum TypedResultDescriptor {
     Vector(TypedVectorResultDescriptor),
 }
 
-#[type_tag(tag = "plot")]
+#[type_tag(value = "plot")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TypedPlotResultDescriptor {
@@ -291,7 +291,7 @@ pub struct TypedPlotResultDescriptor {
     pub result_descriptor: PlotResultDescriptor,
 }
 
-#[type_tag(tag = "raster")]
+#[type_tag(value = "raster")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TypedRasterResultDescriptor {
@@ -299,7 +299,7 @@ pub struct TypedRasterResultDescriptor {
     pub result_descriptor: RasterResultDescriptor,
 }
 
-#[type_tag(tag = "vector")]
+#[type_tag(value = "vector")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TypedVectorResultDescriptor {
@@ -411,14 +411,14 @@ impl From<MockDatasetDataSourceLoadingInfo>
     }
 }
 
-#[type_tag(tag = "MockMetaData")]
+#[type_tag(value = "MockMetaData")]
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MockMetaData {
     pub loading_info: MockDatasetDataSourceLoadingInfo,
     pub result_descriptor: VectorResultDescriptor,
 }
-#[type_tag(tag = "OgrMetaData")]
+#[type_tag(value = "OgrMetaData")]
 #[derive(PartialEq, Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrMetaData {
@@ -544,7 +544,7 @@ impl From<OgrMetaData>
     }
 }
 
-#[type_tag(tag = "GdalStatic")]
+#[type_tag(value = "GdalStatic")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
@@ -647,14 +647,14 @@ pub enum OgrSourceTimeFormat {
     Auto(OgrSourceTimeFormatAuto),
 }
 
-#[type_tag(discriminator = "format", tag = "custom")]
+#[type_tag(tag = "format", value = "custom")]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceTimeFormatCustom {
     custom_format: DateTimeParseFormat,
 }
 
-#[type_tag(discriminator = "format", tag = "unixTimeStamp")]
+#[type_tag(tag = "format", value = "unixTimeStamp")]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceTimeFormatUnixTimeStamp {
@@ -664,7 +664,7 @@ pub struct OgrSourceTimeFormatUnixTimeStamp {
     fmt: DateTimeParseFormat,
 }
 
-#[type_tag(discriminator = "format", tag = "auto")]
+#[type_tag(tag = "format", value = "auto")]
 #[derive(Deserialize, Serialize, PartialEq, Eq, Clone, Debug, ToSchema, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceTimeFormatAuto {}
@@ -776,12 +776,12 @@ pub enum OgrSourceDatasetTimeType {
     StartDuration(OgrSourceDatasetTimeTypeStartDuration),
 }
 
-#[type_tag(tag = "none")]
+#[type_tag(value = "none")]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceDatasetTimeTypeNone {}
 
-#[type_tag(tag = "start")]
+#[type_tag(value = "start")]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceDatasetTimeTypeStart {
@@ -790,7 +790,7 @@ pub struct OgrSourceDatasetTimeTypeStart {
     pub duration: OgrSourceDurationSpec,
 }
 
-#[type_tag(tag = "start+end")]
+#[type_tag(value = "start+end")]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceDatasetTimeTypeStartEnd {
@@ -800,7 +800,7 @@ pub struct OgrSourceDatasetTimeTypeStartEnd {
     pub end_format: OgrSourceTimeFormat,
 }
 
-#[type_tag(tag = "start+duration")]
+#[type_tag(value = "start+duration")]
 #[derive(Deserialize, Serialize, Clone, Debug, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct OgrSourceDatasetTimeTypeStartDuration {
@@ -911,15 +911,15 @@ pub enum OgrSourceDurationSpec {
     Value(OgrSourceDurationSpecValue),
 }
 
-#[type_tag(tag = "infinite")]
+#[type_tag(value = "infinite")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
 pub struct OgrSourceDurationSpecInfinite {}
 
-#[type_tag(tag = "zero")]
+#[type_tag(value = "zero")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
 pub struct OgrSourceDurationSpecZero {}
 
-#[type_tag(tag = "value")]
+#[type_tag(value = "value")]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct OgrSourceDurationSpecValue {
     #[serde(flatten)]
@@ -1046,7 +1046,7 @@ impl From<OgrSourceColumnSpec> for geoengine_operators::source::OgrSourceColumnS
     }
 }
 
-#[type_tag(tag = "GdalMetaDataRegular")]
+#[type_tag(value = "GdalMetaDataRegular")]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataRegular {
@@ -1293,7 +1293,7 @@ impl From<TimeReference> for geoengine_operators::source::TimeReference {
 }
 
 /// Meta data for 4D `NetCDF` CF datasets
-#[type_tag(tag = "GdalMetaDataNetCdfCf")]
+#[type_tag(value = "GdalMetaDataNetCdfCf")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataNetCdfCf {
@@ -1341,7 +1341,7 @@ impl From<GdalMetadataNetCdfCf> for geoengine_operators::source::GdalMetadataNet
     }
 }
 
-#[type_tag(tag = "GdalMetaDataList")]
+#[type_tag(value = "GdalMetaDataList")]
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {

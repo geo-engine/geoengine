@@ -260,7 +260,7 @@ pub enum Symbology {
     Polygon(PolygonSymbology),
 }
 
-#[type_tag(tag = "raster")]
+#[type_tag(value = "raster")]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterSymbology {
@@ -279,7 +279,7 @@ pub struct TextSymbology {
     pub stroke: StrokeParam,
 }
 
-#[type_tag(tag = "point")]
+#[type_tag(value = "point")]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PointSymbology {
@@ -322,7 +322,7 @@ impl From<PointSymbology> for Symbology {
     }
 }
 
-#[type_tag(tag = "line")]
+#[type_tag(value = "line")]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LineSymbology {
@@ -333,7 +333,7 @@ pub struct LineSymbology {
     pub auto_simplified: bool,
 }
 
-#[type_tag(tag = "polygon")]
+#[type_tag(value = "polygon")]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolygonSymbology {
@@ -354,14 +354,14 @@ pub enum NumberParam {
     Derived(DerivedNumber),
 }
 
-#[type_tag(tag = "static")]
+#[type_tag(value = "static")]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StaticNumber {
     pub value: usize,
 }
 
-#[type_tag(tag = "derived")]
+#[type_tag(value = "derived")]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DerivedNumber {
@@ -387,14 +387,14 @@ pub enum ColorParam {
     Derived(DerivedColor),
 }
 
-#[type_tag(tag = "static")]
+#[type_tag(value = "static")]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct StaticColor {
     #[schema(value_type = crate::api::model::datatypes::RgbaColor)]
     pub color: RgbaColor,
 }
 
-#[type_tag(tag = "derived")]
+#[type_tag(value = "derived")]
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct DerivedColor {
     pub attribute: String,

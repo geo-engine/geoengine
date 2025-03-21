@@ -43,7 +43,7 @@ pub enum DataId {
     External(ExternalDataId),
 }
 
-#[type_tag(tag = "internal")]
+#[type_tag(value = "internal")]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct InternalDataId {
@@ -247,7 +247,7 @@ impl std::fmt::Display for LayerId {
     }
 }
 
-#[type_tag(tag = "external")]
+#[type_tag(value = "external")]
 #[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ExternalDataId {
@@ -866,11 +866,11 @@ impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
     }
 }
 
-#[type_tag(tag = "unitless")]
+#[type_tag(value = "unitless")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
 pub struct UnitlessMeasurement {}
 
-#[type_tag(tag = "continuous")]
+#[type_tag(value = "continuous")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
     pub measurement: String,
@@ -896,7 +896,7 @@ impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::Continuous
     }
 }
 
-#[type_tag(tag = "classification")]
+#[type_tag(value = "classification")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(
     try_from = "SerializableClassificationMeasurement",
@@ -1505,7 +1505,7 @@ impl From<Breakpoint> for geoengine_datatypes::operations::image::Breakpoint {
     }
 }
 
-#[type_tag(tag = "linearGradient")]
+#[type_tag(value = "linearGradient")]
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LinearGradient {
@@ -1515,7 +1515,7 @@ pub struct LinearGradient {
     pub under_color: RgbaColor,
 }
 
-#[type_tag(tag = "logarithmicGradient")]
+#[type_tag(value = "logarithmicGradient")]
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LogarithmicGradient {
@@ -1525,7 +1525,7 @@ pub struct LogarithmicGradient {
     pub under_color: RgbaColor,
 }
 
-#[type_tag(tag = "palette")]
+#[type_tag(value = "palette")]
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PaletteColorizer {
@@ -1638,7 +1638,7 @@ pub enum RasterColorizer {
     MultiBand(MultiBandRasterColorizer),
 }
 
-#[type_tag(tag = "singleBand")]
+#[type_tag(value = "singleBand")]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct SingleBandRasterColorizer {
@@ -1646,7 +1646,7 @@ pub struct SingleBandRasterColorizer {
     pub band_colorizer: Colorizer,
 }
 
-#[type_tag(tag = "multiBand")]
+#[type_tag(value = "multiBand")]
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct MultiBandRasterColorizer {
