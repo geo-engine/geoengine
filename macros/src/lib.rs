@@ -33,7 +33,7 @@ pub fn test(
     }
 }
 
-/// This macro generates a type tag for a struct.
+/// This macro generates a type tag for a struct as part of the OpenAPI schema.
 /// It creates a new enum with a single variant that is used as a type tag.
 /// The type tag is used for serialization and deserialization as well as for schema generation.
 ///
