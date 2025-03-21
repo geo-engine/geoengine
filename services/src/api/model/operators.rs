@@ -486,26 +486,6 @@ impl
     }
 }
 
-// #[async_trait]
-// impl<L, R, Q> MetaData<L, R, Q> for StaticMetaData<L, R, Q>
-// where
-//     L: Debug + Clone + Send + Sync + 'static,
-//     R: Debug + Send + Sync + 'static + ResultDescriptor,
-//     Q: Debug + Clone + Send + Sync + 'static,
-// {
-//     async fn loading_info(&self, _query: Q) -> geoengine_operators::util::Result<L> {
-//         Ok(self.loading_info.clone())
-//     }
-
-//     async fn result_descriptor(&self) -> geoengine_operators::util::Result<R> {
-//         Ok(self.result_descriptor.clone())
-//     }
-
-//     fn box_clone(&self) -> Box<dyn MetaData<L, R, Q>> {
-//         Box::new(self.clone())
-//     }
-// }
-
 impl From<MockMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
