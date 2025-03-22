@@ -1956,8 +1956,8 @@ mod tests {
             let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 1).unwrap(),
                 TimeInterval::new_unchecked(
-                    1_671_868_800_000 + i64::from(time_shift_millis),
-                    1_672_041_600_000 + i64::from(time_shift_millis),
+                    1_671_868_800_000 - i64::from(time_shift_millis),
+                    1_672_041_600_000 - i64::from(time_shift_millis),
                 ),
                 BandSelection::first(),
             );
