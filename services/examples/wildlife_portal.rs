@@ -3,6 +3,7 @@
 
 use futures::{StreamExt, TryFutureExt};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, Coordinate2D};
+use geoengine_services::test_data;
 use std::{collections::HashMap, fs::File};
 use url::Url;
 
@@ -56,13 +57,13 @@ async fn main() {
             .await;
 
     {
-        let mut file = File::create("projects.geojson").unwrap();
+        let mut file = File::create(test_data!("wildlife/projects.geojson")).unwrap();
         let geojson = projects_geojson(&projects_with_bounds);
         serde_json::to_writer_pretty(&mut file, &geojson).unwrap();
     }
 
     {
-        let mut file = File::create("station_setups.geojson").unwrap();
+        let mut file = File::create(test_data!("wildlife/station_setups.geojson")).unwrap();
         let geojson =
             station_setups_geojson(station_setups.iter().flat_map(|(project, setups)| {
                 setups.iter().map(|setup| (project.as_str(), setup))
@@ -71,7 +72,7 @@ async fn main() {
     }
 
     {
-        let mut file = File::create("image_objects.geojson").unwrap();
+        let mut file = File::create(test_data!("wildlife/image_objects.geojson")).unwrap();
         let geojson = image_objects_geojson(
             image_objects
                 .iter()
