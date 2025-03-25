@@ -9,6 +9,7 @@ use url::Url;
 
 // TODO: pagination
 const PAGE_SIZE: usize = 10_000;
+const MAX_QUERY_LENGTH: usize = 6_000;
 
 #[tokio::main]
 async fn main() {
@@ -189,15 +190,15 @@ fn image_objects_geojson<'s>(
                 if let Some(annotation) = &image_object.first_annotation {
                     properties.insert(
                         "acceptedNameUsageID".to_string(),
-                        annotation.accepted_name_usage_id.as_str().into(),
+                        annotation.body.accepted_name_usage_id.as_str().into(),
                     );
                     properties.insert(
                         "vernacularName".to_string(),
-                        annotation.vernacular_name.as_str().into(),
+                        annotation.body.vernacular_name.as_str().into(),
                     );
                     properties.insert(
                         "scientificName".to_string(),
-                        annotation.scientific_name.as_str().into(),
+                        annotation.body.scientific_name.as_str().into(),
                     );
                 }
 
@@ -279,13 +280,26 @@ struct ImageObject {
 
 #[derive(Debug, serde::Deserialize)]
 struct Annotation {
-    // pub id: String,
+    pub id: String,
+    #[serde(rename = "hasTarget")]
+    pub target: AnnotationTarget,
+    #[serde(rename = "hasBody")]
+    pub body: AnnotationBody,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AnnotationBody {
     #[serde(rename = "acceptedNameUsageID")]
     pub accepted_name_usage_id: String,
     #[serde(rename = "vernacularName")]
     pub vernacular_name: String,
     #[serde(rename = "scientificName")]
     pub scientific_name: String,
+}
+
+#[derive(Debug, serde::Deserialize)]
+struct AnnotationTarget {
+    pub source: String,
 }
 
 fn project_bounds(project: &Project, station_setups: &[StationSetup]) -> ProjectWithBounds {
@@ -394,6 +408,7 @@ async fn projects() -> Vec<Project> {
     projects
 }
 
+#[allow(clippy::too_many_lines)]
 async fn image_objects(station: &StationSetup) -> Vec<ImageObject> {
     let url = Url::parse_with_params(
         "https://wildlive.senckenberg.de/api/objects/",
@@ -434,28 +449,80 @@ async fn image_objects(station: &StationSetup) -> Vec<ImageObject> {
         .await
         .unwrap();
 
-    for image_object in &mut image_objects {
-        let Some(first_annotation) = image_object.annotation_ids.first() else {
-            continue;
-        };
-        // TODO: one query for all annotations
-        let url = Url::parse(&format!(
-            "https://wildlive.senckenberg.de/api/objects/{first_annotation}"
-        ))
+    let image_annotations: Vec<&str> = image_objects
+        .iter()
+        .filter_map(|image_object| {
+            let first_annotation = image_object.annotation_ids.first()?;
+            Some(first_annotation.as_str())
+        })
+        .collect();
+    let num_image_annotations = image_annotations.len();
+
+    let mut annotation_filters = Vec::new();
+    let mut annotation_filter = String::new();
+    let or_str: &str = r#"" OR ""#;
+    for annotation in image_annotations {
+        if (annotation_filter.len() + annotation.len() + or_str.len()) > MAX_QUERY_LENGTH {
+            annotation_filters.push(annotation_filter);
+            annotation_filter = String::new();
+        } else if !annotation_filter.is_empty() {
+            annotation_filter.push_str(or_str);
+        }
+
+        annotation_filter.push_str(annotation);
+    }
+    annotation_filters.push(annotation_filter);
+
+    let mut found_image_annotations: HashMap<String, Annotation> =
+        HashMap::with_capacity(num_image_annotations);
+
+    for annotation_filter in annotation_filters {
+        let url = Url::parse_with_params(
+            "https://wildlive.senckenberg.de/api/objects/",
+            [
+                (
+                    "query",
+                    format!(r#"("{annotation_filter}") AND type:"Annotation""#),
+                ),
+                // TODO: filter only necessary fields
+                ("pageNum", "0".to_string()),
+                ("pageSize", PAGE_SIZE.to_string()),
+            ],
+        )
         .unwrap();
 
         eprintln!("[QUERY] {url}");
 
-        let annotation = reqwest::get(url)
-            .await
-            .unwrap()
-            .json()
-            .map_ok(|results: serde_json::Value| {
-                serde_json::from_value::<Annotation>(results.get("hasBody").unwrap().clone())
-                    .unwrap()
-            })
-            .await
-            .unwrap();
+        found_image_annotations.extend(
+            reqwest::get(url)
+                .await
+                .unwrap()
+                .json()
+                .map_ok(|results: serde_json::Value| {
+                    results
+                        .get("results")
+                        .unwrap()
+                        .as_array()
+                        .unwrap()
+                        .iter()
+                        .map(|result| {
+                            let annotation = serde_json::from_value::<Annotation>(
+                                result.get("content").unwrap().clone(),
+                            )
+                            .unwrap();
+                            (annotation.target.source.clone(), annotation)
+                        })
+                        .collect::<HashMap<_, _>>()
+                })
+                .await
+                .unwrap(),
+        );
+    }
+
+    for image_object in &mut image_objects {
+        let Some(annotation) = found_image_annotations.remove(&image_object.id) else {
+            continue;
+        };
 
         image_object.first_annotation = Some(annotation);
     }
