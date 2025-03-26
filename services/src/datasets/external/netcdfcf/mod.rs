@@ -1589,7 +1589,7 @@ mod tests {
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::primitives::{
-        BandSelection, BoundingBox2D, PlotQueryRectangle, PlotSeriesSelection,
+        BandSelection, BoundingBox2D, Coordinate2D, PlotQueryRectangle, PlotSeriesSelection, SpatialResolution
     };
     use geoengine_datatypes::raster::RenameBands;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
@@ -1601,7 +1601,7 @@ mod tests {
         MultipleRasterSources, RasterBandDescriptors, RasterOperator, SingleRasterSource,
     };
     use geoengine_operators::processing::{
-        RasterStacker, RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams,
+        Interpolation, InterpolationMethod, InterpolationParams, RasterStacker, RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams
     };
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
@@ -1999,10 +1999,11 @@ mod tests {
         )
         .into();
 
+        let expected_time = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         assert_eq!(
             loading_info_parts[0],
             GdalLoadingInfoTemporalSlice {
-                time: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
+                time: TimeInterval::new_unchecked(expected_time, expected_time+1),
                 params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 4,
@@ -2128,10 +2129,12 @@ mod tests {
             .path()
             .join("dataset_sm.nc/scenario_5/metric_2/1/2000-01-01T00:00:00.000Z.tiff");
 
+
+        let expected_time = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         assert_eq!(
             loading_info_parts[0],
             GdalLoadingInfoTemporalSlice {
-                time: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
+                time: TimeInterval::new_unchecked(expected_time, expected_time+1),
                 params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 1,
@@ -2277,10 +2280,10 @@ mod tests {
             },
             sources: Expression {
                 params: ExpressionParams {
-                    expression: "A".to_string(),
+                    expression: "if A is NODATA {NODATA} else {A}".to_string(), // FIXME: was "A" because nodata pixels would be skipped. --> The landcover pixels overlapping are NODATA, but why?
                     output_type: RasterDataType::F64,
                     output_band: None,
-                    map_no_data: false,
+                    map_no_data: true,
                 },
                 sources: SingleRasterSource {
                     raster: RasterStacker {
@@ -2289,21 +2292,31 @@ mod tests {
                         },
                         sources: MultipleRasterSources {
                             rasters: vec![
-                                GdalSource {
-                                    params: GdalSourceParameters {
-                                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
-                                            EBV_PROVIDER_ID.to_string(),
-                                            serde_json::json!({
-                                                "fileName": "dataset_irr_ts.nc",
-                                                "groupNames": ["metric_1"],
-                                                "entity": 0
-                                            })
-                                            .to_string(),
-                                        ),
-                                        overview_level: None,
+                                Interpolation{
+                                    params: InterpolationParams {
+                                        interpolation: InterpolationMethod::NearestNeighbor,
+                                        output_resolution: geoengine_operators::processing::InterpolationResolution::Resolution(SpatialResolution::new_unchecked(0.1, 0.1)), // The test data has a resolution of 1.0!
+                                        output_origin_reference: Some(Coordinate2D::new(0.0, 0.0)),
                                     },
-                                }
-                                .boxed(),
+                                    sources: SingleRasterSource {
+                                        raster: GdalSource {
+                                            params: GdalSourceParameters {
+                                                data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                                    EBV_PROVIDER_ID.to_string(),
+                                                    serde_json::json!({
+                                                        "fileName": "dataset_irr_ts.nc",
+                                                        "groupNames": ["metric_1"],
+                                                        "entity": 0
+                                                    })
+                                                    .to_string(),
+                                                ),
+                                                overview_level: None,
+                                            },
+                                        }
+                                        .boxed(),
+                                    }
+                                }.boxed(),
+                                
                                 RasterTypeConversion {
                                     params: RasterTypeConversionParams {
                                         output_data_type: RasterDataType::I16,
@@ -2365,7 +2378,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, PlotData {
-            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.342800000000004},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
+            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.68000000000007},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.72000000000009}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
             metadata: PlotMetaData::None,
         });
     }

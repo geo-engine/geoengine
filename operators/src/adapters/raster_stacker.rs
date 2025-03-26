@@ -392,7 +392,6 @@ where
                                 state.set(State::Initial);
                             }
                         }
-
                         return Poll::Ready(Some(Ok(tile)));
                     }
                 },

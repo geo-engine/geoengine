@@ -96,7 +96,7 @@ where
                     ) = Tuple::metadata(&rasters);
 
                     let program = self.program.clone();
-                    let map_no_data = self.map_no_data;
+                    let map_no_data: bool = self.map_no_data;
 
                     let out = crate::util::spawn_blocking_with_thread_pool(
                         ctx.thread_pool().clone(),

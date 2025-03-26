@@ -288,11 +288,15 @@ where
         let tiling_strategy: geoengine_datatypes::raster::TilingStrategy =
             tiling_grid_definition.generate_data_tiling_strategy();
 
+        let input_geo_transform = in_spatial_grid
+            .tiling_grid_definition(ctx.tiling_specification())
+            .tiling_geo_transform();
+
+        let output_geo_transform = tiling_grid_definition.tiling_geo_transform();
+
         let sub_query = InterpolationSubQuery::<_, P, I> {
-            input_geo_transform: in_spatial_grid
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
-            output_geo_transform: tiling_grid_definition.tiling_geo_transform(),
+            input_geo_transform,
+            output_geo_transform,
             fold_fn: fold_future,
             tiling_specification: self.tiling_specification,
             phantom: PhantomData,

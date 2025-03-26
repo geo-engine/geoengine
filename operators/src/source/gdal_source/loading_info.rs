@@ -257,6 +257,11 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
             .inspect(|m| {
                 let time_interval = m.time;
 
+                debug_assert!(
+                    !time_interval.is_instant(),
+                    "time_interval {time_interval} is an instant!"
+                );
+
                 if time_interval.contains(&query.time_interval) {
                     let t1 = time_interval.start();
                     let t2 = time_interval.end();
@@ -273,7 +278,16 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
                 }
 
-                if time_interval.start() >= query.time_interval.end() {
+                if query.time_interval.is_instant() {
+                    // be carefull not to use instant ends...
+                    if time_interval.start() > query.time_interval.end() {
+                        let t2 = time_interval.start();
+                        known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                    } else if time_interval.end() > query.time_interval.end() {
+                        let t2 = time_interval.end();
+                        known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                    }
+                } else if time_interval.start() >= query.time_interval.end() {
                     let t2 = time_interval.start();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                 } else if time_interval.end() >= query.time_interval.end() {

@@ -819,6 +819,8 @@ mod tests {
         )
         .unwrap();
 
+        let expected_time_1: TimeInstance = DateTime::new_utc(2020, 1, 1, 0, 0, 0).into();
+        let expected_time_2: TimeInstance = DateTime::new_utc(2020, 2, 1, 0, 0, 0).into();
         assert_eq!(
             loading_info,
             GdalMetaDataList {
@@ -834,11 +836,7 @@ mod tests {
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2020, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2020, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_1, expected_time_1 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: Path::new("foo/2020-01-01T00:00:00.000Z.tiff").into(),
                             rasterband_channel: 1,
@@ -860,11 +858,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2020, 2, 1, 0, 0, 0),
-                            DateTime::new_utc(2020, 2, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: Path::new("foo/2020-02-01T00:00:00.000Z.tiff").into(),
                             rasterband_channel: 1,
@@ -996,6 +990,11 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+
+        let expected_time_1: TimeInstance = DateTime::new_utc(1900, 1, 1, 0, 0, 0).into();
+        let expected_time_2: TimeInstance = DateTime::new_utc(2015, 1, 1, 0, 0, 0).into();
+        let expected_time_3: TimeInstance = DateTime::new_utc(2055, 1, 1, 0, 0, 0).into();
+
         pretty_assertions::assert_eq!(
             sample_loading_info,
             GdalMetaDataList {
@@ -1011,11 +1010,7 @@ mod tests {
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(1900, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(1900, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_1, expected_time_1 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/1900-01-01T00:00:00.000Z.tiff"),
@@ -1038,11 +1033,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2015, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2015, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/2015-01-01T00:00:00.000Z.tiff"),
@@ -1065,11 +1056,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2055, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2055, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_3, expected_time_3 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/2055-01-01T00:00:00.000Z.tiff"),
