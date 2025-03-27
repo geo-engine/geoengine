@@ -36,6 +36,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn migrations_lead_to_ground_truth_schema() {
         assert_migration_schema_eq(
             &all_migrations(),

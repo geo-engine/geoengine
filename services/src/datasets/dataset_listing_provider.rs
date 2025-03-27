@@ -119,6 +119,7 @@ where
             .take(limit as usize)
             .map(|c| {
                 CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: self.id,
                         collection_id: LayerCollectionId(
@@ -195,6 +196,7 @@ where
             .iter()
             .map(|d| {
                 CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: LayerId(d.id.to_string()),

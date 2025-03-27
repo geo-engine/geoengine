@@ -4,17 +4,69 @@ use crate::api::handlers::permissions::{
     PermissionListOptions, PermissionListing, PermissionRequest, Resource,
 };
 use crate::api::model::datatypes::{
-    DateTimeParseFormat, ExternalDataId, FeatureDataType, GdalConfigOption, LayerId,
-    LinearGradient, LogarithmicGradient, Measurement, MultiLineString, MultiPoint, MultiPolygon,
-    NamedData, NoGeometry, Palette, PlotOutputFormat, PlotQueryRectangle, RasterColorizer,
-    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle,
-    RgbaColor, SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, TimeInstance,
+    AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
+    ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
+    DataProviderId, DatasetId, DateTimeParseFormat, DateTimeString, ExternalDataId,
+    FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement,
+    MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat,
+    PlotQueryRectangle, RasterColorizer, RasterDataType, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D,
+    SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
+    TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+};
+use crate::api::model::operators::{
+    CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
+    GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
+    GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
+    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
+    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+    OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
+    RasterResultDescriptor, TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor,
+    UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
+};
+use crate::api::model::responses::datasets::DatasetNameResponse;
+use crate::api::model::responses::ml_models::MlModelNameResponse;
+use crate::api::model::responses::{
+    BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse, PngResponse,
+    UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
+    ZipResponse,
+};
+use crate::api::model::services::{
+    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
+    Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
+};
+use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
+use crate::api::{
+    handlers::{
+        plots::WrappedPlotOutput,
+        spatial_references::{AxisOrder, SpatialReferenceSpecification},
+        tasks::{TaskAbortOptions, TaskResponse},
+        upload::{UploadFileLayersResponse, UploadFilesResponse},
+        users::{AddRole, Quota, UpdateQuota, UsageSummaryGranularity},
+        wfs::{CollectionType, GeoJson},
+        workflows::{ProvenanceEntry, RasterStreamWebsocketResultType},
+    },
+    model::{
+        datatypes::{GeoTransform, GridBoundingBox2D, GridIdx2D, SpatialGridDefinition},
+        operators::{SpatialGridDescriptor, SpatialGridDescriptorState},
+    },
+};
+use crate::contexts::SessionId;
+use crate::datasets::listing::{DatasetListing, OrderBy};
+use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
+use crate::datasets::upload::{UploadId, VolumeName};
+use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
+use crate::layers::layer::{
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
+    LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
+    UpdateLayerCollection,
 };
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
-use crate::machine_learning::{name::MlModelName, MlModel, MlModelId, MlModelMetadata};
-use crate::permissions::{Permission, ResourceId, Role, RoleDescription, RoleId};
+use crate::machine_learning::name::MlModelName;
+use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
+use crate::permissions::{Permission, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
     LineSymbology, NumberParam, Plot, PlotUpdate, PointSymbology, PolygonSymbology, Project,
@@ -27,69 +79,9 @@ use crate::users::{
     AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
     UserSession,
 };
-use crate::util::{
-    apidoc::{OpenApiServerInfo, TransformSchemasWithTag},
-    server::ServerInfo,
-};
+use crate::util::apidoc::DeriveDiscriminatorMapping;
+use crate::util::{apidoc::OpenApiServerInfo, server::ServerInfo};
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use crate::{
-    api::{
-        handlers::{
-            plots::WrappedPlotOutput,
-            spatial_references::{AxisOrder, SpatialReferenceSpecification},
-            tasks::{TaskAbortOptions, TaskResponse},
-            upload::{UploadFileLayersResponse, UploadFilesResponse},
-            users::{AddRole, Quota, UpdateQuota, UsageSummaryGranularity},
-            wfs::{CollectionType, GeoJson},
-            workflows::{ProvenanceEntry, RasterStreamWebsocketResultType},
-        },
-        model::{
-            datatypes::{
-                AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
-                ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
-                DataProviderId, DatasetId, DateTime, GeoTransform, GridBoundingBox2D, GridIdx2D,
-                SpatialGridDefinition, StringPair, TimeGranularity, TimeInterval, TimeStep,
-                VectorDataType, VectorQueryRectangle,
-            },
-            operators::{
-                CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
-                GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList,
-                GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf,
-                GdalSourceTimePlaceholder, MockDatasetDataSourceLoadingInfo, MockMetaData,
-                OgrMetaData, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
-                OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
-                PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
-                RasterResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState,
-                TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor,
-                UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
-            },
-            responses::{
-                datasets::DatasetNameResponse, ml_models::MlModelNameResponse,
-                BadRequestQueryResponse, ErrorResponse, IdResponse, PayloadTooLargeResponse,
-                PngResponse, UnauthorizedAdminResponse, UnauthorizedUserResponse,
-                UnsupportedMediaTypeForJsonResponse, ZipResponse,
-            },
-            services::{
-                AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
-                MetaDataSuggestion, Provenance, ProvenanceOutput, Provenances, UpdateDataset,
-                Volume,
-            },
-        },
-        ogc::{util::OgcBoundingBox, wcs, wfs, wms},
-    },
-    contexts::SessionId,
-    datasets::{
-        listing::{DatasetListing, OrderBy},
-        storage::{AutoCreateDataset, Dataset, SuggestMetaData},
-        upload::{UploadId, VolumeName},
-        DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult,
-    },
-    layers::layer::{
-        AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection,
-        LayerCollectionListing, LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId,
-        UpdateLayer, UpdateLayerCollection,
-    },
-};
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{Modify, OpenApi};
 
@@ -196,20 +188,18 @@ use utoipa::{Modify, OpenApi};
             IdResponse::<LayerCollectionId>,
             IdResponse::<ProjectId>,
             IdResponse::<RoleId>,
-            DatasetNameResponse,
             UnauthorizedAdminResponse,
             UnauthorizedUserResponse,
             BadRequestQueryResponse,
             PngResponse,
             ZipResponse,
-            AuthCodeRequestURL
         ),
         schemas(
             ErrorResponse,
             UserSession,
             UserCredentials,
             UserRegistration,
-            DateTime,
+            DateTimeString,
             UserInfo,
             Quota,
             UpdateQuota,
@@ -225,6 +215,7 @@ use utoipa::{Modify, OpenApi};
             DataProviderId,
             DatasetId,
             DatasetName,
+            DatasetNameResponse,
             NamedData,
             ExternalDataId,
             LayerId,
@@ -433,7 +424,6 @@ use utoipa::{Modify, OpenApi};
 
             PermissionRequest,
             Resource,
-            ResourceId,
             Permission,
             PermissionListing,
             PermissionListOptions,
@@ -448,7 +438,7 @@ use utoipa::{Modify, OpenApi};
             MlModelNameResponse
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag),
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]
 pub struct ApiDoc;
@@ -467,7 +457,7 @@ impl Modify for SecurityAddon {
                 HttpBuilder::new()
                     .scheme(HttpAuthScheme::Bearer)
                     .bearer_format("UUID")
-                    .description(Some("A valid session token can be obtained via the /anonymous or /login (pro only) endpoints. Alternatively, it can be defined as a fixed value in the Settings.toml file."))
+                    .description(Some("A valid session token can be obtained via the /anonymous or /login endpoints."))
                     .build(),
             ),
         );
@@ -513,6 +503,11 @@ mod tests {
 
     #[ge_context::test]
     async fn it_can_run_examples(app_ctx: PostgresContext<NoTls>) {
-        can_run_examples(app_ctx, ApiDoc::openapi(), send_test_request).await;
+        Box::pin(can_run_examples(
+            app_ctx,
+            ApiDoc::openapi(),
+            send_test_request,
+        ))
+        .await;
     }
 }

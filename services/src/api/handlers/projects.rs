@@ -3,8 +3,8 @@ use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::projects::error::ProjectDbError;
 use crate::projects::{
-    CreateProject, LoadVersion, ProjectDb, ProjectId, ProjectListOptions, ProjectVersionId,
-    UpdateProject,
+    CreateProject, LoadVersion, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
+    ProjectVersion, ProjectVersionId, UpdateProject,
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
 use actix_web::{FromRequest, HttpResponse, Responder, ResponseError, web};
@@ -766,6 +766,7 @@ mod tests {
                 name: "L1".to_string(),
                 visibility: Default::default(),
                 symbology: Symbology::Raster(RasterSymbology {
+                    r#type: Default::default(),
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
@@ -833,6 +834,7 @@ mod tests {
                 legend: false,
             },
             symbology: Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
@@ -849,6 +851,7 @@ mod tests {
                 legend: true,
             },
             symbology: Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,

@@ -1,3 +1,5 @@
+use std::path::PathBuf;
+
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, MockMetaData,
     OgrMetaData,
@@ -14,7 +16,8 @@ use super::datatypes::DataId;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
-#[serde(tag = "type")]
+#[serde(untagged)]
+#[schema(discriminator = "type")]
 pub enum MetaDataDefinition {
     MockMetaData(MockMetaData),
     OgrMetaData(OgrMetaData),
@@ -28,10 +31,18 @@ impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
     fn from(value: crate::datasets::storage::MetaDataDefinition) -> Self {
         match value {
             crate::datasets::storage::MetaDataDefinition::MockMetaData(x) => {
-                Self::MockMetaData(x.into())
+                Self::MockMetaData(MockMetaData {
+                    r#type: Default::default(),
+                    loading_info: x.loading_info.into(),
+                    result_descriptor: x.result_descriptor.into(),
+                })
             }
             crate::datasets::storage::MetaDataDefinition::OgrMetaData(x) => {
-                Self::OgrMetaData(x.into())
+                Self::OgrMetaData(OgrMetaData {
+                    r#type: Default::default(),
+                    loading_info: x.loading_info.into(),
+                    result_descriptor: x.result_descriptor.into(),
+                })
             }
             crate::datasets::storage::MetaDataDefinition::GdalMetaDataRegular(x) => {
                 Self::GdalMetaDataRegular(x.into())
@@ -200,4 +211,13 @@ pub struct ProvenanceOutput {
 pub struct Volume {
     pub name: String,
     pub path: Option<String>,
+}
+
+impl From<&Volume> for crate::datasets::upload::Volume {
+    fn from(value: &Volume) -> Self {
+        Self {
+            name: VolumeName(value.name.clone()),
+            path: value.path.as_ref().map_or_else(PathBuf::new, PathBuf::from),
+        }
+    }
 }

@@ -22,12 +22,14 @@ use validator::{Validate, ValidationError};
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DatasetListing {
+    #[schema(value_type = crate::api::model::datatypes::DatasetId)]
     pub id: DatasetId,
     pub name: DatasetName,
     pub display_name: String,
     pub description: String,
     pub tags: Vec<String>,
     pub source_operator: String,
+    #[schema(value_type = crate::api::model::operators::TypedResultDescriptor)]
     pub result_descriptor: TypedResultDescriptor,
     pub symbology: Option<Symbology>,
     // TODO: meta data like bounds, resolution
@@ -99,6 +101,7 @@ pub trait DatasetProvider: Send
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]
 pub struct ProvenanceOutput {
+    #[schema(value_type = crate::api::model::datatypes::DataId)]
     pub data: DataId,
     pub provenance: Option<Vec<Provenance>>,
 }

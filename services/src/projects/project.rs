@@ -15,11 +15,13 @@ use geoengine_datatypes::{
     primitives::{SpatialBounded, TemporalBounded},
     util::Identifier,
 };
+use geoengine_macros::type_tag;
 use geoengine_operators::string_token;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::{convert::TryInto, fmt::Debug};
+use utoipa::PartialSchema;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 use validator::{Validate, ValidationError};
@@ -36,6 +38,7 @@ pub struct Project {
     pub layers: Vec<ProjectLayer>,
     pub plots: Vec<Plot>,
     pub bounds: STRectangle,
+    #[schema(value_type = crate::api::model::datatypes::TimeStep)]
     pub time_step: TimeStep,
 }
 
@@ -147,7 +150,9 @@ impl Project {
 pub struct STRectangle {
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
+    #[schema(value_type = crate::api::model::datatypes::BoundingBox2D)]
     pub bounding_box: BoundingBox2D,
+    #[schema(value_type = crate::api::model::datatypes::TimeInterval)]
     pub time_interval: TimeInterval,
 }
 
@@ -246,7 +251,8 @@ pub enum LayerType {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[allow(clippy::large_enum_variant)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum Symbology {
     Raster(RasterSymbology),
     Point(PointSymbology),
@@ -254,10 +260,12 @@ pub enum Symbology {
     Polygon(PolygonSymbology),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(value = "raster")]
+#[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterSymbology {
     pub opacity: f64,
+    #[schema(value_type = crate::api::model::datatypes::RasterColorizer)]
     pub raster_colorizer: RasterColorizer,
 }
 
@@ -271,7 +279,8 @@ pub struct TextSymbology {
     pub stroke: StrokeParam,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(value = "point")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PointSymbology {
     pub radius: NumberParam,
@@ -283,15 +292,24 @@ pub struct PointSymbology {
 impl Default for PointSymbology {
     fn default() -> Self {
         Self {
-            radius: NumberParam::Static { value: 10 },
-            fill_color: ColorParam::Static {
+            r#type: Default::default(),
+            radius: NumberParam::Static(StaticNumber {
+                r#type: Default::default(),
+                value: 10,
+            }),
+            fill_color: ColorParam::Static(StaticColor {
+                r#type: Default::default(),
                 color: RgbaColor::white(),
-            },
+            }),
             stroke: StrokeParam {
-                width: NumberParam::Static { value: 1 },
-                color: ColorParam::Static {
+                width: NumberParam::Static(StaticNumber {
+                    r#type: Default::default(),
+                    value: 1,
+                }),
+                color: ColorParam::Static(StaticColor {
+                    r#type: Default::default(),
                     color: RgbaColor::black(),
-                },
+                }),
             },
             text: None,
         }
@@ -304,7 +322,8 @@ impl From<PointSymbology> for Symbology {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(value = "line")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LineSymbology {
     pub stroke: StrokeParam,
@@ -314,7 +333,8 @@ pub struct LineSymbology {
     pub auto_simplified: bool,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(value = "polygon")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PolygonSymbology {
     pub fill_color: ColorParam,
@@ -327,15 +347,21 @@ pub struct PolygonSymbology {
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum NumberParam {
-    #[schema(title = "StaticNumberParam")]
-    Static {
-        value: usize,
-    },
+    Static(StaticNumber),
     Derived(DerivedNumber),
 }
 
+#[type_tag(value = "static")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StaticNumber {
+    pub value: usize,
+}
+
+#[type_tag(value = "derived")]
 #[derive(Debug, PartialEq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct DerivedNumber {
@@ -354,15 +380,25 @@ pub struct StrokeParam {
 impl Eq for DerivedNumber {}
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum ColorParam {
-    Static { color: RgbaColor },
+    Static(StaticColor),
     Derived(DerivedColor),
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema, ToSql, FromSql)]
+#[type_tag(value = "static")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
+pub struct StaticColor {
+    #[schema(value_type = crate::api::model::datatypes::RgbaColor)]
+    pub color: RgbaColor,
+}
+
+#[type_tag(value = "derived")]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 pub struct DerivedColor {
     pub attribute: String,
+    #[schema(value_type = crate::api::model::datatypes::Colorizer)]
     pub colorizer: Colorizer,
 }
 
@@ -387,7 +423,7 @@ pub struct Plot {
     pub name: String,
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema)]
 pub enum OrderBy {
     DateAsc,
     DateDesc,
@@ -457,6 +493,7 @@ pub struct CreateProject {
     #[validate(length(min = 1))]
     pub description: String,
     pub bounds: STRectangle,
+    #[schema(value_type = Option<crate::api::model::datatypes::TimeStep>)]
     pub time_step: Option<TimeStep>,
 }
 
@@ -505,6 +542,7 @@ pub struct UpdateProject {
     pub layers: Option<Vec<LayerUpdate>>,
     pub plots: Option<Vec<PlotUpdate>>,
     pub bounds: Option<STRectangle>,
+    #[schema(value_type = Option<crate::api::model::datatypes::TimeStep>)]
     pub time_step: Option<TimeStep>,
 }
 
@@ -524,42 +562,44 @@ string_token!(Delete, "delete");
 
 // use common schema for `Delete` and `NoUpdate`
 // TODO: maybe revert when https://github.com/OpenAPITools/openapi-generator/issues/14831 is fixed
-impl<'a> ToSchema<'a> for Delete {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "ProjectUpdateToken",
-            ObjectBuilder::new()
-                .schema_type(SchemaType::String)
-                .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
-                .into(),
-        )
+impl ToSchema for Delete {
+    fn name() -> Cow<'static, str> {
+        "ProjectUpdateToken".into()
     }
 }
 
-impl<'a> ToSchema<'a> for LayerUpdate {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "LayerUpdate",
-            OneOfBuilder::new()
-                .item(Ref::from_schema_name("ProjectUpdateToken"))
-                .item(Ref::from_schema_name("ProjectLayer"))
-                .into(),
-        )
+impl PartialSchema for Delete {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::ObjectBuilder;
+        use utoipa::openapi::schema::{SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .enum_values::<[&str; 2], &str>(Some(["none", "delete"]))
+            .into()
     }
 }
 
-impl<'a> ToSchema<'a> for PlotUpdate {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
+impl ToSchema for LayerUpdate {}
+
+impl PartialSchema for LayerUpdate {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
         use utoipa::openapi::*;
-        (
-            "PlotUpdate",
-            OneOfBuilder::new()
-                .item(Ref::from_schema_name("ProjectUpdateToken"))
-                .item(Ref::from_schema_name("Plot"))
-                .into(),
-        )
+        OneOfBuilder::new()
+            .item(Ref::from_schema_name("ProjectUpdateToken"))
+            .item(Ref::from_schema_name("ProjectLayer"))
+            .into()
+    }
+}
+
+impl ToSchema for PlotUpdate {}
+
+impl PartialSchema for PlotUpdate {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::*;
+        OneOfBuilder::new()
+            .item(Ref::from_schema_name("ProjectUpdateToken"))
+            .item(Ref::from_schema_name("Plot"))
+            .into()
     }
 }
 
@@ -725,6 +765,7 @@ mod tests {
                     legend: false,
                 },
                 symbology: Symbology::Raster(RasterSymbology {
+                    r#type: Default::default(),
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
@@ -749,6 +790,7 @@ mod tests {
                     name: "vector layer".to_string(),
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
+                        r#type: Default::default(),
                         opacity: 1.0,
                         raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
@@ -761,6 +803,7 @@ mod tests {
                     name: "raster layer".to_string(),
                     visibility: Default::default(),
                     symbology: Symbology::Raster(RasterSymbology {
+                        r#type: Default::default(),
                         opacity: 1.0,
                         raster_colorizer: RasterColorizer::SingleBand {
                             band: 0,
@@ -794,16 +837,25 @@ mod tests {
     #[test]
     fn serialize_point_symbology() {
         let symbology = Symbology::Point(PointSymbology {
-            radius: NumberParam::Static { value: 1 },
+            r#type: Default::default(),
+            radius: NumberParam::Static(StaticNumber {
+                r#type: Default::default(),
+                value: 1,
+            }),
             fill_color: ColorParam::Derived(DerivedColor {
+                r#type: Default::default(),
                 attribute: "foo".to_owned(),
                 colorizer: Colorizer::test_default(),
             }),
             stroke: StrokeParam {
-                width: NumberParam::Static { value: 1 },
-                color: ColorParam::Static {
+                width: NumberParam::Static(StaticNumber {
+                    r#type: Default::default(),
+                    value: 1,
+                }),
+                color: ColorParam::Static(StaticColor {
+                    r#type: Default::default(),
                     color: RgbaColor::black(),
-                },
+                }),
             },
             text: None,
         });
@@ -859,11 +911,16 @@ mod tests {
     #[test]
     fn serialize_linestring_symbology() {
         let symbology = Symbology::Line(LineSymbology {
+            r#type: Default::default(),
             stroke: StrokeParam {
-                width: NumberParam::Static { value: 1 },
-                color: ColorParam::Static {
+                width: NumberParam::Static(StaticNumber {
+                    r#type: Default::default(),
+                    value: 1,
+                }),
+                color: ColorParam::Static(StaticColor {
+                    r#type: Default::default(),
                     color: RgbaColor::black(),
-                },
+                }),
             },
             text: None,
             auto_simplified: true,
@@ -898,6 +955,7 @@ mod tests {
     fn serialize_derived_number_param() {
         assert_eq!(
             serde_json::to_value(NumberParam::Derived(DerivedNumber {
+                r#type: Default::default(),
                 attribute: "foo".to_owned(),
                 factor: 1.,
                 default_value: 0.

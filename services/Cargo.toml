@@ -22,7 +22,6 @@ actix-web-httpauth = { workspace = true }
 aes-gcm = { workspace = true }
 anyhow.workspace = true
 aruna-rust-api = { workspace = true }
-assert-json-diff = { workspace = true }
 async-trait = { workspace = true }
 base64 = { workspace = true }
 bb8-postgres = { workspace = true }
@@ -53,6 +52,7 @@ opentelemetry = { workspace = true }
 opentelemetry_sdk = { workspace = true }
 opentelemetry-otlp = { workspace = true }
 ordered-float = { workspace = true }
+paste = { workspace = true }
 pbkdf2 = { workspace = true }
 postgres-types = { workspace = true }
 proj = { workspace = true }

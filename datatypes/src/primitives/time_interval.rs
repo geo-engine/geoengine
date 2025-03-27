@@ -71,11 +71,6 @@ impl TimeInterval {
         let start_instant = start.try_into()?;
         let end_instant = end.try_into()?;
 
-        debug_assert!(
-            start_instant <= end_instant,
-            "{start_instant:?} <= {end_instant:?}"
-        );
-
         ensure!(
             start_instant <= end_instant,
             error::TimeIntervalEndBeforeStart {

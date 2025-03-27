@@ -30,7 +30,7 @@ use snafu::{ResultExt, Snafu};
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::{ParseError, Url};
-use utoipa::{ToResponse, ToSchema};
+use utoipa::ToSchema;
 
 type Result<T, E = OidcError> = std::result::Result<T, E>;
 
@@ -217,7 +217,7 @@ struct PendingRequest {
     code_verifier: PkceCodeVerifier,
 }
 
-#[derive(Serialize, Deserialize, ToResponse, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct AuthCodeRequestURL {
     url: Url,
 }

@@ -145,6 +145,7 @@ impl CopernicusDataspaceDataProvider {
             items: Datasets::iter()
                 .map(|item| {
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: LayerCollectionId(format!("datasets/{item}")),
@@ -184,6 +185,7 @@ impl CopernicusDataspaceDataProvider {
             items: Sentinel2Product::iter()
                 .map(|product| {
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: CopernicusDataspaceLayerCollectionId::Sentinel2(
@@ -213,6 +215,7 @@ impl CopernicusDataspaceDataProvider {
             items: UtmZone::zones()
                 .map(|zone| {
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: CopernicusDataspaceLayerCollectionId::Sentinel2(
@@ -247,6 +250,7 @@ impl CopernicusDataspaceDataProvider {
                 .product_bands()
                 .map(|product_band| {
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: CopernicusDataspaceLayerId::Sentinel2(Sentinel2LayerId {
@@ -295,6 +299,7 @@ impl CopernicusDataspaceDataProvider {
                 ),
             },
             symbology: Some(crate::projects::Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,

@@ -1089,6 +1089,7 @@ async fn listing_from_dir(
 
         if entry.path().is_dir() {
             items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id,
                     collection_id: NetCdfLayerCollectionId::Path {
@@ -1121,6 +1122,7 @@ async fn listing_from_dir(
             .await??;
 
             items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id,
                     collection_id: NetCdfLayerCollectionId::Path {
@@ -1734,7 +1736,7 @@ mod tests {
                 name: "NetCdfCfDataProvider".to_string(),
                 description: "NetCdfCfProviderDefinition".to_string(),
                 items: vec![
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("Biodiversity".to_string())
@@ -1743,7 +1745,7 @@ mod tests {
                         description: String::new(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("dataset_irr_ts.nc".to_string())
@@ -1752,7 +1754,7 @@ mod tests {
                         description: "Fake description of test dataset with metric and irregular timestep definition.".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("dataset_m.nc".to_string())
@@ -1761,7 +1763,7 @@ mod tests {
                         description: "CFake description of test dataset with metric.".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("dataset_sm.nc".to_string())
@@ -1770,7 +1772,7 @@ mod tests {
                         description: "Fake description of test dataset with metric and scenario.".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("dataset_esri.nc".to_string())
@@ -1822,7 +1824,7 @@ mod tests {
                 },
                 name: "Test dataset metric".to_string(),
                 description: "CFake description of test dataset with metric.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_m.nc/metric_1".to_string())
@@ -1830,7 +1832,7 @@ mod tests {
                     name: "Random metric 1".to_string(),
                     description: "Randomly created data" .to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_m.nc/metric_2".to_string())
@@ -1881,7 +1883,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario".to_string(),
                 description: "Fake description of test dataset with metric and scenario.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
@@ -1889,7 +1891,7 @@ mod tests {
                     name: "Sustainability".to_string(),
                     description: "SSP1-RCP2.6" .to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
@@ -1897,7 +1899,7 @@ mod tests {
                     name: "Middle of the Road ".to_string(),
                     description: "SSP2-RCP4.5".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
@@ -1905,7 +1907,7 @@ mod tests {
                     name: "Regional Rivalry".to_string(), 
                     description: "SSP3-RCP6.0".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
@@ -1913,7 +1915,7 @@ mod tests {
                     name: "Inequality".to_string(),
                     description: "SSP4-RCP6.0".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string())
@@ -2206,7 +2208,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario".to_string(),
                 description: "Fake description of test dataset with metric and scenario.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
@@ -2214,7 +2216,7 @@ mod tests {
                     name: "Sustainability".to_string(),
                     description: "SSP1-RCP2.6" .to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
@@ -2222,7 +2224,7 @@ mod tests {
                     name: "Middle of the Road ".to_string(),
                     description: "SSP2-RCP4.5".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
@@ -2230,7 +2232,7 @@ mod tests {
                     name: "Regional Rivalry".to_string(),
                     description: "SSP3-RCP6.0".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
@@ -2238,7 +2240,7 @@ mod tests {
                     name: "Inequality".to_string(),
                     description: "SSP4-RCP6.0".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string())

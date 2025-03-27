@@ -258,6 +258,7 @@ impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
             .take(options.limit as usize)
             .map(|c| {
                 Ok(CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: EBV_PROVIDER_ID,
                         collection_id: EbvCollectionId::Class {
@@ -306,6 +307,7 @@ impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
             .take(options.limit as usize)
             .map(|ebv| {
                 Ok(CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: EBV_PROVIDER_ID,
                         collection_id: EbvCollectionId::Ebv {
@@ -350,6 +352,7 @@ impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
             .take(options.limit as usize)
             .map(|d| {
                 Ok(CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: EBV_PROVIDER_ID,
                         collection_id: EbvCollectionId::Dataset {
@@ -890,6 +893,7 @@ mod tests {
                 description: "EbvPortalProviderDefinition".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -904,6 +908,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -918,6 +923,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -930,6 +936,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -1029,6 +1036,7 @@ mod tests {
                 description: String::new(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -1043,6 +1051,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: DataProviderId::from_str(
                                 "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -1195,7 +1204,7 @@ mod tests {
             name: "Ecosystem phenology".to_string(),
             description: String::new(),
             items: vec![
-                CollectionItem::Collection(LayerCollectionListing {
+                CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                         collection_id: LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10".into())
@@ -1434,7 +1443,7 @@ mod tests {
                 },
                 name: "Vegetation Phenology in Finland".to_string(),
                 description: "Datasets present the yearly maps of the start of vegetation active period (VAP) in coniferous forests and deciduous vegetation during 2001-2019 in Finland. The start of the vegetation active period is defined as the day when coniferous trees start to photosynthesize and for deciduous vegetation as the day when trees unfold new leaves in spring. The datasets were derived from satellite observations of the Moderate Resolution Imaging Spectroradiometer (MODIS).".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str(
                             "77d0bf11-986e-43f5-b11d-898321f1854c"
@@ -1448,7 +1457,7 @@ mod tests {
                     description: "Randomly created data".to_string(),
                     properties: Default::default(),
                 }),
-                CollectionItem::Collection(LayerCollectionListing {
+                CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                         collection_id: LayerCollectionId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_2".into())
@@ -1600,7 +1609,7 @@ mod tests {
                 },
                 name: "Random metric 1".to_string(),
                 description: "Randomly created data".to_string(),
-                items: vec![CollectionItem::Layer(LayerListing {
+                items: vec![CollectionItem::Layer(LayerListing { r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/0.entity".into())
@@ -1608,7 +1617,7 @@ mod tests {
                         name: "entity01".to_string(),
                         description: String::new(),
                         properties: vec![],
-                    }), CollectionItem::Layer(LayerListing {
+                    }), CollectionItem::Layer(LayerListing { r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/1.entity".into())
@@ -1616,7 +1625,7 @@ mod tests {
                         name: "entity02".to_string(),
                         description: String::new(),
                         properties: vec![],
-                    }), CollectionItem::Layer(LayerListing {
+                    }), CollectionItem::Layer(LayerListing { r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: DataProviderId::from_str("77d0bf11-986e-43f5-b11d-898321f1854c").unwrap(),
                             layer_id: LayerId("classes/Ecosystem functioning/Ecosystem phenology/10/metric_1/2.entity".into())
