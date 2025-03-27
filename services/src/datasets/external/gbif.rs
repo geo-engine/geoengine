@@ -3271,7 +3271,7 @@ mod tests {
 
             let query_rectangle = VectorQueryRectangle::with_bounds(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-                TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                TimeInterval::new_instant(1_517_443_200_000).unwrap(),
                 ColumnSelection::all(),
             );
 
