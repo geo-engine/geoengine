@@ -53,8 +53,8 @@ mod test_util {
         RasterPropertiesEntryType, RasterTile2D, TileInformation,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::util::test::TestDefault;
     use num_traits::AsPrimitive;
 
     use crate::engine::{

@@ -1591,7 +1591,8 @@ mod tests {
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::primitives::{
-        BandSelection, BoundingBox2D, Coordinate2D, PlotQueryRectangle, PlotSeriesSelection, SpatialResolution
+        BandSelection, BoundingBox2D, Coordinate2D, PlotQueryRectangle, PlotSeriesSelection,
+        SpatialResolution,
     };
     use geoengine_datatypes::raster::RenameBands;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
@@ -1603,7 +1604,8 @@ mod tests {
         MultipleRasterSources, RasterBandDescriptors, RasterOperator, SingleRasterSource,
     };
     use geoengine_operators::processing::{
-        Interpolation, InterpolationMethod, InterpolationParams, RasterStacker, RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams
+        Interpolation, InterpolationMethod, InterpolationParams, RasterStacker,
+        RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams,
     };
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
@@ -2005,7 +2007,7 @@ mod tests {
         assert_eq!(
             loading_info_parts[0],
             GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::new_unchecked(expected_time, expected_time+1),
+                time: TimeInterval::new_unchecked(expected_time, expected_time + 1),
                 params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 4,
@@ -2131,12 +2133,11 @@ mod tests {
             .path()
             .join("dataset_sm.nc/scenario_5/metric_2/1/2000-01-01T00:00:00.000Z.tiff");
 
-
         let expected_time = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         assert_eq!(
             loading_info_parts[0],
             GdalLoadingInfoTemporalSlice {
-                time: TimeInterval::new_unchecked(expected_time, expected_time+1),
+                time: TimeInterval::new_unchecked(expected_time, expected_time + 1),
                 params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 1,
@@ -2318,7 +2319,6 @@ mod tests {
                                         .boxed(),
                                     }
                                 }.boxed(),
-                                
                                 RasterTypeConversion {
                                     params: RasterTypeConversionParams {
                                         output_data_type: RasterDataType::I16,

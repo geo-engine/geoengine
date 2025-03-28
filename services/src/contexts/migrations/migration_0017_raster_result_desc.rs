@@ -1,6 +1,6 @@
 use super::{
-    database_migration::{DatabaseVersion, Migration},
     Migration0016MergeProviders,
+    database_migration::{DatabaseVersion, Migration},
 };
 use crate::error::Result;
 use async_trait::async_trait;

@@ -3,7 +3,7 @@ use crate::util::Result;
 use crate::util::stream_zip::StreamArrayZip;
 use futures::future::{self, BoxFuture, Join, JoinAll};
 use futures::stream::{BoxStream, FusedStream, Zip};
-use futures::{ready, Future, Stream, StreamExt};
+use futures::{Future, Stream, StreamExt, ready};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy,

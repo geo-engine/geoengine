@@ -9,8 +9,8 @@ use crate::processing::{
     InitializedRasterReprojection, Interpolation, InterpolationMethod, InterpolationParams,
     InterpolationResolution, Reprojection, ReprojectionParams,
 };
-use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
+use crate::util::input::RasterOrVectorOperator;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;

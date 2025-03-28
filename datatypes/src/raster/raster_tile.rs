@@ -1,12 +1,12 @@
 use super::masked_grid::MaskedGrid;
 use super::{
+    BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,
+    SpatialGridDefinition,
+};
+use super::{
     GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D, GridIndexAccess, GridShape,
     GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster, TileInformation,
     grid_or_empty::GridOrEmpty,
-};
-use super::{
-    BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,
-    SpatialGridDefinition,
 };
 use crate::primitives::CacheHint;
 use crate::primitives::{
