@@ -243,7 +243,9 @@ CREATE TYPE "DateTimeParseFormat" AS (
     has_tz boolean,
     has_time boolean
 );
-CREATE TYPE "OgrSourceTimeFormatCustom" AS (custom_format "DateTimeParseFormat");
+CREATE TYPE "OgrSourceTimeFormatCustom" AS (
+    custom_format "DateTimeParseFormat"
+);
 CREATE TYPE "UnixTimeStampType" AS ENUM ('EpochSeconds', 'EpochMilliseconds');
 CREATE TYPE "OgrSourceTimeFormatUnixTimeStamp" AS (
     timestamp_type "UnixTimeStampType",
@@ -434,7 +436,9 @@ CREATE TYPE "LayerVisibility" AS (data BOOLEAN, legend BOOLEAN);
 CREATE TABLE project_version_layers (
     layer_index integer NOT NULL,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
-    project_version_id uuid REFERENCES project_versions (id) ON DELETE CASCADE NOT NULL,
+    project_version_id uuid REFERENCES project_versions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
     name character varying(256) NOT NULL,
     workflow_id uuid NOT NULL,
     -- TODO: REFERENCES workflows(id)
@@ -449,7 +453,9 @@ CREATE TABLE project_version_layers (
 CREATE TABLE project_version_plots (
     plot_index integer NOT NULL,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE NOT NULL,
-    project_version_id uuid REFERENCES project_versions (id) ON DELETE CASCADE NOT NULL,
+    project_version_id uuid REFERENCES project_versions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
     name character varying(256) NOT NULL,
     workflow_id uuid NOT NULL,
     -- TODO: REFERENCES workflows(id)
@@ -508,7 +514,9 @@ CREATE TABLE layers (
     metadata "TextTextKeyValue" [] NOT NULL
 );
 CREATE TABLE collection_layers (
-    collection uuid REFERENCES layer_collections (id) ON DELETE CASCADE NOT NULL,
+    collection uuid REFERENCES layer_collections (
+        id
+    ) ON DELETE CASCADE NOT NULL,
     layer uuid REFERENCES layers (id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (collection, layer)
 );
@@ -695,7 +703,9 @@ CREATE TABLE ebv_provider_groups (
     unit text NOT NULL,
     -- TODO: check if we need it
     PRIMARY KEY (provider_id, file_name, name) DEFERRABLE,
-    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (provider_id, file_name) ON DELETE CASCADE DEFERRABLE
+    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
+        provider_id, file_name
+    ) ON DELETE CASCADE DEFERRABLE
 );
 CREATE TABLE ebv_provider_entities (
     provider_id uuid NOT NULL,
@@ -704,7 +714,9 @@ CREATE TABLE ebv_provider_entities (
     name text NOT NULL,
     -- TODO: check if we need it
     PRIMARY KEY (provider_id, file_name, id) DEFERRABLE,
-    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (provider_id, file_name) ON DELETE CASCADE DEFERRABLE
+    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
+        provider_id, file_name
+    ) ON DELETE CASCADE DEFERRABLE
 );
 CREATE TABLE ebv_provider_timestamps (
     provider_id uuid NOT NULL,
@@ -712,7 +724,9 @@ CREATE TABLE ebv_provider_timestamps (
     time bigint NOT NULL,
     -- TODO: check if we need it
     PRIMARY KEY (provider_id, file_name, time) DEFERRABLE,
-    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (provider_id, file_name) ON DELETE CASCADE DEFERRABLE
+    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
+        provider_id, file_name
+    ) ON DELETE CASCADE DEFERRABLE
 );
 CREATE TABLE ebv_provider_loading_infos (
     provider_id uuid NOT NULL,
@@ -722,7 +736,9 @@ CREATE TABLE ebv_provider_loading_infos (
     meta_data "GdalMetaDataList" NOT NULL,
     -- TODO: check if we need it
     PRIMARY KEY (provider_id, file_name, group_names, entity_id) DEFERRABLE,
-    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (provider_id, file_name) ON DELETE CASCADE DEFERRABLE
+    FOREIGN KEY (provider_id, file_name) REFERENCES ebv_provider_overviews (
+        provider_id, file_name
+    ) ON DELETE CASCADE DEFERRABLE
 );
 CREATE TYPE "MlModelMetadata" AS (
     file_name text,
@@ -779,7 +795,9 @@ CREATE TABLE user_roles (
     PRIMARY KEY (user_id, role_id)
 );
 CREATE TABLE project_version_authors (
-    project_version_id uuid REFERENCES project_versions (id) ON DELETE CASCADE NOT NULL,
+    project_version_id uuid REFERENCES project_versions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
     user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
     PRIMARY KEY (project_version_id, user_id)
 );
@@ -792,10 +810,10 @@ CREATE TABLE sessions (
     id uuid PRIMARY KEY,
     project_id uuid REFERENCES projects (id) ON DELETE
     SET NULL,
-        view "STRectangle",
-        user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
-        created timestamp with time zone NOT NULL,
-        valid_until timestamp with time zone NOT NULL
+    view "STRectangle",
+    user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
+    created timestamp with time zone NOT NULL,
+    valid_until timestamp with time zone NOT NULL
 );
 CREATE TYPE "Permission" AS ENUM ('Read', 'Owner');
 -- TODO: uploads, providers permissions
@@ -813,12 +831,18 @@ CREATE TABLE permissions (
     permission "Permission" NOT NULL,
     dataset_id uuid REFERENCES datasets (id) ON DELETE CASCADE,
     layer_id uuid REFERENCES layers (id) ON DELETE CASCADE,
-    layer_collection_id uuid REFERENCES layer_collections (id) ON DELETE CASCADE,
+    layer_collection_id uuid REFERENCES layer_collections (
+        id
+    ) ON DELETE CASCADE,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE,
     ml_model_id uuid REFERENCES ml_models (id) ON DELETE CASCADE,
     CHECK (
         (
-            (dataset_id IS NOT NULL)::integer + (layer_id IS NOT NULL)::integer + (layer_collection_id IS NOT NULL)::integer + (project_id IS NOT NULL)::integer + (ml_model_id IS NOT NULL)::integer
+            (dataset_id IS NOT NULL)::integer
+            + (layer_id IS NOT NULL)::integer
+            + (layer_collection_id IS NOT NULL)::integer
+            + (project_id IS NOT NULL)::integer
+            + (ml_model_id IS NOT NULL)::integer
         ) = 1
     )
 );
@@ -832,43 +856,49 @@ CREATE UNIQUE INDEX ON permissions (
 CREATE UNIQUE INDEX ON permissions (role_id, permission, project_id);
 CREATE UNIQUE INDEX ON permissions (role_id, permission, ml_model_id);
 CREATE VIEW user_permitted_datasets AS
-SELECT r.user_id,
+SELECT
+    r.user_id,
     p.dataset_id,
     p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.dataset_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.dataset_id IS NOT NULL
+);
 CREATE VIEW user_permitted_projects AS
-SELECT r.user_id,
+SELECT
+    r.user_id,
     p.project_id,
     p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.project_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.project_id IS NOT NULL
+);
 CREATE VIEW user_permitted_layer_collections AS
-SELECT r.user_id,
+SELECT
+    r.user_id,
     p.layer_collection_id,
     p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.layer_collection_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.layer_collection_id IS NOT NULL
+);
 CREATE VIEW user_permitted_layers AS
-SELECT r.user_id,
+SELECT
+    r.user_id,
     p.layer_id,
     p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.layer_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.layer_id IS NOT NULL
+);
 CREATE TABLE oidc_session_tokens (
-    session_id uuid PRIMARY KEY REFERENCES sessions (id) ON DELETE CASCADE NOT NULL,
+    session_id uuid PRIMARY KEY REFERENCES sessions (
+        id
+    ) ON DELETE CASCADE NOT NULL,
     access_token bytea NOT NULL,
     access_token_encryption_nonce bytea,
     access_token_valid_until timestamp with time zone NOT NULL,
@@ -876,14 +906,15 @@ CREATE TABLE oidc_session_tokens (
     refresh_token_encryption_nonce bytea
 );
 CREATE VIEW user_permitted_ml_models AS
-SELECT r.user_id,
+SELECT
+    r.user_id,
     p.ml_model_id,
     p.permission
 FROM user_roles AS r
-    INNER JOIN permissions AS p ON (
-        r.role_id = p.role_id
-        AND p.ml_model_id IS NOT NULL
-    );
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id
+    AND p.ml_model_id IS NOT NULL
+);
 CREATE TABLE quota_log (
     timestamp timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     user_id uuid NOT NULL,
