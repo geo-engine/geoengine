@@ -200,12 +200,12 @@ CREATE TYPE "GeoTransform" AS (
     x_pixel_size double precision,
     y_pixel_size double precision
 );
-CREATE TYPE "SpatialGridDefinition" as (
+CREATE TYPE "SpatialGridDefinition" AS (
     geo_transform "GeoTransform",
     grid_bounds "GridBoundingBox2D"
 );
-CREATE TYPE "SpatialGridDescriptorState" as ENUM ('Source', 'Merged');
-CREATE TYPE "SpatialGridDescriptor" aS (
+CREATE TYPE "SpatialGridDescriptorState" AS ENUM ('Source', 'Merged');
+CREATE TYPE "SpatialGridDescriptor" AS (
     "state" "SpatialGridDescriptorState",
     spatial_grid "SpatialGridDefinition"
 );
