@@ -655,18 +655,18 @@ CREATE TYPE "DataProviderDefinition" AS (
     aruna_data_provider_definition "ArunaDataProviderDefinition",
     gbif_data_provider_definition "GbifDataProviderDefinition",
     gfbio_abcd_data_provider_definition "GfbioAbcdDataProviderDefinition",
-    -- noqa: 
-    gfbio_collections_data_provider_definition "GfbioCollectionsDataProviderDefinition",
+    gfbio_collections_data_provider_definition
+    "GfbioCollectionsDataProviderDefinition",
     ebv_portal_data_provider_definition "EbvPortalDataProviderDefinition",
     net_cdf_cf_data_provider_definition "NetCdfCfDataProviderDefinition",
     pangaea_data_provider_definition "PangaeaDataProviderDefinition",
     edr_data_provider_definition "EdrDataProviderDefinition",
-    -- noqa: 
-    dataset_layer_listing_provider_definition "DatasetLayerListingProviderDefinition",
-    -- noqa: 
-    sentinel_s2_l2_a_cogs_provider_definition "SentinelS2L2ACogsProviderDefinition",
-    -- noqa: 
-    copernicus_dataspace_provider_definition "CopernicusDataspaceDataProviderDefinition"
+    dataset_layer_listing_provider_definition
+    "DatasetLayerListingProviderDefinition",
+    sentinel_s2_l2_a_cogs_provider_definition
+    "SentinelS2L2ACogsProviderDefinition",
+    copernicus_dataspace_provider_definition
+    "CopernicusDataspaceDataProviderDefinition"
 );
 CREATE TABLE layer_providers (
     id uuid PRIMARY KEY,
