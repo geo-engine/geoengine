@@ -36,6 +36,7 @@ fn setup_gdal_source(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProcessor<u8> {
     let grid: GridOrEmpty2D<u8> = Grid2D::new(
         tiling_spec.tile_size_in_pixels,
