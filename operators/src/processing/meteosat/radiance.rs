@@ -284,7 +284,7 @@ mod tests {
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, MaskedGrid2D, TilingSpecification};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // #[tokio::test]
     // async fn test_msg_raster() {
@@ -517,7 +517,7 @@ mod tests {
                     None,
                     Some(Measurement::Classification(ClassificationMeasurement {
                         measurement: "invalid".into(),
-                        classes: HashMap::new(),
+                        classes: BTreeMap::new(),
                     })),
                 );
 

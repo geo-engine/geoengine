@@ -334,7 +334,7 @@ mod tests {
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterTile2D, TilingSpecification,
     };
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     async fn process_mock(
         params: ReflectanceParams,
@@ -615,7 +615,7 @@ mod tests {
             false,
             Some(Measurement::Classification(ClassificationMeasurement {
                 measurement: "invalid".into(),
-                classes: HashMap::new(),
+                classes: BTreeMap::new(),
             })),
         )
         .await;

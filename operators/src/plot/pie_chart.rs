@@ -16,7 +16,7 @@ use geoengine_datatypes::primitives::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub const PIE_CHART_OPERATOR_NAME: &str = "PieChart";
 
@@ -110,7 +110,7 @@ pub struct InitializedCountPieChart<Op> {
     result_descriptor: PlotResultDescriptor,
     column_name: String,
     column_label: String,
-    class_mapping: Option<HashMap<u8, String>>,
+    class_mapping: Option<BTreeMap<u8, String>>,
     donut: bool,
 }
 
@@ -121,7 +121,7 @@ impl<Op> InitializedCountPieChart<Op> {
         result_descriptor: PlotResultDescriptor,
         column_name: String,
         column_label: String,
-        class_mapping: Option<HashMap<u8, String>>,
+        class_mapping: Option<BTreeMap<u8, String>>,
         donut: bool,
     ) -> Self {
         Self {
@@ -163,7 +163,7 @@ pub struct CountPieChartVectorQueryProcessor {
     input: TypedVectorQueryProcessor,
     column_label: String,
     column_name: String,
-    class_mapping: Option<HashMap<u8, String>>,
+    class_mapping: Option<BTreeMap<u8, String>>,
     donut: bool,
 }
 
@@ -188,7 +188,7 @@ impl PlotQueryProcessor for CountPieChartVectorQueryProcessor {
 /// Null-values are empty strings.
 pub fn feature_data_strings_iter<'f>(
     feature_data: &'f FeatureDataRef,
-    class_mapping: Option<&'f HashMap<u8, String>>,
+    class_mapping: Option<&'f BTreeMap<u8, String>>,
 ) -> Box<dyn Iterator<Item = String> + 'f> {
     match (feature_data, class_mapping) {
         (FeatureDataRef::Category(feature_data_ref), Some(class_mapping)) => {

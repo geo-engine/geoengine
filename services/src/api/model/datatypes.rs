@@ -10,12 +10,13 @@ use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
 use snafu::ResultExt;
+use std::borrow::Cow;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::{Debug, Formatter},
     str::FromStr,
 };
-use utoipa::{PartialSchema, ToSchema};
+use utoipa::{PartialSchema, ToSchema, openapi};
 
 identifier!(DataProviderId);
 
@@ -1000,15 +1001,54 @@ impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::Continuous
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SerializableClasses(BTreeMap<u8, String>);
+
+impl PartialSchema for SerializableClasses {
+    fn schema() -> openapi::RefOr<openapi::schema::Schema> {
+        BTreeMap::<String, String>::schema()
+    }
+}
+
+impl ToSchema for SerializableClasses {
+    fn name() -> Cow<'static, str> {
+        <BTreeMap<String, String> as ToSchema>::name() // TODO: is this needed?
+    }
+}
+
+impl Serialize for SerializableClasses {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let classes: BTreeMap<String, &String> =
+            self.0.iter().map(|(k, v)| (k.to_string(), v)).collect();
+        classes.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SerializableClasses {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let tree: BTreeMap<String, String> = Deserialize::deserialize(deserializer)?;
+        let classes: Result<BTreeMap<u8, String>, _> = tree
+            .into_iter()
+            .map(|(k, v)| (k.parse::<u8>().map(|x| (x, v))))
+            .collect();
+        Ok(SerializableClasses(
+            classes.map_err(serde::de::Error::custom)?,
+        ))
+    }
+}
+
 #[type_tag(value = "classification")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(
-    try_from = "SerializableClassificationMeasurement",
-    into = "SerializableClassificationMeasurement"
-)]
 pub struct ClassificationMeasurement {
     pub measurement: String,
-    pub classes: HashMap<u8, String>,
+    // use a BTreeMap to preserve the order of the keys
+    pub classes: SerializableClasses,
 }
 
 impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
@@ -1018,7 +1058,7 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
         Self {
             r#type: Default::default(),
             measurement: value.measurement,
-            classes: value.classes,
+            classes: SerializableClasses(value.classes),
         }
     }
 }
@@ -1026,49 +1066,13 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
 impl From<ClassificationMeasurement>
     for geoengine_datatypes::primitives::ClassificationMeasurement
 {
-    fn from(value: ClassificationMeasurement) -> Self {
-        Self {
+    fn from(
+        value: ClassificationMeasurement,
+    ) -> geoengine_datatypes::primitives::ClassificationMeasurement {
+        geoengine_datatypes::primitives::ClassificationMeasurement {
             measurement: value.measurement,
-            classes: value.classes,
+            classes: value.classes.0,
         }
-    }
-}
-
-/// A type that is solely for serde's serializability.
-/// You cannot serialize floats as JSON map keys.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SerializableClassificationMeasurement {
-    pub measurement: String,
-    // use a BTreeMap to preserve the order of the keys
-    pub classes: BTreeMap<String, String>,
-}
-
-impl From<ClassificationMeasurement> for SerializableClassificationMeasurement {
-    fn from(measurement: ClassificationMeasurement) -> Self {
-        let mut classes = BTreeMap::new();
-        for (k, v) in measurement.classes {
-            classes.insert(k.to_string(), v);
-        }
-        Self {
-            measurement: measurement.measurement,
-            classes,
-        }
-    }
-}
-
-impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasurement {
-    type Error = <u8 as FromStr>::Err;
-
-    fn try_from(measurement: SerializableClassificationMeasurement) -> Result<Self, Self::Error> {
-        let mut classes = HashMap::with_capacity(measurement.classes.len());
-        for (k, v) in measurement.classes {
-            classes.insert(k.parse::<u8>()?, v);
-        }
-        Ok(Self {
-            r#type: Default::default(),
-            measurement: measurement.measurement,
-            classes,
-        })
     }
 }
 

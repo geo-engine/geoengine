@@ -5452,6 +5452,15 @@
           "eastNorth"
         ]
       },
+      "BTreeMap": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "propertyNames": {
+          "type": "string"
+        }
+      },
       "BandSelection": {
         "type": "array",
         "items": {
@@ -5504,15 +5513,7 @@
         ],
         "properties": {
           "classes": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
+            "$ref": "#/components/schemas/BTreeMap"
           },
           "measurement": {
             "type": "string"

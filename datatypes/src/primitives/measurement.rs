@@ -1,6 +1,6 @@
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, HashMap};
+use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
@@ -17,7 +17,7 @@ impl Measurement {
         Self::Continuous(ContinuousMeasurement { measurement, unit })
     }
 
-    pub fn classification(measurement: String, classes: HashMap<u8, String>) -> Self {
+    pub fn classification(measurement: String, classes: BTreeMap<u8, String>) -> Self {
         Self::Classification(ClassificationMeasurement {
             measurement,
             classes,
@@ -52,7 +52,7 @@ pub struct ContinuousMeasurement {
 )]
 pub struct ClassificationMeasurement {
     pub measurement: String,
-    pub classes: HashMap<u8, String>,
+    pub classes: BTreeMap<u8, String>,
 }
 
 /// A type that is solely for serde's serializability.
@@ -81,13 +81,14 @@ impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasuremen
     type Error = <u8 as FromStr>::Err;
 
     fn try_from(measurement: SerializableClassificationMeasurement) -> Result<Self, Self::Error> {
-        let mut classes = HashMap::with_capacity(measurement.classes.len());
-        for (k, v) in measurement.classes {
-            classes.insert(k.parse::<u8>()?, v);
-        }
+        let classes: Result<BTreeMap<u8, String>, _> = measurement
+            .classes
+            .into_iter()
+            .map(|(k, v)| (k.parse::<u8>().map(|x| (x, v))))
+            .collect();
         Ok(Self {
             measurement: measurement.measurement,
-            classes,
+            classes: classes?,
         })
     }
 }
@@ -151,7 +152,7 @@ mod tests {
     fn classification_serialization() {
         let measurement = Measurement::classification(
             "foo".into(),
-            HashMap::from([(1_u8, "bar".to_string()), (2, "baz".to_string())]),
+            BTreeMap::from([(1_u8, "bar".to_string()), (2, "baz".to_string())]),
         );
         let serialized = serde_json::to_string(&measurement).unwrap();
         assert_eq!(
