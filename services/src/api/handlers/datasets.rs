@@ -6,7 +6,7 @@ use crate::{
             datasets::{DatasetNameResponse, errors::*},
         },
         services::{
-            AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
+            AddDataset, CreateDataset, DataPath, Dataset, DatasetDefinition, MetaDataDefinition,
             MetaDataSuggestion, Provenances, UpdateDataset, Volume,
         },
     },
@@ -15,7 +15,7 @@ use crate::{
     datasets::{
         DatasetName,
         listing::{DatasetListOptions, DatasetListing, DatasetProvider},
-        storage::{AutoCreateDataset, Dataset, DatasetStore, SuggestMetaData},
+        storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, VolumeName, Volumes},
     },
     error::{self, Error, Result},
@@ -241,6 +241,8 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         .load_dataset(&dataset_id)
         .await
         .context(CannotLoadDataset)?;
+
+    let dataset: Dataset = dataset.into();
 
     Ok(web::Json(dataset))
 }

@@ -105,12 +105,12 @@ impl fmt::Display for Measurement {
     /// # Examples
     /// ```rust
     /// use geoengine_datatypes::primitives::Measurement;
-    /// use std::collections::HashMap;
+    /// use std::collections::BTreeMap;
     ///
     /// assert_eq!(format!("{}", Measurement::Unitless), "");
     /// assert_eq!(format!("{}", Measurement::continuous("foo".into(), Some("bar".into()))), "foo in bar");
     /// assert_eq!(format!("{}", Measurement::continuous("foo".into(), None)), "foo");
-    /// assert_eq!(format!("{}", Measurement::classification("foobar".into(), HashMap::new())), "foobar");
+    /// assert_eq!(format!("{}", Measurement::classification("foobar".into(), BTreeMap::new())), "foobar");
     /// ```
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

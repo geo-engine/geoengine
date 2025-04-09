@@ -24,15 +24,13 @@ use validator::{Validate, ValidationError};
 pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x5460_73b6_d535_4205_b601_9967_5c9f_6dd7);
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
-    #[schema(value_type = crate::api::model::datatypes::DatasetId)]
     pub id: DatasetId,
     pub name: DatasetName,
     pub display_name: String,
     pub description: String,
-    #[schema(value_type = crate::api::model::operators::TypedResultDescriptor)]
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
     pub symbology: Option<Symbology>,

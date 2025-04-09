@@ -32,8 +32,8 @@ use crate::api::model::responses::{
     ZipResponse,
 };
 use crate::api::model::services::{
-    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
-    Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
+    AddDataset, CreateDataset, DataPath, Dataset, DatasetDefinition, MetaDataDefinition,
+    MetaDataSuggestion, Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
 };
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
 use crate::api::{
@@ -53,7 +53,7 @@ use crate::api::{
 };
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
-use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
+use crate::datasets::storage::{AutoCreateDataset, SuggestMetaData};
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{

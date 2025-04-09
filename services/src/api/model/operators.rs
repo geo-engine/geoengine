@@ -375,6 +375,26 @@ impl From<geoengine_operators::engine::TypedResultDescriptor> for TypedResultDes
     }
 }
 
+impl From<TypedResultDescriptor> for geoengine_operators::engine::TypedResultDescriptor {
+    fn from(value: TypedResultDescriptor) -> Self {
+        match value {
+            TypedResultDescriptor::Plot(p) => {
+                geoengine_operators::engine::TypedResultDescriptor::Plot(p.result_descriptor.into())
+            }
+            TypedResultDescriptor::Raster(r) => {
+                geoengine_operators::engine::TypedResultDescriptor::Raster(
+                    r.result_descriptor.into(),
+                )
+            }
+            TypedResultDescriptor::Vector(v) => {
+                geoengine_operators::engine::TypedResultDescriptor::Vector(
+                    v.result_descriptor.into(),
+                )
+            }
+        }
+    }
+}
+
 impl From<geoengine_operators::engine::PlotResultDescriptor> for TypedResultDescriptor {
     fn from(value: geoengine_operators::engine::PlotResultDescriptor) -> Self {
         Self::Plot(TypedPlotResultDescriptor {
