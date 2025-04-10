@@ -101,8 +101,10 @@ flexi_logger = { version = "0.29", features = ["trc"] }
 float-cmp = "0.10"
 futures = "0.3"
 futures-util = "0.3"
-gdal = "0.17"
-gdal-sys = "0.10"
+gdal = "0.18"
+gdal-sys = { version = "0.11", features = ["bundled"] }
+gdal-src = { version = "0.2.0+3.10.2", features = ["driver_gpkg"] }
+
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.29.3"
 geo-rand = "0.4"

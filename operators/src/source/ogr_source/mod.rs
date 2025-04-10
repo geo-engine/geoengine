@@ -979,7 +979,7 @@ where
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
-                    let field_value = feature.field(&start_field)?;
+                    let field_value = feature.field(feature.field_index(&start_field)?)?; // TODO: resolve field index from field name only once
                     if let Some(field_value) = field_value {
                         let time_start = time_start_parser(field_value)?;
                         TimeInterval::new(time_start, (time_start + duration)?).map_err(Into::into)
@@ -999,8 +999,8 @@ where
                 let time_end_parser = Self::create_time_parser(end_format);
 
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature.field(&start_field)?;
-                    let end_field_value = feature.field(&end_field)?;
+                    let start_field_value = feature.field(feature.field_index(&start_field)?)?;
+                    let end_field_value = feature.field(feature.field_index(&end_field)?)?;
 
                     if let (Some(start_field_value), Some(end_field_value)) =
                         (start_field_value, end_field_value)
@@ -1023,8 +1023,9 @@ where
                 let time_start_parser = Self::create_time_parser(start_format);
 
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature.field(&start_field)?;
-                    let duration_field_value = feature.field(&duration_field)?;
+                    let start_field_value = feature.field(feature.field_index(&start_field)?)?;
+                    let duration_field_value =
+                        feature.field(feature.field_index(&duration_field)?)?;
 
                     if let (Some(start_field_value), Some(duration_field_value)) =
                         (start_field_value, duration_field_value)
@@ -1300,7 +1301,7 @@ where
         builder.push_time_interval(time_interval);
 
         for (column, data_type) in data_types {
-            let field = feature.field(column);
+            let field = feature.field(feature.field_index(column)?);
             let value =
                 Self::convert_field_value(*data_type, field, time_attribute_parser, error_spec)?;
             builder.push_data(column, value)?;
@@ -1425,9 +1426,9 @@ impl TryFromOgrGeometry for MultiPoint {
 impl TryFromOgrGeometry for MultiLineString {
     fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
-            geometry
-                .get_point_vec()
-                .into_iter()
+            let mut vec = Vec::new(); // TODO capacity
+            geometry.get_points(&mut vec);
+            vec.into_iter()
                 .map(|(x, y, _z)| Coordinate2D::new(x, y))
                 .collect()
         }
@@ -1454,9 +1455,9 @@ impl TryFromOgrGeometry for MultiLineString {
 impl TryFromOgrGeometry for MultiPolygon {
     fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
-            geometry
-                .get_point_vec()
-                .into_iter()
+            let mut vec = Vec::new(); // TODO capacity
+            geometry.get_points(&mut vec);
+            vec.into_iter()
                 .map(|(x, y, _z)| Coordinate2D::new(x, y))
                 .collect()
         }
