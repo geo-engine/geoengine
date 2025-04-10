@@ -60,7 +60,7 @@ impl RasterDatasetFromWorkflowParams {
         request: RasterDatasetFromWorkflow,
         result_descriptor: &RasterResultDescriptor,
         tiling_spec: TilingSpecification,
-    ) -> error::Result<Self> {
+    ) -> Self {
         let query = request.query;
 
         let grid_bounds = result_descriptor
@@ -76,13 +76,13 @@ impl RasterDatasetFromWorkflowParams {
                 BandSelection::first_n(result_descriptor.bands.len() as u32),
             );
 
-        Ok(Self {
+        Self {
             name: request.name,
             display_name: request.display_name,
             description: request.description,
             query: raster_query,
             as_cog: request.as_cog,
-        })
+        }
     }
 }
 

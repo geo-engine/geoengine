@@ -459,7 +459,7 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
         info.into_inner(),
         result_descriptor,
         ctx.execution_context()?.tiling_specification(),
-    )?;
+    );
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
