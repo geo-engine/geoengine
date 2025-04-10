@@ -151,6 +151,10 @@ where
     if s.is_empty() {
         return Ok(None);
     }
+    // don't fail on python queries where undefined resolution is not removed
+    if s == "None" {
+        return Ok(None);
+    }
 
     let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
 
