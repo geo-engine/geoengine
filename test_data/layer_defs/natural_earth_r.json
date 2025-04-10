@@ -1,0 +1,42 @@
+{
+  "id": "52ef9e16-acd1-4c61-9a80-7d5b335d0d5a",
+  "name": "Natural Earth II – R",
+  "description": "A raster with one band (R from RGB)",
+  "workflow": {
+    "type": "Raster",
+    "operator": {      
+      "type": "GdalSource",
+      "params": {
+        "data": "ne2_raster_red"
+      }
+    }
+  },
+  "symbology": {
+      "type": "raster",
+      "opacity": 1,
+      "rasterColorizer": {
+        "type": "singleBand",
+        "band": 0,
+        "bandColorizer": {
+          "type": "linearGradient",
+          "breakpoints": [
+            {
+              "value": 0,
+              "color": [255, 245, 240, 255]
+            },
+            {
+              "value": 127,
+              "color": [250, 105, 73, 255]
+            },
+            {
+              "value": 255,
+              "color": [254, 244, 239, 255]
+            }
+          ],
+          "noDataColor": [0, 0, 0, 0],
+          "underColor": [255, 245, 240, 255],
+          "overColor": [254, 244, 239, 255]
+        }
+      }
+    }
+}

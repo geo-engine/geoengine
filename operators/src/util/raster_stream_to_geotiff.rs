@@ -328,7 +328,7 @@ where
 {
     // TODO: support multi band geotiffs
     ensure!(
-        query_rect.attributes.count() == 1,
+        query_rect.attributes.is_single() || processor.result_descriptor().bands.is_single(),
         crate::error::OperationDoesNotSupportMultiBandQueriesYet {
             operation: "raster_stream_to_geotiff"
         }

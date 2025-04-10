@@ -686,6 +686,10 @@ impl RasterBandDescriptors {
         bands.extend(other.0.clone());
         Self::new(bands)
     }
+
+    pub fn is_single(&self) -> bool {
+        self.len() == 1
+    }
 }
 
 impl TryFrom<Vec<RasterBandDescriptor>> for RasterBandDescriptors {

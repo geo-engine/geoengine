@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::RasterQueryRectangle;
+use crate::api::model::datatypes::RasterToDatasetQueryRectangle;
 use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
 use crate::datasets::listing::DatasetProvider;
@@ -7,7 +7,6 @@ use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
 use crate::workflows::workflow::WorkflowId;
-use float_cmp::approx_eq;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
 use geoengine_datatypes::raster::TilingSpecification;
@@ -42,7 +41,7 @@ pub struct RasterDatasetFromWorkflow {
     pub name: Option<DatasetName>,
     pub display_name: String,
     pub description: Option<String>,
-    pub query: RasterQueryRectangle,
+    pub query: RasterToDatasetQueryRectangle,
     #[schema(default = default_as_cog)]
     #[serde(default = "default_as_cog")]
     pub as_cog: bool,
@@ -63,27 +62,6 @@ impl RasterDatasetFromWorkflowParams {
         tiling_spec: TilingSpecification,
     ) -> error::Result<Self> {
         let query = request.query;
-
-        // FIXME: handle resolutions
-        // TODO: allow to use pixel bounds in query?
-        ensure!(
-            approx_eq!(
-                f64,
-                result_descriptor
-                    .spatial_grid_descriptor()
-                    .spatial_resolution()
-                    .x,
-                query.spatial_resolution.x
-            ) && approx_eq!(
-                f64,
-                result_descriptor
-                    .spatial_grid_descriptor()
-                    .spatial_resolution()
-                    .y,
-                query.spatial_resolution.y
-            ),
-            error::ResolutionMissmatch,
-        );
 
         let grid_bounds = result_descriptor
             .spatial_grid_descriptor()
