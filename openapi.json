@@ -8345,10 +8345,6 @@
             "timeInterval": {
               "start": 1388534400000,
               "end": 1388534401000
-            },
-            "spatialResolution": {
-              "x": 0.1,
-              "y": 0.1
             }
           }
         }
