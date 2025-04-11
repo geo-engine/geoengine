@@ -35,7 +35,7 @@ use super::{DatasetIdAndName, DatasetName};
 
 /// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
-#[schema(example = json!({"name": "foo", "displayName": "a new dataset", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
+#[schema(example = json!({"name": "foo", "displayName": "a new dataset", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}}}))]
 #[serde(rename_all = "camelCase")]
 pub struct RasterDatasetFromWorkflow {
     pub name: Option<DatasetName>,
