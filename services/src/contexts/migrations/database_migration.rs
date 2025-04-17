@@ -129,7 +129,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     let pre_migration_version = determine_current_database_version(connection).await?;
-    info!("Current database version: {:?}", pre_migration_version);
+    info!("Current database version: {pre_migration_version:?}");
 
     // start with the first migration after the current version
     let applicable_migrations = migrations

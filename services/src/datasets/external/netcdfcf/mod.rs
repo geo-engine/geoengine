@@ -372,7 +372,7 @@ pub fn build_netcdf_tree(
     let time_coverage = TimeCoverage::from_dimension(&root_group)?;
 
     let colorizer = load_colorizer(&path).or_else(|error| {
-        debug!("Use fallback colorizer: {:?}", error);
+        debug!("Use fallback colorizer: {error:?}");
         fallback_colorizer()
     })?;
 
@@ -598,7 +598,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
                     // we can safely ignore it since it must be a file in the provider path
                     continue;
                 }
-            };
+            }
         }
 
         Ok(files)

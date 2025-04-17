@@ -622,7 +622,7 @@ impl FeaturesProvider<'_> {
             FeaturesProvider::ResultSet(r) => {
                 r.deref_mut().set_attribute_filter(attribute_query)?;
             }
-        };
+        }
 
         Ok(())
     }
@@ -904,7 +904,7 @@ where
     fn create_time_parser(
         time_format: OgrSourceTimeFormat,
     ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync> {
-        debug!("{:?}", time_format);
+        debug!("{time_format:?}");
 
         match time_format {
             OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {

@@ -72,16 +72,16 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
         match entry {
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
                 match add_layer_from_dir_entry(db, &entry).await {
-                    Ok(()) => info!("Added layer from directory entry: {:?}", entry),
+                    Ok(()) => info!("Added layer from directory entry: {entry:?}"),
                     Err(e) => warn!(
                         "Skipped adding layer from directory entry: {:?} error: {}",
                         entry,
-                        e.to_string()
+                        e
                     ),
                 }
             }
             _ => {
-                warn!("Skipped adding layer from directory entry: {:?}", entry);
+                warn!("Skipped adding layer from directory entry: {entry:?}");
             }
         }
     }
@@ -156,15 +156,14 @@ pub async fn add_layer_collections_from_directory<
                         warn!(
                             "Skipped adding layer collection from directory entry: {:?} error: {}",
                             entry,
-                            e.to_string()
+                            e
                         );
                     }
                 }
             }
             _ => {
                 warn!(
-                    "Skipped adding layer collection from directory entry: {:?}",
-                    entry
+                    "Skipped adding layer collection from directory entry: {entry:?}"
                 );
             }
         }
@@ -189,7 +188,7 @@ pub async fn add_layer_collections_from_directory<
                 collection_children.insert(def.id, def.collections);
             }
             Err(e) => {
-                warn!("Skipped adding layer collection to db: {}", e);
+                warn!("Skipped adding layer collection to db: {e}");
             }
         }
     }
@@ -199,7 +198,7 @@ pub async fn add_layer_collections_from_directory<
             let op = db.add_collection_to_parent(&child, &parent).await;
 
             if let Err(e) = op {
-                warn!("Skipped adding child collection to db: {}", e);
+                warn!("Skipped adding child collection to db: {e}");
             }
         }
     }
@@ -219,8 +218,7 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
 
     let Ok(dir) = fs::read_dir(&base_path) else {
         error!(
-            "Skipped adding providers from directory `{:?}` because it can't be read",
-            base_path
+            "Skipped adding providers from directory `{base_path:?}` because it can't be read"
         );
         return;
     };
@@ -243,7 +241,7 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
                 }
             }
             Err(e) => {
-                warn!("Skipped adding provider from directory entry `{:?}`", e);
+                warn!("Skipped adding provider from directory entry `{e:?}`");
             }
             _ => {
                 // ignore directories, etc.
@@ -298,7 +296,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
                 );
             }
         } else {
-            warn!("Skipped adding dataset from directory entry: {:?}", entry);
+            warn!("Skipped adding dataset from directory entry: {entry:?}");
         }
     }
 }
