@@ -105,7 +105,7 @@ gdal = "0.18"
 gdal-sys = "0.11"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.30.0"
-geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.30.0"} # TODO: revert back to "0.5"
+geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.30.0"} # TODO: revert back to "0.5" when it is released
 geo-types = "0.7.16"                                                       # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
@@ -113,7 +113,7 @@ image = "0.25"
 itertools = "0.14"
 libloading = "0.8"
 log = "0.4"
-lru = "0.13"
+lru = "0.14"
 lz4_flex = "0.11"
 mime = "0.3"
 ndarray = { version = "0.16", features = ["approx"] }                      # has to match with `ort`

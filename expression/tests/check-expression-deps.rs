@@ -1,3 +1,5 @@
+#![allow(clippy::print_stderr, clippy::unwrap_used)] // ok for tests
+
 use std::fs;
 use std::path::Path;
 use toml::Table;
@@ -18,15 +20,15 @@ fn it_has_compatible_dependencies() {
     let deps_workspace_lockfile = Path::new("expression/deps-workspace/Cargo.lock");
     let workspace_lockfile = Path::new("Cargo.lock");
 
-    if !deps_workspace_lockfile.exists() || !deps_workspace_lockfile.is_file() {
-        panic!(
-            "`Cargo.lock` in dependencies workspace does not exist at {deps_workspace_lockfile:?}"
-        );
-    }
+    assert!(
+        deps_workspace_lockfile.exists() && deps_workspace_lockfile.is_file(),
+        "`Cargo.lock` in dependencies workspace does not exist at {deps_workspace_lockfile:?}"
+    );
 
-    if !workspace_lockfile.exists() || !workspace_lockfile.is_file() {
-        panic!("`Cargo.lock` in workspace does not exist at {workspace_lockfile:?}");
-    }
+    assert!(
+        workspace_lockfile.exists() && workspace_lockfile.is_file(),
+        "`Cargo.lock` in workspace does not exist at {workspace_lockfile:?}"
+    );
 
     let workspace_geo_versions = find_geo_versions(workspace_lockfile);
     let deps_workspace_geo_versions = find_geo_versions(deps_workspace_lockfile);
@@ -92,19 +94,19 @@ struct GeoVersions {
 impl GeoVersions {
     pub fn geo_overlaps(&self, other: &Self) -> bool {
         for geo_version in &self.geo {
-            if other.geo.contains(&geo_version) {
+            if other.geo.contains(geo_version) {
                 return true;
             }
         }
-        return false;
+        false
     }
 
     pub fn geo_types_overlaps(&self, other: &Self) -> bool {
         for geo_version in &self.geo_types {
-            if other.geo_types.contains(&geo_version) {
+            if other.geo_types.contains(geo_version) {
                 return true;
             }
         }
-        return false;
+        false
     }
 }
