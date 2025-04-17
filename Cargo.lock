@@ -2372,6 +2372,7 @@ dependencies = [
  "snafu",
  "syn",
  "tempfile",
+ "toml",
 ]
 
 [[package]]

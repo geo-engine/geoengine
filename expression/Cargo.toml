@@ -24,6 +24,7 @@ tempfile = { workspace = true }
 [dev-dependencies]
 geo = { workspace = true }
 pretty_assertions = { workspace = true }
+toml = { workspace = true }
 
 [lints]
 workspace = true

@@ -78,11 +78,6 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: SQLFluff
         run: pipx run sqlfluff==3.3.1 lint
-      - name: Verifying expression dependencies workspace
-        run: |
-          rustup toolchain install nightly
-          chmod +x ./.scripts/check-expression-deps.rs
-          ./.scripts/check-expression-deps.rs
 
   build:
     runs-on: ubuntu-24.04
