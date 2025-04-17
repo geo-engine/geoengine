@@ -73,10 +73,10 @@ actix-web-httpauth = "0.8"
 aes-gcm = "0.10.3"
 anyhow = "1.0"
 approx = "0.5"
-arrow = { version = "54.2", features = ["ipc_compression"] }
-arrow-array = "54.2"
-arrow-ord = "54.2"
-arrow-schema = { version = "54.2", features = ["serde"] }
+arrow = { version = "55.0", features = ["ipc_compression"] }
+arrow-array = "55.0"
+arrow-ord = "55.0"
+arrow-schema = { version = "55.0", features = ["serde"] }
 aruna-rust-api = "2.0.0-beta.12"
 assert_cmd = "2.0"
 async-stream = "0.3"
@@ -92,21 +92,21 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 clap_derive = "4.5"
 config = "0.15"
-convert_case = "0.7"
+convert_case = "0.8"
 criterion = "0.5"
 csv = "1.3"
 erased-serde = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
-flexi_logger = { version = "0.29", features = ["trc"] }
+flexi_logger = { version = "0.30", features = ["trc"] }
 float-cmp = "0.10"
 futures = "0.3"
 futures-util = "0.3"
-gdal = "0.17"
-gdal-sys = "0.10"
+gdal = "0.18"
+gdal-sys = "0.11"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
-geo = "0.29.3"
-geo-rand = "0.4"
-geo-types = "0.7.15"                                                       # important for compatibility when linking expressions
+geo = "0.30.0"
+geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.30.0"} # TODO: revert back to "0.5"
+geo-types = "0.7.16"                                                       # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
 image = "0.25"
