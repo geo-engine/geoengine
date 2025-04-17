@@ -73,11 +73,9 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
                 match add_layer_from_dir_entry(db, &entry).await {
                     Ok(()) => info!("Added layer from directory entry: {entry:?}"),
-                    Err(e) => warn!(
-                        "Skipped adding layer from directory entry: {:?} error: {}",
-                        entry,
-                        e
-                    ),
+                    Err(e) => {
+                        warn!("Skipped adding layer from directory entry: {entry:?} error: {e}");
+                    }
                 }
             }
             _ => {
@@ -154,17 +152,13 @@ pub async fn add_layer_collections_from_directory<
                     Ok(def) => collection_defs.push(def),
                     Err(e) => {
                         warn!(
-                            "Skipped adding layer collection from directory entry: {:?} error: {}",
-                            entry,
-                            e
+                            "Skipped adding layer collection from directory entry: {entry:?} error: {e}"
                         );
                     }
                 }
             }
             _ => {
-                warn!(
-                    "Skipped adding layer collection from directory entry: {entry:?}"
-                );
+                warn!("Skipped adding layer collection from directory entry: {entry:?}");
             }
         }
     }
@@ -217,9 +211,7 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
     }
 
     let Ok(dir) = fs::read_dir(&base_path) else {
-        error!(
-            "Skipped adding providers from directory `{base_path:?}` because it can't be read"
-        );
+        error!("Skipped adding providers from directory `{base_path:?}` because it can't be read");
         return;
     };
 

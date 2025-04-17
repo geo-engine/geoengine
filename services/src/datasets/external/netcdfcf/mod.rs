@@ -592,13 +592,12 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
                 continue;
             }
 
-            match path.strip_prefix(&self.data) {
-                Ok(path) => files.push(path.to_owned()),
-                Err(_) => {
-                    // we can safely ignore it since it must be a file in the provider path
-                    continue;
-                }
-            }
+            let Ok(path) = path.strip_prefix(&self.data) else {
+                // we can safely ignore it since it must be a file in the provider path
+                continue;
+            };
+
+            files.push(path.to_owned());
         }
 
         Ok(files)
