@@ -73,7 +73,7 @@ where
                     tile_size_yx: tile_shape,
                 },
             );
-        };
+        }
 
         Ok(Self {
             result_descriptor,

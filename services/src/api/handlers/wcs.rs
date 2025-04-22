@@ -93,7 +93,7 @@ async fn wcs_capabilities_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let workflow = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     // TODO: workflow bounding box
     // TODO: host schema file(?)
@@ -185,7 +185,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let endpoint = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     let identifiers = WorkflowId::from_str(&request.identifiers)?;
 
@@ -340,7 +340,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let endpoint = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     let identifier = WorkflowId::from_str(&request.identifier)?;
 
@@ -408,9 +408,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         initialized
     } else {
         log::debug!(
-            "WCS query srs: {}, workflow srs: {} --> injecting reprojection",
-            request_spatial_ref,
-            workflow_spatial_ref
+            "WCS query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
         );
 
         let reprojection_params = ReprojectionParams {

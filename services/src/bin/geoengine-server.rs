@@ -177,21 +177,21 @@ fn reroute_gdal_logging() {
         match error_type {
             gdal::errors::CplErrType::None => {
                 // should never log anything
-                log::info!(target: target, "GDAL None {}: {}", error_num, error_msg);
+                log::info!(target: target, "GDAL None {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Debug => {
-                log::debug!(target: target, "GDAL Debug {}: {}", error_num, error_msg);
+                log::debug!(target: target, "GDAL Debug {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Warning => {
-                log::warn!(target: target, "GDAL Warning {}: {}", error_num, error_msg);
+                log::warn!(target: target, "GDAL Warning {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Failure => {
-                log::error!(target: target, "GDAL Failure {}: {}", error_num, error_msg);
+                log::error!(target: target, "GDAL Failure {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Fatal => {
-                log::error!(target: target, "GDAL Fatal {}: {}", error_num, error_msg);
+                log::error!(target: target, "GDAL Fatal {error_num}: {error_msg}");
             }
-        };
+        }
     });
 }
 

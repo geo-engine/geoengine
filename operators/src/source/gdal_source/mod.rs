@@ -549,7 +549,7 @@ impl GdalRasterLoader {
                 dataset_params.file_path
             );
             return err_result;
-        };
+        }
 
         let dataset = dataset_result.expect("checked");
 
@@ -562,7 +562,7 @@ impl GdalRasterLoader {
         )?;
 
         let elapsed = start.elapsed();
-        debug!("data loaded -> returning data grid, took {:?}", elapsed);
+        debug!("data loaded -> returning data grid, took {elapsed:?}");
 
         Ok(result_tile)
     }
@@ -1052,7 +1052,7 @@ where
             dataset_params.geo_transform,
             gdal_dataset_geotransform,
         );
-    };
+    }
 
     debug_assert_eq!(gdal_dataset_pixels_x, dataset_params.width);
     debug_assert_eq!(gdal_dataset_pixels_y, dataset_params.height);
@@ -1214,10 +1214,10 @@ fn properties_from_gdal_metadata<'a, I, M>(
 fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRasterBand) {
     if let Some(scale) = gdal_dataset.scale() {
         properties.set_scale(scale);
-    };
+    }
     if let Some(offset) = gdal_dataset.offset() {
         properties.set_offset(offset);
-    };
+    }
 
     // ignore if there is no description
     if let Ok(description) = gdal_dataset.description() {

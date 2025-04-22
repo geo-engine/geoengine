@@ -463,7 +463,7 @@ where
             })?
         {
             return Err(geoengine_operators::error::Error::PermissionDenied);
-        };
+        }
 
         let stmt = tx
             .prepare(
@@ -549,7 +549,7 @@ where
             })?
         {
             return Err(geoengine_operators::error::Error::PermissionDenied);
-        };
+        }
 
         let stmt = tx
             .prepare(

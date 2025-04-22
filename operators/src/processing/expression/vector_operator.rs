@@ -242,7 +242,7 @@ fn check_output_column_validity(output_column: &OutputColumn) -> Result<(), Vect
                 })?;
             }
         }
-    };
+    }
 
     Ok(())
 }

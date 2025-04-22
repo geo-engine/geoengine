@@ -986,7 +986,7 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                                     .as_ref()
                                     .replace(URL_REPLACEMENT, url.as_str()),
                             );
-                        };
+                        }
                         new_part
                     })
                     .collect::<std::vec::Vec<_>>();

@@ -24,7 +24,7 @@ use std::borrow::Cow;
 
 /// Parameters for the `Expression` operator.
 /// * The `expression` must only contain simple arithmetic
-///     calculations.
+///   calculations.
 /// * `output_type` is the data type of the produced raster tiles.
 /// * `output_no_data_value` is the no data value of the output raster
 /// * `output_measurement` is the measurement description of the output
