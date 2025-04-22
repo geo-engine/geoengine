@@ -977,7 +977,7 @@ where
 
                 Box::new(move |feature: &Feature| {
                     let field_value = feature
-                        .geometry_field_index(&start_field)
+                        .field_index(&start_field)
                         .and_then(|i| feature.field(i))?;
                     if let Some(field_value) = field_value {
                         let time_start = time_start_parser(field_value)?;
@@ -999,10 +999,10 @@ where
 
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature
-                        .geometry_field_index(&start_field)
+                        .field_index(&start_field)
                         .and_then(|i| feature.field(i))?;
                     let end_field_value = feature
-                        .geometry_field_index(&end_field)
+                        .field_index(&end_field)
                         .and_then(|i| feature.field(i))?;
 
                     if let (Some(start_field_value), Some(end_field_value)) =
@@ -1027,10 +1027,10 @@ where
 
                 Box::new(move |feature: &Feature| {
                     let start_field_value = feature
-                        .geometry_field_index(&start_field)
+                        .field_index(&start_field)
                         .and_then(|i| feature.field(i))?;
                     let duration_field_value = feature
-                        .geometry_field_index(&duration_field)
+                        .field_index(&duration_field)
                         .and_then(|i| feature.field(i))?;
 
                     if let (Some(start_field_value), Some(duration_field_value)) =
@@ -1307,9 +1307,7 @@ where
         builder.push_time_interval(time_interval);
 
         for (column, data_type) in data_types {
-            let field = feature
-                .geometry_field_index(column)
-                .and_then(|i| feature.field(i));
+            let field = feature.field_index(column).and_then(|i| feature.field(i));
             let value =
                 Self::convert_field_value(*data_type, field, time_attribute_parser, error_spec)?;
             builder.push_data(column, value)?;
