@@ -1432,7 +1432,7 @@ impl TryFromOgrGeometry for MultiPoint {
 impl TryFromOgrGeometry for MultiLineString {
     fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
-            let mut point_vec = Vec::new();
+            let mut point_vec = Vec::with_capacity(geometry.geometry_count());
             geometry.get_points(&mut point_vec);
             point_vec
                 .into_iter()
@@ -1462,7 +1462,7 @@ impl TryFromOgrGeometry for MultiLineString {
 impl TryFromOgrGeometry for MultiPolygon {
     fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
-            let mut point_vec = Vec::new();
+            let mut point_vec = Vec::with_capacity(geometry.geometry_count());
             geometry.get_points(&mut point_vec);
             point_vec
                 .into_iter()
