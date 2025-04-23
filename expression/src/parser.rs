@@ -71,7 +71,7 @@ impl ExpressionParser {
                     ExpressionSemanticError::EmptyParameterName.into_definition_parser_error()
                 );
             }
-        };
+        }
 
         Ok(Self {
             parameters: parameters.to_vec(),
@@ -201,7 +201,7 @@ impl ExpressionParser {
                                 }
                                 .into_parser_error(span));
                             }
-                        };
+                        }
                     } else {
                         let expression = self.build_ast(pair.into_inner(), &variables)?;
 

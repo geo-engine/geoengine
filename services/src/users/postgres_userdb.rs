@@ -407,7 +407,7 @@ where
             let refresh_result = self.refresh_oidc_session_tokens(session, &tx).await;
 
             if let Err(refresh_error) = refresh_result {
-                log::debug!("Session extension failed {}", refresh_error);
+                log::debug!("Session extension failed {refresh_error}");
                 return Err(Error::InvalidSession);
             }
             log::debug!("Session extended");
@@ -587,7 +587,7 @@ where
                 oidc_tokens,
                 db_valid_until: expiration,
             });
-        };
+        }
 
         Err(Error::InvalidSession)
     }

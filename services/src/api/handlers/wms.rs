@@ -307,9 +307,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             initialized
         } else {
             log::debug!(
-                "WMS query srs: {}, workflow srs: {} --> injecting reprojection",
-                request_spatial_ref,
-                workflow_spatial_ref
+                "WMS query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
             );
 
             let reprojection_params = ReprojectionParams {

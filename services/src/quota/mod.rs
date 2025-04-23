@@ -86,9 +86,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
         if self.mode == QuotaTrackingMode::Disabled {
             // if the quota tracking is disabled, we still consume the messages in order to empty the channel, but ignore the messages
             crate::util::spawn(async move {
-                while let Some(_message) = self.quota_receiver.recv().await {
-                    continue;
-                }
+                while let Some(_message) = self.quota_receiver.recv().await {}
             });
 
             return;

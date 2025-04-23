@@ -3,7 +3,7 @@ pub mod ml_models;
 
 use actix_http::StatusCode;
 use actix_web::{HttpResponse, dev::ServiceResponse};
-use convert_case::{Converter, Pattern};
+use convert_case::{Converter, pattern};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use utoipa::{ToResponse, ToSchema, openapi::schema::SchemaType};
@@ -131,7 +131,7 @@ where
             // error variant was not tagged with custom display
             // => derive more sensible default than snafu
             let conv = Converter::new()
-                .set_pattern(Pattern::Sentence)
+                .set_pattern(pattern::sentence)
                 .set_delim(' ');
             message = conv.convert(variant_name);
         }

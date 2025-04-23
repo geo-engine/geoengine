@@ -568,7 +568,7 @@ where
                                 }
                                 .into(),
                             )));
-                        };
+                        }
 
                         this.sc
                             .cache_hint

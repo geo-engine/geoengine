@@ -173,22 +173,22 @@ trait NetCdfVisitor {
         let mut options = CslStringList::new();
         options
             .set_name_value("SHOW_ZERO_DIM", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("SHOW_COORDINATES", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("SHOW_INDEXING", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("SHOW_BOUNDS", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("SHOW_TIME", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("GROUP_BY", "SAME_DIMENSION")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
     }
 }

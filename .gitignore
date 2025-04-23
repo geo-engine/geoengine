@@ -11,6 +11,9 @@ lcov.info
 /.vscode
 Settings.toml
 
+# Venvs
+env
+
 # Data
 upload/
 test_upload/

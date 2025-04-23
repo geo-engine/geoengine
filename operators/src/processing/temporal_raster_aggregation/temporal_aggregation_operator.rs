@@ -111,7 +111,7 @@ impl RasterOperator for TemporalRasterAggregation {
 
         if let Some(output_type) = self.params.output_type {
             out_result_descriptor.data_type = output_type;
-        };
+        }
 
         let initialized_operator = InitializedTemporalRasterAggregation {
             name,

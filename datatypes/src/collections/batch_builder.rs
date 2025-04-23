@@ -515,7 +515,7 @@ mod tests {
         let collection = builder.output.unwrap().try_into_points().unwrap();
 
         assert_eq!(
-            collection.to_geo_json(),
+            serde_json::from_str::<serde_json::Value>(&collection.to_geo_json()).unwrap(),
             json!({
                 "type": "FeatureCollection",
                 "features": [{
@@ -559,7 +559,6 @@ mod tests {
                     }
                 }]
             })
-            .to_string()
         );
     }
 
@@ -591,7 +590,7 @@ mod tests {
         let collection = builder.output.unwrap().try_into_points().unwrap();
 
         assert_eq!(
-            collection.to_geo_json(),
+            serde_json::from_str::<serde_json::Value>(&collection.to_geo_json()).unwrap(),
             json!({
                 "type": "FeatureCollection",
                 "features": [{
@@ -635,7 +634,6 @@ mod tests {
                     }
                 }]
             })
-            .to_string()
         );
     }
 
@@ -663,7 +661,7 @@ mod tests {
         let collection = builder.output.unwrap().try_into_lines().unwrap();
 
         assert_eq!(
-            collection.to_geo_json(),
+            serde_json::from_str::<serde_json::Value>(&collection.to_geo_json()).unwrap(),
             json!({
                 "type": "FeatureCollection",
                 "features": [{
@@ -706,7 +704,6 @@ mod tests {
                     }
                 }]
             })
-            .to_string()
         );
     }
 
@@ -743,7 +740,7 @@ mod tests {
         let collection = builder.output.unwrap().try_into_polygons().unwrap();
 
         assert_eq!(
-            collection.to_geo_json(),
+            serde_json::from_str::<serde_json::Value>(&collection.to_geo_json()).unwrap(),
             json!({
                 "type": "FeatureCollection",
                 "features": [{
@@ -802,7 +799,6 @@ mod tests {
                     }
                 }]
             })
-            .to_string()
         );
     }
 }

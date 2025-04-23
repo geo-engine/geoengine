@@ -116,7 +116,7 @@ where
 
         if let GridOrEmpty::Grid(grid) = self {
             grid.update_elements(map_fn);
-        };
+        }
     }
 }
 
@@ -201,7 +201,7 @@ where
 
                 if let Some(o) = out_value {
                     *i = o;
-                };
+                }
             });
     }
 }
@@ -246,7 +246,7 @@ where
 
         if let GridOrEmpty::Grid(grid) = self {
             grid.update_elements_parallel(map_fn);
-        };
+        }
     }
 }
 

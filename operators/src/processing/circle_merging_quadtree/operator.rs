@@ -329,7 +329,7 @@ impl VisualPointClusteringProcessor {
                     AttributeAggregate::Null => {
                         builder.push_null(&column)?;
                     }
-                };
+                }
             }
 
             builder.finish_row();
