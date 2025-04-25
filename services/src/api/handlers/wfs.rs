@@ -482,9 +482,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
         initialized
     } else {
         log::debug!(
-            "WFS query srs: {}, workflow srs: {} --> injecting reprojection",
-            request_spatial_ref,
-            workflow_spatial_ref
+            "WFS query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
         );
 
         let reprojection_params = ReprojectionParams {

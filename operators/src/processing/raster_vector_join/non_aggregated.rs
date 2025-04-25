@@ -331,7 +331,7 @@ where
                     .map(|feature_index| covered_pixels.covered_pixels(feature_index, raster))
                     .collect::<Vec<_>>(),
             );
-        };
+        }
 
         for (feature_index, feature_pixels) in state
             .feature_pixels

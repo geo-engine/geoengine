@@ -299,7 +299,7 @@ pub(crate) fn log_server_info() -> Result<()> {
         ))?,
     );
 
-    info!("External Address: {} ", external_address);
+    info!("External Address: {external_address} ");
 
     info!(
         "API Documentation: {}",

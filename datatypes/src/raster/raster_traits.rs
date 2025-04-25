@@ -85,7 +85,7 @@ mod tests {
                 (Ok(a), Ok(b)) => assert_eq!(a, b),
                 (Err(e1), Err(e2)) => assert_eq!(format!("{e1:?}"), format!("{e2:?}")),
                 (Err(e), _) | (_, Err(e)) => panic!("{}", e.to_string()),
-            };
+            }
         }
 
         let raster_tile = RasterTile2D::new_with_tile_info(

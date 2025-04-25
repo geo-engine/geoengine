@@ -484,7 +484,7 @@ impl GdalRasterLoader {
                 dataset_params.file_path
             );
             return err_result;
-        };
+        }
 
         let dataset = dataset_result.expect("checked");
 
@@ -521,7 +521,7 @@ impl GdalRasterLoader {
         let properties = read_raster_properties(&dataset, dataset_params, &rasterband);
 
         let elapsed = start.elapsed();
-        debug!("data loaded -> returning data grid, took {:?}", elapsed);
+        debug!("data loaded -> returning data grid, took {elapsed:?}");
 
         Ok(Some(GridAndProperties {
             grid: result_grid,
@@ -1248,10 +1248,10 @@ fn properties_from_gdal_metadata<'a, I, M>(
 fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRasterBand) {
     if let Some(scale) = gdal_dataset.scale() {
         properties.set_scale(scale);
-    };
+    }
     if let Some(offset) = gdal_dataset.offset() {
         properties.set_offset(offset);
-    };
+    }
 
     // ignore if there is no description
     if let Ok(description) = gdal_dataset.description() {

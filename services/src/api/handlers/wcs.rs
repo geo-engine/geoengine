@@ -91,7 +91,7 @@ async fn wcs_capabilities_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let workflow = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     // TODO: workflow bounding box
     // TODO: host schema file(?)
@@ -183,7 +183,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let endpoint = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     let identifiers = WorkflowId::from_str(&request.identifiers)?;
 
@@ -340,7 +340,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let endpoint = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     let identifier = WorkflowId::from_str(&request.identifier)?;
 

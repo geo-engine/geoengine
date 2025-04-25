@@ -66,7 +66,7 @@ impl CacheBackend {
                             .expect("LRU entry must exist in the cache!");
                         self.cache_size.remove_element_bytes(&query_element);
                     }
-                };
+                }
                 self.cache_size.remove_element_bytes(&pop_id);
 
                 debug!(
@@ -245,7 +245,7 @@ where
         if landing_zone_element.cache_hint().is_expired() {
             log::trace!("Element is already expired");
             return Err(CacheError::TileExpiredBeforeInsertion);
-        };
+        }
 
         let element_bytes_size = landing_zone_element.byte_size();
 

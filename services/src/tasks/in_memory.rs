@@ -318,7 +318,7 @@ fn run_task(
 
                 clean_up_phase(task_manager.clone(), task_handle, &mut update_lock, task_id);
             }
-        };
+        }
 
         // TODO: move this into clean-up?
         if let Some(notify) = notify {
@@ -412,7 +412,7 @@ fn clean_up_phase(
         match result {
             Ok(()) => set_status_to_clean_up_completed(&task_handle.status).await,
             Err(err) => set_status_to_clean_up_failed(&task_handle.status, err).await,
-        };
+        }
 
         remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
     });

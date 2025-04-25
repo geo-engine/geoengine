@@ -319,7 +319,7 @@ where
                     this.state.set(StateInner::Ended);
                     return Poll::Ready(Some(Err(e)));
                 }
-            };
+            }
         }
 
         // We are waiting for/expecting the result of the fold.
@@ -384,7 +384,7 @@ where
         if let Some(tile) = &tile_option {
             debug_assert!(*this.current_time_start >= tile.time.start());
             *this.current_time_end = Some(tile.time.end());
-        };
+        }
 
         // now do progress
 
@@ -436,7 +436,7 @@ where
                     this.state.set(StateInner::Ended);
                 }
             }
-        };
+        }
 
         Poll::Ready(Some(Ok(tile_option)))
     }
