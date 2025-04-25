@@ -769,7 +769,7 @@ fn overview_level_spatial_grid(
     overview_level: u32,
 ) -> Option<SpatialGridDefinition> {
     if overview_level > 0 {
-        debug!("Using overview level {}", overview_level);
+        debug!("Using overview level {overview_level}");
         let geo_transform = GeoTransform::new(
             source_spatial_grid.geo_transform.origin_coordinate,
             source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),

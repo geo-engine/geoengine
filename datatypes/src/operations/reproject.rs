@@ -506,7 +506,7 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     // if the input grid is anchored at the upper left idx then we don't have to move the origin of the geo transform
     if spatial_grid.grid_bounds.min_index() == GridIdx([0, 0]) {
         return Ok(SpatialGridDefinition::new(geo_transform, grid_bounds));
-    };
+    }
 
     let proj_origin = spatial_grid
         .geo_transform()

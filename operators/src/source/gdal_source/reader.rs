@@ -135,7 +135,7 @@ impl ReaderState {
                 bounds_of_target: tile.grid_bounds,
                 flip_y,
             });
-        };
+        }
 
         // we need to crop the window to the intersection of the tiling based bounds and the dataset bounds
         let crop_tl =
