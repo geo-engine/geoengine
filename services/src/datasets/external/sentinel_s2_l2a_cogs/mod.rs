@@ -669,8 +669,7 @@ impl SentinelS2L2aCogsMetaData {
             .reproject(&projector)
             .inspect_err(|e| {
                 debug!(
-                    "could not project zone bounds to EPSG:4326. Was: {:?}. Source: {}",
-                    native_bounds, e
+                    "could not project zone bounds to EPSG:4326. Was: {native_bounds:?}. Source: {e}"
                 );
             })
             .ok();

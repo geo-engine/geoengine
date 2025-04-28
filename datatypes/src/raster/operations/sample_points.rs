@@ -65,6 +65,11 @@ impl SamplePoints for GridBoundingBox2D {
     }
 
     fn sample_diagonals(&self, step: usize) -> Vec<Self::Coord> {
+        enum LongAxis {
+            X,
+            Y,
+        }
+
         let [y_min, y_max] = self.y_bounds();
         let [x_min, x_max] = self.x_bounds();
 
@@ -72,11 +77,6 @@ impl SamplePoints for GridBoundingBox2D {
         let y_range = range_inclusive(y_min, y_max);
 
         let capacity = (self.axis_size_x() / step) * 2 + (self.axis_size_y() / step) * 2;
-
-        enum LongAxis {
-            X,
-            Y,
-        }
 
         let (long_range_id, long_range, b, b_max, m) = if self.axis_size_x() > self.axis_size_y() {
             (
