@@ -15,7 +15,7 @@ use futures::stream::{BoxStream, FusedStream};
 use futures::{Stream, StreamExt, TryStreamExt, ready};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, Geometry, QueryAttributeSelection, QueryRectangle, VectorQueryRectangle,
+    Geometry, QueryAttributeSelection, QueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -159,7 +159,7 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 struct CacheQueryProcessor<P, E, Q, U, R>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U, ResultDescription = R>,
+    P: QueryProcessor<Output = E, SpatialQuery = Q, Selection = U, ResultDescription = R>,
 {
     processor: P,
     cache_key: CanonicOperatorName,
@@ -168,7 +168,7 @@ where
 impl<P, E, Q, U, R> CacheQueryProcessor<P, E, Q, U, R>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U, ResultDescription = R> + Sized,
+    P: QueryProcessor<Output = E, SpatialQuery = Q, Selection = U, ResultDescription = R> + Sized,
 {
     pub fn new(processor: P, cache_key: CanonicOperatorName) -> Self {
         CacheQueryProcessor {
@@ -181,8 +181,8 @@ where
 #[async_trait]
 impl<P, E, S, U, R> QueryProcessor for CacheQueryProcessor<P, E, S, U, R>
 where
-    P: QueryProcessor<Output = E, SpatialBounds = S, Selection = U, ResultDescription = R> + Sized,
-    S: AxisAlignedRectangle + Send + Sync + 'static,
+    P: QueryProcessor<Output = E, SpatialQuery = S, Selection = U, ResultDescription = R> + Sized,
+    S: Clone + Send + Sync + 'static,
     U: QueryAttributeSelection,
     E: CacheElement<Query = QueryRectangle<S, U>>
         + Send
@@ -195,13 +195,13 @@ where
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = U>,
 {
     type Output = E;
-    type SpatialBounds = S;
+    type SpatialQuery = S;
     type Selection = U;
     type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
+        query: QueryRectangle<Self::SpatialQuery, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let shared_cache = ctx
@@ -430,8 +430,8 @@ mod tests {
 
     use crate::{
         engine::{
-            ChunkByteSize, MockExecutionContext, MockQueryContext, MultipleRasterSources,
-            RasterOperator, SingleRasterSource, WorkflowOperatorPath,
+            ChunkByteSize, MockExecutionContext, MultipleRasterSources, RasterOperator,
+            SingleRasterSource, WorkflowOperatorPath,
         },
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
         source::{GdalSource, GdalSourceParameters},
@@ -439,8 +439,8 @@ mod tests {
     };
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{BandSelection, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{RasterDataType, RenameBands, TilesEqualIgnoringCacheHint},
+        primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+        raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint},
         util::test::TestDefault,
     };
     use std::sync::Arc;
@@ -452,9 +452,7 @@ mod tests {
         let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
 
         let operator = GdalSource {
-            params: GdalSourceParameters {
-                data: ndvi_id.clone(),
-            },
+            params: GdalSourceParameters::new(ndvi_id.clone()),
         }
         .boxed()
         .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -467,7 +465,7 @@ mod tests {
 
         let tile_cache = Arc::new(SharedCache::test_default());
 
-        let query_ctx = MockQueryContext::new_with_query_extensions(
+        let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
             ChunkByteSize::test_default(),
             Some(tile_cache),
             None,
@@ -476,15 +474,11 @@ mod tests {
 
         let stream = processor
             .query(
-                QueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        [-180., -90.].into(),
-                        [180., 90.].into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::first(),
+                ),
                 &query_ctx,
             )
             .await
@@ -501,15 +495,11 @@ mod tests {
 
         let stream_from_cache = processor
             .query(
-                QueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        [-180., -90.].into(),
-                        [180., 90.].into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::first(),
+                ),
                 &query_ctx,
             )
             .await
@@ -539,6 +529,7 @@ mod tests {
                     GdalSource {
                         params: GdalSourceParameters {
                             data: ndvi_id.clone(),
+                            overview_level: None,
                         },
                     }
                     .boxed(),
@@ -553,6 +544,7 @@ mod tests {
                             raster: GdalSource {
                                 params: GdalSourceParameters {
                                     data: ndvi_id.clone(),
+                                    overview_level: None,
                                 },
                             }
                             .boxed(),
@@ -573,7 +565,7 @@ mod tests {
 
         let tile_cache = Arc::new(SharedCache::test_default());
 
-        let query_ctx = MockQueryContext::new_with_query_extensions(
+        let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
             ChunkByteSize::test_default(),
             Some(tile_cache),
             None,
@@ -583,15 +575,11 @@ mod tests {
         // query the first two bands
         let stream = processor
             .query(
-                QueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        [-180., -90.].into(),
-                        [180., 90.].into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: BandSelection::new(vec![0, 1]).unwrap(),
-                },
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::new(vec![0, 1]).unwrap(),
+                ),
                 &query_ctx,
             )
             .await
@@ -621,15 +609,11 @@ mod tests {
         // now query only the second band
         let stream_from_cache = processor
             .query(
-                QueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        [-180., -90.].into(),
-                        [180., 90.].into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: BandSelection::new_single(1),
-                },
+                RasterQueryRectangle::new_with_grid_bounds(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::new_single(1),
+                ),
                 &query_ctx,
             )
             .await

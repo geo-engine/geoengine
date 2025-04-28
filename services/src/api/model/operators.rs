@@ -1,14 +1,15 @@
+use super::datatypes::{
+    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialGridDefinition,
+    SpatialReferenceOption, TimeInterval, VectorDataType,
+};
 use crate::api::model::datatypes::{
-    BoundingBox2D, CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, FeatureDataType,
-    GdalConfigOption, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, SpatialPartition2D,
-    SpatialReferenceOption, SpatialResolution, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType,
+    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, MultiLineString,
+    MultiPoint, MultiPolygon, NoGeometry, RasterPropertiesEntryType, RasterPropertiesKey,
+    TimeInstance, TimeStep,
 };
 use crate::error::{
     RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
 };
-use geoengine_datatypes::primitives::ColumnSelection;
 use geoengine_datatypes::util::ByteSize;
 use geoengine_macros::type_tag;
 use geoengine_operators::util::input::float_option_with_nan;
@@ -27,9 +28,53 @@ pub struct RasterResultDescriptor {
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
     pub time: Option<TimeInterval>,
-    pub bbox: Option<SpatialPartition2D>,
-    pub resolution: Option<SpatialResolution>,
+    pub spatial_grid: SpatialGridDescriptor,
     pub bands: RasterBandDescriptors,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SpatialGridDescriptorState {
+    Source,
+    Derived,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpatialGridDescriptor {
+    pub spatial_grid: SpatialGridDefinition,
+    pub descriptor: SpatialGridDescriptorState,
+}
+
+impl From<SpatialGridDescriptor> for geoengine_operators::engine::SpatialGridDescriptor {
+    fn from(value: SpatialGridDescriptor) -> Self {
+        let sp = geoengine_operators::engine::SpatialGridDescriptor::new_source(
+            value.spatial_grid.into(),
+        );
+        match value.descriptor {
+            SpatialGridDescriptorState::Source => sp,
+            SpatialGridDescriptorState::Derived => sp.as_derived(),
+        }
+    }
+}
+
+impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDescriptor {
+    fn from(value: geoengine_operators::engine::SpatialGridDescriptor) -> Self {
+        if value.is_source() {
+            let sp = value.source_spatial_grid_definition().expect("is source");
+            return SpatialGridDescriptor {
+                spatial_grid: sp.into(),
+                descriptor: SpatialGridDescriptorState::Source,
+            };
+        }
+        let sp = value
+            .derived_spatial_grid_definition()
+            .expect("if not source it must be derived");
+        SpatialGridDescriptor {
+            spatial_grid: sp.into(),
+            descriptor: SpatialGridDescriptorState::Derived,
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
@@ -108,8 +153,7 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
-            bbox: value.bbox.map(Into::into),
-            resolution: value.resolution.map(Into::into),
+            spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into(),
         }
     }
@@ -121,8 +165,7 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
             time: value.time.map(Into::into),
-            bbox: value.bbox.map(Into::into),
-            resolution: value.resolution.map(Into::into),
+            spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into(),
         }
     }
@@ -332,6 +375,26 @@ impl From<geoengine_operators::engine::TypedResultDescriptor> for TypedResultDes
     }
 }
 
+impl From<TypedResultDescriptor> for geoengine_operators::engine::TypedResultDescriptor {
+    fn from(value: TypedResultDescriptor) -> Self {
+        match value {
+            TypedResultDescriptor::Plot(p) => {
+                geoengine_operators::engine::TypedResultDescriptor::Plot(p.result_descriptor.into())
+            }
+            TypedResultDescriptor::Raster(r) => {
+                geoengine_operators::engine::TypedResultDescriptor::Raster(
+                    r.result_descriptor.into(),
+                )
+            }
+            TypedResultDescriptor::Vector(v) => {
+                geoengine_operators::engine::TypedResultDescriptor::Vector(
+                    v.result_descriptor.into(),
+                )
+            }
+        }
+    }
+}
+
 impl From<geoengine_operators::engine::PlotResultDescriptor> for TypedResultDescriptor {
     fn from(value: geoengine_operators::engine::PlotResultDescriptor) -> Self {
         Self::Plot(TypedPlotResultDescriptor {
@@ -431,10 +494,7 @@ impl
         geoengine_operators::engine::StaticMetaData<
             geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     > for MockMetaData
 {
@@ -442,10 +502,7 @@ impl
         value: geoengine_operators::engine::StaticMetaData<
             geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     ) -> Self {
         Self {
@@ -461,10 +518,7 @@ impl
         geoengine_operators::engine::StaticMetaData<
             geoengine_operators::source::OgrSourceDataset,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     > for OgrMetaData
 {
@@ -472,10 +526,7 @@ impl
         value: geoengine_operators::engine::StaticMetaData<
             geoengine_operators::source::OgrSourceDataset,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     ) -> Self {
         Self {
@@ -490,10 +541,7 @@ impl From<MockMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
         geoengine_operators::engine::VectorResultDescriptor,
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::BoundingBox2D,
-            ColumnSelection,
-        >,
+        geoengine_datatypes::primitives::VectorQueryRectangle,
     >
 {
     fn from(value: MockMetaData) -> Self {
@@ -509,10 +557,7 @@ impl From<OgrMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::source::OgrSourceDataset,
         geoengine_operators::engine::VectorResultDescriptor,
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::BoundingBox2D,
-            ColumnSelection,
-        >,
+        geoengine_datatypes::primitives::VectorQueryRectangle,
     >
 {
     fn from(value: OgrMetaData) -> Self {

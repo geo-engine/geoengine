@@ -17,7 +17,7 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement,
-    RasterQueryRectangle, SpatialPartition2D,
+    RasterQueryRectangle, RasterSpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
@@ -117,8 +117,7 @@ impl RasterOperator for Reflectance {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
             time: in_desc.time,
-            bbox: in_desc.bbox,
-            resolution: in_desc.resolution,
+            spatial_grid: in_desc.spatial_grid,
             bands: RasterBandDescriptors::new(
                 in_desc
                     .bands
@@ -298,13 +297,13 @@ impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<PixelOut>,
-            SpatialBounds = SpatialPartition2D,
+            SpatialQuery = RasterSpatialQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialQuery = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -335,7 +334,7 @@ mod tests {
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterTile2D, TilingSpecification,
     };
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     async fn process_mock(
         params: ReflectanceParams,
@@ -346,7 +345,6 @@ mod tests {
     ) -> Result<RasterTile2D<f32>> {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -617,7 +615,7 @@ mod tests {
             false,
             Some(Measurement::Classification(ClassificationMeasurement {
                 measurement: "invalid".into(),
-                classes: HashMap::new(),
+                classes: BTreeMap::new(),
             })),
         )
         .await;

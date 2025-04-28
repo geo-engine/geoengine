@@ -3,24 +3,16 @@ use crate::api::handlers::datasets::VolumeFileLayersResponse;
 use crate::api::handlers::permissions::{
     PermissionListOptions, PermissionListing, PermissionRequest, Resource,
 };
-use crate::api::handlers::plots::WrappedPlotOutput;
-use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
-use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
-use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use crate::api::handlers::users::AddRole;
-use crate::api::handlers::users::{Quota, UpdateQuota, UsageSummaryGranularity};
-use crate::api::handlers::wfs::{CollectionType, GeoJson};
-use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
     AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
     ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
     DataProviderId, DatasetId, DateTimeParseFormat, DateTimeString, ExternalDataId,
     FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement,
     MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat,
-    PlotQueryRectangle, RasterColorizer, RasterDataType, RasterPropertiesEntryType,
-    RasterPropertiesKey, RasterQueryRectangle, RgbaColor, SpatialPartition2D,
-    SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
-    TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
+    RasterToDatasetQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
+    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+    VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -40,13 +32,28 @@ use crate::api::model::responses::{
     ZipResponse,
 };
 use crate::api::model::services::{
-    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
-    Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
+    AddDataset, CreateDataset, DataPath, Dataset, DatasetDefinition, MetaDataDefinition,
+    MetaDataSuggestion, Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
 };
 use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
+use crate::api::{
+    handlers::{
+        plots::WrappedPlotOutput,
+        spatial_references::{AxisOrder, SpatialReferenceSpecification},
+        tasks::{TaskAbortOptions, TaskResponse},
+        upload::{UploadFileLayersResponse, UploadFilesResponse},
+        users::{AddRole, Quota, UpdateQuota, UsageSummaryGranularity},
+        wfs::{CollectionType, GeoJson},
+        workflows::{ProvenanceEntry, RasterStreamWebsocketResultType},
+    },
+    model::{
+        datatypes::{GeoTransform, GridBoundingBox2D, GridIdx2D, SpatialGridDefinition},
+        operators::{SpatialGridDescriptor, SpatialGridDescriptorState},
+    },
+};
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
-use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
+use crate::datasets::storage::{AutoCreateDataset, SuggestMetaData};
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
@@ -261,9 +268,7 @@ use utoipa::{Modify, OpenApi};
             VectorColumnInfo,
             RasterDatasetFromWorkflow,
             RasterDatasetFromWorkflowResult,
-            RasterQueryRectangle,
-            VectorQueryRectangle,
-            PlotQueryRectangle,
+            RasterToDatasetQueryRectangle,
             BandSelection,
 
             TaskAbortOptions,
@@ -407,6 +412,13 @@ use utoipa::{Modify, OpenApi};
             LayerVisibility,
             RasterStreamWebsocketResultType,
             CacheTtlSeconds,
+
+            SpatialGridDefinition,
+            SpatialGridDescriptorState,
+            SpatialGridDescriptor,
+            GridBoundingBox2D,
+            GridIdx2D,
+            GeoTransform,
 
             PermissionRequest,
             Resource,

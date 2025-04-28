@@ -11,7 +11,8 @@ use geoengine_datatypes::collections::{
     GeometryRandomAccess,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ColumnSelection, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
+    ColumnSelection, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
+    VectorSpatialQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -355,7 +356,7 @@ where
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = BoundingBox2D;
+    type SpatialQuery = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -409,23 +410,20 @@ where
 #[cfg(test)]
 mod tests {
     use futures::executor::block_on_stream;
-
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType,
     };
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, FeatureData, MultiPoint, TimeInterval,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
+    use super::*;
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::MockFeatureCollectionSource;
-
-    use super::*;
     use crate::processing::vector_join::util::translation_table;
 
     async fn join_mock_collections(
@@ -451,18 +449,13 @@ mod tests {
         let left_processor = left.query_processor().unwrap().multi_point().unwrap();
         let right_processor = right.query_processor().unwrap().data().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new(
-                (f64::MIN, f64::MIN).into(),
-                (f64::MAX, f64::MAX).into(),
-            )
-            .unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ctx = execution_context.mock_query_context(ChunkByteSize::MAX);
 
         let processor = EquiGeoToDataJoinProcessor::new(
             VectorResultDescriptor {

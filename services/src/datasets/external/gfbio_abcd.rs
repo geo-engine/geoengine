@@ -645,17 +645,14 @@ impl
 mod tests {
     use super::*;
     use crate::config;
-    use crate::contexts::SessionContext;
-    use crate::contexts::{PostgresContext, PostgresSessionContext};
+    use crate::contexts::{PostgresContext, PostgresSessionContext, SessionContext};
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::{ge_context, test_data};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::dataset::ExternalDataId;
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
-    };
+    use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, MultiPoint, TimeInterval};
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
@@ -1281,15 +1278,11 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all(),
-                })
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ))
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -1461,12 +1454,11 @@ mod tests {
                     bbox: None,
             },meta, vec![]);
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            };
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            );
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor

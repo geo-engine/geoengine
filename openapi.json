@@ -5197,14 +5197,6 @@
             }
           },
           {
-            "name": "spatialResolution",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/SpatialResolution"
-            }
-          },
-          {
             "name": "attributes",
             "in": "query",
             "required": true,
@@ -5460,6 +5452,15 @@
           "eastNorth"
         ]
       },
+      "BTreeMap": {
+        "type": "object",
+        "additionalProperties": {
+          "type": "string"
+        },
+        "propertyNames": {
+          "type": "string"
+        }
+      },
       "BandSelection": {
         "type": "array",
         "items": {
@@ -5512,15 +5513,7 @@
         ],
         "properties": {
           "classes": {
-            "type": "object",
-            "additionalProperties": {
-              "type": "string"
-            },
-            "propertyNames": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            }
+            "$ref": "#/components/schemas/BTreeMap"
           },
           "measurement": {
             "type": "string"
@@ -6461,6 +6454,27 @@
           }
         }
       },
+      "GeoTransform": {
+        "type": "object",
+        "required": [
+          "originCoordinate",
+          "xPixelSize",
+          "yPixelSize"
+        ],
+        "properties": {
+          "originCoordinate": {
+            "$ref": "#/components/schemas/Coordinate2D"
+          },
+          "xPixelSize": {
+            "type": "number",
+            "format": "double"
+          },
+          "yPixelSize": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "GetCapabilitiesFormat": {
         "type": "string",
         "enum": [
@@ -6515,6 +6529,36 @@
         "enum": [
           "GetMap"
         ]
+      },
+      "GridBoundingBox2D": {
+        "type": "object",
+        "required": [
+          "topLeftIdx",
+          "bottomRightIdx"
+        ],
+        "properties": {
+          "bottomRightIdx": {
+            "$ref": "#/components/schemas/GridIdx2D"
+          },
+          "topLeftIdx": {
+            "$ref": "#/components/schemas/GridIdx2D"
+          }
+        }
+      },
+      "GridIdx2D": {
+        "type": "object",
+        "required": [
+          "yIdx",
+          "xIdx"
+        ],
+        "properties": {
+          "xIdx": {
+            "type": "integer"
+          },
+          "yIdx": {
+            "type": "integer"
+          }
+        }
       },
       "InternalDataId": {
         "type": "object",
@@ -7794,26 +7838,6 @@
           "ImagePng"
         ]
       },
-      "PlotQueryRectangle": {
-        "type": "object",
-        "description": "A spatio-temporal rectangle with a specified resolution",
-        "required": [
-          "spatialBounds",
-          "timeInterval",
-          "spatialResolution"
-        ],
-        "properties": {
-          "spatialBounds": {
-            "$ref": "#/components/schemas/BoundingBox2D"
-          },
-          "spatialResolution": {
-            "$ref": "#/components/schemas/SpatialResolution"
-          },
-          "timeInterval": {
-            "$ref": "#/components/schemas/TimeInterval"
-          }
-        }
-      },
       "PlotResultDescriptor": {
         "type": "object",
         "description": "A `ResultDescriptor` for plot queries",
@@ -8300,7 +8324,7 @@
             ]
           },
           "query": {
-            "$ref": "#/components/schemas/RasterQueryRectangle"
+            "$ref": "#/components/schemas/RasterToDatasetQueryRectangle"
           }
         },
         "example": {
@@ -8321,10 +8345,6 @@
             "timeInterval": {
               "start": 1388534400000,
               "end": 1388534401000
-            },
-            "spatialResolution": {
-              "x": 0.1,
-              "y": 0.1
             }
           }
         }
@@ -8369,60 +8389,24 @@
           }
         }
       },
-      "RasterQueryRectangle": {
-        "type": "object",
-        "description": "A spatio-temporal rectangle with a specified resolution",
-        "required": [
-          "spatialBounds",
-          "timeInterval",
-          "spatialResolution"
-        ],
-        "properties": {
-          "spatialBounds": {
-            "$ref": "#/components/schemas/SpatialPartition2D"
-          },
-          "spatialResolution": {
-            "$ref": "#/components/schemas/SpatialResolution"
-          },
-          "timeInterval": {
-            "$ref": "#/components/schemas/TimeInterval"
-          }
-        }
-      },
       "RasterResultDescriptor": {
         "type": "object",
         "description": "A `ResultDescriptor` for raster queries",
         "required": [
           "dataType",
           "spatialReference",
+          "spatialGrid",
           "bands"
         ],
         "properties": {
           "bands": {
             "$ref": "#/components/schemas/RasterBandDescriptors"
           },
-          "bbox": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/SpatialPartition2D"
-              }
-            ]
-          },
           "dataType": {
             "$ref": "#/components/schemas/RasterDataType"
           },
-          "resolution": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/SpatialResolution"
-              }
-            ]
+          "spatialGrid": {
+            "$ref": "#/components/schemas/SpatialGridDescriptor"
           },
           "spatialReference": {
             "type": "string"
@@ -8466,6 +8450,22 @@
             "enum": [
               "raster"
             ]
+          }
+        }
+      },
+      "RasterToDatasetQueryRectangle": {
+        "type": "object",
+        "description": "A spatio-temporal rectangle with a specified resolution",
+        "required": [
+          "spatialBounds",
+          "timeInterval"
+        ],
+        "properties": {
+          "spatialBounds": {
+            "$ref": "#/components/schemas/SpatialPartition2D"
+          },
+          "timeInterval": {
+            "$ref": "#/components/schemas/TimeInterval"
           }
         }
       },
@@ -8656,6 +8656,43 @@
             ]
           }
         }
+      },
+      "SpatialGridDefinition": {
+        "type": "object",
+        "required": [
+          "geoTransform",
+          "gridBounds"
+        ],
+        "properties": {
+          "geoTransform": {
+            "$ref": "#/components/schemas/GeoTransform"
+          },
+          "gridBounds": {
+            "$ref": "#/components/schemas/GridBoundingBox2D"
+          }
+        }
+      },
+      "SpatialGridDescriptor": {
+        "type": "object",
+        "required": [
+          "spatialGrid",
+          "descriptor"
+        ],
+        "properties": {
+          "descriptor": {
+            "$ref": "#/components/schemas/SpatialGridDescriptorState"
+          },
+          "spatialGrid": {
+            "$ref": "#/components/schemas/SpatialGridDefinition"
+          }
+        }
+      },
+      "SpatialGridDescriptorState": {
+        "type": "string",
+        "enum": [
+          "source",
+          "derived"
+        ]
       },
       "SpatialPartition2D": {
         "type": "object",
@@ -9755,26 +9792,6 @@
           "MultiLineString",
           "MultiPolygon"
         ]
-      },
-      "VectorQueryRectangle": {
-        "type": "object",
-        "description": "A spatio-temporal rectangle with a specified resolution",
-        "required": [
-          "spatialBounds",
-          "timeInterval",
-          "spatialResolution"
-        ],
-        "properties": {
-          "spatialBounds": {
-            "$ref": "#/components/schemas/BoundingBox2D"
-          },
-          "spatialResolution": {
-            "$ref": "#/components/schemas/SpatialResolution"
-          },
-          "timeInterval": {
-            "$ref": "#/components/schemas/TimeInterval"
-          }
-        }
       },
       "VectorResultDescriptor": {
         "type": "object",
