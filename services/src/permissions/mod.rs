@@ -1,16 +1,17 @@
-use crate::error::Result;
+use crate::error::{self, Error, Result};
 use crate::identifier;
 use crate::layers::listing::LayerCollectionId;
 use crate::machine_learning::MlModelId;
 use crate::projects::ProjectId;
 use crate::users::UserId;
 use async_trait::async_trait;
-use geoengine_datatypes::dataset::{DatasetId, LayerId};
+use geoengine_datatypes::dataset::{DataProviderId, DatasetId, LayerId};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use snafu::Snafu;
+use snafu::{ResultExt, Snafu};
 use std::str::FromStr;
 use utoipa::ToSchema;
+use uuid::Uuid;
 
 mod postgres_permissiondb;
 
@@ -100,6 +101,7 @@ pub enum ResourceId {
     Project(ProjectId),
     DatasetId(DatasetId),
     MlModel(MlModelId),
+    DataProvider(DataProviderId),
 }
 
 impl std::fmt::Display for ResourceId {
@@ -112,6 +114,7 @@ impl std::fmt::Display for ResourceId {
             ResourceId::Project(project_id) => write!(f, "project:{}", project_id.0),
             ResourceId::DatasetId(dataset_id) => write!(f, "dataset:{}", dataset_id.0),
             ResourceId::MlModel(ml_model_id) => write!(f, "mlModel:{}", ml_model_id.0),
+            ResourceId::DataProvider(provider_id) => write!(f, "provider:{}", provider_id.0),
         }
     }
 }
@@ -137,6 +140,38 @@ impl From<ProjectId> for ResourceId {
 impl From<DatasetId> for ResourceId {
     fn from(dataset_id: DatasetId) -> Self {
         ResourceId::DatasetId(dataset_id)
+    }
+}
+
+impl From<DataProviderId> for ResourceId {
+    fn from(provider_id: DataProviderId) -> Self {
+        ResourceId::DataProvider(provider_id)
+    }
+}
+
+impl TryFrom<(String, String)> for ResourceId {
+    type Error = Error;
+
+    fn try_from(value: (String, String)) -> Result<Self> {
+        Ok(match value.0.as_str() {
+            "layer" => ResourceId::Layer(LayerId(value.1)),
+            "layerCollection" => ResourceId::LayerCollection(LayerCollectionId(value.1)),
+            "project" => {
+                ResourceId::Project(ProjectId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            "dataset" => {
+                ResourceId::DatasetId(DatasetId(Uuid::from_str(&value.1).context(error::Uuid)?))
+            }
+            "provider" => ResourceId::DataProvider(DataProviderId(
+                Uuid::from_str(&value.1).context(error::Uuid)?,
+            )),
+            _ => {
+                return Err(Error::InvalidResourceId {
+                    resource_type: value.0,
+                    resource_id: value.1,
+                });
+            }
+        })
     }
 }
 
