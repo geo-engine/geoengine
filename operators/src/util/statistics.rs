@@ -281,12 +281,12 @@ impl<T: AsPrimitive<f64>> SafePSquareQuantileEstimator<T> {
             return Err(StatisticsError::Initialization {
                 reason: "The desired quantile must be in the interval (0,1)".into(),
             });
-        };
+        }
         if !f64::is_finite(initial_sample.as_()) {
             return Err(StatisticsError::Initialization {
                 reason: "The initial sample must be finite".into(),
             });
-        };
+        }
 
         Ok(Self::Values {
             quantile,

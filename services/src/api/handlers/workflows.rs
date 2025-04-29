@@ -459,7 +459,7 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
         info.into_inner(),
         result_descriptor,
         ctx.execution_context()?.tiling_specification(),
-    )?;
+    );
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
@@ -1276,7 +1276,7 @@ mod tests {
     #[ge_context::test(tiling_spec = "test_download_all_metadata_zip_tiling_spec")]
     #[allow(clippy::too_many_lines)]
     async fn test_download_all_metadata_zip(app_ctx: PostgresContext<NoTls>) {
-        fn zip_file_to_json(mut zip_file: ZipFile) -> serde_json::Value {
+        fn zip_file_to_json<R: std::io::Read>(mut zip_file: ZipFile<R>) -> serde_json::Value {
             let mut bytes = Vec::new();
             zip_file.read_to_end(&mut bytes).unwrap();
 

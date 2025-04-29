@@ -7,7 +7,8 @@ use crate::{
         SpatialResolution,
     },
     raster::{
-        BoundedGrid, GeoTransform, GridBounds, GridIdx, GridShape, GridSize, SpatialGridDefinition,
+        BoundedGrid, GeoTransform, GridBoundingBox, GridBounds, GridIdx, GridIdx2D, GridShape,
+        GridSize, SamplePoints, SpatialGridDefinition,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -419,11 +420,21 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
 
     // Second, create a grid of coordinates project that and use the valid bounds.
 
-    // TODO: test if we can also use a "Haus vom Nikolaus" and get the same results.
-    let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge(); // TODO: need to add one pixel at lower right.
+    let sample_bounds = SpatialGridDefinition::new(
+        spatial_grid.geo_transform,
+        GridBoundingBox::new_unchecked(
+            spatial_grid.grid_bounds.min_index(),
+            spatial_grid.grid_bounds.max_index() + GridIdx2D::new_y_x(1, 1),
+        ),
+    );
+    // let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge();
+    // use a "Haus vom Nikolaus" strategy to find the bound.
+    let mut coord_grid_sample = sample_bounds.sample_outline(2);
+    coord_grid_sample.append(&mut sample_bounds.sample_diagonals(2));
+    coord_grid_sample.append(&mut sample_bounds.sample_cross(2));
 
     let proj_outline_coordinates: Vec<Coordinate2D> =
-        project_coordinates_fail_tolerant(&coord_grid.data, projector)
+        project_coordinates_fail_tolerant(&coord_grid_sample, projector)
             .into_iter()
             .flatten()
             .collect();
@@ -495,7 +506,7 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     // if the input grid is anchored at the upper left idx then we don't have to move the origin of the geo transform
     if spatial_grid.grid_bounds.min_index() == GridIdx([0, 0]) {
         return Ok(SpatialGridDefinition::new(geo_transform, grid_bounds));
-    };
+    }
 
     let proj_origin = spatial_grid
         .geo_transform()

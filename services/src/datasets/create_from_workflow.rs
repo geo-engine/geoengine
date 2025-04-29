@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::RasterQueryRectangle;
+use crate::api::model::datatypes::RasterToDatasetQueryRectangle;
 use crate::api::model::services::AddDataset;
 use crate::contexts::SessionContext;
 use crate::datasets::listing::DatasetProvider;
@@ -7,7 +7,6 @@ use crate::datasets::upload::{UploadId, UploadRootPath};
 use crate::error;
 use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
 use crate::workflows::workflow::WorkflowId;
-use float_cmp::approx_eq;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
 use geoengine_datatypes::raster::TilingSpecification;
@@ -36,13 +35,13 @@ use super::{DatasetIdAndName, DatasetName};
 
 /// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
-#[schema(example = json!({"name": "foo", "displayName": "a new dataset", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}, "spatialResolution": {"x": 0.1, "y": 0.1}}}))]
+#[schema(example = json!({"name": "foo", "displayName": "a new dataset", "description": null, "query": {"spatialBounds": {"upperLeftCoordinate": {"x": -10.0, "y": 80.0}, "lowerRightCoordinate": {"x": 50.0, "y": 20.0}}, "timeInterval": {"start": 1_388_534_400_000_i64, "end": 1_388_534_401_000_i64}}}))]
 #[serde(rename_all = "camelCase")]
 pub struct RasterDatasetFromWorkflow {
     pub name: Option<DatasetName>,
     pub display_name: String,
     pub description: Option<String>,
-    pub query: RasterQueryRectangle,
+    pub query: RasterToDatasetQueryRectangle,
     #[schema(default = default_as_cog)]
     #[serde(default = "default_as_cog")]
     pub as_cog: bool,
@@ -61,29 +60,8 @@ impl RasterDatasetFromWorkflowParams {
         request: RasterDatasetFromWorkflow,
         result_descriptor: &RasterResultDescriptor,
         tiling_spec: TilingSpecification,
-    ) -> error::Result<Self> {
+    ) -> Self {
         let query = request.query;
-
-        // FIXME: handle resolutions
-        // TODO: allow to use pixel bounds in query?
-        ensure!(
-            approx_eq!(
-                f64,
-                result_descriptor
-                    .spatial_grid_descriptor()
-                    .spatial_resolution()
-                    .x,
-                query.spatial_resolution.x
-            ) && approx_eq!(
-                f64,
-                result_descriptor
-                    .spatial_grid_descriptor()
-                    .spatial_resolution()
-                    .y,
-                query.spatial_resolution.y
-            ),
-            error::ResolutionMissmatch,
-        );
 
         let grid_bounds = result_descriptor
             .spatial_grid_descriptor()
@@ -98,13 +76,13 @@ impl RasterDatasetFromWorkflowParams {
                 BandSelection::first_n(result_descriptor.bands.len() as u32),
             );
 
-        Ok(Self {
+        Self {
             name: request.name,
             display_name: request.display_name,
             description: request.description,
             query: raster_query,
             as_cog: request.as_cog,
-        })
+        }
     }
 }
 

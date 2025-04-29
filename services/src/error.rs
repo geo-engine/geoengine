@@ -62,7 +62,11 @@ pub enum Error {
 
     #[snafu(context(false))]
     Trace {
-        source: opentelemetry::trace::TraceError,
+        source: opentelemetry_sdk::trace::TraceError,
+    },
+    #[snafu(context(false))]
+    TraceOltp {
+        source: opentelemetry_otlp::ExporterBuildError,
     },
 
     TokioChannelSend,

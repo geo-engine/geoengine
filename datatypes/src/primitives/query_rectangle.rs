@@ -229,6 +229,10 @@ impl BandSelection {
     pub fn as_vec(&self) -> Vec<u32> {
         self.0.clone()
     }
+
+    pub fn is_single(&self) -> bool {
+        self.count() == 1
+    }
 }
 
 impl From<u32> for BandSelection {

@@ -451,7 +451,7 @@ impl SentinelS2L2aCogsMetaData {
         let num_features = features.len();
         let mut known_time_start: Option<TimeInstance> = None;
         let mut known_time_end: Option<TimeInstance> = None;
-        debug!("number of features in current zone: {}", num_features);
+        debug!("number of features in current zone: {num_features}");
         for i in 0..num_features {
             let feature = &features[i];
 
@@ -669,8 +669,7 @@ impl SentinelS2L2aCogsMetaData {
             .reproject(&projector)
             .inspect_err(|e| {
                 debug!(
-                    "could not project zone bounds to EPSG:4326. Was: {:?}. Source: {}",
-                    native_bounds, e
+                    "could not project zone bounds to EPSG:4326. Was: {native_bounds:?}. Source: {e}"
                 );
             })
             .ok();

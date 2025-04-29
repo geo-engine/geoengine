@@ -1164,7 +1164,7 @@ impl<D: NetCdfCfProviderDb + 'static + std::fmt::Debug> Drop for InProgressFlag<
             let result = db.unlock_overview(provider_id, &file_name).await;
 
             if let Err(e) = result {
-                log::error!("Cannot remove in-progress flag: {}", e);
+                log::error!("Cannot remove in-progress flag: {e}");
             }
         });
     }

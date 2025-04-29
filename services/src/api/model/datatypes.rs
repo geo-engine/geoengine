@@ -1105,12 +1105,12 @@ impl From<SpatialPartition2D> for geoengine_datatypes::primitives::SpatialPartit
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RasterQueryRectangle {
+pub struct RasterToDatasetQueryRectangle {
     pub spatial_bounds: SpatialPartition2D,
     pub time_interval: TimeInterval,
-    pub spatial_resolution: SpatialResolution,
 }
 
+/*
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1127,6 +1127,7 @@ pub struct PlotQueryRectangle {
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
+*/
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
 pub struct BandSelection(pub Vec<usize>);

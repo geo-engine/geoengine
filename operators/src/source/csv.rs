@@ -611,7 +611,8 @@ x,y
         assert_eq!(r.len(), 1);
 
         assert_eq!(
-            r[0].as_ref().unwrap().to_geo_json(),
+            serde_json::from_str::<serde_json::Value>(&r[0].as_ref().unwrap().to_geo_json())
+                .unwrap(),
             serde_json::json!({
                 "type": "FeatureCollection",
                 "features": [{
@@ -640,7 +641,6 @@ x,y
                     }
                 }]
             })
-            .to_string()
         );
     }
 

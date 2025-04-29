@@ -233,7 +233,7 @@ where
             DatabaseStatus::InitializedClearDatabase
                 if postgres_config.clear_database_on_start && schema_name != "pg_temp" =>
             {
-                info!("Clearing schema {}.", schema_name);
+                info!("Clearing schema {schema_name}.");
                 conn.batch_execute(&format!("DROP SCHEMA {schema_name} CASCADE;"))
                     .await?;
             }
@@ -243,7 +243,7 @@ where
             DatabaseStatus::InitializedClearDatabase
             | DatabaseStatus::InitializedKeepDatabase
             | DatabaseStatus::Unitialized => (),
-        };
+        }
 
         Ok(())
     }

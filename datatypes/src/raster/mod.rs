@@ -45,6 +45,7 @@ pub use operations::checked_scaling::{
 pub use operations::from_index_fn::{FromIndexFn, FromIndexFnParallel};
 pub use operations::map_elements::{MapElements, MapElementsParallel};
 pub use operations::map_indexed_elements::{MapIndexedElements, MapIndexedElementsParallel};
+pub use operations::sample_points::SamplePoints;
 pub use operations::update_elements::{UpdateElements, UpdateElementsParallel};
 pub use operations::update_indexed_elements::{
     UpdateIndexedElements, UpdateIndexedElementsParallel,

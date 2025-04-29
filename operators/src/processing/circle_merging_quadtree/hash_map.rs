@@ -45,7 +45,7 @@ where
                 }
             }
             Bucket::Multi(entries) => entries.push(entry),
-        };
+        }
     }
 }
 
@@ -372,7 +372,7 @@ mod tests {
             match map.entry(i) {
                 ValueRef::Vacant(_) => panic!("key not found: {i}"),
                 ValueRef::Occupied(_) => (), // okay
-            };
+            }
         }
     }
 

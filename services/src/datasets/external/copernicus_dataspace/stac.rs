@@ -107,10 +107,7 @@ pub async fn load_stac_items(
     let mut stac_items = Vec::new();
 
     loop {
-        log::debug!(
-            "Copernicus Dataspace Provider: Requesting page {} of STAC API",
-            page
-        );
+        log::debug!("Copernicus Dataspace Provider: Requesting page {page} of STAC API");
 
         let response = client
             .get(url.clone())

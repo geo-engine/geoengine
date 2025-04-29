@@ -221,8 +221,9 @@ impl TryFrom<SpatialRef> for SpatialReference {
     type Error = error::Error;
 
     fn try_from(value: SpatialRef) -> Result<Self, Self::Error> {
+        let auth_name = value.auth_name().map_or_else(|| value.authority(), Ok)?;
         Ok(SpatialReference::new(
-            SpatialReferenceAuthority::from_str(&value.auth_name().unwrap())?, // TODO
+            SpatialReferenceAuthority::from_str(&auth_name)?,
             value.auth_code()? as u32,
         ))
     }

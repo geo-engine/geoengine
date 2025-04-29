@@ -59,9 +59,7 @@ impl WrapWithProjectionAndResample {
             self
         } else {
             log::debug!(
-                "Target srs: {}, workflow srs: {} --> injecting reprojection",
-                target_sref,
-                result_sref
+                "Target srs: {target_sref}, workflow srs: {result_sref} --> injecting reprojection"
             );
 
             let reprojection_params = ReprojectionParams {
@@ -139,9 +137,7 @@ impl WrapWithProjectionAndResample {
         //TODO: we should allow to use the "interpolation" as long as the fraction is > 0.5. This would require to keep 4 tiles which seems to be fine. The edge case of resampling with same resolution should also use the interpolation since bilieaner woudl make sense here?
         {
             log::debug!(
-                "Target res: {:?}, workflow res: {:?} --> injecting interpolation",
-                target_spatial_resolution,
-                rd_resolution
+                "Target res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting interpolation"
             );
             /*
             let interpolation_method = if self
@@ -181,9 +177,7 @@ impl WrapWithProjectionAndResample {
             Self::new(iop.boxed(), iip.boxed(), rd)
         } else {
             log::debug!(
-                "Query res: {:?}, workflow res: {:?} --> injecting downsampling",
-                target_spatial_resolution,
-                rd_resolution
+                "Query res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting downsampling"
             );
 
             let downsample_params = DownsamplingParams {

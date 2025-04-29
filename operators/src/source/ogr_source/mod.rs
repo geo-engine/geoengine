@@ -40,8 +40,8 @@ use crate::engine::{
     CanonicOperatorName, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
-use crate::util::Result;
 use crate::util::input::StringOrNumberRange;
+use crate::util::{Result, safe_lock_mutex};
 use crate::{
     engine::{
         InitializedVectorOperator, MetaData, QueryContext, SourceOperator,
@@ -563,7 +563,7 @@ where
     }
 }
 
-type TimeExtractorType = Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync + 'static>;
+type TimeExtractorType = Box<dyn FnMut(&Feature) -> Result<TimeInterval> + Send + Sync + 'static>;
 
 #[pin_project(project = OgrSourceStreamProjection)]
 pub struct OgrSourceStream<G>
@@ -574,7 +574,7 @@ where
     dataset_iterator: Arc<Mutex<OgrDatasetIterator>>,
     data_types: Arc<HashMap<String, FeatureDataType>>,
     feature_collection_builder: FeatureCollectionBuilder<G>,
-    time_extractor: Arc<TimeExtractorType>,
+    time_extractor: Arc<std::sync::Mutex<TimeExtractorType>>,
     time_attribute_parser:
         Arc<Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync + 'static>>,
     query_rectangle: VectorQueryRectangle,
@@ -625,7 +625,7 @@ impl FeaturesProvider<'_> {
             FeaturesProvider::ResultSet(r) => {
                 r.deref_mut().set_attribute_filter(attribute_query)?;
             }
-        };
+        }
 
         Ok(())
     }
@@ -852,7 +852,7 @@ where
                 data_types: Arc::new(data_types),
                 feature_collection_builder,
                 query_rectangle,
-                time_extractor: Arc::new(time_extractor),
+                time_extractor: Arc::new(std::sync::Mutex::new(time_extractor)),
                 time_attribute_parser: Arc::new(time_attribute_parser),
                 chunk_byte_size,
                 future: None,
@@ -870,7 +870,7 @@ where
         feature_collection_builder: FeatureCollectionBuilder<G>,
         data_types: Arc<HashMap<String, FeatureDataType>>,
         query_rectangle: VectorQueryRectangle,
-        time_extractor: Arc<TimeExtractorType>,
+        time_extractor: Arc<std::sync::Mutex<TimeExtractorType>>,
         time_attribute_parser: Arc<Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync>>,
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
@@ -883,7 +883,7 @@ where
                 &dataset_information,
                 &data_types,
                 &query_rectangle,
-                time_extractor.as_ref(),
+                safe_lock_mutex(&time_extractor).as_mut(),
                 time_attribute_parser.as_ref(),
                 chunk_byte_size,
             );
@@ -907,7 +907,7 @@ where
     fn create_time_parser(
         time_format: OgrSourceTimeFormat,
     ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync> {
-        debug!("{:?}", time_format);
+        debug!("{time_format:?}");
 
         match time_format {
             OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
@@ -978,8 +978,12 @@ where
             } => {
                 let time_start_parser = Self::create_time_parser(start_format);
 
+                let mut field_index = None;
                 Box::new(move |feature: &Feature| {
-                    let field_value = feature.field(feature.field_index(&start_field)?)?; // TODO: resolve field index from field name only once
+                    let field_index =
+                        get_or_insert_field_index(&mut field_index, feature, &start_field)?;
+
+                    let field_value = feature.field(field_index)?;
                     if let Some(field_value) = field_value {
                         let time_start = time_start_parser(field_value)?;
                         TimeInterval::new(time_start, (time_start + duration)?).map_err(Into::into)
@@ -998,9 +1002,17 @@ where
                 let time_start_parser = Self::create_time_parser(start_format);
                 let time_end_parser = Self::create_time_parser(end_format);
 
+                let mut start_field_index = None;
+                let mut end_field_index = None;
+
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature.field(feature.field_index(&start_field)?)?;
-                    let end_field_value = feature.field(feature.field_index(&end_field)?)?;
+                    let start_field_index =
+                        get_or_insert_field_index(&mut start_field_index, feature, &start_field)?;
+                    let end_field_index =
+                        get_or_insert_field_index(&mut end_field_index, feature, &end_field)?;
+
+                    let start_field_value = feature.field(start_field_index)?;
+                    let end_field_value = feature.field(end_field_index)?;
 
                     if let (Some(start_field_value), Some(end_field_value)) =
                         (start_field_value, end_field_value)
@@ -1022,10 +1034,20 @@ where
             } => {
                 let time_start_parser = Self::create_time_parser(start_format);
 
+                let mut start_field_index = None;
+                let mut duration_field_index = None;
+
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature.field(feature.field_index(&start_field)?)?;
-                    let duration_field_value =
-                        feature.field(feature.field_index(&duration_field)?)?;
+                    let start_field_index =
+                        get_or_insert_field_index(&mut start_field_index, feature, &start_field)?;
+                    let duration_field_index = get_or_insert_field_index(
+                        &mut duration_field_index,
+                        feature,
+                        &duration_field,
+                    )?;
+
+                    let start_field_value = feature.field(start_field_index)?;
+                    let duration_field_value = feature.field(duration_field_index)?;
 
                     if let (Some(start_field_value), Some(duration_field_value)) =
                         (start_field_value, duration_field_value)
@@ -1104,7 +1126,7 @@ where
         dataset_information: &OgrSourceDataset,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
-        time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
+        time_extractor: &mut dyn FnMut(&Feature) -> Result<TimeInterval>,
         time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
@@ -1259,7 +1281,7 @@ where
         default_geometry: &Option<G>,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
-        time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
+        time_extractor: &mut dyn FnMut(&Feature) -> Result<TimeInterval, Error>,
         time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         builder: &mut FeatureCollectionRowBuilder<G>,
         feature: &Feature,
@@ -1300,8 +1322,14 @@ where
         builder.push_generic_geometry(geometry);
         builder.push_time_interval(time_interval);
 
+        let mut field_indices = HashMap::with_capacity(data_types.len());
+
         for (column, data_type) in data_types {
-            let field = feature.field(feature.field_index(column)?);
+            let field_index = field_indices
+                .entry(column.as_str())
+                .or_insert_with(|| feature.field_index(column));
+
+            let field = field_index.clone().and_then(|i| feature.field(i));
             let value =
                 Self::convert_field_value(*data_type, field, time_attribute_parser, error_spec)?;
             builder.push_data(column, value)?;
@@ -1311,6 +1339,20 @@ where
 
         Ok(())
     }
+}
+
+fn get_or_insert_field_index(
+    field_index: &mut Option<usize>,
+    feature: &Feature,
+    field_name: &str,
+) -> Result<usize> {
+    if let Some(i) = field_index {
+        return Ok(*i);
+    }
+
+    let i = feature.field_index(field_name)?;
+    *field_index = Some(i);
+    Ok(i)
 }
 
 impl<G> Stream for OgrSourceStream<G>
@@ -1426,9 +1468,10 @@ impl TryFromOgrGeometry for MultiPoint {
 impl TryFromOgrGeometry for MultiLineString {
     fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
-            let mut vec = Vec::new(); // TODO capacity
-            geometry.get_points(&mut vec);
-            vec.into_iter()
+            let mut point_vec = Vec::with_capacity(geometry.geometry_count());
+            geometry.get_points(&mut point_vec);
+            point_vec
+                .into_iter()
                 .map(|(x, y, _z)| Coordinate2D::new(x, y))
                 .collect()
         }
@@ -1455,9 +1498,10 @@ impl TryFromOgrGeometry for MultiLineString {
 impl TryFromOgrGeometry for MultiPolygon {
     fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
-            let mut vec = Vec::new(); // TODO capacity
-            geometry.get_points(&mut vec);
-            vec.into_iter()
+            let mut point_vec = Vec::with_capacity(geometry.geometry_count());
+            geometry.get_points(&mut point_vec);
+            point_vec
+                .into_iter()
                 .map(|(x, y, _z)| Coordinate2D::new(x, y))
                 .collect()
         }

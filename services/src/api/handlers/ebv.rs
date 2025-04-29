@@ -299,7 +299,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
                         status.error.push(file);
                     }
                     TaskStatus::Failed { error, .. } => {
-                        debug!("{:?}", error);
+                        debug!("{error:?}");
 
                         status.error.push(file);
                     }
@@ -312,7 +312,7 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
                 }
             } else {
                 // TODO: can we ignore this?
-            };
+            }
 
             // TODO: grab finished pct from subtasks
             Self::update_pct(
