@@ -657,7 +657,9 @@ where
         let mut empty = false;
 
         if !tiling_based_pixel_bounds.intersects(&query_pixel_bounds) {
-            debug!("query does not intersect spatial data bounds");
+            debug!(
+                "query {query_pixel_bounds:?} does not intersect spatial data bounds {tiling_based_pixel_bounds:?}"
+            );
             empty = true;
         }
 
