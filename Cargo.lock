@@ -2203,11 +2203,23 @@ dependencies = [
 ]
 
 [[package]]
+name = "gdal-src"
+version = "0.2.0+3.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dfe065be4c59457d934487706b6ffa7fe91d238e20e42b8fae03f47a291f684"
+dependencies = [
+ "cmake",
+ "link-cplusplus",
+ "proj-sys",
+]
+
+[[package]]
 name = "gdal-sys"
 version = "0.11.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "febef67dc08a956a9ecb04de2b40dbd15ad56be49421aad9ae0cdcbe9a24166c"
 dependencies = [
+ "gdal-src",
  "pkg-config",
  "semver",
 ]
