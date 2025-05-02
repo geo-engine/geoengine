@@ -1,4 +1,7 @@
+use super::storage::LayerProviderDb;
+use crate::contexts::GeoEngineDb;
 use crate::datasets::storage::{DatasetDb, DatasetDefinition};
+use crate::layers::external::DataProviderDefinition;
 use crate::layers::storage::LayerDb;
 use crate::{
     error::Result,
@@ -21,8 +24,6 @@ use std::{
     path::PathBuf,
 };
 use uuid::Uuid;
-
-use super::storage::LayerProviderDb;
 
 pub const UNSORTED_COLLECTION_ID: Uuid = Uuid::from_u128(0xffb2_dd9e_f5ad_427c_b7f1_c9a0_c7a0_ae3f);
 
@@ -198,15 +199,31 @@ pub async fn add_layer_collections_from_directory<
     }
 }
 
-pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_path: PathBuf) {
-    async fn add_provider_definition_from_dir_entry<D: LayerProviderDb>(
+pub async fn add_providers_from_directory<D: LayerProviderDb + PermissionDb + GeoEngineDb>(
+    db: &mut D,
+    base_path: PathBuf,
+) {
+    async fn add_provider_definition_from_dir_entry<
+        D: LayerProviderDb + PermissionDb + GeoEngineDb,
+    >(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
         let def: TypedDataProviderDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        db.add_layer_provider(def).await?; // TODO: add as system user
+        db.add_layer_provider(def.clone()).await?;
+
+        let id = <TypedDataProviderDefinition as DataProviderDefinition<D>>::id(&def);
+
+        // share with users
+        db.add_permission(Role::registered_user_role_id(), id, Permission::Read)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+        db.add_permission(Role::anonymous_role_id(), id, Permission::Read)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
         Ok(())
     }
 
