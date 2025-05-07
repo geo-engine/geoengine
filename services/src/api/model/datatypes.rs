@@ -2192,13 +2192,13 @@ impl<'a> FromSql<'a> for CacheTtlSeconds {
 
 /// A struct describing tensor shape for `MlModelMetadata`
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
-pub struct TensorShape3D {
+pub struct MlTensorShape3D {
     pub y: u32,
     pub x: u32,
     pub bands: u32, // TODO: named attributes?
 }
 
-impl TensorShape3D {
+impl MlTensorShape3D {
     pub fn new_y_x_attr(y: u32, x: u32, bands: u32) -> Self {
         Self { y, x, bands }
     }
@@ -2212,8 +2212,8 @@ impl TensorShape3D {
     }
 }
 
-impl From<geoengine_datatypes::machine_learning::TensorShape3D> for TensorShape3D {
-    fn from(value: geoengine_datatypes::machine_learning::TensorShape3D) -> Self {
+impl From<geoengine_datatypes::machine_learning::MlTensorShape3D> for MlTensorShape3D {
+    fn from(value: geoengine_datatypes::machine_learning::MlTensorShape3D) -> Self {
         Self {
             y: value.y,
             x: value.x,
@@ -2222,8 +2222,8 @@ impl From<geoengine_datatypes::machine_learning::TensorShape3D> for TensorShape3
     }
 }
 
-impl From<TensorShape3D> for geoengine_datatypes::machine_learning::TensorShape3D {
-    fn from(value: TensorShape3D) -> Self {
+impl From<MlTensorShape3D> for geoengine_datatypes::machine_learning::MlTensorShape3D {
+    fn from(value: MlTensorShape3D) -> Self {
         Self {
             y: value.y,
             x: value.x,

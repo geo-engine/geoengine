@@ -1,5 +1,5 @@
 use crate::{
-    api::model::datatypes::{RasterDataType, TensorShape3D},
+    api::model::datatypes::{MlTensorShape3D, RasterDataType},
     config::{MachineLearning, get_config_element},
     datasets::upload::{UploadId, UploadRootPath},
     identifier,
@@ -44,8 +44,8 @@ pub struct MlModelMetadata {
     pub file_name: String,
     pub input_type: RasterDataType,
     pub output_type: RasterDataType,
-    pub input_shape: TensorShape3D,
-    pub output_shape: TensorShape3D,
+    pub input_shape: MlTensorShape3D,
+    pub output_shape: MlTensorShape3D,
     // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
 }
 

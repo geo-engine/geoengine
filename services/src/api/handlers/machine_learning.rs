@@ -131,7 +131,7 @@ pub(crate) async fn get_ml_model<C: ApplicationContext>(
 mod tests {
     use super::*;
     use crate::{
-        api::model::{datatypes::RasterDataType, datatypes::TensorShape3D, responses::IdResponse},
+        api::model::{datatypes::RasterDataType, datatypes::MlTensorShape3D, responses::IdResponse},
         contexts::PostgresContext,
         contexts::Session,
         datasets::upload::UploadId,
@@ -178,8 +178,8 @@ mod tests {
                 file_name: "model.onnx".to_string(),
                 input_type: RasterDataType::F32,
                 output_type: RasterDataType::I64,
-                input_shape: TensorShape3D::new_y_x_attr(1, 1, 2),
-                output_shape: TensorShape3D::new_y_x_attr(1, 1, 1),
+                input_shape: MlTensorShape3D::new_y_x_attr(1, 1, 2),
+                output_shape: MlTensorShape3D::new_y_x_attr(1, 1, 1),
             },
         };
 

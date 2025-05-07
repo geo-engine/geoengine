@@ -1,8 +1,7 @@
 use super::MachineLearningError;
 use crate::machine_learning::error::{MultipleInputsNotSupported, Ort};
-use geoengine_datatypes::{machine_learning::MlModelMetadata, raster::RasterDataType};
 use geoengine_datatypes::{
-    machine_learning::{MlModelMetadata, TensorShape3D},
+    machine_learning::{MlModelMetadata, MlTensorShape3D},
     raster::RasterDataType,
 };
 use snafu::{ResultExt, ensure};
@@ -65,18 +64,18 @@ pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearni
 
 fn try_dimensions_to_tensor_shape(
     dimensions: &[i64],
-) -> Result<TensorShape3D, MachineLearningError> {
+) -> Result<MlTensorShape3D, MachineLearningError> {
     if dimensions.len() == 1 && dimensions[0] == -1 {
-        Ok(TensorShape3D::new_y_x_bands(1, 1, 1))
+        Ok(MlTensorShape3D::new_y_x_bands(1, 1, 1))
     } else if dimensions.len() == 2 && dimensions[0] == -1 && dimensions[1] > 0 {
-        Ok(TensorShape3D::new_y_x_bands(1, 1, dimensions[1] as u32))
+        Ok(MlTensorShape3D::new_y_x_bands(1, 1, dimensions[1] as u32))
     } else if dimensions.len() == 4
         && dimensions[0] == -1
         && dimensions[1] > 0
         && dimensions[2] > 0
         && dimensions[3] > 0
     {
-        Ok(TensorShape3D::new_y_x_bands(
+        Ok(MlTensorShape3D::new_y_x_bands(
             dimensions[1] as u32, // TODO: figure out how the axis in the dimensions are ordered!
             dimensions[2] as u32,
             dimensions[3] as u32, // In this case we could also accept attributes at first position, however we need to figure out how we would handle this...

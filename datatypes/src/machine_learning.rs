@@ -137,13 +137,13 @@ impl Visitor<'_> for MlModelNameDeserializeVisitor {
 
 /// A struct describing tensor shape for `MlModelMetadata`
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
-pub struct TensorShape3D {
+pub struct MlTensorShape3D {
     pub y: u32,
     pub x: u32,
     pub bands: u32, // TODO: named attributes?
 }
 
-impl TensorShape3D {
+impl MlTensorShape3D {
     pub fn new_y_x_bands(y: u32, x: u32, bands: u32) -> Self {
         Self { y, x, bands }
     }
@@ -177,8 +177,8 @@ pub struct MlModelMetadata {
     pub file_path: PathBuf,
     pub input_type: RasterDataType,
     pub output_type: RasterDataType,
-    pub input_shape: TensorShape3D,
-    pub output_shape: TensorShape3D, // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+    pub input_shape: MlTensorShape3D,
+    pub output_shape: MlTensorShape3D, // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
 }
 
 impl MlModelMetadata {

@@ -326,7 +326,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        api::model::datatypes::{RasterDataType as ApiRasterDataType, TensorShape3D},
+        api::model::datatypes::{RasterDataType as ApiRasterDataType, MlTensorShape3D},
         contexts::PostgresContext,
         datasets::upload::{Upload, UploadDb, UploadId},
         ge_context,
@@ -529,8 +529,8 @@ mod tests {
             metadata: MlModelMetadata {
                 file_name: "myUnrealmodel.onnx".to_owned(),
                 input_type: ApiRasterDataType::F32,
-                input_shape: TensorShape3D::new_single_pixel_bands(17),
-                output_shape: TensorShape3D::new_single_pixel_single_band(),
+                input_shape: MlTensorShape3D::new_single_pixel_bands(17),
+                output_shape: MlTensorShape3D::new_single_pixel_single_band(),
                 output_type: ApiRasterDataType::F64,
             },
             name: MlModelName::new(None, "myUnrealModel").into(),

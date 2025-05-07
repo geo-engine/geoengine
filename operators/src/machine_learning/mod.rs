@@ -1,5 +1,5 @@
 use geoengine_datatypes::{
-    machine_learning::TensorShape3D,
+    machine_learning::MlTensorShape3D,
     raster::{GridShape2D, RasterDataType},
 };
 use snafu::Snafu;
@@ -24,18 +24,20 @@ pub enum MachineLearningError {
     InvalidDimensions { dimensions: Vec<i64> },
     #[snafu(display(
         "Onnx model must have one dimensional output or match the tiling tile size. Found {:?} and {:?}.",
-        tensor_shape, tiling_shape
+        tensor_shape,
+        tiling_shape
     ))]
     InvalidInputShape {
-        tensor_shape: TensorShape3D,
+        tensor_shape: MlTensorShape3D,
         tiling_shape: GridShape2D,
     },
     #[snafu(display(
         "Onnx model must have one dimensional output or match the tiling tile size. Found {:?} and {:?}.",
-        tensor_shape, tiling_shape
+        tensor_shape,
+        tiling_shape
     ))]
     InvalidOutputShape {
-        tensor_shape: TensorShape3D,
+        tensor_shape: MlTensorShape3D,
         tiling_shape: GridShape2D,
     },
     #[snafu(display("Onnx model must have Tensor output. Found {:?}.", output_type))]
