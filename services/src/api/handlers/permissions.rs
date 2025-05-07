@@ -326,7 +326,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        api::model::datatypes::{RasterDataType as ApiRasterDataType, MlTensorShape3D},
+        api::model::datatypes::{MlTensorShape3D, RasterDataType as ApiRasterDataType},
         contexts::PostgresContext,
         datasets::upload::{Upload, UploadDb, UploadId},
         ge_context,

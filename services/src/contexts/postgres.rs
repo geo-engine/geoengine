@@ -462,7 +462,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::{RasterDataType as ApiRasterDataType, MlTensorShape3D};
+    use crate::api::model::datatypes::{MlTensorShape3D, RasterDataType as ApiRasterDataType};
     use crate::config::QuotaTrackingMode;
     use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};

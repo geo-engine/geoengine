@@ -131,7 +131,9 @@ pub(crate) async fn get_ml_model<C: ApplicationContext>(
 mod tests {
     use super::*;
     use crate::{
-        api::model::{datatypes::RasterDataType, datatypes::MlTensorShape3D, responses::IdResponse},
+        api::model::{
+            datatypes::MlTensorShape3D, datatypes::RasterDataType, responses::IdResponse,
+        },
         contexts::PostgresContext,
         contexts::Session,
         datasets::upload::UploadId,
