@@ -34,7 +34,7 @@ pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearni
         });
     };
 
-    // Input dimensions must be [-1, b] to accept a table of (arbitrarily many) single pixel features (rows) with `b` bands (columns)
+    // Input dimensions must be convertable to a valid tensor shape
     let input_shape = try_dimensions_to_tensor_shape(input_dimensions)?;
 
     // Onnx model must output one prediction per pixel as
