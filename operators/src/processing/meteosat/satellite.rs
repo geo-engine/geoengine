@@ -598,17 +598,21 @@ mod tests {
 
     #[tokio::test]
     async fn get_channel_ok() {
-        assert!(Satellite::satellite_by_msg_id(1)
-            .unwrap()
-            .channel(0)
-            .is_ok());
+        assert!(
+            Satellite::satellite_by_msg_id(1)
+                .unwrap()
+                .channel(0)
+                .is_ok()
+        );
     }
 
     #[tokio::test]
     async fn get_channel_fail() {
-        assert!(Satellite::satellite_by_msg_id(1)
-            .unwrap()
-            .channel(42)
-            .is_err());
+        assert!(
+            Satellite::satellite_by_msg_id(1)
+                .unwrap()
+                .channel(42)
+                .is_err()
+        );
     }
 }

@@ -1,14 +1,14 @@
 use self::migrations::all_migrations;
 use crate::api::model::services::Volume;
-use crate::config::{get_config_element, Cache, Oidc, Quota};
+use crate::config::{Cache, Oidc, Quota, get_config_element};
 use crate::contexts::{
-    initialize_database, migrations, ApplicationContext, CurrentSchemaMigration, MigrationResult,
-    QueryContextImpl, SessionId,
+    ApplicationContext, CurrentSchemaMigration, MigrationResult, QueryContextImpl, SessionId,
+    initialize_database, migrations,
 };
 use crate::contexts::{ExecutionContextImpl, QuotaCheckerImpl};
 use crate::contexts::{GeoEngineDb, SessionContext};
-use crate::datasets::upload::Volumes;
 use crate::datasets::DatasetName;
+use crate::datasets::upload::Volumes;
 use crate::error::{self, Error, Result};
 use crate::layers::add_from_directory::{
     add_datasets_from_directory, add_layer_collections_from_directory, add_layers_from_directory,
@@ -16,17 +16,17 @@ use crate::layers::add_from_directory::{
 };
 use crate::machine_learning::error::MachineLearningError;
 use crate::machine_learning::name::MlModelName;
-use crate::quota::{initialize_quota_tracking, QuotaTrackingFactory};
+use crate::quota::{QuotaTrackingFactory, initialize_quota_tracking};
 use crate::tasks::SimpleTaskManagerContext;
 use crate::tasks::{TypedTaskManagerBackend, UserTaskManager};
 use crate::users::OidcManager;
 use crate::users::{UserAuth, UserSession};
 use async_trait::async_trait;
 use bb8_postgres::{
+    PostgresConnectionManager,
     bb8::Pool,
     bb8::PooledConnection,
-    tokio_postgres::{tls::MakeTlsConnect, tls::TlsConnect, Config, Socket},
-    PostgresConnectionManager,
+    tokio_postgres::{Config, Socket, tls::MakeTlsConnect, tls::TlsConnect},
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -233,17 +233,17 @@ where
             DatabaseStatus::InitializedClearDatabase
                 if postgres_config.clear_database_on_start && schema_name != "pg_temp" =>
             {
-                info!("Clearing schema {}.", schema_name);
+                info!("Clearing schema {schema_name}.");
                 conn.batch_execute(&format!("DROP SCHEMA {schema_name} CASCADE;"))
                     .await?;
             }
             DatabaseStatus::InitializedKeepDatabase if postgres_config.clear_database_on_start => {
-                return Err(Error::ClearDatabaseOnStartupNotAllowed)
+                return Err(Error::ClearDatabaseOnStartupNotAllowed);
             }
             DatabaseStatus::InitializedClearDatabase
             | DatabaseStatus::InitializedKeepDatabase
             | DatabaseStatus::Unitialized => (),
-        };
+        }
 
         Ok(())
     }
@@ -481,8 +481,8 @@ mod tests {
         LayerCollectionId, LayerCollectionProvider, SearchParameters, SearchType,
     };
     use crate::layers::storage::{
-        LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
-        INTERNAL_PROVIDER_ID,
+        INTERNAL_PROVIDER_ID, LayerDb, LayerProviderDb, LayerProviderListing,
+        LayerProviderListingOptions,
     };
     use crate::machine_learning::{MlModel, MlModelDb, MlModelIdAndName, MlModelMetadata};
     use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
@@ -493,8 +493,8 @@ mod tests {
     };
     use crate::users::{OidcTokens, SessionTokenStore};
     use crate::users::{RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration};
-    use crate::util::tests::mock_oidc::{mock_refresh_server, MockRefreshServerConfig};
-    use crate::util::tests::{admin_login, register_ndvi_workflow_helper, MockQuotaTracking};
+    use crate::util::tests::mock_oidc::{MockRefreshServerConfig, mock_refresh_server};
+    use crate::util::tests::{MockQuotaTracking, admin_login, register_ndvi_workflow_helper};
     use crate::workflows::registry::WorkflowRegistry;
     use crate::workflows::workflow::Workflow;
     use bb8_postgres::tokio_postgres::NoTls;
@@ -659,10 +659,11 @@ mod tests {
     ) {
         let db = app_ctx.session_context(session.clone()).db();
 
-        assert!(db
-            .has_permission(project_id, Permission::Owner)
-            .await
-            .unwrap());
+        assert!(
+            db.has_permission(project_id, Permission::Owner)
+                .await
+                .unwrap()
+        );
 
         let user2 = app_ctx
             .register_user(UserRegistration {
@@ -682,19 +683,21 @@ mod tests {
             .unwrap();
 
         let db2 = app_ctx.session_context(session2.clone()).db();
-        assert!(!db2
-            .has_permission(project_id, Permission::Owner)
-            .await
-            .unwrap());
+        assert!(
+            !db2.has_permission(project_id, Permission::Owner)
+                .await
+                .unwrap()
+        );
 
         db.add_permission(user2.into(), project_id, Permission::Read)
             .await
             .unwrap();
 
-        assert!(db2
-            .has_permission(project_id, Permission::Read)
-            .await
-            .unwrap());
+        assert!(
+            db2.has_permission(project_id, Permission::Read)
+                .await
+                .unwrap()
+        );
     }
 
     #[allow(clippy::too_many_lines)]
@@ -1851,6 +1854,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -1860,6 +1864,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(UNSORTED_COLLECTION_ID.to_string()),
@@ -1869,6 +1874,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer1,
@@ -1905,6 +1911,7 @@ mod tests {
                 description: "Collection 1".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id,
@@ -1914,6 +1921,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2,
@@ -2027,6 +2035,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2036,6 +2045,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2045,6 +2055,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -2056,6 +2067,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer1.clone(),
@@ -2065,6 +2077,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2103,6 +2116,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2112,6 +2126,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2150,6 +2165,7 @@ mod tests {
                 description: "Collection 1".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2159,6 +2175,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2196,6 +2213,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: layer2.clone(),
@@ -2260,6 +2278,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: layer2.clone(),
@@ -2439,6 +2458,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2448,6 +2468,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2457,6 +2478,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection3_id.clone(),
@@ -2466,6 +2488,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -2477,6 +2500,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer1.clone(),
@@ -2486,6 +2510,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2495,6 +2520,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer3.clone(),
@@ -2533,6 +2559,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2542,6 +2569,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2551,6 +2579,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(
@@ -2562,6 +2591,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer1.clone(),
@@ -2571,6 +2601,7 @@ mod tests {
                         properties: vec![("proper".to_string(), "tee".to_string()).into()],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2609,6 +2640,7 @@ mod tests {
                 description: "All available Geo Engine layers".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection1_id.clone(),
@@ -2618,6 +2650,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2656,6 +2689,7 @@ mod tests {
                 description: "Collection 1".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: collection2_id.clone(),
@@ -2665,6 +2699,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: layer2.clone(),
@@ -2702,6 +2737,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: layer2.clone(),
@@ -2766,6 +2802,7 @@ mod tests {
                 name: "Collection1".to_string(),
                 description: "Collection 1".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: layer2.clone(),
@@ -3245,87 +3282,99 @@ mod tests {
         let root_collection_id = layer_db.get_root_layer_collection_id().await.unwrap();
 
         if capabilities.search_types.fulltext {
-            assert!(layer_db
-                .search(
-                    &root_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Fulltext,
-                        search_string: String::new(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .is_ok());
+            assert!(
+                layer_db
+                    .search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: SearchType::Fulltext,
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_ok()
+            );
 
             if capabilities.autocomplete {
-                assert!(layer_db
-                    .autocomplete_search(
-                        &root_collection_id,
-                        SearchParameters {
-                            search_type: SearchType::Fulltext,
-                            search_string: String::new(),
-                            limit: 10,
-                            offset: 0,
-                        },
-                    )
-                    .await
-                    .is_ok());
+                assert!(
+                    layer_db
+                        .autocomplete_search(
+                            &root_collection_id,
+                            SearchParameters {
+                                search_type: SearchType::Fulltext,
+                                search_string: String::new(),
+                                limit: 10,
+                                offset: 0,
+                            },
+                        )
+                        .await
+                        .is_ok()
+                );
             } else {
-                assert!(layer_db
-                    .autocomplete_search(
-                        &root_collection_id,
-                        SearchParameters {
-                            search_type: SearchType::Fulltext,
-                            search_string: String::new(),
-                            limit: 10,
-                            offset: 0,
-                        },
-                    )
-                    .await
-                    .is_err());
+                assert!(
+                    layer_db
+                        .autocomplete_search(
+                            &root_collection_id,
+                            SearchParameters {
+                                search_type: SearchType::Fulltext,
+                                search_string: String::new(),
+                                limit: 10,
+                                offset: 0,
+                            },
+                        )
+                        .await
+                        .is_err()
+                );
             }
         }
         if capabilities.search_types.prefix {
-            assert!(layer_db
-                .search(
-                    &root_collection_id,
-                    SearchParameters {
-                        search_type: SearchType::Prefix,
-                        search_string: String::new(),
-                        limit: 10,
-                        offset: 0,
-                    },
-                )
-                .await
-                .is_ok());
+            assert!(
+                layer_db
+                    .search(
+                        &root_collection_id,
+                        SearchParameters {
+                            search_type: SearchType::Prefix,
+                            search_string: String::new(),
+                            limit: 10,
+                            offset: 0,
+                        },
+                    )
+                    .await
+                    .is_ok()
+            );
 
             if capabilities.autocomplete {
-                assert!(layer_db
-                    .autocomplete_search(
-                        &root_collection_id,
-                        SearchParameters {
-                            search_type: SearchType::Prefix,
-                            search_string: String::new(),
-                            limit: 10,
-                            offset: 0,
-                        },
-                    )
-                    .await
-                    .is_ok());
+                assert!(
+                    layer_db
+                        .autocomplete_search(
+                            &root_collection_id,
+                            SearchParameters {
+                                search_type: SearchType::Prefix,
+                                search_string: String::new(),
+                                limit: 10,
+                                offset: 0,
+                            },
+                        )
+                        .await
+                        .is_ok()
+                );
             } else {
-                assert!(layer_db
-                    .autocomplete_search(
-                        &root_collection_id,
-                        SearchParameters {
-                            search_type: SearchType::Prefix,
-                            search_string: String::new(),
-                            limit: 10,
-                            offset: 0,
-                        },
-                    )
-                    .await
-                    .is_err());
+                assert!(
+                    layer_db
+                        .autocomplete_search(
+                            &root_collection_id,
+                            SearchParameters {
+                                search_type: SearchType::Prefix,
+                                search_string: String::new(),
+                                limit: 10,
+                                offset: 0,
+                            },
+                        )
+                        .await
+                        .is_err()
+                );
             }
         }
     }
@@ -3556,6 +3605,7 @@ mod tests {
                 description: "description".to_string(),
                 items: vec![
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: empty_c_id.clone(),
@@ -3565,6 +3615,7 @@ mod tests {
                         properties: Default::default(),
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: l_id.clone(),
@@ -3603,6 +3654,7 @@ mod tests {
                 name: "top collection".to_string(),
                 description: "description".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: INTERNAL_PROVIDER_ID,
                         layer_id: l_id.clone(),

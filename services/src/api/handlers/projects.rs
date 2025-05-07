@@ -3,14 +3,14 @@ use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::projects::error::ProjectDbError;
 use crate::projects::{
-    CreateProject, LoadVersion, ProjectDb, ProjectId, ProjectListOptions, ProjectVersionId,
-    UpdateProject,
+    CreateProject, LoadVersion, Project, ProjectDb, ProjectId, ProjectListOptions, ProjectListing,
+    ProjectVersion, ProjectVersionId, UpdateProject,
 };
 use crate::util::extractors::{ValidatedJson, ValidatedQuery};
-use actix_web::{web, FromRequest, HttpResponse, Responder, ResponseError};
+use actix_web::{FromRequest, HttpResponse, Responder, ResponseError, web};
 use geoengine_datatypes::util::helpers::ge_report;
-use snafu::prelude::*;
 use snafu::ResultExt;
+use snafu::prelude::*;
 use std::fmt;
 use strum::IntoStaticStr;
 
@@ -405,13 +405,13 @@ mod tests {
         ProjectListing, RasterSymbology, STRectangle, Symbology, UpdateProject,
     };
     use crate::users::{UserAuth, UserSession};
+    use crate::util::Identifier;
     use crate::util::tests::{
         check_allowed_http_methods, create_project_helper, send_test_request, update_project_helper,
     };
-    use crate::util::Identifier;
     use crate::workflows::workflow::WorkflowId;
     use actix_web::dev::ServiceResponse;
-    use actix_web::{http::header, http::Method, test};
+    use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer};
     use geoengine_datatypes::primitives::{TimeGranularity, TimeStep};
@@ -766,6 +766,7 @@ mod tests {
                 name: "L1".to_string(),
                 visibility: Default::default(),
                 symbology: Symbology::Raster(RasterSymbology {
+                    r#type: Default::default(),
                     opacity: 1.0,
                     raster_colorizer: RasterColorizer::SingleBand {
                         band: 0,
@@ -833,6 +834,7 @@ mod tests {
                 legend: false,
             },
             symbology: Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
@@ -849,6 +851,7 @@ mod tests {
                 legend: true,
             },
             symbology: Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,

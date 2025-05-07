@@ -19,12 +19,12 @@ use crate::users::UserSession;
 use crate::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
 use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, web};
 use geoengine_datatypes::error::BoxedResultExt;
 use serde::Deserialize;
 use serde::Serialize;
-use snafu::ensure;
 use snafu::ResultExt;
+use snafu::ensure;
 use utoipa::IntoParams;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -562,6 +562,12 @@ pub(crate) async fn update_user_quota_handler<C: ApplicationContext>(
     Ok(actix_web::HttpResponse::Ok().finish())
 }
 
+#[derive(Debug, Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct RedirectUri {
+    pub redirect_uri: String,
+}
+
 /// Initializes the Open Id Connect login procedure by requesting a parametrized url to the configured Id Provider.
 ///
 /// # Errors
@@ -577,9 +583,13 @@ pub(crate) async fn update_user_quota_handler<C: ApplicationContext>(
         example = json!({
             "url": "http://someissuer.com/authorize?client_id=someclient&redirect_uri=someuri&response_type=code&scope=somescope&state=somestate&nonce=somenonce&codechallenge=somechallenge&code_challenge_method=S256"
         })
-    ))
+    )),
+    params(
+        RedirectUri
+    )
 )]
 pub(crate) async fn oidc_init<C: ApplicationContext>(
+    params: web::Query<RedirectUri>,
     app_ctx: web::Data<C>,
 ) -> Result<web::Json<AuthCodeRequestURL>> {
     ensure!(
@@ -588,7 +598,7 @@ pub(crate) async fn oidc_init<C: ApplicationContext>(
     );
     let auth_code_request_url = app_ctx
         .oidc_manager()
-        .get_client()
+        .get_client_with_redirect_uri(params.into_inner().redirect_uri)
         .await?
         .generate_request()
         .await?;
@@ -625,10 +635,14 @@ pub(crate) async fn oidc_init<C: ApplicationContext>(
            "project": null,
            "view": null
         })
-    ))
+    )),
+    params(
+        RedirectUri
+    )
 )]
 pub(crate) async fn oidc_login<C: ApplicationContext + UserAuth>(
     response: web::Json<AuthCodeResponse>,
+    params: web::Query<RedirectUri>,
     app_ctx: web::Data<C>,
 ) -> Result<web::Json<UserSession>> {
     ensure!(
@@ -637,7 +651,7 @@ pub(crate) async fn oidc_login<C: ApplicationContext + UserAuth>(
     );
     let authentication_response = app_ctx
         .oidc_manager()
-        .get_client()
+        .get_client_with_redirect_uri(params.into_inner().redirect_uri)
         .await?
         .resolve_request(response.into_inner())
         .await?;
@@ -869,7 +883,7 @@ pub(crate) async fn get_role_descriptions<C: ApplicationContext<Session = UserSe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::RasterColorizer;
+    use crate::api::model::datatypes::{RasterColorizer, SingleBandRasterColorizer};
     use crate::api::model::responses::ErrorResponse;
     use crate::config::Oidc;
     use crate::contexts::PostgresContext;
@@ -878,8 +892,8 @@ mod tests {
     use crate::permissions::Role;
     use crate::users::{AuthCodeRequestURL, OidcManager, UserAuth, UserId};
     use crate::util::tests::mock_oidc::{
-        mock_refresh_server, mock_token_response, mock_valid_provider_discovery,
-        MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE,
+        MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE, mock_refresh_server,
+        mock_token_response, mock_valid_provider_discovery,
     };
     use crate::util::tests::{
         admin_login, create_project_helper2, create_session_helper, register_ndvi_workflow_helper,
@@ -887,7 +901,7 @@ mod tests {
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
-    use actix_web::{http::header, http::Method, test};
+    use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use core::time::Duration;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
@@ -900,6 +914,8 @@ mod tests {
     use serde_json::json;
     use tokio_postgres::NoTls;
     use uuid::Uuid;
+
+    const DUMMY_REDIRECT_URI: &str = "http://dummy.redirect-uri.com";
 
     async fn register_test_helper(
         app_ctx: PostgresContext<NoTls>,
@@ -1391,7 +1407,7 @@ mod tests {
     async fn oidc_init_test_helper(method: Method, ctx: PostgresContext<NoTls>) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
-            .uri("/oidcInit")
+            .uri(&format!("/oidcInit?redirectUri={DUMMY_REDIRECT_URI}"))
             .append_header((header::CONTENT_LENGTH, 0));
         send_test_request(req, ctx).await
     }
@@ -1403,7 +1419,7 @@ mod tests {
     ) -> ServiceResponse {
         let req = test::TestRequest::default()
             .method(method)
-            .uri("/oidcLogin")
+            .uri(&format!("/oidcLogin?redirectUri={DUMMY_REDIRECT_URI}"))
             .append_header((header::CONTENT_LENGTH, 0))
             .set_json(&auth_code_response);
         send_test_request(req, ctx).await
@@ -1506,7 +1522,7 @@ mod tests {
 
         let request = app_ctx
             .oidc_manager()
-            .get_client()
+            .get_client_with_redirect_uri(DUMMY_REDIRECT_URI.to_string())
             .await
             .unwrap()
             .generate_request()
@@ -1576,7 +1592,7 @@ mod tests {
 
         let request = app_ctx
             .oidc_manager()
-            .get_client()
+            .get_client_with_redirect_uri(DUMMY_REDIRECT_URI.to_string())
             .await
             .unwrap()
             .generate_request()
@@ -1697,7 +1713,7 @@ mod tests {
 
         let request = app_ctx
             .oidc_manager()
-            .get_client()
+            .get_client_with_redirect_uri(DUMMY_REDIRECT_URI.to_string())
             .await
             .unwrap()
             .generate_request()
@@ -1762,7 +1778,7 @@ mod tests {
 
         let request = app_ctx
             .oidc_manager()
-            .get_client()
+            .get_client_with_redirect_uri(DUMMY_REDIRECT_URI.to_string())
             .await
             .unwrap()
             .generate_request()
@@ -1920,10 +1936,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),

@@ -14,9 +14,9 @@ use crate::layers::listing::{
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::NoTls;
-use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
@@ -275,6 +275,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             .into_iter()
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
                         layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
@@ -411,6 +412,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             .into_iter()
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
                         layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
@@ -628,10 +630,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -679,7 +681,7 @@ mod tests {
             .read_to_string(&mut sql)
             .unwrap();
 
-        let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
+        let schema = format!("geoengine_test_{}", rand::rng().next_u64());
 
         conn.batch_execute(&format!(
             "CREATE SCHEMA {schema};
@@ -759,6 +761,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("1".to_string()),
@@ -768,6 +771,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("2".to_string()),
@@ -835,6 +839,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("1".to_string()),
@@ -844,6 +849,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("2".to_string()),
@@ -884,6 +890,7 @@ mod tests {
                 name: "GFBio".to_string(),
                 description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
                         layer_id: LayerId("2".to_string()),
@@ -979,6 +986,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("1".to_string()),
@@ -988,6 +996,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("2".to_string()),
@@ -1028,6 +1037,7 @@ mod tests {
                 name: "GFBio".to_string(),
                 description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
                         layer_id: LayerId("2".to_string()),

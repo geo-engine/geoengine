@@ -1,10 +1,11 @@
 use super::MachineLearningError;
 use crate::machine_learning::error::{MultipleInputsNotSupported, Ort};
+use geoengine_datatypes::{machine_learning::MlModelMetadata, raster::RasterDataType};
 use geoengine_datatypes::{
     machine_learning::{MlModelMetadata, TensorShape3D},
     raster::RasterDataType,
 };
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use std::path::Path;
 
 pub fn load_model_metadata(path: &Path) -> Result<MlModelMetadata, MachineLearningError> {

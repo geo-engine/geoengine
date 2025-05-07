@@ -41,7 +41,7 @@ use log::debug;
 use postgres_types::{FromSql, ToSql};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
@@ -251,6 +251,7 @@ impl SentinelS2L2aCogsDataProvider {
                             .expect("Gdal source is a valid operator."),
                         },
                         symbology: Some(Symbology::Raster(RasterSymbology {
+                            r#type: Default::default(),
                             opacity: 1.0,
                             raster_colorizer: RasterColorizer::SingleBand {
                                 band: 0, band_colorizer:
@@ -330,6 +331,7 @@ impl LayerCollectionProvider for SentinelS2L2aCogsDataProvider {
             .values()
             .map(|d| {
                 Ok(CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: d.listing.id.clone(),
                     name: d.listing.name.clone(),
                     description: d.listing.description.clone(),
@@ -452,7 +454,7 @@ impl SentinelS2L2aCogsMetaData {
         let num_features = features.len();
         let mut known_time_start: Option<TimeInstance> = None;
         let mut known_time_end: Option<TimeInstance> = None;
-        debug!("number of features in current zone: {}", num_features);
+        debug!("number of features in current zone: {num_features}");
         for i in 0..num_features {
             let feature = &features[i];
 
@@ -861,10 +863,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -903,7 +905,7 @@ mod tests {
     use geoengine_datatypes::{
         dataset::{DatasetId, ExternalDataId},
         primitives::{BandSelection, SpatialPartition2D, SpatialResolution},
-        util::{gdal::hide_gdal_errors, test::TestDefault, Identifier},
+        util::{Identifier, gdal::hide_gdal_errors, test::TestDefault},
     };
     use geoengine_operators::{
         engine::{
@@ -913,10 +915,9 @@ mod tests {
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
     use httptest::{
-        all_of,
+        Expectation, Server, all_of,
         matchers::{contains, request, url_decoded},
         responders::{self},
-        Expectation, Server,
     };
     use std::{fs::File, io::BufReader, str::FromStr};
     use tokio_postgres::NoTls;
@@ -1119,7 +1120,7 @@ mod tests {
                 )))),
                 request::query(url_decoded(contains((
                     "datetime",
-                    // default case adds one minute to the start/end of the query to catch elements before/after 
+                    // default case adds one minute to the start/end of the query to catch elements before/after
                     "2021-09-23T08:09:44+00:00/2021-09-23T08:11:44+00:00"
                 )))),
             ])

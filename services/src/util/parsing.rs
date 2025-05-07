@@ -1,8 +1,8 @@
 use crate::api::model::datatypes::BandSelection;
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution};
+use serde::Deserialize;
 use serde::de;
 use serde::de::Error;
-use serde::Deserialize;
 use std::fmt;
 use std::marker::PhantomData;
 use std::str::FromStr;

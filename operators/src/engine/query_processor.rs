@@ -6,8 +6,8 @@ use super::{RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor};
 use crate::processing::RasterTypeConversionQueryProcessor;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::Stream;
+use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     DataCollection, MultiLineStringCollection, MultiPolygonCollection,
 };
@@ -28,9 +28,9 @@ pub trait QueryProcessor: Send + Sync {
     type SpatialBounds: AxisAlignedRectangle + Send + Sync;
     type Selection: QueryAttributeSelection;
     type ResultDescription: ResultDescriptor<
-        QueryRectangleSpatialBounds = Self::SpatialBounds,
-        QueryRectangleAttributeSelection = Self::Selection,
-    >;
+            QueryRectangleSpatialBounds = Self::SpatialBounds,
+            QueryRectangleAttributeSelection = Self::Selection,
+        >;
 
     /// inner logic of the processor
     async fn _query<'a>(

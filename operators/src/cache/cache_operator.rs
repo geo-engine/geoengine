@@ -12,7 +12,7 @@ use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
-use futures::{ready, Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt, TryStreamExt, ready};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, Geometry, QueryAttributeSelection, QueryRectangle, VectorQueryRectangle,
@@ -23,7 +23,7 @@ use geoengine_datatypes::util::helpers::ge_report;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 /// A cache operator that caches the results of its source operator
 pub struct InitializedCacheOperator<S> {
@@ -227,7 +227,7 @@ where
         let query_id = shared_cache.insert_query(&self.cache_key, &query).await;
 
         if let Err(e) = query_id {
-            log::debug!("could not insert query into cache: {}", e);
+            log::debug!("could not insert query into cache: {e}");
             return Ok(source_stream);
         }
 
@@ -246,26 +246,19 @@ where
                             .insert_query_element(&cache_key, &query_id, tile)
                             .await;
                         log::trace!(
-                            "inserted tile into cache for cache key {} and query id {}. result: {:?}",
-                            cache_key,
-                            query_id,
-                            result
+                            "inserted tile into cache for cache key {cache_key} and query id {query_id}. result: {result:?}"
                         );
                     }
                     SourceStreamEvent::Abort => {
                         tile_cache.abort_query(&cache_key, &query_id).await;
                         log::debug!(
-                            "aborted cache insertion for cache key {} and query id {}",
-                            cache_key,
-                            query_id
+                            "aborted cache insertion for cache key {cache_key} and query id {query_id}"
                         );
                     }
                     SourceStreamEvent::Finished => {
                         let result = tile_cache.finish_query(&cache_key, &query_id).await;
                         log::debug!(
-                            "finished cache insertion for cache key {} and query id {}, result: {:?}",
-                            cache_key,query_id,
-                            result
+                            "finished cache insertion for cache key {cache_key} and query id {query_id}, result: {result:?}"
                         );
                     }
                 }
@@ -371,7 +364,7 @@ where
             // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
             let r = self.stream_event_sender.send(SourceStreamEvent::Abort);
             if let Err(e) = r {
-                log::debug!("could not send abort to cache: {}", e.to_string());
+                log::debug!("could not send abort to cache: {e}");
             }
         }
     }

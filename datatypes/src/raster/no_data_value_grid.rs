@@ -2,7 +2,7 @@ use super::{
     EmptyGrid, Grid, GridIndexAccess, GridOrEmpty, GridShape1D, GridShape2D, GridShape3D, GridSize,
     MaskedGrid,
 };
-use crate::util::{helpers::equals_or_both_nan, Result};
+use crate::util::{Result, helpers::equals_or_both_nan};
 
 pub type NoDataValueGrid1D<T> = NoDataValueGrid<GridShape1D, T>;
 pub type NoDataValueGrid2D<T> = NoDataValueGrid<GridShape2D, T>;

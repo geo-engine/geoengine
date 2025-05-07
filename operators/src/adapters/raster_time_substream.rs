@@ -5,9 +5,8 @@ use std::{
 
 use crate::util::Result;
 use futures::{
-    ready,
+    Future, ready,
     stream::{FusedStream, Stream},
-    Future,
 };
 use geoengine_datatypes::{
     primitives::TimeInterval,

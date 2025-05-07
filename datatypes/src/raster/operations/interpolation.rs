@@ -249,7 +249,12 @@ mod tests {
     #[test]
     #[allow(clippy::float_cmp)]
     fn bilinear_fn() {
-        let [(a_x, a_y, a_v), (_b_x, b_y, b_v), (c_x, _c_y, c_v), (_d_x, _d_y, d_v)] = [
+        let [
+            (a_x, a_y, a_v),
+            (_b_x, b_y, b_v),
+            (c_x, _c_y, c_v),
+            (_d_x, _d_y, d_v),
+        ] = [
             (54.5, 17.041_667, 31.993),
             (54.5, 17.083_333, 31.911),
             (54.458_333, 17.041_667, 31.945),

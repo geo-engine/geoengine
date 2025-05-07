@@ -4,7 +4,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     primitives::{
         BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval,
@@ -257,7 +257,7 @@ where
         let stream = self.raster.query(query, ctx).await?.chunks(2).map(|chunk| {
             if chunk.len() != 2 {
                 // if there are not exactly two tiles, it should mean the last tile was an error and the chunker ended prematurely
-                if let Some(Err(e)) = chunk.into_iter().last() {
+                if let Some(Err(e)) = chunk.into_iter().next_back() {
                     return Err(e);
                 }
                 // if there is no error, the source did not produce all bands, which likely means a bug in an operator

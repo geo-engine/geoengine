@@ -5,7 +5,7 @@ use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTrack
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::HashMap, time::Duration};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -86,9 +86,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
         if self.mode == QuotaTrackingMode::Disabled {
             // if the quota tracking is disabled, we still consume the messages in order to empty the channel, but ignore the messages
             crate::util::spawn(async move {
-                while let Some(_message) = self.quota_receiver.recv().await {
-                    continue;
-                }
+                while let Some(_message) = self.quota_receiver.recv().await {}
             });
 
             return;
@@ -222,7 +220,7 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         ge_context,
         users::{UserAuth, UserCredentials, UserRegistration},
-        util::tests::{admin_login, MockQuotaTracking},
+        util::tests::{MockQuotaTracking, admin_login},
     };
     use tokio_postgres::NoTls;
 

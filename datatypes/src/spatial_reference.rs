@@ -88,7 +88,7 @@ impl SpatialReference {
     pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
         let proj_string = self.proj_string()?;
 
-        let proj = Proj::new(&proj_string).ok_or(error::Error::InvalidProjDefinition {
+        let proj = Proj::new(&proj_string).map_err(|_| error::Error::InvalidProjDefinition {
             proj_definition: proj_string.clone(),
         })?;
         let area = proj
@@ -193,7 +193,7 @@ impl FromStr for SpatialReferenceAuthority {
             _ => {
                 return Err(error::Error::InvalidSpatialReferenceString {
                     spatial_reference_string: s.into(),
-                })
+                });
             }
         })
     }
@@ -221,8 +221,9 @@ impl TryFrom<SpatialRef> for SpatialReference {
     type Error = error::Error;
 
     fn try_from(value: SpatialRef) -> Result<Self, Self::Error> {
+        let auth_name = value.auth_name().map_or_else(|| value.authority(), Ok)?;
         Ok(SpatialReference::new(
-            SpatialReferenceAuthority::from_str(&value.auth_name()?)?,
+            SpatialReferenceAuthority::from_str(&auth_name)?,
             value.auth_code()? as u32,
         ))
     }
@@ -546,7 +547,9 @@ mod tests {
             "EPSG:4326"
         );
         assert_eq!(
-            SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81).proj_string().unwrap(),
+            SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81)
+                .proj_string()
+                .unwrap(),
             "+proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs +type=crs"
         );
         assert_eq!(
@@ -561,9 +564,11 @@ mod tests {
                 .unwrap(),
             "ESRI:42"
         );
-        assert!(SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1)
-            .proj_string()
-            .is_err());
+        assert!(
+            SpatialReference::new(SpatialReferenceAuthority::SrOrg, 1)
+                .proj_string()
+                .is_err()
+        );
     }
 
     #[test]

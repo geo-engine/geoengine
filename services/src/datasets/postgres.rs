@@ -13,10 +13,10 @@ use crate::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
 use crate::util::postgres::PostgresErrorExt;
 use async_trait::async_trait;
-use bb8_postgres::bb8::PooledConnection;
-use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
-use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::PostgresConnectionManager;
+use bb8_postgres::bb8::PooledConnection;
+use bb8_postgres::tokio_postgres::Socket;
+use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
@@ -415,10 +415,10 @@ where
     ) -> geoengine_operators::util::Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)
@@ -463,7 +463,7 @@ where
             })?
         {
             return Err(geoengine_operators::error::Error::PermissionDenied);
-        };
+        }
 
         let stmt = tx
             .prepare(
@@ -549,7 +549,7 @@ where
             })?
         {
             return Err(geoengine_operators::error::Error::PermissionDenied);
-        };
+        }
 
         let stmt = tx
             .prepare(
@@ -936,16 +936,23 @@ mod tests {
 
         // check that other user B cannot access datasets of user A
 
-        assert!(db_b
-            .dataset_autocomplete_search(None, "Ogr".to_owned(), 10, 0)
+        assert!(
+            db_b.dataset_autocomplete_search(None, "Ogr".to_owned(), 10, 0)
+                .await
+                .unwrap()
+                .is_empty()
+        );
+        assert!(
+            db_b.dataset_autocomplete_search(
+                Some(vec!["upload".to_string()]),
+                "Ogr".to_owned(),
+                10,
+                0
+            )
             .await
             .unwrap()
-            .is_empty());
-        assert!(db_b
-            .dataset_autocomplete_search(Some(vec!["upload".to_string()]), "Ogr".to_owned(), 10, 0)
-            .await
-            .unwrap()
-            .is_empty());
+            .is_empty()
+        );
     }
 
     #[ge_context::test]

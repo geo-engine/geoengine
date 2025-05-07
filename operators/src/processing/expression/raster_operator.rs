@@ -1,7 +1,6 @@
 use super::{
-    get_expression_dependencies,
+    RasterExpressionError, get_expression_dependencies,
     raster_query_processor::{ExpressionInput, ExpressionQueryProcessor},
-    RasterExpressionError,
 };
 use crate::{
     engine::{
@@ -25,7 +24,7 @@ use std::borrow::Cow;
 
 /// Parameters for the `Expression` operator.
 /// * The `expression` must only contain simple arithmetic
-///     calculations.
+///   calculations.
 /// * `output_type` is the data type of the produced raster tiles.
 /// * `output_no_data_value` is the no data value of the output raster
 /// * `output_measurement` is the measurement description of the output
@@ -111,10 +110,11 @@ impl RasterOperator for Expression {
             time: in_descriptor.time,
             bbox: in_descriptor.bbox,
             resolution: in_descriptor.resolution,
-            bands: RasterBandDescriptors::new(vec![self
-                .params
-                .output_band
-                .unwrap_or(RasterBandDescriptor::new_unitless("expression".into()))])?,
+            bands: RasterBandDescriptors::new(vec![
+                self.params
+                    .output_band
+                    .unwrap_or(RasterBandDescriptor::new_unitless("expression".into())),
+            ])?,
         };
 
         let initialized_operator = InitializedExpression {

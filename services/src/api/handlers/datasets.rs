@@ -1,21 +1,22 @@
 use crate::{
     api::model::{
         operators::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
-        responses::datasets::{errors::*, DatasetNameResponse},
+        responses::{
+            ErrorResponse,
+            datasets::{DatasetNameResponse, errors::*},
+        },
         services::{
             AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
-            MetaDataSuggestion, Provenances, UpdateDataset,
+            MetaDataSuggestion, Provenances, UpdateDataset, Volume,
         },
     },
-    config::{get_config_element, Data},
+    config::{Data, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
-        listing::{DatasetListOptions, DatasetProvider},
-        storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
-        upload::{
-            AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, Volume, VolumeName, Volumes,
-        },
         DatasetName,
+        listing::{DatasetListOptions, DatasetListing, DatasetProvider},
+        storage::{AutoCreateDataset, Dataset, DatasetStore, SuggestMetaData},
+        upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, VolumeName, Volumes},
     },
     error::{self, Error, Result},
     permissions::{Permission, PermissionDb, Role},
@@ -25,10 +26,10 @@ use crate::{
         path_with_base_path,
     },
 };
-use actix_web::{web, FromRequest, HttpResponse, HttpResponseBuilder, Responder};
+use actix_web::{FromRequest, HttpResponse, HttpResponseBuilder, Responder, web};
 use gdal::{
+    DatasetOptions,
     vector::{Layer, LayerAccess, OGRFieldType},
-    Dataset, DatasetOptions,
 };
 use geoengine_datatypes::{
     collections::VectorDataType,
@@ -61,7 +62,6 @@ use utoipa::{ToResponse, ToSchema};
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext,
-
     C::Session: FromRequest,
 {
     cfg.service(
@@ -317,7 +317,7 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
     dataset: web::Path<DatasetName>,
     session: C::Session,
     app_ctx: web::Data<C>,
-) -> Result<impl Responder> {
+) -> Result<web::Json<MetaDataDefinition>> {
     let session_ctx = app_ctx.session_context(session).db();
 
     let real_dataset = dataset.into_inner();
@@ -333,7 +333,7 @@ pub async fn get_loading_info_handler<C: ApplicationContext>(
 
     let dataset = session_ctx.load_loading_info(&dataset_id).await?;
 
-    Ok(web::Json(dataset))
+    Ok(web::Json(dataset.into()))
 }
 
 /// Updates the dataset's loading info
@@ -546,7 +546,7 @@ pub fn add_tag(properties: &mut AddDataset, tag: String) {
     path = "/dataset/auto",
     request_body = AutoCreateDataset,
     responses(
-        (status = 200, response = DatasetNameResponse),
+        (status = 200, body = DatasetNameResponse),
         (status = 400, description = "Bad request", body = ErrorResponse, examples(
             ("Body is invalid json" = (value = json!({
                 "error": "BodyDeserializeError",
@@ -765,6 +765,7 @@ pub async fn suggest_meta_data_handler<C: ApplicationContext>(
             main_file,
             layer_name: String::new(),
             meta_data: MetaDataDefinition::GdalMetaDataList(GdalMetaDataList {
+                r#type: Default::default(),
                 result_descriptor: result_descriptor.into(),
                 params: vec![GdalLoadingInfoTemporalSlice {
                     time: TimeInterval::default().into(),
@@ -796,10 +797,10 @@ fn suggest_main_file(upload: &Upload) -> Option<String> {
 
 #[allow(clippy::ref_option)]
 fn select_layer_from_dataset<'a>(
-    dataset: &'a Dataset,
+    dataset: &'a gdal::Dataset,
     layer_name: &Option<String>,
 ) -> Result<Layer<'a>> {
-    if let Some(ref layer_name) = layer_name {
+    if let Some(layer_name) = layer_name {
         dataset.layer_by_name(layer_name).map_err(|_| {
             crate::error::Error::DatasetInvalidLayerName {
                 layer_name: layer_name.clone(),
@@ -824,7 +825,7 @@ fn auto_detect_vector_meta_data_definition(
 
 #[allow(clippy::ref_option)]
 fn auto_detect_vector_meta_data_definition_from_dataset(
-    dataset: &Dataset,
+    dataset: &gdal::Dataset,
     main_file_path: &Path,
     layer_name: &Option<String>,
 ) -> Result<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>> {
@@ -1082,7 +1083,7 @@ fn detect_vector_geometry(layer: &Layer) -> DetectedGeometry {
 }
 
 struct GdalAutoDetect {
-    dataset: Dataset,
+    dataset: gdal::Dataset,
     x: String,
     y: Option<String>,
 }
@@ -1295,7 +1296,7 @@ pub async fn list_volume_file_layers_handler<C: ApplicationContext>(
     path = "/dataset", 
     request_body = CreateDataset,
     responses(
-        (status = 200, response = DatasetNameResponse),
+        (status = 200, body = DatasetNameResponse),
     ),
     security(
         ("session_token" = [])
@@ -1332,12 +1333,15 @@ async fn create_system_dataset<C: ApplicationContext>(
         .get(&volume_name)
         .ok_or(CreateDatasetError::UnknownVolume)?;
     let volume = Volume {
-        name: volume_name,
-        path: volume_path.clone(),
+        name: volume_name.to_string(),
+        path: Some(volume_path.to_string_lossy().into()),
     };
 
-    adjust_meta_data_path(&mut definition.meta_data, &volume)
-        .context(CannotResolveUploadFilePath)?;
+    adjust_meta_data_path(
+        &mut definition.meta_data,
+        &crate::datasets::upload::Volume::from(&volume),
+    )
+    .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
 
@@ -1367,14 +1371,14 @@ async fn create_system_dataset<C: ApplicationContext>(
 mod tests {
     use super::*;
     use crate::api::model::datatypes::NamedData;
-    use crate::api::model::responses::datasets::DatasetNameResponse;
     use crate::api::model::responses::IdResponse;
+    use crate::api::model::responses::datasets::DatasetNameResponse;
     use crate::api::model::services::{DatasetDefinition, Provenance};
     use crate::contexts::PostgresContext;
     use crate::contexts::{Session, SessionId};
+    use crate::datasets::DatasetIdAndName;
     use crate::datasets::storage::DatasetStore;
     use crate::datasets::upload::{UploadId, VolumeName};
-    use crate::datasets::DatasetIdAndName;
     use crate::error::Result;
     use crate::ge_context;
     use crate::projects::{PointSymbology, RasterSymbology, Symbology};
@@ -1382,8 +1386,8 @@ mod tests {
     use crate::users::UserAuth;
     use crate::util::tests::admin_login;
     use crate::util::tests::{
-        add_file_definition_to_datasets, read_body_json, read_body_string, send_test_request,
-        MockQueryContext, SetMultipartBody, TestDataUploads,
+        MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
+        read_body_json, read_body_string, send_test_request,
     };
     use actix_web;
     use actix_web::http::header;
@@ -1404,7 +1408,7 @@ mod tests {
         OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
     };
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -2661,24 +2665,26 @@ mod tests {
             name: dataset_name,
         } = db.add_dataset(ds.into(), meta).await?;
 
-        let update = crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
-            loading_info: OgrSourceDataset {
-                file_name: "foo.bar".into(),
-                layer_name: "baz".to_string(),
-                data_type: None,
-                time: Default::default(),
-                default_geometry: None,
-                columns: None,
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Ignore,
-                sql_query: None,
-                attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
-            },
-            result_descriptor: descriptor,
-            phantom: Default::default(),
-        });
+        let update: MetaDataDefinition =
+            crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: "foo.bar".into(),
+                    layer_name: "baz".to_string(),
+                    data_type: None,
+                    time: Default::default(),
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
+                },
+                result_descriptor: descriptor,
+                phantom: Default::default(),
+            })
+            .into();
 
         let req = actix_web::test::TestRequest::put()
             .uri(&format!("/dataset/{dataset_name}/loadingInfo"))
@@ -2689,7 +2695,7 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
         assert_eq!(res.status(), 200);
 
-        let loading_info = db.load_loading_info(&id).await.unwrap();
+        let loading_info: MetaDataDefinition = db.load_loading_info(&id).await.unwrap().into();
 
         assert_eq!(loading_info, update);
 
@@ -2707,6 +2713,7 @@ mod tests {
         } = add_file_definition_to_datasets(&ctx.db(), test_data!("dataset_defs/ndvi.json")).await;
 
         let symbology = Symbology::Raster(RasterSymbology {
+            r#type: Default::default(),
             opacity: 1.0,
             raster_colorizer: RasterColorizer::SingleBand {
                 band: 0,

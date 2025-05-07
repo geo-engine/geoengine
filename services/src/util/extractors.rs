@@ -1,9 +1,9 @@
 use std::fmt;
 
 use actix_http::Payload;
-use actix_web::{web, FromRequest, HttpRequest};
-use futures::future::LocalBoxFuture;
+use actix_web::{FromRequest, HttpRequest, web};
 use futures::FutureExt;
+use futures::future::LocalBoxFuture;
 use serde::de::DeserializeOwned;
 use validator::Validate;
 

@@ -1,7 +1,7 @@
 use crate::api::model::datatypes::LayerId;
 use crate::contexts::{ApplicationContext, GeoEngineDb, SessionContext};
-use crate::datasets::storage::DatasetDb;
 use crate::datasets::DatasetName;
+use crate::datasets::storage::DatasetDb;
 use crate::error::{self, Error, Result};
 use crate::layers::listing::LayerCollectionId;
 use crate::machine_learning::MlModelDb;
@@ -9,9 +9,10 @@ use crate::permissions::{
     Permission, PermissionDb, PermissionListing as DbPermissionListing, ResourceId, Role, RoleId,
 };
 use crate::projects::ProjectId;
-use actix_web::{web, FromRequest, HttpResponse};
+use actix_web::{FromRequest, HttpResponse, web};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::machine_learning::MlModelName;
+use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::str::FromStr;
@@ -21,7 +22,6 @@ use uuid::Uuid;
 pub(crate) fn init_permissions_routes<C>(cfg: &mut web::ServiceConfig)
 where
     C: ApplicationContext,
-
     C::Session: FromRequest,
 {
     cfg.service(
@@ -70,18 +70,52 @@ impl PermissionListing {
 
 /// A resource that is affected by a permission.
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
-#[serde(rename_all = "camelCase", tag = "type", content = "id")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum Resource {
-    #[schema(title = "LayerResource")]
-    Layer(LayerId), // TODO: check model
-    #[schema(title = "LayerCollectionResource")]
-    LayerCollection(LayerCollectionId),
-    #[schema(title = "ProjectResource")]
-    Project(ProjectId),
-    #[schema(title = "DatasetResource")]
-    Dataset(DatasetName), // TODO: add a DatasetName to model!
-    #[schema(title = "MlModelResource")]
-    MlModel(MlModelName),
+    Layer(LayerResource),
+    LayerCollection(LayerCollectionResource),
+    Project(ProjectResource),
+    Dataset(DatasetResource),
+    MlModel(MlModelResource),
+}
+
+#[type_tag(value = "layer")]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerResource {
+    pub id: LayerId,
+}
+
+#[type_tag(value = "layerCollection")]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LayerCollectionResource {
+    pub id: LayerCollectionId,
+}
+
+#[type_tag(value = "project")]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectResource {
+    pub id: ProjectId,
+}
+
+#[type_tag(value = "dataset")]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DatasetResource {
+    pub id: DatasetName,
+}
+
+#[type_tag(value = "mlModel")]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModelResource {
+    #[schema(value_type = String)]
+    pub id: MlModelName,
+    // TODO: add a DatasetName to model
+    // TODO: check model
 }
 
 impl Resource {
@@ -90,22 +124,22 @@ impl Resource {
         db: &D,
     ) -> Result<ResourceId> {
         match self {
-            Resource::Layer(layer) => Ok(ResourceId::Layer(layer.clone().into())),
+            Resource::Layer(layer) => Ok(ResourceId::Layer(layer.id.clone().into())),
             Resource::LayerCollection(layer_collection) => {
-                Ok(ResourceId::LayerCollection(layer_collection.clone()))
+                Ok(ResourceId::LayerCollection(layer_collection.id.clone()))
             }
-            Resource::Project(project_id) => Ok(ResourceId::Project(*project_id)),
+            Resource::Project(project_id) => Ok(ResourceId::Project(project_id.id)),
             Resource::Dataset(dataset_name) => {
-                let dataset_id_option = db.resolve_dataset_name_to_id(dataset_name).await?;
+                let dataset_id_option = db.resolve_dataset_name_to_id(&dataset_name.id).await?;
                 dataset_id_option
                     .ok_or(error::Error::UnknownResource {
                         kind: "Dataset".to_owned(),
-                        name: dataset_name.to_string(),
+                        name: dataset_name.id.to_string(),
                     })
                     .map(ResourceId::DatasetId)
             }
             Resource::MlModel(model_name) => {
-                let actual_name = model_name.clone().into();
+                let actual_name = model_name.id.clone().into();
                 let model_id_option =
                     db.resolve_model_name_to_id(&actual_name)
                         .await
@@ -129,18 +163,31 @@ impl TryFrom<(String, String)> for Resource {
     /// Transform a tuple of `String` into a `Resource`. The first element is used as type and the second element as the id / name.
     fn try_from(value: (String, String)) -> Result<Self> {
         Ok(match value.0.as_str() {
-            "layer" => Resource::Layer(LayerId(value.1)),
-            "layerCollection" => Resource::LayerCollection(LayerCollectionId(value.1)),
-            "project" => {
-                Resource::Project(ProjectId(Uuid::from_str(&value.1).context(error::Uuid)?))
-            }
-            "dataset" => Resource::Dataset(DatasetName::from_str(&value.1)?),
-            "mlModel" => Resource::MlModel(MlModelName::from_str(&value.1)?),
+            "layer" => Resource::Layer(LayerResource {
+                r#type: Default::default(),
+                id: LayerId(value.1),
+            }),
+            "layerCollection" => Resource::LayerCollection(LayerCollectionResource {
+                r#type: Default::default(),
+                id: LayerCollectionId(value.1),
+            }),
+            "project" => Resource::Project(ProjectResource {
+                r#type: Default::default(),
+                id: ProjectId(Uuid::from_str(&value.1).context(error::Uuid)?),
+            }),
+            "dataset" => Resource::Dataset(DatasetResource {
+                r#type: Default::default(),
+                id: DatasetName::from_str(&value.1)?,
+            }),
+            "mlModel" => Resource::MlModel(MlModelResource {
+                r#type: Default::default(),
+                id: MlModelName::from_str(&value.1)?,
+            }),
             _ => {
                 return Err(Error::InvalidResourceId {
                     resource_type: value.0,
                     resource_id: value.1,
-                })
+                });
             }
         })
     }
@@ -300,7 +347,7 @@ mod tests {
         mock::{MockPointSource, MockPointSourceParams},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -356,11 +403,12 @@ mod tests {
 
         // check that workflow can only be intitialized after adding permissions
 
-        assert!(gdal
-            .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_err());
+        assert!(
+            gdal.clone()
+                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_err()
+        );
 
         admin_ctx
             .db()
@@ -372,16 +420,18 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(gdal
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_ok());
+        assert!(
+            gdal.initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_ok()
+        );
 
-        assert!(ogr
-            .clone()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_err());
+        assert!(
+            ogr.clone()
+                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_err()
+        );
 
         admin_ctx
             .db()
@@ -393,10 +443,11 @@ mod tests {
             .await
             .unwrap();
 
-        assert!(ogr
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_ok());
+        assert!(
+            ogr.initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_ok()
+        );
     }
 
     #[ge_context::test]
@@ -421,42 +472,41 @@ mod tests {
         let res_body = serde_json::from_str::<Value>(&read_body_string(res).await).unwrap();
         assert_eq!(res_status, 200, "{res_body}");
 
-        assert_eq!(
-            res_body,
-            json!([{
-                   "permission":"Owner",
-                   "resource":  {
-                       "id": dataset_name.to_string(),
-                       "type": "dataset"
-                   },
-                   "role": {
-                       "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
-                       "name":
-                       "admin"
-                   }
-               }, {
-                   "permission": "Read",
-                   "resource": {
-                       "id": dataset_name.to_string(),
-                       "type": "dataset"
-                   },
-                   "role": {
-                       "id": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
-                       "name": "anonymous"
-                   }
-               }, {
-                   "permission": "Read",
-                   "resource": {
-                       "id": dataset_name.to_string(),
-                       "type": "dataset",
-                   },
-                   "role": {
-                       "id": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
-                       "name": "user"
-                   }
-               }]
-            )
+        let expected_result = json!([{
+               "permission":"Owner",
+               "resource":  {
+                   "id": dataset_name.to_string(),
+                   "type": "dataset"
+               },
+               "role": {
+                   "id": "d5328854-6190-4af9-ad69-4e74b0961ac9",
+                   "name":
+                   "admin"
+               }
+           }, {
+               "permission": "Read",
+               "resource": {
+                   "id": dataset_name.to_string(),
+                   "type": "dataset"
+               },
+               "role": {
+                   "id": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
+                   "name": "anonymous"
+               }
+           }, {
+               "permission": "Read",
+               "resource": {
+                   "id": dataset_name.to_string(),
+                   "type": "dataset",
+               },
+               "role": {
+                   "id": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
+                   "name": "user"
+               }
+           }]
         );
+
+        assert_eq!(res_body, expected_result, "{res_body} != {expected_result}");
     }
 
     #[ge_context::test]
@@ -653,28 +703,49 @@ mod tests {
         let test_uuid = Uuid::new_v4();
 
         let layer_res = Resource::try_from(("layer".to_owned(), "cats".to_owned())).unwrap();
-        assert_eq!(layer_res, Resource::Layer(LayerId("cats".to_owned())));
+        assert_eq!(
+            layer_res,
+            Resource::Layer(LayerResource {
+                r#type: Default::default(),
+                id: LayerId("cats".to_owned())
+            })
+        );
 
         let layer_col_res =
             Resource::try_from(("layerCollection".to_owned(), "cats".to_owned())).unwrap();
         assert_eq!(
             layer_col_res,
-            Resource::LayerCollection(LayerCollectionId("cats".to_owned()))
+            Resource::LayerCollection(LayerCollectionResource {
+                r#type: Default::default(),
+                id: LayerCollectionId("cats".to_owned())
+            })
         );
 
         let project_res = Resource::try_from(("project".to_owned(), test_uuid.into())).unwrap();
-        assert_eq!(project_res, Resource::Project(ProjectId(test_uuid)));
+        assert_eq!(
+            project_res,
+            Resource::Project(ProjectResource {
+                r#type: Default::default(),
+                id: ProjectId(test_uuid)
+            })
+        );
 
         let dataset_res = Resource::try_from(("dataset".to_owned(), "cats".to_owned())).unwrap();
         assert_eq!(
             dataset_res,
-            Resource::Dataset(DatasetName::new(None, "cats".to_owned()))
+            Resource::Dataset(DatasetResource {
+                r#type: Default::default(),
+                id: DatasetName::new(None, "cats".to_owned())
+            })
         );
 
         let ml_model_res = Resource::try_from(("mlModel".to_owned(), "cats".to_owned())).unwrap();
         assert_eq!(
             ml_model_res,
-            Resource::MlModel(MlModelName::new(None, "cats".to_owned()))
+            Resource::MlModel(MlModelResource {
+                r#type: Default::default(),
+                id: MlModelName::new(None, "cats".to_owned())
+            })
         );
     }
 }

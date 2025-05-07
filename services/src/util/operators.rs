@@ -36,7 +36,7 @@ pub fn source_operator_from_dataset(
         s => {
             return Err(crate::error::Error::UnknownOperator {
                 operator: s.to_owned(),
-            })
+            });
         }
     })
 }

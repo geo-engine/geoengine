@@ -43,11 +43,7 @@ type_cast_lossy_into_impl!(i64, f64);
 impl LossyInto<f64> for bool {
     /// This function allows transforming booleans to 0/1 `f64`s
     fn lossy_into(self) -> f64 {
-        if self {
-            1.
-        } else {
-            0.
-        }
+        if self { 1. } else { 0. }
     }
 }
 

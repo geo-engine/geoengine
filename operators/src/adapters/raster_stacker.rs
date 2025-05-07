@@ -1,7 +1,7 @@
 use crate::util::Result;
 use futures::future::JoinAll;
 use futures::stream::{Fuse, FusedStream, Stream};
-use futures::{ready, Future, StreamExt};
+use futures::{Future, StreamExt, ready};
 use geoengine_datatypes::primitives::{
     BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
 };
@@ -313,28 +313,37 @@ where
                         };
 
                         debug_assert_eq!(
-                                tile.band, *current_band as u32,
-                                "RasterStacker got tile with unexpected band index: expected {}, got {} for source {}",
-                                current_band,
-                                tile.band,
-                                current_stream
-                            );
+                            tile.band, *current_band as u32,
+                            "RasterStacker got tile with unexpected band index: expected {}, got {} for source {}",
+                            current_band, tile.band, current_stream
+                        );
 
                         debug_assert!(
-                                tile.time.contains(time_slice),
-                                "RasterStacker got tile with unexpected time: time slice [{}, {}) not contained in tile time [{}, {}) for source {}",
-                                time_slice.start().as_datetime_string(),
-                                time_slice.end().as_datetime_string(),
-                                tile.time.start().as_datetime_string(),
-                                tile.time.end().as_datetime_string(),
-                                current_stream
-                            );
+                            tile.time.contains(time_slice),
+                            "RasterStacker got tile with unexpected time: time slice [{}, {}) not contained in tile time [{}, {}) for source {}",
+                            time_slice.start().as_datetime_string(),
+                            time_slice.end().as_datetime_string(),
+                            tile.time.start().as_datetime_string(),
+                            tile.time.end().as_datetime_string(),
+                            current_stream
+                        );
 
                         debug_assert_eq!(
-                                Some(tile.tile_position), Self::grid_idx_for_nth_tile(&tile.tile_information(), query_rect.spatial_bounds, *current_spatial_tile),
-                                "RasteStacker got tile with unexpected tile_position: expected {:?}, got {:?} for source {}",
-                                Self::grid_idx_for_nth_tile(&tile.tile_information(), query_rect.spatial_bounds, *current_spatial_tile), tile.tile_position, current_stream
-                            );
+                            Some(tile.tile_position),
+                            Self::grid_idx_for_nth_tile(
+                                &tile.tile_information(),
+                                query_rect.spatial_bounds,
+                                *current_spatial_tile
+                            ),
+                            "RasteStacker got tile with unexpected tile_position: expected {:?}, got {:?} for source {}",
+                            Self::grid_idx_for_nth_tile(
+                                &tile.tile_information(),
+                                query_rect.spatial_bounds,
+                                *current_spatial_tile
+                            ),
+                            tile.tile_position,
+                            current_stream
+                        );
 
                         tile.band = sources
                             .iter()
@@ -679,14 +688,16 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
 
         let stacker = RasterStackerAdapter::new(
-            vec![(
-                QueryWrapper {
-                    p: &qp1,
-                    ctx: &query_ctx,
-                },
-                vec![0],
-            )
-                .into()],
+            vec![
+                (
+                    QueryWrapper {
+                        p: &qp1,
+                        ctx: &query_ctx,
+                    },
+                    vec![0],
+                )
+                    .into(),
+            ],
             PartialQueryRect {
                 spatial_bounds: SpatialPartition2D::new_unchecked([0., 1.].into(), [3., 0.].into()),
                 time_interval: TimeInterval::new_unchecked(0, 10),

@@ -2,7 +2,7 @@ use std::collections::{HashMap, HashSet};
 
 use utoipa::openapi::{OpenApi, RefOr, Schema};
 
-use super::openapi_visitor::{visit_api, OpenapiVisitor};
+use super::openapi_visitor::{OpenapiVisitor, visit_api};
 
 struct CanResolveVisitor {
     pub unknown_ref: Option<String>,
@@ -67,11 +67,10 @@ pub fn get_schema_use_counts(api: &OpenApi) -> HashMap<String, usize> {
 mod tests {
     use geoengine_datatypes::hashmap;
     use utoipa::openapi::{
+        AllOfBuilder, ArrayBuilder, Components, ComponentsBuilder, ContentBuilder, HttpMethod,
+        Object, ObjectBuilder, OneOfBuilder, OpenApiBuilder, PathsBuilder, Ref, ResponseBuilder,
         path::{OperationBuilder, ParameterBuilder, PathItemBuilder},
         request_body::RequestBodyBuilder,
-        AllOfBuilder, ArrayBuilder, Components, ComponentsBuilder, ContentBuilder, Object,
-        ObjectBuilder, OneOfBuilder, OpenApiBuilder, PathItemType, PathsBuilder, Ref,
-        ResponseBuilder,
     };
 
     use crate::util::openapi_visitor::visit_schema;
@@ -194,7 +193,7 @@ mod tests {
                     "asdf",
                     PathItemBuilder::new()
                         .operation(
-                            PathItemType::Post,
+                            HttpMethod::Post,
                             OperationBuilder::new()
                                 .parameter(
                                     ParameterBuilder::new()
@@ -205,7 +204,7 @@ mod tests {
                                         .content(
                                             "application/json",
                                             ContentBuilder::new()
-                                                .schema(Ref::from_schema_name("Schema2"))
+                                                .schema(Some(Ref::from_schema_name("Schema2")))
                                                 .into(),
                                         )
                                         .into(),
@@ -215,7 +214,7 @@ mod tests {
                                     ResponseBuilder::new().content(
                                         "application/json",
                                         ContentBuilder::new()
-                                            .schema(Ref::from_schema_name("Schema3"))
+                                            .schema(Some(Ref::from_schema_name("Schema3")))
                                             .into(),
                                     ),
                                 ),
@@ -245,13 +244,13 @@ mod tests {
                     "asdf",
                     PathItemBuilder::new()
                         .operation(
-                            PathItemType::Post,
+                            HttpMethod::Post,
                             OperationBuilder::new().request_body(Some(
                                 RequestBodyBuilder::new()
                                     .content(
                                         "application/json",
                                         ContentBuilder::new()
-                                            .schema(Ref::from_schema_name("MissingSchema"))
+                                            .schema(Some(Ref::from_schema_name("MissingSchema")))
                                             .into(),
                                     )
                                     .into(),
@@ -282,7 +281,7 @@ mod tests {
                     "asdf",
                     PathItemBuilder::new()
                         .operation(
-                            PathItemType::Post,
+                            HttpMethod::Post,
                             OperationBuilder::new().parameter(
                                 ParameterBuilder::new()
                                     .schema(Some(Ref::from_schema_name("MissingSchema"))),
@@ -313,13 +312,13 @@ mod tests {
                     "asdf",
                     PathItemBuilder::new()
                         .operation(
-                            PathItemType::Post,
+                            HttpMethod::Post,
                             OperationBuilder::new().response(
                                 "200",
                                 ResponseBuilder::new().content(
                                     "application/json",
                                     ContentBuilder::new()
-                                        .schema(Ref::from_schema_name("MissingSchema"))
+                                        .schema(Some(Ref::from_schema_name("MissingSchema")))
                                         .into(),
                                 ),
                             ),

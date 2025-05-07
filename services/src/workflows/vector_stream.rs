@@ -1,10 +1,10 @@
 use crate::{contexts::SessionContext, error::Result};
 use actix::{
-    fut::wrap_future, Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler,
+    Actor, ActorContext, ActorFutureExt, AsyncContext, SpawnHandle, StreamHandler, fut::wrap_future,
 };
 use actix_http::ws::{CloseCode, CloseReason, Item};
 use actix_web_actors::ws;
-use futures::{stream::BoxStream, FutureExt, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{collections::FeatureCollectionIpc, primitives::VectorQueryRectangle};
 use geoengine_operators::{
     call_on_generic_vector_processor,

@@ -1,8 +1,8 @@
 use crate::{
-    dataset::{is_invalid_name_char, SYSTEM_NAMESPACE},
+    dataset::{SYSTEM_NAMESPACE, is_invalid_name_char},
     raster::{GridShape2D, GridSize, RasterDataType},
 };
-use serde::{de::Visitor, Deserialize, Serialize};
+use serde::{Deserialize, Serialize, de::Visitor};
 use snafu::Snafu;
 use std::path::PathBuf;
 use std::str::FromStr;

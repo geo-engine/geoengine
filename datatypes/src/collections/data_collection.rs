@@ -12,11 +12,11 @@ impl<'i> IntoGeometryOptionsIterator<'i> for DataCollection {
     type GeometryType = NoGeometry;
 
     fn geometry_options(&'i self) -> Self::GeometryOptionIterator {
-        NoGeometryIterator(std::iter::repeat(None).take(self.len()))
+        NoGeometryIterator(std::iter::repeat_n(None, self.len()))
     }
 }
 
-pub struct NoGeometryIterator(std::iter::Take<std::iter::Repeat<Option<NoGeometry>>>);
+pub struct NoGeometryIterator(std::iter::RepeatN<Option<NoGeometry>>);
 pub struct NoGeometryParIterator(NoGeometryIterator);
 
 impl Iterator for NoGeometryIterator {
@@ -39,7 +39,7 @@ impl ExactSizeIterator for NoGeometryIterator {}
 mod par_iter {
     use super::*;
     use rayon::iter::{
-        plumbing::Producer, IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
+        IndexedParallelIterator, IntoParallelIterator, ParallelIterator, plumbing::Producer,
     };
 
     impl IntoParallelIterator for NoGeometryIterator {
@@ -76,9 +76,9 @@ mod par_iter {
             let left_len = (0..index).len();
             let right_len = (index..n).len();
 
-            let left = NoGeometryIterator(std::iter::repeat(None).take(left_len));
+            let left = NoGeometryIterator(std::iter::repeat_n(None, left_len));
 
-            let right = NoGeometryIterator(std::iter::repeat(None).take(right_len));
+            let right = NoGeometryIterator(std::iter::repeat_n(None, right_len));
 
             (Self(left), Self(right))
         }

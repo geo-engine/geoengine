@@ -1,6 +1,6 @@
 use super::{
-    canonicalize_name, error::vector as error, get_expression_dependencies, AsExpressionGeo,
-    FromExpressionGeo, VectorExpressionError,
+    AsExpressionGeo, FromExpressionGeo, VectorExpressionError, canonicalize_name,
+    error::vector as error, get_expression_dependencies,
 };
 use crate::{
     engine::{
@@ -12,8 +12,8 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
     FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry, Measurement,
     MultiLineString, MultiPoint, MultiPolygon, VectorQueryRectangle,
@@ -28,8 +28,8 @@ use geoengine_datatypes::{
     primitives::NoGeometry,
 };
 use geoengine_expression::{
-    is_allowed_variable_name, DataType, ExpressionParser, LinkedExpression,
-    Parameter as ExpressionParameter,
+    DataType, ExpressionParser, LinkedExpression, Parameter as ExpressionParameter,
+    is_allowed_variable_name,
 };
 use rayon::iter::{
     FromParallelIterator, IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -242,7 +242,7 @@ fn check_output_column_validity(output_column: &OutputColumn) -> Result<(), Vect
                 })?;
             }
         }
-    };
+    }
 
     Ok(())
 }

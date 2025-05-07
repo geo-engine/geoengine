@@ -1,15 +1,15 @@
 use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
 use crate::api::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::config;
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error;
 use crate::error::Result;
-use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
+use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use futures::future::BoxFuture;
 use futures_util::TryStreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
@@ -483,9 +483,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
         initialized
     } else {
         log::debug!(
-            "WFS query srs: {}, workflow srs: {} --> injecting reprojection",
-            request_spatial_ref,
-            workflow_spatial_ref
+            "WFS query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
         );
 
         let reprojection_params = ReprojectionParams {

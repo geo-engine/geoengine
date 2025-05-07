@@ -1,6 +1,6 @@
 use bb8_postgres::{
-    bb8::{Pool, PooledConnection},
     PostgresConnectionManager,
+    bb8::{Pool, PooledConnection},
 };
 use futures::future::BoxFuture;
 use tokio_postgres::{NoTls, Transaction};
@@ -731,6 +731,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn it_compares_schemas() {
         assert_schema_eq(
             |connection| {
@@ -806,6 +807,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     #[should_panic = "Schemas have different composite types"]
     async fn it_catches_schema_diffs() {
         assert_schema_eq(
@@ -857,6 +859,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     #[should_panic = "Schemas have different enums"]
     async fn it_catches_enum_diffs() {
         assert_schema_eq(
@@ -900,6 +903,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::serial]
     #[should_panic = "Columns with arrays differ"]
     async fn it_catches_array_diffs() {
         assert_schema_eq(

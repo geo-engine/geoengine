@@ -5,14 +5,14 @@ use geoengine_services::config;
 use geoengine_services::config::get_config_element;
 use geoengine_services::error::Result;
 use tracing::Subscriber;
+use tracing_subscriber::EnvFilter;
+use tracing_subscriber::Layer;
 use tracing_subscriber::field::RecordFields;
-use tracing_subscriber::fmt::format::{DefaultFields, Writer};
 use tracing_subscriber::fmt::FormatFields;
+use tracing_subscriber::fmt::format::{DefaultFields, Writer};
 use tracing_subscriber::layer::Filter;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry::LookupSpan;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::Layer;
 
 /// Starts the server.
 ///
@@ -71,7 +71,7 @@ fn open_telemetry_layer<S>(
 ) -> Result<
     tracing_opentelemetry::OpenTelemetryLayer<
         S,
-        impl opentelemetry::trace::Tracer + tracing_opentelemetry::PreSampledTracer,
+        impl opentelemetry::trace::Tracer + tracing_opentelemetry::PreSampledTracer + use<S>,
     >,
 >
 where
@@ -80,17 +80,19 @@ where
     use opentelemetry::trace::TracerProvider as _;
     use opentelemetry_otlp::WithExportConfig;
     use opentelemetry_sdk::trace::Sampler;
-    use opentelemetry_sdk::trace::TracerProvider;
+    use opentelemetry_sdk::trace::SdkTracerProvider;
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
         .with_endpoint(open_telemetry_config.endpoint.to_string())
         .build()?;
-    let provider = TracerProvider::builder()
-        .with_batch_exporter(exporter, opentelemetry_sdk::runtime::Tokio)
+    let provider = SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
         .with_sampler(Sampler::AlwaysOn)
-        .with_resource(opentelemetry_sdk::Resource::new(vec![
-            opentelemetry::KeyValue::new("service.name", "Geo Engine"),
-        ]))
+        .with_resource(
+            opentelemetry_sdk::Resource::builder_empty()
+                .with_attribute(opentelemetry::KeyValue::new("service.name", "Geo Engine"))
+                .build(),
+        )
         .build();
 
     let tracer = provider.tracer("Geo Engine");
@@ -130,7 +132,7 @@ fn file_layer_with_filter<S, F: Filter<S> + 'static>(
     filename_prefix: &str,
     log_directory: Option<&str>,
     filter: F,
-) -> (impl Layer<S>, FileLogWriterHandle)
+) -> (impl Layer<S> + use<S, F>, FileLogWriterHandle)
 where
     S: Subscriber,
     for<'a> S: LookupSpan<'a>,
@@ -175,28 +177,28 @@ fn reroute_gdal_logging() {
         match error_type {
             gdal::errors::CplErrType::None => {
                 // should never log anything
-                log::info!(target: target, "GDAL None {}: {}", error_num, error_msg);
+                log::info!(target: target, "GDAL None {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Debug => {
-                log::debug!(target: target, "GDAL Debug {}: {}", error_num, error_msg);
+                log::debug!(target: target, "GDAL Debug {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Warning => {
-                log::warn!(target: target, "GDAL Warning {}: {}", error_num, error_msg);
+                log::warn!(target: target, "GDAL Warning {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Failure => {
-                log::error!(target: target, "GDAL Failure {}: {}", error_num, error_msg);
+                log::error!(target: target, "GDAL Failure {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Fatal => {
-                log::error!(target: target, "GDAL Fatal {}: {}", error_num, error_msg);
+                log::error!(target: target, "GDAL Fatal {error_num}: {error_msg}");
             }
-        };
+        }
     });
 }
 
 fn configure_error_report_formatting(logging_config: &config::Logging) {
     if logging_config.raw_error_messages {
         // there is no way to configure snafu::Report other than through env variables
-        std::env::set_var("SNAFU_RAW_ERROR_MESSAGES", "1");
+        unsafe { std::env::set_var("SNAFU_RAW_ERROR_MESSAGES", "1") };
     }
 }
 

@@ -5,8 +5,8 @@ use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::aruna::error::ArunaProviderError;
 use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
-use actix_web::http::StatusCode;
 use actix_web::HttpResponse;
+use actix_web::http::StatusCode;
 use geoengine_datatypes::dataset::LayerId;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::util::helpers::ge_report;
@@ -62,7 +62,11 @@ pub enum Error {
 
     #[snafu(context(false))]
     Trace {
-        source: opentelemetry::trace::TraceError,
+        source: opentelemetry_sdk::trace::TraceError,
+    },
+    #[snafu(context(false))]
+    TraceOltp {
+        source: opentelemetry_otlp::ExporterBuildError,
     },
 
     TokioChannelSend,

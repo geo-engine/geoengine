@@ -1,4 +1,4 @@
-use crate::util::{statistics::SafePSquareQuantileEstimator, Result};
+use crate::util::{Result, statistics::SafePSquareQuantileEstimator};
 use geoengine_datatypes::raster::{GridOrEmpty2D, MapIndexedElements, Pixel};
 use std::marker::PhantomData;
 
@@ -137,11 +137,7 @@ pub struct Min;
 
 impl<P: Pixel> BinaryOperation<P> for Min {
     fn op(state: P, value: P) -> P {
-        if state < value {
-            state
-        } else {
-            value
-        }
+        if state < value { state } else { value }
     }
 }
 
@@ -153,11 +149,7 @@ pub struct Max;
 
 impl<P: Pixel> BinaryOperation<P> for Max {
     fn op(state: P, value: P) -> P {
-        if state > value {
-            state
-        } else {
-            value
-        }
+        if state > value { state } else { value }
     }
 }
 

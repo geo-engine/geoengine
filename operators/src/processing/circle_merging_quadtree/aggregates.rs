@@ -75,7 +75,7 @@ impl AttributeAggregate {
             // if there is null on the other side, just leave it as it is
             (_, AttributeAggregate::Null) => Ok(()),
             // if there is null on this side, just take the other side
-            (this @ &mut AttributeAggregate::Null, other) => {
+            &mut (ref mut this @ &mut AttributeAggregate::Null, ref mut other) => {
                 **this = other.clone();
                 Ok(())
             }

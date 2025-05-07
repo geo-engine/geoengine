@@ -1,5 +1,5 @@
 use crate::{engine::WorkflowOperatorPath, meta::quota::QuotaTracking};
-use futures::{ready, Stream};
+use futures::{Stream, ready};
 use pin_project::pin_project;
 use std::{
     pin::Pin,
@@ -114,7 +114,7 @@ mod tests {
     use crate::meta::quota::{ComputationUnit, QuotaMessage};
     use futures::StreamExt;
     use tokio::sync::mpsc::unbounded_channel;
-    use tracing::{span, Level};
+    use tracing::{Level, span};
     use uuid::Uuid;
 
     #[tokio::test]

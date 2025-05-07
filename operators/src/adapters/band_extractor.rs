@@ -4,7 +4,7 @@ use std::{
 };
 
 use crate::util::Result;
-use futures::{ready, Stream};
+use futures::{Stream, ready};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
 

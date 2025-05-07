@@ -4,14 +4,14 @@ use crate::engine::{
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
+use crate::machine_learning::MachineLearningError;
 use crate::machine_learning::error::{
     InputBandsMismatch, InputTypeMismatch, InvalidInputShape, Ort,
 };
-use crate::machine_learning::MachineLearningError;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
@@ -20,7 +20,7 @@ use geoengine_datatypes::raster::{
 use ndarray::{Array2, Array4};
 use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -195,17 +195,13 @@ impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
-    ort::value::Value: std::convert::TryFrom<
-        ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
-    >,
-    ort::value::Value: std::convert::TryFrom<
-        ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
-    >,
+    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>>,
+    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>>,
     ort::Error: std::convert::From<
-        <ort::value::Value as std::convert::TryFrom<
-            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
-        >>::Error,
-    >,
+            <ort::value::Value as std::convert::TryFrom<
+                ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
+            >>::Error,
+        >,
     ort::Error: From<
         <ort::value::Value as std::convert::TryFrom<
             ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
@@ -255,7 +251,7 @@ where
 
                 if chunk.len() != num_bands {
                     // if there are not exactly N tiles, it should mean the last tile was an error and the chunker ended prematurely
-                    if let Some(Err(e)) = chunk.into_iter().last() {
+                    if let Some(Err(e)) = chunk.into_iter().next_back() {
                         return Err(e);
                     }
                     // if there is no error, the source did not produce all bands, which likely means a bug in an operator
@@ -407,7 +403,7 @@ mod tests {
         test_data,
         util::test::TestDefault,
     };
-    use ndarray::{arr2, array, Array1, Array2};
+    use ndarray::{Array1, Array2, arr2, array};
 
     use super::*;
 

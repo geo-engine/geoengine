@@ -5,7 +5,7 @@ use crate::api::ogc::util::{parse_bbox, parse_time};
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::datasets::listing::{DatasetProvider, Provenance, ProvenanceOutput};
-use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
+use crate::datasets::{RasterDatasetFromWorkflow, schedule_raster_dataset_from_workflow_task};
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::util::parsing::{
@@ -15,7 +15,7 @@ use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse, Responder};
+use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
@@ -33,7 +33,7 @@ use std::io::{Cursor, Write};
 use std::sync::Arc;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
-use zip::{write::SimpleFileOptions, ZipWriter};
+use zip::{ZipWriter, write::SimpleFileOptions};
 
 pub(crate) fn init_workflow_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -169,7 +169,7 @@ async fn load_workflow_handler<C: ApplicationContext>(
     get,
     path = "/workflow/{id}/metadata",
     responses(
-        (status = 200, description = "Metadata of loaded workflow", body = TypedResultDescriptor,
+        (status = 200, description = "Metadata of loaded workflow", body = crate::api::model::operators::TypedResultDescriptor,
             example = json!({"type": "vector", "dataType": "MultiPoint", "spatialReference": "EPSG:4326", "columns": {}})
         )
     ),
@@ -401,7 +401,7 @@ async fn resolve_provenance<C: SessionContext>(
     id: &DataId,
 ) -> Result<ProvenanceOutput> {
     match id {
-        DataId::Internal { dataset_id } => db.load_provenance(&dataset_id.into()).await,
+        DataId::Internal(internal) => db.load_provenance(&internal.dataset_id.into()).await,
         DataId::External(e) => {
             db.load_layer_provider(e.provider_id.into())
                 .await?
@@ -461,11 +461,13 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
 #[serde(rename_all = "camelCase")]
 pub struct RasterStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_spatial_partition")]
+    #[param(value_type = crate::api::model::datatypes::SpatialPartition2D)]
     pub spatial_bounds: SpatialPartition2D,
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
+    #[param(value_type = crate::api::model::datatypes::SpatialResolution)]
     pub spatial_resolution: SpatialResolution,
     #[serde(deserialize_with = "parse_band_selection")]
     #[param(value_type = String)]
@@ -555,11 +557,13 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 #[serde(rename_all = "camelCase")]
 pub struct VectorStreamWebsocketQuery {
     #[serde(deserialize_with = "parse_bbox")]
+    #[param(value_type = crate::api::model::datatypes::BoundingBox2D)]
     pub spatial_bounds: BoundingBox2D,
     #[serde(deserialize_with = "parse_time")]
     #[param(value_type = String)]
     pub time_interval: TimeInterval,
     #[serde(deserialize_with = "parse_spatial_resolution")]
+    #[param(value_type = crate::api::model::datatypes::SpatialResolution)]
     pub spatial_resolution: SpatialResolution,
     pub result_type: RasterStreamWebsocketResultType,
 }
@@ -667,12 +671,13 @@ mod tests {
     use crate::users::UserAuth;
     use crate::util::tests::admin_login;
     use crate::util::tests::{
-        add_ndvi_to_datasets, check_allowed_http_methods, check_allowed_http_methods2,
-        read_body_string, register_ndvi_workflow_helper, send_test_request, TestDataUploads,
+        TestDataUploads, add_ndvi_to_datasets, check_allowed_http_methods,
+        check_allowed_http_methods2, read_body_string, register_ndvi_workflow_helper,
+        send_test_request,
     };
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
-    use actix_web::{http::header, http::Method, test};
+    use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::CacheHint;
@@ -682,6 +687,9 @@ mod tests {
     };
     use geoengine_datatypes::raster::{GridShape, RasterDataType, TilingSpecification};
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::ImageFormat;
+    use geoengine_datatypes::util::assert_image_equals_with_format;
     use geoengine_operators::engine::{
         ExecutionContext, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
         RasterBandDescriptors, TypedOperator,
@@ -695,15 +703,15 @@ mod tests {
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_operators::util::raster_stream_to_geotiff::{
-        single_timestep_raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata,
-        GdalGeoTiffOptions,
+        GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+        single_timestep_raster_stream_to_geotiff_bytes,
     };
     use serde_json::json;
     use std::io::Read;
     use std::sync::Arc;
     use tokio_postgres::NoTls;
-    use zip::read::ZipFile;
     use zip::ZipArchive;
+    use zip::read::ZipFile;
 
     async fn register_test_helper(
         app_ctx: PostgresContext<NoTls>,
@@ -1236,7 +1244,7 @@ mod tests {
     #[ge_context::test(tiling_spec = "test_download_all_metadata_zip_tiling_spec")]
     #[allow(clippy::too_many_lines)]
     async fn test_download_all_metadata_zip(app_ctx: PostgresContext<NoTls>) {
-        fn zip_file_to_json(mut zip_file: ZipFile) -> serde_json::Value {
+        fn zip_file_to_json<R: std::io::Read>(mut zip_file: ZipFile<R>) -> serde_json::Value {
             let mut bytes = Vec::new();
             zip_file.read_to_end(&mut bytes).unwrap();
 
@@ -1480,10 +1488,10 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            result.as_slice()
+        assert_image_equals_with_format(
+            test_data!("raster/geotiff_from_stream_compressed.tiff"),
+            result.as_slice(),
+            ImageFormat::Tiff,
         );
     }
 }

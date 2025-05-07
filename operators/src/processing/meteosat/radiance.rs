@@ -83,7 +83,7 @@ impl RasterOperator for Radiance {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Classification(ClassificationMeasurement {
                     measurement: m,
@@ -92,13 +92,13 @@ impl RasterOperator for Radiance {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Unitless => {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: "unitless".into(),
-                    })
+                    });
                 }
                 // OK Case
                 Measurement::Continuous(ContinuousMeasurement {
@@ -249,11 +249,11 @@ where
 impl<Q, P> QueryProcessor for RadianceProcessor<Q, P>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialBounds = SpatialPartition2D,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialBounds = SpatialPartition2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;

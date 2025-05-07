@@ -9,8 +9,8 @@ use super::listing::{
     SearchType, SearchTypes,
 };
 use super::storage::{
-    LayerDb, LayerProviderDb, LayerProviderListing, LayerProviderListingOptions,
-    INTERNAL_PROVIDER_ID,
+    INTERNAL_PROVIDER_ID, LayerDb, LayerProviderDb, LayerProviderListing,
+    LayerProviderListingOptions,
 };
 use crate::contexts::PostgresDb;
 use crate::layers::external::DataProviderDefinition;
@@ -19,22 +19,22 @@ use crate::workflows::registry::TxWorkflowRegistry;
 use crate::{
     error::{self, Result},
     layers::{
+        LayerDbError,
         layer::{AddLayer, AddLayerCollection},
         listing::LayerCollectionId,
         storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
-        LayerDbError,
     },
 };
+use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::PooledConnection;
 use bb8_postgres::tokio_postgres::{
-    tls::{MakeTlsConnect, TlsConnect},
     Socket,
+    tls::{MakeTlsConnect, TlsConnect},
 };
-use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::HashMapTextTextDbType;
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use std::str::FromStr;
 use tokio_postgres::Transaction;
 use tonic::async_trait;
@@ -504,6 +504,7 @@ where
 
                 if is_layer {
                     Ok(CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: LayerId(row.get(0)),
@@ -514,6 +515,7 @@ where
                     }))
                 } else {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(row.get(0)),
@@ -609,6 +611,7 @@ where
 
                 if is_layer {
                     Ok(CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             layer_id: LayerId(row.get(0)),
@@ -619,6 +622,7 @@ where
                     }))
                 } else {
                     Ok(CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: INTERNAL_PROVIDER_ID,
                             collection_id: LayerCollectionId(row.get(0)),

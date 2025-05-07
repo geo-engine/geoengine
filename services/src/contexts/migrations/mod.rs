@@ -4,7 +4,7 @@ pub use crate::contexts::migrations::{
     migration_0017_ml_model_tensor_shape::Migration0017MlModelTensorShape,
 };
 pub use database_migration::{
-    initialize_database, migrate_database, DatabaseVersion, Migration, MigrationResult,
+    DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
 };
 
 mod current_schema;
@@ -17,7 +17,7 @@ mod migration_0017_ml_model_tensor_shape;
 mod schema_info;
 
 #[cfg(test)]
-pub(crate) use schema_info::{assert_migration_schema_eq, AssertSchemaEqPopulationConfig};
+pub(crate) use schema_info::{AssertSchemaEqPopulationConfig, assert_migration_schema_eq};
 
 /// All migrations that are available. The migrations are applied in the order they are defined here, starting from the current version of the database.
 ///
@@ -36,6 +36,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[serial_test::serial]
     async fn migrations_lead_to_ground_truth_schema() {
         assert_migration_schema_eq(
             &all_migrations(),

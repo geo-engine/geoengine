@@ -7,13 +7,13 @@ use crate::engine::{
 };
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, QueryAttributeSelection, QueryRectangle,
 };
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tracing::{span, Level};
+use tracing::{Level, span};
 
 // A wrapper around an initialized operator that adds statistics and quota tracking
 pub struct InitializedOperatorWrapper<S> {

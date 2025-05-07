@@ -1,0 +1,6 @@
+name: "Run Tests & Generate Coverage"
+description: "Run Geo Engine tests with coverage"
+runs:
+  using: "docker"
+  image: "docker://quay.io/geoengine/devcontainer:latest"
+  entrypoint: "./.github/actions/test/test.sh"

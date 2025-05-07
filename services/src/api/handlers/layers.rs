@@ -2,11 +2,11 @@ use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::api::model::responses::IdResponse;
 use crate::config::get_config_element;
 use crate::contexts::ApplicationContext;
-use crate::datasets::{schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflow};
+use crate::datasets::{RasterDatasetFromWorkflow, schedule_raster_dataset_from_workflow_task};
 use crate::error::Error::NotImplemented;
 use crate::error::{Error, Result};
 use crate::layers::layer::{
-    AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId, UpdateLayer, UpdateLayerCollection,
 };
 use crate::layers::listing::{
@@ -18,7 +18,7 @@ use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
-use actix_web::{web, FromRequest, HttpResponse, Responder};
+use actix_web::{FromRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::primitives::{BandSelection, QueryRectangle};
 use geoengine_operators::engine::WorkflowOperatorPath;
 use serde::{Deserialize, Serialize};
@@ -177,6 +177,7 @@ async fn get_layer_providers<C: ApplicationContext>(
     let mut providers = vec![];
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
                 collection_id: LayerCollectionId(
@@ -201,7 +202,7 @@ async fn get_layer_providers<C: ApplicationContext>(
     {
         if provider_listing.priority <= -1000 {
             continue; // skip providers that are disabled
-        };
+        }
 
         // TODO: resolve providers in parallel
         let provider = match external.load_layer_provider(provider_listing.id).await {
@@ -228,6 +229,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         };
 
         providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: provider_listing.id,
                 collection_id,
@@ -753,7 +755,7 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
     ),
     params(
         ("provider" = DataProviderId, description = "Data provider id"),
-        ("layer" = LayerCollectionId, description = "Layer id"),
+        ("layer" = LayerId, description = "Layer id"),
     ),
     security(
         ("session_token" = [])
@@ -1196,7 +1198,7 @@ mod tests {
     use crate::users::{UserAuth, UserSession};
     use crate::util::tests::admin_login;
     use crate::util::tests::{
-        read_body_string, send_test_request, MockQueryContext, TestDataUploads,
+        MockQueryContext, TestDataUploads, read_body_string, send_test_request,
     };
     use crate::{contexts::Session, workflows::workflow::Workflow};
     use actix_web::dev::ServiceResponse;
@@ -1219,7 +1221,7 @@ mod tests {
     use geoengine_operators::processing::{TimeShift, TimeShiftParams};
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::raster_stream_to_geotiff::{
-        raster_stream_to_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+        GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_geotiff_bytes,
     };
     use geoengine_operators::{
         engine::VectorOperator,
