@@ -21,14 +21,14 @@ impl Migration for Migration0017MlModelTensorShape {
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
         tx.batch_execute(
             r#"
-                CREATE TYPE "TensorShape3D" AS (
+                CREATE TYPE "MlTensorShape3D" AS (
                     x OID,
                     y OID,
                     bands OID
                 );
 
-                ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE input_shape "TensorShape3D";
-                ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE output_shape "TensorShape3D";
+                ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE input_shape "MlTensorShape3D";
+                ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE output_shape "MlTensorShape3D";
             
                 WITH qqqq AS (
                     SELECT 
@@ -39,8 +39,8 @@ impl Migration for Migration0017MlModelTensorShape {
                 )
                 UPDATE ml_models
                 SET 
-                    metadata.input_shape = (1, 1, (qqqq.metadata).num_input_bands)::"TensorShape3D",
-                    metadata.output_shape = (1, 1, 1)::"TensorShape3D"
+                    metadata.input_shape = (1, 1, (qqqq.metadata).num_input_bands)::"MlTensorShape3D",
+                    metadata.output_shape = (1, 1, 1)::"MlTensorShape3D"
                 FROM qqqq
                 WHERE ml_models.id = qqqq.id;
                 
