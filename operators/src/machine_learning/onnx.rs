@@ -4,7 +4,10 @@ use crate::engine::{
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::machine_learning::error::{InputBandsMismatch, InputTypeMismatch, Ort};
+use crate::machine_learning::MachineLearningError;
+use crate::machine_learning::error::{
+    InputBandsMismatch, InputTypeMismatch, InvalidInputShape, Ort,
+};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -12,13 +15,12 @@ use futures::stream::BoxStream;
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
+    Grid, GridIdx2D, GridIndexAccess, GridShapeAccess, GridSize, Pixel, RasterTile2D,
 };
-use ndarray::Array2;
+use ndarray::{Array2, Array4};
 use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
-use std::path::PathBuf;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,11 +56,37 @@ impl RasterOperator for Onnx {
 
         let model_metadata = context.ml_model_metadata(&self.params.model).await?;
 
+        let tiling_shape = context.tiling_specification().tile_size_in_pixels;
+
+        // check that we can use the model input shape with the operator
+        ensure!(
+            model_metadata.input_is_single_pixel()
+                || model_metadata
+                    .input_shape
+                    .yx_matches_tile_shape(&tiling_shape),
+            InvalidInputShape {
+                tensor_shape: model_metadata.input_shape,
+                tiling_shape
+            }
+        );
+
+        // check that we can use the model output shape with the operator
+        ensure!(
+            model_metadata.output_is_single_pixel()
+                || model_metadata
+                    .output_shape
+                    .yx_matches_tile_shape(&tiling_shape),
+            InvalidInputShape {
+                tensor_shape: model_metadata.output_shape,
+                tiling_shape
+            }
+        );
+
         // check that number of input bands fits number of model features
         ensure!(
-            model_metadata.num_input_bands == in_descriptor.bands.count(),
+            model_metadata.num_input_bands() == in_descriptor.bands.count(),
             InputBandsMismatch {
-                model_input_bands: model_metadata.num_input_bands,
+                model_input_bands: model_metadata.num_input_bands(),
                 source_bands: in_descriptor.bands.count(),
             }
         );
@@ -119,7 +147,7 @@ impl InitializedRasterOperator for InitializedOnnx {
                     OnnxProcessor::new(
                         input,
                         self.result_descriptor.clone(),
-                        self.model_metadata.file_path.clone(),
+                        self.model_metadata.clone(),
                     )
                     .boxed()
                 )
@@ -143,7 +171,7 @@ impl InitializedRasterOperator for InitializedOnnx {
 pub(crate) struct OnnxProcessor<TIn, TOut> {
     source: Box<dyn RasterQueryProcessor<RasterType = TIn>>, // as most ml algorithms work on f32 we use this as input type
     result_descriptor: RasterResultDescriptor,
-    model_path: PathBuf,
+    model_metadata: MlModelMetadata,
     phantom: std::marker::PhantomData<TOut>,
 }
 
@@ -151,12 +179,12 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
     pub fn new(
         source: Box<dyn RasterQueryProcessor<RasterType = TIn>>,
         result_descriptor: RasterResultDescriptor,
-        model_path: PathBuf,
+        model_metadata: MlModelMetadata,
     ) -> Self {
         Self {
             source,
             result_descriptor,
-            model_path,
+            model_metadata,
             phantom: Default::default(),
         }
     }
@@ -168,11 +196,17 @@ where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
     ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>>,
+    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>>,
     ort::Error: std::convert::From<
             <ort::value::Value as std::convert::TryFrom<
                 ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
             >>::Error,
         >,
+    ort::Error: From<
+        <ort::value::Value as std::convert::TryFrom<
+            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
+        >>::Error,
+    >,
 {
     type RasterType = TOut;
 
@@ -189,19 +223,19 @@ where
         // TODO: re-use session accross queries?
         let session = ort::session::Session::builder()
             .context(Ort)?
-            .commit_from_file(&self.model_path)
+            .commit_from_file(&self.model_metadata.file_path)
             .context(Ort)
             .inspect_err(|e| {
                 tracing::debug!(
                     "Could not create ONNX session for {:?}. Error: {}",
-                    self.model_path.file_name(),
+                    self.model_metadata.file_path.file_name(),
                     e
                 );
             })?;
 
         tracing::debug!(
             "Created ONNX session for {:?}",
-            &self.model_path.file_name()
+            &self.model_metadata.file_path.file_name()
         );
 
         let stream = self
@@ -234,8 +268,9 @@ where
                 let global_geo_transform = first_tile.global_geo_transform;
                 let cache_hint = first_tile.cache_hint;
 
-                let width = tiles[0].grid_array.axis_size_x();
-                let height = tiles[0].grid_array.axis_size_y();
+                let tile_shape = tiles[0].grid_shape();
+                let width = tile_shape.axis_size_x();
+                let height = tile_shape.axis_size_y();
 
                 // TODO: collect into a ndarray directly
 
@@ -256,18 +291,41 @@ where
                 }
 
                 let pixels = pixels.into_iter().flatten().collect::<Vec<TIn>>();
-                let rows = width * height;
-                let cols = num_bands;
 
-                let samples = Array2::from_shape_vec((rows, cols), pixels).expect(
-                    "Array2 should be valid because it is created from a Vec with the correct size",
-                );
+                let outputs = if self.model_metadata.input_is_single_pixel() {
+                    let rows = width * height;
+                    let cols = num_bands;
 
-                let input_name = &session.inputs[0].name;
+                    let samples = Array2::from_shape_vec((rows, cols), pixels).expect(
+                        "Array2 should be valid because it is created from a Vec with the correct size",
+                    );
 
-                let outputs = session
-                    .run(ort::inputs![input_name => samples].context(Ort)?)
-                    .context(Ort)?;
+                    let input_name = &session.inputs[0].name;
+
+                    let out = session
+                        .run(ort::inputs![input_name => samples].context(Ort)?)
+                        .context(Ort)?;
+                    Ok(out)
+                } else if self.model_metadata.input_shape.yx_matches_tile_shape(&tile_shape){
+                    let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
+                        "Array2 should be valid because it is created from a Vec with the correct size",
+                    );
+
+                    let input_name = &session.inputs[0].name;
+
+                    let out = session
+                        .run(ort::inputs![input_name => samples].context(Ort)?)
+                        .context(Ort)?;
+
+                    Ok(out)
+                } else {
+                    Err(
+                        MachineLearningError::InvalidInputShape {
+                            tensor_shape: self.model_metadata.input_shape,
+                            tiling_shape: tile_shape
+                        }
+                    )
+                }.map_err(error::Error::from)?;
 
                 // assume the first output is the prediction and ignore the other outputs (e.g. probabilities for classification)
                 // we don't access the output by name because it can vary, e.g. "output_label" vs "variable"
