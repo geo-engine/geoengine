@@ -1,0 +1,28 @@
+
+###
+
+# @name anonymousSession
+POST http://localhost:3030/api/anonymous
+Content-Type: application/json
+
+### 
+
+# @name workflow
+POST http://localhost:3030/api/workflow
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "type": "Raster",
+  "operator": {
+    "type": "GdalSource",
+    "params": {
+      "data": "LND05_BOA_1"
+    }
+  }
+}
+
+###
+
+GET http://localhost:3030/api/wms/c965662b-a5bf-57ce-aae2-e7a6036d8a99?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image%2Fpng&STYLES=custom%3A%7B%22type%22%3A%22singleBand%22%2C%22band%22%3A0%2C%22bandColorizer%22%3A%7B%22type%22%3A%22linearGradient%22%2C%22breakpoints%22%3A%5B%7B%22value%22%3A1%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A255%2C%22color%22%3A%5B255%2C255%2C255%2C255%5D%7D%5D%2C%22noDataColor%22%3A%5B0%2C0%2C0%2C0%5D%2C%22overColor%22%3A%5B255%2C255%2C255%2C127%5D%2C%22underColor%22%3A%5B0%2C0%2C0%2C127%5D%7D%7D&TRANSPARENT=true&layers=c965662b-a5bf-57ce-aae2-e7a6036d8a99&time=2011-09-20T00%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=256&HEIGHT=256&CRS=EPSG%3A4326&BBOX=47.8125%2C9.84375%2C49.21875%2C11.25
+Authorization: Bearer {{anonymousSession.response.body.$.id}}

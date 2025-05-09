@@ -95,12 +95,22 @@ where
             self.state.out_spatial_grid.geo_transform()
         );
 
-        let valid_pixel_bounds = self
-            .state
-            .out_spatial_grid
-            .grid_bounds()
-            .intersection(&tile_info.global_pixel_bounds())
-            .and_then(|b| b.intersection(&query_rect.spatial_query.grid_bounds()));
+        // why is this none?
+        let valid_pixel_bounds = dbg!(
+            dbg!(
+                self.state
+                    .out_spatial_grid
+                    .grid_bounds()
+                    .intersection(&tile_info.global_pixel_bounds())
+            )
+            .and_then(|b| b.intersection(&query_rect.spatial_query.grid_bounds()))
+        );
+
+        log::debug!(
+            "ÖÖÖÖÖ valid_pixel_bounds {:?} -> {:?}",
+            tile_info.global_pixel_bounds(),
+            valid_pixel_bounds
+        );
 
         let valid_spatial_bounds = valid_pixel_bounds.map(|pb| {
             self.state
@@ -109,25 +119,49 @@ where
                 .grid_to_spatial_bounds(&pb)
         });
 
+        log::debug!(
+            "ÖÖÖÖÖ valid_spatial_bounds {:?} -> {:?}",
+            query_rect.spatial_query.grid_bounds(),
+            valid_spatial_bounds
+        );
+
         if let Some(bounds) = valid_spatial_bounds {
             let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
             let projected_bounds = bounds.reproject(&proj);
 
+            log::debug!(
+                "ÖÖÖÖÖ projected_bounds {:?} -> {:?}",
+                bounds,
+                projected_bounds
+            );
+
             match projected_bounds {
-                Ok(pb) => Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
-                    self.state
-                        .in_spatial_grid
-                        .geo_transform()
-                        .spatial_to_grid_bounds(&pb),
-                    TimeInterval::new_instant(start_time)?,
-                    band_idx.into(),
-                ))),
+                Ok(pb) => {
+                    dbg!("produce something");
+                    Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+                        self.state
+                            .in_spatial_grid
+                            .geo_transform()
+                            .spatial_to_grid_bounds(&pb),
+                        TimeInterval::new_instant(start_time)?,
+                        band_idx.into(),
+                    )))
+                }
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.
                 Err(geoengine_datatypes::error::Error::OutputBboxEmpty { bbox: _ }) => Ok(None),
                 Err(e) => Err(e.into()),
             }
         } else {
+            dbg!("output query rectangle is not valid in source projection => produce empty tile");
+            log::debug!(
+                "ÖÖÖÖÖ output query rectangle is not valid in source projection => produce empty tile {:?}",
+                self.state
+                    .out_spatial_grid
+                    .geo_transform()
+                    .grid_to_spatial_bounds(&query_rect.spatial_query.grid_bounds())
+            );
+
             // output query rectangle is not valid in source projection => produce empty tile
             Ok(None)
         }
@@ -352,6 +386,8 @@ impl<T: Pixel> FoldTileAccu for TileWithProjectionCoordinates<T> {
     type RasterType = T;
 
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        debug_assert!(self.accu_tile.time.end() > self.accu_tile.time.start());
+        debug_assert!(self.accu_tile.time.end() != self.accu_tile.time.start() + 1);
         Ok(self.accu_tile)
     }
 
@@ -362,6 +398,7 @@ impl<T: Pixel> FoldTileAccu for TileWithProjectionCoordinates<T> {
 
 impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
     fn set_time(&mut self, time: TimeInterval) {
+        debug_assert!(time.end() > time.start());
         self.accu_tile.time = time;
     }
 

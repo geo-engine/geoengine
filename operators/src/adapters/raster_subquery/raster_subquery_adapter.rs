@@ -23,6 +23,7 @@ use geoengine_datatypes::{
     primitives::TimeInstance,
     raster::{Pixel, RasterTile2D, TileInformation},
 };
+use log::debug;
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use std::marker::PhantomData;
@@ -289,6 +290,7 @@ where
                 }
                 Ok(None) => this.state.set(StateInner::ReturnResult(None)),
                 Err(e) => {
+                    debug!(">>>> Tile query rectangle not valid: {e}");
                     this.state.set(StateInner::Ended);
                     return Poll::Ready(Some(Err(e)));
                 }
@@ -382,6 +384,7 @@ where
 
         // If there is a tile, set the current_time_end option.
         if let Some(tile) = &tile_option {
+            debug_assert!(tile.time.end() > tile.time.start());
             debug_assert!(*this.current_time_start >= tile.time.start());
             *this.current_time_end = Some(tile.time.end());
         }
@@ -408,6 +411,7 @@ where
             (None, None) => {
                 // end the stream since we never recieved a tile from any subquery. Should only happen if we end the first grid iteration.
                 // NOTE: this assumes that the input operator produces no data tiles for queries where time and space are valid but no data is avalable.
+                debug!(">>>> Tile stream ended without any data");
                 debug_assert!(&tile_option.is_none());
                 debug_assert!(
                     *this.current_time_start == this.query_rect_to_answer.time_interval.start()
@@ -437,7 +441,9 @@ where
                 }
             }
         }
-
+        if let Some(tile) = &tile_option {
+            debug_assert!(tile.time.end() > tile.time.start());
+        }
         Poll::Ready(Some(Ok(tile_option)))
     }
 }

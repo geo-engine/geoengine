@@ -382,6 +382,7 @@ impl GdalRasterLoader {
         tile_time: TimeInterval,
         cache_hint: CacheHint,
     ) -> Result<RasterTile2D<T>> {
+        debug_assert!(tile_time.end() > tile_time.start());
         let tile_spatial_grid = tile_information.spatial_grid_definition();
 
         match dataset_params {
@@ -546,7 +547,7 @@ impl GdalRasterLoader {
                         info.params.clone(),
                         reader_mode,
                         tile,
-                        info.time,
+                        dbg!(info.time),
                         info.cache_ttl.into(),
                     )
                 }),
@@ -564,6 +565,7 @@ impl GdalRasterLoader {
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> + use<S, T> {
         loading_info_stream
             .map_ok(move |info| {
+                debug!("Loading info: {:?}", info);
                 GdalRasterLoader::temporal_slice_tile_future_stream(
                     spatial_query,
                     info,
@@ -614,6 +616,7 @@ where
         query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
+        log::debug!("GdalSource query: {:?}", query);
         ensure!(
             query.attributes.as_slice() == [0],
             crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet

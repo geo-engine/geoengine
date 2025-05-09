@@ -303,6 +303,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         let known_time_before = known_time_start.unwrap_or(TimeInstance::MIN);
         let known_time_after = known_time_end.unwrap_or(TimeInstance::MAX);
 
+        log::debug!(
+            "ÄÄÄÄÄÄ known_time_before: {known_time_before}, known_time_after: {known_time_after}",
+        );
+
         Ok(GdalLoadingInfo::new(
             GdalLoadingInfoTemporalSliceIterator::Static {
                 parts: data.into_iter(),

@@ -357,7 +357,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             query_tiling_pixel_grid.grid_bounds(),
             request.time.unwrap_or_else(default_time_from_config).into(),
             attributes,
-        );
+        ); // <-- this one 
 
         debug!("WMS query rect: {:?}", query_rect);
 

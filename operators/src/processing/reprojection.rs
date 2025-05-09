@@ -638,6 +638,8 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        log::debug!("ÖÖÖÖÖÖ Reprojection query: {:?}", query);
+
         let state = self.state;
 
         // setup the subquery
@@ -680,8 +682,9 @@ mod tests {
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::source::{
-        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataRegular,
-        GdalMetaDataStatic, GdalSourceTimePlaceholder, TimeReference,
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
+        GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic,
+        GdalSourceTimePlaceholder, TimeReference,
     };
     use crate::util::gdal::add_ndvi_dataset;
     use crate::{
@@ -1750,5 +1753,126 @@ mod tests {
             out_spatial_grid.grid_bounds,
             GridBoundingBox2D::new_min_max(-1405, 1405, -1410, 1409).unwrap()
         );
+    }
+
+    #[tokio::test]
+    async fn it_sets_correct_temporal_validity_for_partially_undefined_source_regions() -> Result<()>
+    {
+        let tile_size_in_pixels = [600, 600].into(); //TODO ??
+        let data_geo_transform =
+            GeoTransform::new(Coordinate2D::new(399_960.000, 5700_000.000), 1098., -1098.);
+        let data_bounds = GridBoundingBox2D::new([0, 0], [99, 99]).unwrap();
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632).into(),
+            time: None,
+            spatial_grid: SpatialGridDescriptor::source_from_parts(data_geo_transform, data_bounds),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        dbg!(result_descriptor.spatial_grid);
+
+        let m = GdalMetaDataList {
+            result_descriptor: result_descriptor.clone(),
+            params: vec![GdalLoadingInfoTemporalSlice {
+                time: TimeInterval::new_unchecked(
+                    TimeInstance::from_str("2022-02-01T00:00:00.000Z").unwrap(),
+                    TimeInstance::from_str("2022-03-01T00:00:00.000Z").unwrap(),
+                ),
+                params: Some(GdalDatasetParameters {
+                    file_path: test_data!(
+                        "raster/sentinel2/S2B_32UMB_20220129_0_L2A__B02.tif_downsampled.tif"
+                    )
+                    .into(),
+                    rasterband_channel: 1,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: data_geo_transform.origin_coordinate,
+                        x_pixel_size: data_geo_transform.x_pixel_size(),
+                        y_pixel_size: data_geo_transform.y_pixel_size(),
+                    },
+                    width: data_bounds.axis_size_x(),
+                    height: data_bounds.axis_size_y(),
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: Some(0.),
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
+                    retry: None,
+                }),
+                cache_ttl: CacheTtlSeconds::default(),
+            }],
+        };
+
+        let tiling_spec = TilingSpecification::new(tile_size_in_pixels);
+        let mut exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec);
+
+        let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("s2");
+        exe_ctx.add_meta_data(id.clone(), name.clone(), Box::new(m));
+
+        let gdal_op = GdalSource {
+            params: GdalSourceParameters::new(name),
+        }
+        .boxed();
+
+        let initialized_operator = RasterOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::epsg_4326(),
+                derive_out_spec: DeriveOutRasterSpecsSource::DataBounds,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: gdal_op.into(),
+            },
+        })
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+        .await?;
+
+        let qp = initialized_operator
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let qr = qp.result_descriptor();
+
+        dbg!(qr.spatial_grid);
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
+
+        // query with Germany bbox which is partially outside of 32632 projection
+        let request_bounds = SpatialPartition2D::new(
+            Coordinate2D::new(5.98865807458, 54.983104153),
+            Coordinate2D::new(15.0169958839, 47.3024876979),
+        )?;
+
+        let query_tiling_pixel_grid = qr
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec)
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(request_bounds);
+
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            query_tiling_pixel_grid.grid_bounds(),
+            TimeInterval::new_instant(TimeInstance::from_str("2022-02-01T00:00:00.000Z").unwrap())
+                .unwrap(),
+            BandSelection::first(),
+        );
+
+        dbg!(&query_rect);
+
+        let qs = qp.raster_query(query_rect, &query_ctx).await.unwrap();
+
+        let tiles = qs
+            .map(Result::unwrap)
+            .collect::<Vec<RasterTile2D<u8>>>()
+            .await;
+
+        for r in tiles {
+            dbg!(r.time, r.is_empty());
+        }
+
+        assert!(false);
+
+        Ok(())
     }
 }
