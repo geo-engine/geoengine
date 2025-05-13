@@ -2189,3 +2189,61 @@ impl<'a> FromSql<'a> for CacheTtlSeconds {
         <i32 as FromSql>::accepts(ty)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use crate::api::model::datatypes::ClassificationMeasurement;
+    use crate::error::Error;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn it_serializes_classification_measurement() -> Result<(), Error> {
+        let measurement = ClassificationMeasurement {
+            r#type: Default::default(),
+            measurement: "Test".to_string(),
+            classes: BTreeMap::<u8, String>::from([
+                (0, "Class 0".to_string()),
+                (1, "Class 1".to_string()),
+            ]),
+        };
+
+        let serialized = serde_json::to_string(&measurement)?;
+
+        assert_eq!(
+            serialized,
+            r#"{"type":"classification","measurement":"Test","classes":{"0":"Class 0","1":"Class 1"}}"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn it_deserializes_classification_measurement() -> Result<(), Error> {
+        let measurement = ClassificationMeasurement {
+            r#type: Default::default(),
+            measurement: "Test".to_string(),
+            classes: BTreeMap::<u8, String>::from([
+                (0, "Class 0".to_string()),
+                (1, "Class 1".to_string()),
+            ]),
+        };
+
+        let serialized = r#"{"type":"classification","measurement":"Test","classes":{"0":"Class 0","1":"Class 1"}}"#;
+        let deserialized: ClassificationMeasurement = serde_json::from_str(serialized)?;
+
+        assert_eq!(measurement, deserialized);
+        Ok(())
+    }
+
+    #[test]
+    fn it_throws_error_on_deserializing_non_integer_classification_measurement_class_value() {
+        let serialized =
+            r#"{"type":"classification","measurement":"Test","classes":{"Zero":"Class 0"}}"#;
+        let deserialized = serde_json::from_str::<ClassificationMeasurement>(serialized);
+
+        assert!(deserialized.is_err());
+        assert_eq!(
+            deserialized.unwrap_err().to_string(),
+            "Failed to parse key as u8: invalid digit found in string at line 1 column 75"
+        );
+    }
+}
