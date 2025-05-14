@@ -186,7 +186,7 @@ impl MlModelMetadata {
         self.input_shape.bands
     }
 
-    pub fn mun_output_bands(&self) -> u32 {
+    pub fn num_output_bands(&self) -> u32 {
         self.output_shape.bands
     }
 
@@ -199,7 +199,7 @@ impl MlModelMetadata {
     }
 
     pub fn output_is_single_attribute(&self) -> bool {
-        self.mun_output_bands() == 1
+        self.num_output_bands() == 1
     }
 }
 

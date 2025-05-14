@@ -2,10 +2,10 @@ use geoengine_datatypes::{
     machine_learning::MlTensorShape3D,
     raster::{GridShape2D, RasterDataType},
 };
+use ort::tensor::TensorElementType;
 use snafu::Snafu;
-
-pub mod metadata_from_file;
 pub mod onnx;
+pub mod onnx_util;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -27,16 +27,25 @@ pub enum MachineLearningError {
         tensor_shape,
         tiling_shape
     ))]
-    InvalidInputShape {
+    InvalidInputPixelShape {
         tensor_shape: MlTensorShape3D,
         tiling_shape: GridShape2D,
+    },
+    #[snafu(display(
+        "Onnx model tensor shape must match the combination of raster y,x pixels * bands. Found {:?} and {:?}.",
+        model_shape,
+        input_shape
+    ))]
+    InvalidInputTensorShape {
+        model_shape: MlTensorShape3D,
+        input_shape: MlTensorShape3D,
     },
     #[snafu(display(
         "Onnx model must have one dimensional output or match the tiling tile size. Found {:?} and {:?}.",
         tensor_shape,
         tiling_shape
     ))]
-    InvalidOutputShape {
+    InvalidOutputPixelShape {
         tensor_shape: MlTensorShape3D,
         tiling_shape: GridShape2D,
     },
@@ -47,11 +56,36 @@ pub enum MachineLearningError {
         element_type: ort::tensor::TensorElementType,
     },
     #[snafu(display(
-        "Number of bands in source ({source_bands}) does not match the model input bands ({model_input_bands})."
+        "The input shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
-    InputBandsMismatch {
-        model_input_bands: u32,
-        source_bands: u32,
+    MetadataModelInputShapeMismatch {
+        model_dimensions: Vec<i64>,
+        model_shape: MlTensorShape3D,
+        metadata_shape: MlTensorShape3D,
+    },
+    #[snafu(display(
+        "The output shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
+    ))]
+    MetadataModelOutputShapeMismatch {
+        model_dimensions: Vec<i64>,
+        model_shape: MlTensorShape3D,
+        metadata_shape: MlTensorShape3D,
+    },
+    #[snafu(display(
+        "The input type of the model ({model_tensor_type:?} => {model_raster_type:?}) does not match the metadata input type  ({metadata_type:?})."
+    ))]
+    MetadataModelInputTypeMismatch {
+        model_tensor_type: TensorElementType,
+        model_raster_type: RasterDataType,
+        metadata_type: RasterDataType,
+    },
+    #[snafu(display(
+        "The output type of the model ({model_tensor_type:?} => {model_raster_type:?}) does not match the metadata output type  ({metadata_type:?})."
+    ))]
+    MetadataModelOutputTypeMismatch {
+        model_tensor_type: TensorElementType,
+        model_raster_type: RasterDataType,
+        metadata_type: RasterDataType,
     },
     #[snafu(display(
         "Raster data types of source ({source_type:?}) does not match model input type ({model_input_type:?})."
@@ -59,6 +93,13 @@ pub enum MachineLearningError {
     InputTypeMismatch {
         model_input_type: RasterDataType,
         source_type: RasterDataType,
+    },
+    #[snafu(display(
+        "Model input and output shapes must match. Found in: {in_shape:?} and out: {out_shape:?}."
+    ))]
+    UnsupportedInOutMapping {
+        in_shape: MlTensorShape3D,
+        out_shape: MlTensorShape3D,
     },
 }
 

@@ -5,9 +5,8 @@ use crate::engine::{
 };
 use crate::error;
 use crate::machine_learning::MachineLearningError;
-use crate::machine_learning::error::{
-    InputBandsMismatch, InputTypeMismatch, InvalidInputShape, Ort,
-};
+use crate::machine_learning::error::{InputTypeMismatch, Ort};
+use crate::machine_learning::onnx_util::{check_model_input_features, check_model_shape};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -21,6 +20,8 @@ use ndarray::{Array2, Array4};
 use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
+
+use super::onnx_util::{check_onnx_model_matches_metadata, load_onnx_model_from_metadata};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -58,38 +59,9 @@ impl RasterOperator for Onnx {
 
         let tiling_shape = context.tiling_specification().tile_size_in_pixels;
 
-        // check that we can use the model input shape with the operator
-        ensure!(
-            model_metadata.input_is_single_pixel()
-                || model_metadata
-                    .input_shape
-                    .yx_matches_tile_shape(&tiling_shape),
-            InvalidInputShape {
-                tensor_shape: model_metadata.input_shape,
-                tiling_shape
-            }
-        );
-
-        // check that we can use the model output shape with the operator
-        ensure!(
-            model_metadata.output_is_single_pixel()
-                || model_metadata
-                    .output_shape
-                    .yx_matches_tile_shape(&tiling_shape),
-            InvalidInputShape {
-                tensor_shape: model_metadata.output_shape,
-                tiling_shape
-            }
-        );
-
-        // check that number of input bands fits number of model features
-        ensure!(
-            model_metadata.num_input_bands() == in_descriptor.bands.count(),
-            InputBandsMismatch {
-                model_input_bands: model_metadata.num_input_bands(),
-                source_bands: in_descriptor.bands.count(),
-            }
-        );
+        // check that we can use the model input / output shape with the operator
+        check_model_shape(&model_metadata, tiling_shape)?;
+        check_model_input_features(&model_metadata, tiling_shape, in_descriptor.bands.count())?;
 
         // check that input type fits model input type
         ensure!(
@@ -140,6 +112,7 @@ impl InitializedRasterOperator for InitializedOnnx {
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let source = self.source.query_processor()?;
+
         Ok(call_on_generic_raster_processor!(
             source, input => {
                 call_generic_raster_processor!(
@@ -221,22 +194,10 @@ where
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         // TODO: re-use session accross queries?
-        let session = ort::session::Session::builder()
-            .context(Ort)?
-            .commit_from_file(&self.model_metadata.file_path)
-            .context(Ort)
-            .inspect_err(|e| {
-                tracing::debug!(
-                    "Could not create ONNX session for {:?}. Error: {}",
-                    self.model_metadata.file_path.file_name(),
-                    e
-                );
-            })?;
+        let session = load_onnx_model_from_metadata(&self.model_metadata)?;
 
-        tracing::debug!(
-            "Created ONNX session for {:?}",
-            &self.model_metadata.file_path.file_name()
-        );
+        // TODO: check @ initialize?
+        check_onnx_model_matches_metadata(&session, &self.model_metadata)?;
 
         let stream = self
             .source
@@ -320,7 +281,7 @@ where
                     Ok(out)
                 } else {
                     Err(
-                        MachineLearningError::InvalidInputShape {
+                        MachineLearningError::InvalidInputPixelShape {
                             tensor_shape: self.model_metadata.input_shape,
                             tiling_shape: tile_shape
                         }
@@ -385,11 +346,19 @@ impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
+    use super::*;
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
         },
-        machine_learning::metadata_from_file::load_model_metadata,
+        machine_learning::{
+            error::MultipleInputsNotSupported,
+            onnx_util::{
+                try_onnx_tensor_to_ml_tensorshape_3d, try_raster_datatype_from_tensor_element_type,
+            },
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
     };
@@ -405,7 +374,62 @@ mod tests {
     };
     use ndarray::{Array1, Array2, arr2, array};
 
-    use super::*;
+    fn generate_model_metadata_from_onnx(
+        path: &Path,
+    ) -> Result<MlModelMetadata, MachineLearningError> {
+        // TODO: proper error if model file cannot be found
+        let session = ort::session::Session::builder()
+            .context(Ort)?
+            .commit_from_file(path)
+            .context(Ort)?;
+
+        // Onnx model may have multiple inputs, but we only support one input (with multiple features/bands)
+        ensure!(
+            session.inputs.len() == 1,
+            MultipleInputsNotSupported {
+                num_inputs: session.inputs.len()
+            }
+        );
+
+        // Onnx model input type must be a Tensor in order to accept a 2d ndarray as input
+        let ort::value::ValueType::Tensor {
+            ty: input_tensor_element_type,
+            dimensions: input_dimensions,
+            dimension_symbols: _dimension_symbols,
+        } = &session.inputs[0].input_type
+        else {
+            return Err(MachineLearningError::InvalidInputType {
+                input_type: session.inputs[0].input_type.clone(),
+            });
+        };
+
+        // Input dimensions must be convertable to a valid tensor shape
+        let input_shape = try_onnx_tensor_to_ml_tensorshape_3d(input_dimensions)?;
+
+        // Onnx model must output one prediction per pixel as
+        // (1) a Tensor with a single dimension of unknown size (dim = [-1]), or
+        // (2) a Tensor with two dimensions, the first of unknown size and the second of size 1 (dim = [-1, 1])
+        let ort::value::ValueType::Tensor {
+            ty: output_tensor_element_type,
+            dimensions: output_dimensions,
+            dimension_symbols: _,
+        } = &session.outputs[0].output_type
+        else {
+            return Err(MachineLearningError::InvalidOutputType {
+                output_type: session.outputs[0].output_type.clone(),
+            });
+        };
+
+        let output_shape = try_onnx_tensor_to_ml_tensorshape_3d(output_dimensions)?;
+
+        Ok(MlModelMetadata {
+            file_path: path.to_owned(),
+            input_type: try_raster_datatype_from_tensor_element_type(*input_tensor_element_type)?,
+            input_shape,
+            output_shape,
+            output_type: try_raster_datatype_from_tensor_element_type(*output_tensor_element_type)?,
+        })
+    }
 
     #[test]
     fn ort() {
@@ -624,7 +648,8 @@ mod tests {
         };
         exe_ctx.ml_models.insert(
             model_name,
-            load_model_metadata(test_data!("ml/onnx/test_classification.onnx")).unwrap(),
+            generate_model_metadata_from_onnx(test_data!("ml/onnx/test_classification.onnx"))
+                .unwrap(),
         );
 
         let query_rect = RasterQueryRectangle {
@@ -832,7 +857,7 @@ mod tests {
         };
         exe_ctx.ml_models.insert(
             model_name,
-            load_model_metadata(test_data!("ml/onnx/test_regression.onnx")).unwrap(),
+            generate_model_metadata_from_onnx(test_data!("ml/onnx/test_regression.onnx")).unwrap(),
         );
 
         let query_rect = RasterQueryRectangle {

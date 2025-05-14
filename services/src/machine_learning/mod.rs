@@ -53,7 +53,7 @@ impl MlModel {
     pub fn metadata_for_operator(
         &self,
     ) -> Result<geoengine_datatypes::machine_learning::MlModelMetadata, MachineLearningError> {
-        Ok(geoengine_datatypes::machine_learning::MlModelMetadata {
+        let meta = geoengine_datatypes::machine_learning::MlModelMetadata {
             file_path: path_with_base_path(
                 &self
                     .upload
@@ -66,7 +66,9 @@ impl MlModel {
             output_type: self.metadata.output_type.into(),
             input_shape: self.metadata.input_shape.into(),
             output_shape: self.metadata.output_shape.into(),
-        })
+        };
+
+        Ok(meta)
     }
 }
 

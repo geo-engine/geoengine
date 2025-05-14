@@ -1,4 +1,10 @@
 use actix_web::{FromRequest, HttpResponse, ResponseError, web};
+use geoengine_operators::{
+    engine::ExecutionContext,
+    machine_learning::onnx_util::{
+        check_model_shape, check_onnx_model_matches_metadata, load_onnx_model_from_metadata,
+    },
+};
 
 use crate::{
     api::model::responses::{ErrorResponse, ml_models::MlModelNameResponse},
@@ -60,12 +66,27 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
     app_ctx: web::Data<C>,
     model: web::Json<MlModel>,
 ) -> Result<web::Json<MlModelNameResponse>, MachineLearningError> {
+    let session_context = app_ctx.session_context(session);
+    let exe_context = session_context
+        .execution_context()
+        .expect("Execution Context must exist");
+
     let model = model.into_inner();
-    let id_and_name = app_ctx
-        .session_context(session)
-        .db()
-        .add_model(model)
-        .await?;
+
+    // This call also checks that the file is available!
+    let ml_model_metadata = model.metadata_for_operator()?;
+    // Check that the in/out shapes are ok
+    check_model_shape(
+        &ml_model_metadata,
+        exe_context.tiling_specification().tile_size_in_pixels,
+    )?;
+    // initialize model
+    // TODO: re-use session accross queries?
+    let session = load_onnx_model_from_metadata(&ml_model_metadata)?;
+    // Check that the model is initializable and that the types are vaild
+    check_onnx_model_matches_metadata(&session, &ml_model_metadata)?;
+
+    let id_and_name = session_context.db().add_model(model).await?;
     Ok(web::Json(id_and_name.name.into()))
 }
 
