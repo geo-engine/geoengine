@@ -7,6 +7,8 @@ use geoengine_datatypes::primitives::{
 use geoengine_macros::type_tag;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
+use serde::de::Error as SerdeError;
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
 use snafu::ResultExt;
 use std::{
@@ -898,23 +900,54 @@ impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::Continuous
 
 #[type_tag(value = "classification")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(
-    try_from = "SerializableClassificationMeasurement",
-    into = "SerializableClassificationMeasurement"
-)]
 pub struct ClassificationMeasurement {
     pub measurement: String,
-    pub classes: HashMap<u8, String>,
+    // use a BTreeMap to preserve the order of the keys
+    #[serde(serialize_with = "serialize_classes")]
+    #[serde(deserialize_with = "deserialize_classes")]
+    pub classes: BTreeMap<u8, String>,
+}
+
+fn serialize_classes<S>(classes: &BTreeMap<u8, String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut map = serializer.serialize_map(Some(classes.len()))?;
+    for (k, v) in classes {
+        map.serialize_entry(&k.to_string(), v)?;
+    }
+    map.end()
+}
+
+fn deserialize_classes<'de, D>(deserializer: D) -> Result<BTreeMap<u8, String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let map = BTreeMap::<String, String>::deserialize(deserializer)?;
+    let mut classes = BTreeMap::new();
+    for (k, v) in map {
+        classes.insert(
+            k.parse::<u8>()
+                .map_err(|e| D::Error::custom(format!("Failed to parse key as u8: {e}")))?,
+            v,
+        );
+    }
+    Ok(classes)
 }
 
 impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
     for ClassificationMeasurement
 {
     fn from(value: geoengine_datatypes::primitives::ClassificationMeasurement) -> Self {
+        let mut classes = BTreeMap::new();
+        for (k, v) in value.classes {
+            classes.insert(k, v);
+        }
+
         Self {
             r#type: Default::default(),
             measurement: value.measurement,
-            classes: value.classes,
+            classes,
         }
     }
 }
@@ -922,49 +955,16 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
 impl From<ClassificationMeasurement>
     for geoengine_datatypes::primitives::ClassificationMeasurement
 {
-    fn from(value: ClassificationMeasurement) -> Self {
-        Self {
-            measurement: value.measurement,
-            classes: value.classes,
-        }
-    }
-}
-
-/// A type that is solely for serde's serializability.
-/// You cannot serialize floats as JSON map keys.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct SerializableClassificationMeasurement {
-    pub measurement: String,
-    // use a BTreeMap to preserve the order of the keys
-    pub classes: BTreeMap<String, String>,
-}
-
-impl From<ClassificationMeasurement> for SerializableClassificationMeasurement {
     fn from(measurement: ClassificationMeasurement) -> Self {
-        let mut classes = BTreeMap::new();
-        for (k, v) in measurement.classes {
-            classes.insert(k.to_string(), v);
-        }
-        Self {
-            measurement: measurement.measurement,
-            classes,
-        }
-    }
-}
-
-impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasurement {
-    type Error = <u8 as FromStr>::Err;
-
-    fn try_from(measurement: SerializableClassificationMeasurement) -> Result<Self, Self::Error> {
         let mut classes = HashMap::with_capacity(measurement.classes.len());
         for (k, v) in measurement.classes {
-            classes.insert(k.parse::<u8>()?, v);
+            classes.insert(k, v);
         }
-        Ok(Self {
-            r#type: Default::default(),
+
+        Self {
             measurement: measurement.measurement,
             classes,
-        })
+        }
     }
 }
 
@@ -2187,5 +2187,63 @@ impl<'a> FromSql<'a> for CacheTtlSeconds {
 
     fn accepts(ty: &postgres_types::Type) -> bool {
         <i32 as FromSql>::accepts(ty)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::api::model::datatypes::ClassificationMeasurement;
+    use crate::error::Error;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn it_serializes_classification_measurement() -> Result<(), Error> {
+        let measurement = ClassificationMeasurement {
+            r#type: Default::default(),
+            measurement: "Test".to_string(),
+            classes: BTreeMap::<u8, String>::from([
+                (0, "Class 0".to_string()),
+                (1, "Class 1".to_string()),
+            ]),
+        };
+
+        let serialized = serde_json::to_string(&measurement)?;
+
+        assert_eq!(
+            serialized,
+            r#"{"type":"classification","measurement":"Test","classes":{"0":"Class 0","1":"Class 1"}}"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn it_deserializes_classification_measurement() -> Result<(), Error> {
+        let measurement = ClassificationMeasurement {
+            r#type: Default::default(),
+            measurement: "Test".to_string(),
+            classes: BTreeMap::<u8, String>::from([
+                (0, "Class 0".to_string()),
+                (1, "Class 1".to_string()),
+            ]),
+        };
+
+        let serialized = r#"{"type":"classification","measurement":"Test","classes":{"0":"Class 0","1":"Class 1"}}"#;
+        let deserialized: ClassificationMeasurement = serde_json::from_str(serialized)?;
+
+        assert_eq!(measurement, deserialized);
+        Ok(())
+    }
+
+    #[test]
+    fn it_throws_error_on_deserializing_non_integer_classification_measurement_class_value() {
+        let serialized =
+            r#"{"type":"classification","measurement":"Test","classes":{"Zero":"Class 0"}}"#;
+        let deserialized = serde_json::from_str::<ClassificationMeasurement>(serialized);
+
+        assert!(deserialized.is_err());
+        assert_eq!(
+            deserialized.unwrap_err().to_string(),
+            "Failed to parse key as u8: invalid digit found in string at line 1 column 75"
+        );
     }
 }
