@@ -16,7 +16,9 @@ jobs:
           echo "Event type: ${{ github.event_type }}"
           echo "Pull request title: ${{ github.event.pull_request.title }}"
           echo "Changes title: ${{ github.changes.title.from }}"
-          echo "Changes title: ${{ github.changes.title.to }}"
+          echo "Event name: ${{ github.event_name }}"
+          echo "Event: ${{ toJson(github.event) }}"
+          echo "Event type: ${{ github.event.type }}"
   lint-pr-title:
     if: github.event.type == 'opened' || github.changes.title.from
     runs-on: ubuntu-latest
