@@ -96,22 +96,22 @@ pub fn try_onnx_tensor_to_ml_tensorshape_3d(
     tensor_dimensions: &[i64],
 ) -> Result<MlTensorShape3D, MachineLearningError> {
     match *tensor_dimensions {
-        [-1] => Ok(MlTensorShape3D {
+        [-1..=1] => Ok(MlTensorShape3D {
             x: 1,
             y: 1,
             bands: 1,
         }),
-        [bands] | [1 | -1, bands] if bands > 0 => Ok(MlTensorShape3D {
+        [bands] | [-1..=1, bands] if bands > 0 => Ok(MlTensorShape3D {
             x: 1,
             y: 1,
             bands: (bands as u32),
         }),
-        [x, y] | [-1 | 1, x, y] if x > 0 && y > 0 => Ok(MlTensorShape3D {
+        [x, y] | [-1..=1, x, y] if x > 0 && y > 0 => Ok(MlTensorShape3D {
             x: x as u32,
             y: y as u32,
             bands: 1,
         }),
-        [x, y, bands] | [-1 | 1, x, y, bands] if x > 0 && y > 0 && bands > 0 => {
+        [x, y, bands] | [-1..=1, x, y, bands] if x > 0 && y > 0 && bands > 0 => {
             Ok(MlTensorShape3D {
                 x: x as u32,
                 y: y as u32,
