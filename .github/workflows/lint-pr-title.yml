@@ -4,8 +4,6 @@ on:
     types:
       - opened
       - edited
-  # Allows you to run this workflow manually from the Actions tab
-  workflow_dispatch:
 
 jobs:
   debug:
@@ -15,12 +13,10 @@ jobs:
         run: |
           echo "Event type: ${{ github.event_type }}"
           echo "Pull request title: ${{ github.event.pull_request.title }}"
-          echo "Changes title: ${{ github.changes.title.from }}"
-          echo "Event name: ${{ github.event_name }}"
-          echo "Event: ${{ toJson(github.event) }}"
-          echo "Event type: ${{ github.event.type }}"
+          echo "Changes title: ${{ github.event.changes.title.from }}"
+          echo "Event action: ${{ github.event.action }}"
   lint-pr-title:
-    if: github.event.type == 'opened' || github.changes.title.from
+    if: github.event.action == 'opened' || github.event.changes.title.from
     runs-on: ubuntu-latest
     steps:
       - name: Create config
