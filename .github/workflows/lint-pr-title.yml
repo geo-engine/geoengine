@@ -1,0 +1,39 @@
+name: "Lint PR Title"
+on:
+  pull_request:
+    types:
+      - opened
+      - edited
+
+jobs:
+  lint-pr-title:
+    if: github.event.action == 'opened' || github.event.changes.title.from
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create config
+        run: |
+          cat <<EOF > .commitlintrc.yml
+          rules:
+            type-enum:
+              - 2
+              - "always"
+              - - build
+                - ci
+                - docs
+                - feat
+                - fix
+                - perf
+                - refactor
+                - test
+            type-empty: [2, "never"]
+            scope-enum:
+              - 2
+              - "always"
+              - - datatypes
+                - expression
+                - macros
+                - operators
+                - services
+          EOF
+      - name: Check PR title
+        run: echo ${{ github.event.pull_request.title }} | npx @commitlint/cli
