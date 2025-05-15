@@ -9,7 +9,7 @@ on:
 
 jobs:
   lint-pr-title:
-    if: event.type == 'opened' || event.changes.title.from
+    if: github.event.type == 'opened' || github.changes.title.from
     runs-on: ubuntu-latest
     steps:
       - name: Create config
