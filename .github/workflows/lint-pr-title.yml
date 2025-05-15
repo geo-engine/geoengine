@@ -6,15 +6,6 @@ on:
       - edited
 
 jobs:
-  debug:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Debug
-        run: |
-          echo "Event type: ${{ github.event_type }}"
-          echo "Pull request title: ${{ github.event.pull_request.title }}"
-          echo "Changes title: ${{ github.event.changes.title.from }}"
-          echo "Event action: ${{ github.event.action }}"
   lint-pr-title:
     if: github.event.action == 'opened' || github.event.changes.title.from
     runs-on: ubuntu-latest
