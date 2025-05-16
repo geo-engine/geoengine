@@ -1,4 +1,4 @@
-use crate::api::model::datatypes::LayerId;
+use crate::api::model::datatypes::{DataProviderId, LayerId};
 use crate::contexts::{ApplicationContext, GeoEngineDb, SessionContext};
 use crate::datasets::DatasetName;
 use crate::datasets::storage::DatasetDb;
@@ -78,6 +78,7 @@ pub enum Resource {
     Project(ProjectResource),
     Dataset(DatasetResource),
     MlModel(MlModelResource),
+    Provider(DataProviderResource),
 }
 
 #[type_tag(value = "layer")]
@@ -108,6 +109,13 @@ pub struct DatasetResource {
     pub id: DatasetName,
 }
 
+#[type_tag(value = "provider")]
+#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DataProviderResource {
+    pub id: DataProviderId,
+}
+
 #[type_tag(value = "mlModel")]
 #[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -129,6 +137,7 @@ impl Resource {
                 Ok(ResourceId::LayerCollection(layer_collection.id.clone()))
             }
             Resource::Project(project_id) => Ok(ResourceId::Project(project_id.id)),
+            Resource::Provider(provider_id) => Ok(ResourceId::DataProvider(provider_id.id.into())),
             Resource::Dataset(dataset_name) => {
                 let dataset_id_option = db.resolve_dataset_name_to_id(&dataset_name.id).await?;
                 dataset_id_option
@@ -182,6 +191,10 @@ impl TryFrom<(String, String)> for Resource {
             "mlModel" => Resource::MlModel(MlModelResource {
                 r#type: Default::default(),
                 id: MlModelName::from_str(&value.1)?,
+            }),
+            "provider" => Resource::Provider(DataProviderResource {
+                r#type: Default::default(),
+                id: DataProviderId(Uuid::from_str(&value.1).context(error::Uuid)?),
             }),
             _ => {
                 return Err(Error::InvalidResourceId {

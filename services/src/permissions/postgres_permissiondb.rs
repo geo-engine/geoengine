@@ -32,6 +32,7 @@ impl ResourceTypeName for ResourceId {
             ResourceId::Project(_) => "project_id",
             ResourceId::DatasetId(_) => "dataset_id",
             ResourceId::MlModel(_) => "ml_model_id",
+            ResourceId::DataProvider(_) => "provider_id",
         }
     }
 
@@ -50,6 +51,7 @@ impl ResourceTypeName for ResourceId {
             ResourceId::Project(id) => Ok(id.0),
             ResourceId::DatasetId(id) => Ok(id.0),
             ResourceId::MlModel(id) => Ok(id.0),
+            ResourceId::DataProvider(id) => Ok(id.0),
         }
     }
 }
@@ -330,33 +332,60 @@ where
     ) -> Result<Vec<PermissionListing>, PermissionDbError> {
         let resource: ResourceId = resource.into();
 
-        self.ensure_permission_in_tx(resource.clone(), Permission::Owner, tx)
+        self.ensure_permission_in_tx(resource.clone(), Permission::Read, tx)
+            .await?;
+
+        // Owners see all permissions, Readers only permissions from roles they are assigned to.
+        // Owner Permissions are always returned first so Owners know immediately that they are
+        // an owner of the resource when the first entry is an Owner permission.
+        let is_owner = self
+            .has_permission_in_tx(resource.clone(), Permission::Owner, tx)
             .await?;
 
         let stmt = tx
             .prepare(&format!(
                 "
-            SELECT 
-                r.id, r.name, p.permission 
-            FROM 
-                permissions p JOIN roles r ON (p.role_id = r.id) 
-            WHERE 
+            SELECT
+                r.id, r.name, p.permission
+            FROM
+                permissions p JOIN {roles} r ON (p.role_id = r.id)
+            WHERE
                 {resource_type} = $1
-            ORDER BY r.name ASC
+            ORDER BY p.permission DESC, r.name ASC
             OFFSET $2
             LIMIT $3;",
-                resource_type = resource.resource_type_name()
+                resource_type = resource.resource_type_name(),
+                roles = if is_owner {
+                    "roles"
+                } else {
+                    "(SELECT r.id, r.name \
+                    FROM user_roles ur JOIN roles r ON (ur.role_id = r.id) \
+                    WHERE ur.user_id = $4)"
+                }
             ))
             .await
             .context(PostgresPermissionDbError)?;
 
-        let rows = tx
-            .query(
+        let rows = if is_owner {
+            tx.query(
                 &stmt,
                 &[&resource.uuid()?, &(i64::from(offset)), &(i64::from(limit))],
             )
             .await
-            .context(PostgresPermissionDbError)?;
+            .context(PostgresPermissionDbError)?
+        } else {
+            tx.query(
+                &stmt,
+                &[
+                    &resource.uuid()?,
+                    &(i64::from(offset)),
+                    &(i64::from(limit)),
+                    &self.session.user.id,
+                ],
+            )
+            .await
+            .context(PostgresPermissionDbError)?
+        };
 
         let permissions = rows
             .into_iter()
