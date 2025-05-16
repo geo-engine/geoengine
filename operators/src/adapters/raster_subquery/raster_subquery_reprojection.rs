@@ -95,12 +95,25 @@ where
             self.state.out_spatial_grid.geo_transform()
         );
 
-        let valid_pixel_bounds = self
-            .state
-            .out_spatial_grid
-            .grid_bounds()
-            .intersection(&tile_info.global_pixel_bounds())
-            .and_then(|b| b.intersection(&query_rect.spatial_query.grid_bounds()));
+        // TODO: instead of producing an empty stream if the query does not intersect the data or projection,
+        // we need to actually perform the query in order to give the nodata tiles the correct time interval
+        // because all tiles in a time step need the same temporal validity, even across diferent quereis
+
+        // so we need a way to reliably query the source in such cases that ensures no data tiles are produced.
+        // what to do in cases where the bbox coordinates cannot be reprojected?
+        // - query the data bbox but discard the data?
+        // - implement a special empty bbox query that makes sure to produce empty tiles but correct time intervals?
+        // - ideally: implement a way to query the time intervals of the source data and produce empty tiles accordingly
+
+        let valid_pixel_bounds = dbg!(
+            dbg!(
+                self.state
+                    .out_spatial_grid
+                    .grid_bounds()
+                    .intersection(&tile_info.global_pixel_bounds())
+            )
+            .and_then(|b| b.intersection(&query_rect.spatial_query.grid_bounds()))
+        );
 
         let valid_spatial_bounds = valid_pixel_bounds.map(|pb| {
             self.state
@@ -114,20 +127,25 @@ where
             let projected_bounds = bounds.reproject(&proj);
 
             match projected_bounds {
-                Ok(pb) => Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
-                    self.state
-                        .in_spatial_grid
-                        .geo_transform()
-                        .spatial_to_grid_bounds(&pb),
-                    TimeInterval::new_instant(start_time)?,
-                    band_idx.into(),
-                ))),
+                Ok(pb) => {
+                    dbg!("produce something");
+                    Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+                        self.state
+                            .in_spatial_grid
+                            .geo_transform()
+                            .spatial_to_grid_bounds(&pb),
+                        TimeInterval::new_instant(start_time)?,
+                        band_idx.into(),
+                    )))
+                }
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.
                 Err(geoengine_datatypes::error::Error::OutputBboxEmpty { bbox: _ }) => Ok(None),
                 Err(e) => Err(e.into()),
             }
         } else {
+            dbg!("output query rectangle is not valid in source projection => produce empty tile");
+
             // output query rectangle is not valid in source projection => produce empty tile
             Ok(None)
         }
@@ -352,6 +370,8 @@ impl<T: Pixel> FoldTileAccu for TileWithProjectionCoordinates<T> {
     type RasterType = T;
 
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        debug_assert!(self.accu_tile.time.end() > self.accu_tile.time.start());
+        debug_assert!(self.accu_tile.time.end() != self.accu_tile.time.start() + 1);
         Ok(self.accu_tile)
     }
 
@@ -362,6 +382,7 @@ impl<T: Pixel> FoldTileAccu for TileWithProjectionCoordinates<T> {
 
 impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
     fn set_time(&mut self, time: TimeInterval) {
+        debug_assert!(time.end() > time.start());
         self.accu_tile.time = time;
     }
 

@@ -10,6 +10,7 @@ use geoengine_datatypes::{
 use pin_project::pin_project;
 use snafu::Snafu;
 use std::{pin::Pin, task::Poll};
+use tracing::debug;
 
 #[derive(Debug, Snafu)]
 pub enum SparseTilesFillAdapterError {
@@ -61,7 +62,11 @@ impl From<TimeInterval> for FillerTimeBounds {
     fn from(time: TimeInterval) -> FillerTimeBounds {
         FillerTimeBounds {
             start: time.start(),
-            end: time.end(),
+            end: if time.is_instant() {
+                time.end() + 1
+            } else {
+                time.end()
+            },
         }
     }
 }
@@ -74,11 +79,14 @@ impl FillerTimeBounds {
         self.end
     }
 
+    // TODO: return result
     pub fn new(start: TimeInstance, end: TimeInstance) -> Self {
+        debug_assert!(start < end);
         Self::new_unchecked(start, end)
     }
 
     pub fn new_unchecked(start: TimeInstance, end: TimeInstance) -> Self {
+        debug_assert!(start < end);
         Self { start, end }
     }
 }
@@ -107,6 +115,12 @@ struct GridIdxAndBand {
 impl<T: Pixel> StateContainer<T> {
     /// Create a new no-data `RasterTile2D` with `GridIdx` and time from the current state
     fn current_no_data_tile(&self) -> RasterTile2D<T> {
+        // debug_assert!(
+        //     self.current_time.unwrap().end() != self.current_time.unwrap().start() + 1,
+        //     "current no data tile, current_time: {:?}, current tile time: {:?}",
+        //     self.current_time,
+        //     self.next_tile.as_ref().map(|t| t.time)
+        // );
         RasterTile2D::new(
             self.current_time
                 .expect("time must exist when a tile is stored."),
@@ -231,6 +245,12 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     fn next_time_interval_from_stored_tile(&self) -> Option<TimeInterval> {
+        debug!(
+            "filladapter ding current time {:?}, stored tile time {:?}",
+            self.current_time,
+            self.next_tile.as_ref().map(|t| t.time)
+        );
+
         // we wrapped around. We need to do time progress.
         if let Some(tile) = &self.next_tile {
             let stored_tile_time = tile.time;
@@ -263,6 +283,7 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     fn set_current_time_from_initial_tile(&mut self, first_tile_time: TimeInterval) {
+        debug_assert!(first_tile_time.end() > first_tile_time.start());
         // if we know a bound we must use it to set the current time
         let start_data_bound = self.data_time_bounds.start();
         let requested_start = self.requested_time_bounds.start();
@@ -279,10 +300,9 @@ impl<T: Pixel> StateContainer<T> {
                 requested_start,
                 start_data_bound
             );
-            self.current_time = Some(TimeInterval::new_unchecked(
-                start_data_bound,
-                first_tile_time.start(),
-            ));
+            self.current_time =
+                Some(TimeInterval::new(start_data_bound, first_tile_time.start()).unwrap());
+            debug_assert!(!self.current_time.unwrap().is_instant());
             return;
         }
         if start_data_bound > first_tile_time.start() {
@@ -297,10 +317,10 @@ impl<T: Pixel> StateContainer<T> {
 
     fn set_current_time_from_data_time_bounds(&mut self) {
         assert!(self.state == State::FillToEnd);
-        self.current_time = Some(TimeInterval::new_unchecked(
-            self.data_time_bounds.start(),
-            self.data_time_bounds.end(),
-        ));
+        self.current_time = Some(
+            TimeInterval::new(self.data_time_bounds.start(), self.data_time_bounds.end()).unwrap(),
+        );
+        debug_assert!(!self.current_time.unwrap().is_instant());
     }
 
     fn update_current_time(&mut self, new_time: TimeInterval) {
@@ -335,6 +355,8 @@ impl<T: Pixel> StateContainer<T> {
 
         debug_assert!(current_time.end() < self.data_time_bounds.end());
 
+        debug_assert!(self.requested_time_bounds.end() <= self.data_time_bounds.end());
+
         let new_time = if current_time.is_instant() {
             TimeInterval::new_unchecked(current_time.end() + 1, self.data_time_bounds.end())
         } else {
@@ -363,10 +385,15 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     fn store_tile(&mut self, tile: RasterTile2D<T>) {
+        debug_assert!(tile.time.end() > tile.time.start());
+
         debug_assert!(self.next_tile.is_none());
         let current_time = self
             .current_time
             .expect("Time must be set when the first tile arrives");
+
+        debug_assert!(current_time.end() > current_time.start());
+
         debug_assert!(current_time.start() <= tile.time.start());
         debug_assert!(
             current_time.start() < tile.time.start()
@@ -481,6 +508,11 @@ where
                 // poll for a first (input) tile
                 let result_tile = match ready!(this.stream.as_mut().poll_next(cx)) {
                     Some(Ok(tile)) => {
+                        debug!(
+                            "Initial tile: {:?} with time interval {:?}, currentime: {:?}",
+                            tile.tile_position, tile.time, this.sc.current_time
+                        );
+                        debug_assert!(tile.time.end() > tile.time.start());
                         // now we have to inspect the time we got and the bound we need to fill. If there are bounds known, then we need to check if the tile starts with the bounds.
                         this.sc.set_current_time_from_initial_tile(tile.time);
 
@@ -494,11 +526,24 @@ where
                                 tile.band,
                             )
                         {
+                            debug!(
+                                "AAA Initial tile: {:?} with time interval {:?}, currentime: {:?}",
+                                tile.tile_position, tile.time, this.sc.current_time
+                            );
                             this.sc.state = State::PollingForNextTile; // return the received tile and set state to polling for the next tile
                             tile
                         } else {
-                            this.sc.store_tile(tile);
+                            debug!(
+                                "BBB Initial tile: {:?} with time interval {:?}, currentime: {:?}",
+                                tile.tile_position, tile.time, this.sc.current_time
+                            );
+                            this.sc.store_tile(tile.clone());
                             this.sc.state = State::FillAndProduceNextTile; // save the tile and go to fill mode
+
+                            debug!(
+                                "CCC Initial tile: {:?} with time interval {:?}, currentime: {:?}",
+                                tile.tile_position, tile.time, this.sc.current_time
+                            );
                             this.sc.current_no_data_tile()
                         }
                     }
@@ -508,6 +553,7 @@ where
                         return Poll::Ready(Some(Err(e)));
                     }
                     // the source never produced a tile.
+                    // TODO: this should never happen??
                     None => {
                         debug_assert!(this.sc.current_idx == min_idx);
                         this.sc.state = State::FillToEnd;
@@ -515,6 +561,9 @@ where
                         this.sc.current_no_data_tile()
                     }
                 };
+
+                debug_assert!(result_tile.time.end() > result_tile.time.start());
+
                 // move the current_idx. There is no need to do time progress here. Either a new tile triggers that or it is never needed for an empty source.
                 this.sc.current_idx = wrapped_next_idx;
                 this.sc.current_band_idx = wrapped_next_band;
@@ -535,6 +584,17 @@ where
 
                 let res = match ready!(this.stream.as_mut().poll_next(cx)) {
                     Some(Ok(tile)) => {
+                        debug_assert!(
+                            tile.time.end() > tile.time.start(),
+                            "Tile time interval is invalid: {:?}",
+                            tile.time
+                        );
+
+                        debug!(
+                            "DDD next tile: {:?} with time interval {:?}, currentime: {:?}",
+                            tile.tile_position, tile.time, this.sc.current_time
+                        );
+
                         // 1. The start of the recieved TimeInterval MUST NOT BE before the start of the current TimeInterval.
                         if this.sc.time_starts_before_current_state(tile.time) {
                             this.sc.state = State::Ended;
@@ -548,9 +608,10 @@ where
                         }
                         if tile.time.start() >= this.sc.requested_time_bounds.end() {
                             log::warn!(
-                                "The tile time start ({}) is outside of the requested time bounds ({})!",
+                                "The tile time start ({}) is outside of the requested time bounds ({})! end is {}",
                                 tile.time.start(),
-                                this.sc.requested_time_bounds.end()
+                                this.sc.requested_time_bounds.end(),
+                                tile.time.end()
                             );
                         }
 
@@ -575,6 +636,7 @@ where
                         if this.sc.time_starts_equals_current_state(tile.time)
                             && !this.sc.time_duration_equals_current_state(tile.time)
                         {
+                            debug!("missmatch tile is empty: {}", tile.is_empty());
                             this.sc.state = State::Ended;
                             return Poll::Ready(Some(Err(
                                 SparseTilesFillAdapterError::TileTimeIntervalLengthMissmatch {

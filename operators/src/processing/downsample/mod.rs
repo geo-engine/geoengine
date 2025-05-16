@@ -402,6 +402,7 @@ impl<T: Pixel> FoldTileAccu for DownsampleAccu<T> {
     type RasterType = T;
 
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
+        debug_assert!(self.time.unwrap().end() > self.time.unwrap().start());
         // TODO: later do conversation of accu into tile here
 
         let output_tile = RasterTile2D::new_with_tile_info(
@@ -471,7 +472,9 @@ pub fn fold_impl<T>(mut accu: DownsampleAccu<T>, tile: RasterTile2D<T>) -> Downs
 where
     T: Pixel,
 {
+    debug_assert!(tile.time.end() > tile.time.start());
     // get the time now because it is not known when the accu was created
+
     accu.set_time(tile.time);
     accu.cache_hint.merge_with(&tile.cache_hint);
 

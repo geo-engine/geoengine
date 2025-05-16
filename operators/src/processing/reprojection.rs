@@ -1480,6 +1480,7 @@ mod tests {
 
         for r in result {
             assert!(r.is_empty());
+            assert_eq!(r.time, time_interval);
         }
     }
 

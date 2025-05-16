@@ -360,7 +360,7 @@ pub enum Error {
     InterpolationOperator {
         source: crate::processing::InterpolationError,
     },
-    #[snafu(context(false))]
+    #[snafu(display("Downsampling error: {source}"), context(false))]
     DownsampleOperator {
         source: crate::processing::DownsamplingError,
     },
