@@ -9,6 +9,7 @@ use crate::machine_learning::error::{
     InvalidInputPixelShape, InvalidInputTensorShape, InvalidInputType, InvalidOutputPixelShape,
     InvalidOutputType, MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
     MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, UnsupportedInOutMapping,
+    UnsupportedNumberOfOutputAttributes,
 };
 
 use super::{MachineLearningError, error::Ort};
@@ -70,6 +71,13 @@ pub fn check_model_output_shape_supported(
         InvalidOutputPixelShape {
             tensor_shape: model_metadata.output_shape,
             tiling_shape
+        }
+    );
+
+    ensure!(
+        model_metadata.output_is_single_attribute(),
+        UnsupportedNumberOfOutputAttributes {
+            output_attributes: model_metadata.num_output_bands()
         }
     );
 

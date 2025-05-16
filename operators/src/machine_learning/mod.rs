@@ -49,6 +49,10 @@ pub enum MachineLearningError {
         tensor_shape: MlTensorShape3D,
         tiling_shape: GridShape2D,
     },
+    #[snafu(display(
+        "Currently only a single (1) output feature (band) is supported. Found {output_attributes}"
+    ))]
+    UnsupportedNumberOfOutputAttributes { output_attributes: u32 },
     #[snafu(display("Onnx model must have Tensor output. Found {:?}.", output_type))]
     InvalidOutputType { output_type: ort::value::ValueType },
     #[snafu(display("Onnx tensor element type {:?} is not supported.", element_type))]
