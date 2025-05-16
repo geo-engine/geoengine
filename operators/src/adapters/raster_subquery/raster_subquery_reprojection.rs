@@ -95,7 +95,16 @@ where
             self.state.out_spatial_grid.geo_transform()
         );
 
-        // why is this none?
+        // TODO: instead of producing an empty stream if the query does not intersect the data or projection,
+        // we need to actually perform the query in order to give the nodata tiles the correct time interval
+        // because all tiles in a time step need the same temporal validity, even across diferent quereis
+
+        // so we need a way to reliably query the source in such cases that ensures no data tiles are produced.
+        // what to do in cases where the bbox coordinates cannot be reprojected?
+        // - query the data bbox but discard the data?
+        // - implement a special empty bbox query that makes sure to produce empty tiles but correct time intervals?
+        // - ideally: implement a way to query the time intervals of the source data and produce empty tiles accordingly
+
         let valid_pixel_bounds = dbg!(
             dbg!(
                 self.state
@@ -106,12 +115,6 @@ where
             .and_then(|b| b.intersection(&query_rect.spatial_query.grid_bounds()))
         );
 
-        log::debug!(
-            "ÖÖÖÖÖ valid_pixel_bounds {:?} -> {:?}",
-            tile_info.global_pixel_bounds(),
-            valid_pixel_bounds
-        );
-
         let valid_spatial_bounds = valid_pixel_bounds.map(|pb| {
             self.state
                 .out_spatial_grid
@@ -119,21 +122,9 @@ where
                 .grid_to_spatial_bounds(&pb)
         });
 
-        log::debug!(
-            "ÖÖÖÖÖ valid_spatial_bounds {:?} -> {:?}",
-            query_rect.spatial_query.grid_bounds(),
-            valid_spatial_bounds
-        );
-
         if let Some(bounds) = valid_spatial_bounds {
             let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
             let projected_bounds = bounds.reproject(&proj);
-
-            log::debug!(
-                "ÖÖÖÖÖ projected_bounds {:?} -> {:?}",
-                bounds,
-                projected_bounds
-            );
 
             match projected_bounds {
                 Ok(pb) => {
@@ -154,13 +145,6 @@ where
             }
         } else {
             dbg!("output query rectangle is not valid in source projection => produce empty tile");
-            log::debug!(
-                "ÖÖÖÖÖ output query rectangle is not valid in source projection => produce empty tile {:?}",
-                self.state
-                    .out_spatial_grid
-                    .geo_transform()
-                    .grid_to_spatial_bounds(&query_rect.spatial_query.grid_bounds())
-            );
 
             // output query rectangle is not valid in source projection => produce empty tile
             Ok(None)

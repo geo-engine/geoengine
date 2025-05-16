@@ -1,4 +1,4 @@
-use chrono::{NaiveDate, TimeZone, naive};
+use chrono::{NaiveDate, TimeZone};
 use gdal::vector::{Defn, Feature, FieldDefn, LayerOptions, OGRFieldType};
 use gdal::{Dataset as GdalDataset, DriverManager, Metadata};
 use geoengine_datatypes::primitives::{CacheTtlSeconds, DateTime, TimeInstance, TimeInterval};

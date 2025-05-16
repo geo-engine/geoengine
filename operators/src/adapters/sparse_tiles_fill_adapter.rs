@@ -284,7 +284,6 @@ impl<T: Pixel> StateContainer<T> {
 
     fn set_current_time_from_initial_tile(&mut self, first_tile_time: TimeInterval) {
         debug_assert!(first_tile_time.end() > first_tile_time.start());
-        debug_assert!(first_tile_time.end() != first_tile_time.start() + 1);
         // if we know a bound we must use it to set the current time
         let start_data_bound = self.data_time_bounds.start();
         let requested_start = self.requested_time_bounds.start();
@@ -322,7 +321,6 @@ impl<T: Pixel> StateContainer<T> {
             TimeInterval::new(self.data_time_bounds.start(), self.data_time_bounds.end()).unwrap(),
         );
         debug_assert!(!self.current_time.unwrap().is_instant());
-        // debug_assert!(self.current_time.unwrap().end() != self.current_time.unwrap().start() + 1);
     }
 
     fn update_current_time(&mut self, new_time: TimeInterval) {
@@ -330,7 +328,6 @@ impl<T: Pixel> StateContainer<T> {
             !new_time.is_instant(),
             "Tile time is the data validity and must not be an instant!"
         );
-        debug_assert!(new_time.end() != new_time.start() + 1);
 
         if let Some(old_time) = self.current_time {
             if old_time == new_time {

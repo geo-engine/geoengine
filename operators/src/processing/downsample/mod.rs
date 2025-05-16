@@ -256,8 +256,6 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        log::debug!("ÖÖÖÖÖÖ Downsampling query: {:?}", query);
-
         // do not interpolate if the source resolution is already fine enough
 
         let in_spatial_grid = self.source.result_descriptor().spatial_grid_descriptor();
@@ -405,7 +403,6 @@ impl<T: Pixel> FoldTileAccu for DownsampleAccu<T> {
 
     async fn into_tile(self) -> Result<RasterTile2D<Self::RasterType>> {
         debug_assert!(self.time.unwrap().end() > self.time.unwrap().start());
-        debug_assert!(self.time.unwrap().end() != self.time.unwrap().start() + 1);
         // TODO: later do conversation of accu into tile here
 
         let output_tile = RasterTile2D::new_with_tile_info(

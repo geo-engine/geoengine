@@ -28,7 +28,6 @@ use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::debug;
-use tracing_subscriber::field::debug;
 use uuid::Uuid;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
@@ -277,14 +276,9 @@ async fn wms_map_handler<C: ApplicationContext>(
             request.crs.ok_or(error::Error::MissingSpatialReference)?;
 
         let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
-
-        debug!("WMS request bounds: {:?}", request_bounds);
-
         let x_request_res = request_bounds.size_x() / f64::from(request.width);
         let y_request_res = request_bounds.size_y() / f64::from(request.height);
         let request_resolution = SpatialResolution::new(x_request_res.abs(), y_request_res.abs())?;
-
-        debug!("WMS request resolution: {:?}", request_resolution);
 
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 
@@ -357,7 +351,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             query_tiling_pixel_grid.grid_bounds(),
             request.time.unwrap_or_else(default_time_from_config).into(),
             attributes,
-        ); // <-- this one 
+        );
 
         debug!("WMS query rect: {:?}", query_rect);
 
