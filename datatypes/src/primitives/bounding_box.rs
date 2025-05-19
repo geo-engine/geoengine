@@ -580,6 +580,23 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
     }
 }
 
+impl From<BoundingBox2D> for geojson::Geometry {
+    fn from(bounds: BoundingBox2D) -> Self {
+        let value = geojson::Value::Polygon(vec![vec![
+            vec![bounds.upper_left().x, bounds.upper_left().y],
+            vec![bounds.upper_right().x, bounds.upper_right().y],
+            vec![bounds.lower_right().x, bounds.lower_right().y],
+            vec![bounds.lower_left().x, bounds.lower_left().y],
+            vec![bounds.upper_left().x, bounds.upper_left().y],
+        ]]);
+        geojson::Geometry {
+            bbox: None,
+            value,
+            foreign_members: None,
+        }
+    }
+}
+
 impl ApproxEq for BoundingBox2D {
     type Margin = float_cmp::F64Margin;
 

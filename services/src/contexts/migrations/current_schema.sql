@@ -817,6 +817,14 @@ CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
     gdal_config "StringPair" []
 );
 
+CREATE TYPE "WildliveDataConnectorDefinition" AS (
+    id uuid,
+    "name" text,
+    description text,
+    api_key text,
+    priority smallint
+);
+
 CREATE TYPE "DataProviderDefinition" AS (
     -- one of
     aruna_data_provider_definition "ArunaDataProviderDefinition",
@@ -833,7 +841,8 @@ CREATE TYPE "DataProviderDefinition" AS (
     sentinel_s2_l2_a_cogs_provider_definition
     "SentinelS2L2ACogsProviderDefinition",
     copernicus_dataspace_provider_definition
-    "CopernicusDataspaceDataProviderDefinition"
+    "CopernicusDataspaceDataProviderDefinition",
+    wildlive_data_connector_definition "WildliveDataConnectorDefinition"
 );
 
 CREATE TABLE layer_providers (

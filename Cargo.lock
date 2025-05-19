@@ -2425,6 +2425,7 @@ dependencies = [
  "clap_derive",
  "config",
  "convert_case 0.8.0",
+ "csv",
  "erased-serde",
  "flexi_logger",
  "float-cmp",

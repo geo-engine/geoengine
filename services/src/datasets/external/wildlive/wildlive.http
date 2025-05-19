@@ -1,0 +1,44 @@
+GET https://wildlive.senckenberg.de/api/search?query=type:project
+Content-Type: application/json
+
+###
+
+GET https://wildlive.senckenberg.de/api/objects/wildlive/ef7833589d61b2d2a905
+Content-Type: application/json
+
+###
+
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup",
+    "filter": [
+        "/id",
+        "/content/inStationsLayout",
+        "/content/decimalLatitude",
+        "/content/decimalLongitude"
+    ],
+    "page_num": 0,
+    "page_size": 10000
+}
+
+###
+
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup",
+    "filter": [
+        "/id",
+        "/content/id",
+        "/content/name",
+        "/content/location",
+        "/content/description",
+        "/content/decimalLatitude",
+        "/content/decimalLongitude"
+    ],
+    "page_num": 0,
+    "page_size": 10000
+}

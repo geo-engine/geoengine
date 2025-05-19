@@ -494,7 +494,10 @@ async fn image_objects(station: &StationSetup) -> Vec<ImageObject> {
         eprintln!("[QUERY] {url}");
 
         found_image_annotations.extend(
-            reqwest::get(url)
+            reqwest::Client::new()
+                .get(url)
+                .bearer_auth("w3hwnxogncwj1in85lge86awl")
+                .send()
                 .await
                 .unwrap()
                 .json()
