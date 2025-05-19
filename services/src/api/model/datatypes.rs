@@ -2190,6 +2190,48 @@ impl<'a> FromSql<'a> for CacheTtlSeconds {
     }
 }
 
+/// A struct describing tensor shape for `MlModelMetadata`
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+pub struct MlTensorShape3D {
+    pub y: u32,
+    pub x: u32,
+    pub bands: u32, // TODO: named attributes?
+}
+
+impl MlTensorShape3D {
+    pub fn new_y_x_attr(y: u32, x: u32, bands: u32) -> Self {
+        Self { y, x, bands }
+    }
+
+    pub fn new_single_pixel_bands(bands: u32) -> Self {
+        Self { y: 1, x: 1, bands }
+    }
+
+    pub fn new_single_pixel_single_band() -> Self {
+        Self::new_single_pixel_bands(1)
+    }
+}
+
+impl From<geoengine_datatypes::machine_learning::MlTensorShape3D> for MlTensorShape3D {
+    fn from(value: geoengine_datatypes::machine_learning::MlTensorShape3D) -> Self {
+        Self {
+            y: value.y,
+            x: value.x,
+            bands: value.bands,
+        }
+    }
+}
+
+impl From<MlTensorShape3D> for geoengine_datatypes::machine_learning::MlTensorShape3D {
+    fn from(value: MlTensorShape3D) -> Self {
+        Self {
+            y: value.y,
+            x: value.x,
+            bands: value.bands,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::api::model::datatypes::ClassificationMeasurement;

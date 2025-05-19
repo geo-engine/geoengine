@@ -1,6 +1,6 @@
 use crate::{
     dataset::{SYSTEM_NAMESPACE, is_invalid_name_char},
-    raster::RasterDataType,
+    raster::{GridShape2D, GridSize, RasterDataType},
 };
 use serde::{Deserialize, Serialize, de::Visitor};
 use snafu::Snafu;
@@ -135,15 +135,72 @@ impl Visitor<'_> for MlModelNameDeserializeVisitor {
     }
 }
 
+/// A struct describing tensor shape for `MlModelMetadata`
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
+pub struct MlTensorShape3D {
+    pub y: u32,
+    pub x: u32,
+    pub bands: u32, // TODO: named attributes?
+}
+
+impl MlTensorShape3D {
+    pub fn new_y_x_bands(y: u32, x: u32, bands: u32) -> Self {
+        Self { y, x, bands }
+    }
+
+    pub fn new_single_pixel_bands(bands: u32) -> Self {
+        Self { y: 1, x: 1, bands }
+    }
+
+    pub fn new_single_pixel_single_band() -> Self {
+        Self::new_single_pixel_bands(1)
+    }
+
+    pub fn axis_size_y(&self) -> u32 {
+        self.y
+    }
+
+    pub fn axis_size_x(&self) -> u32 {
+        self.x
+    }
+
+    pub fn yx_matches_tile_shape(&self, tile_shape: &GridShape2D) -> bool {
+        self.axis_size_x() as usize == tile_shape.axis_size_x()
+            && self.axis_size_y() as usize == tile_shape.axis_size_y()
+    }
+}
+
 // For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
 // To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
 pub struct MlModelMetadata {
     pub file_path: PathBuf,
     pub input_type: RasterDataType,
-    pub num_input_bands: u32, // number of features per sample (bands per pixel)
-    pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
-                                     // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+    pub output_type: RasterDataType,
+    pub input_shape: MlTensorShape3D,
+    pub output_shape: MlTensorShape3D, // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+}
+
+impl MlModelMetadata {
+    pub fn num_input_bands(&self) -> u32 {
+        self.input_shape.bands
+    }
+
+    pub fn num_output_bands(&self) -> u32 {
+        self.output_shape.bands
+    }
+
+    pub fn input_is_single_pixel(&self) -> bool {
+        self.input_shape.x == 1 && self.input_shape.y == 1
+    }
+
+    pub fn output_is_single_pixel(&self) -> bool {
+        self.output_shape.x == 1 && self.output_shape.y == 1
+    }
+
+    pub fn output_is_single_attribute(&self) -> bool {
+        self.num_output_bands() == 1
+    }
 }
 
 #[cfg(test)]
