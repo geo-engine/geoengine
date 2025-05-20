@@ -251,7 +251,7 @@ where
                 let pixels = pixels.into_iter().flatten().collect::<Vec<TIn>>();
 
                 let outputs = if self.model_metadata.input_is_single_pixel() {
-                    let rows = width * height;
+                    let rows = pixels.len();
                     let cols = num_bands;
 
                     let samples = Array2::from_shape_vec((rows, cols), pixels).expect(
