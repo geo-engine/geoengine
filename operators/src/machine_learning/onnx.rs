@@ -249,33 +249,26 @@ where
                 }
 
                 let pixels = pixels.into_iter().flatten().collect::<Vec<TIn>>();
+                let input_name = &session.inputs[0].name;
+
 
                 let outputs = if self.model_metadata.input_is_single_pixel() {
-                    let rows = pixels.len();
-                    let cols = num_bands;
 
-                    let samples = Array2::from_shape_vec((rows, cols), pixels).expect(
+                    let samples = Array2::from_shape_vec((pixels.len(), num_bands), pixels).expect(
                         "Array2 should be valid because it is created from a Vec with the correct size",
                     );
 
-                    let input_name = &session.inputs[0].name;
-
-                    let out = session
+                    session
                         .run(ort::inputs![input_name => samples].context(Ort)?)
-                        .context(Ort)?;
-                    Ok(out)
+                        .context(Ort)
                 } else if self.model_metadata.input_shape.yx_matches_tile_shape(&tile_shape){
                     let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
                         "Array4 should be valid because it is created from a Vec with the correct size",
                     );
 
-                    let input_name = &session.inputs[0].name;
-
-                    let out = session
+                    session
                         .run(ort::inputs![input_name => samples].context(Ort)?)
-                        .context(Ort)?;
-
-                    Ok(out)
+                        .context(Ort)
                 } else {
                     Err(
                         MachineLearningError::InvalidInputPixelShape {
