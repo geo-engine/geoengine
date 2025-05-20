@@ -21,7 +21,7 @@ use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
-use super::onnx_util::{check_onnx_model_matches_metadata, load_onnx_model_from_metadata};
+use super::onnx_util::load_onnx_model_from_metadata;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -195,9 +195,6 @@ where
 
         // TODO: re-use session accross queries?
         let session = load_onnx_model_from_metadata(&self.model_metadata)?;
-
-        // TODO: check @ initialize?
-        check_onnx_model_matches_metadata(&session, &self.model_metadata)?;
 
         let stream = self
             .source
