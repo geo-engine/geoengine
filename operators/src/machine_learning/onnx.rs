@@ -266,7 +266,7 @@ where
                     Ok(out)
                 } else if self.model_metadata.input_shape.yx_matches_tile_shape(&tile_shape){
                     let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
-                        "Array2 should be valid because it is created from a Vec with the correct size",
+                        "Array4 should be valid because it is created from a Vec with the correct size",
                     );
 
                     let input_name = &session.inputs[0].name;
