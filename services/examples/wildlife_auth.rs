@@ -1,3 +1,6 @@
+#![allow(clippy::unwrap_used, clippy::print_stderr, clippy::dbg_macro)] // ok for example
+#![allow(dead_code)] // TODO: remove
+
 #[derive(serde::Deserialize, Debug)]
 struct TokenResponse {
     access_token: String,
@@ -21,7 +24,7 @@ async fn main() {
     let response = reqwest::Client::new()
         .post("https://webapp.senckenberg.de/auth/realms/wildlive-portal/protocol/openid-connect/token")
         .body( // TODO: urlencode
-            serde_urlencoded::to_string(&[
+            serde_urlencoded::to_string([
                 ("grant_type", "client_credentials"),
                 ("client_id", user),
                 ("client_secret", &password),

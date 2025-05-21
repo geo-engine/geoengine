@@ -4,7 +4,7 @@ use super::{
     error,
 };
 use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{NaiveDate, Utc};
 use geoengine_datatypes::{dataset::DataProviderId, error::BoxedResultExt};
 use tokio_postgres::{
     Socket, Transaction,
@@ -59,7 +59,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     async fn has_projects(&self, provider_id: DataProviderId) -> Result<bool> {
-        let current_date = DateTime::<Utc>::from(Utc::now()).date_naive();
+        let current_date = Utc::now().date_naive();
 
         has_projects(get_connection!(self.conn_pool), provider_id, &current_date).await
     }
@@ -69,7 +69,7 @@ where
         provider_id: DataProviderId,
         projects: &[ProjectFeature],
     ) -> Result<()> {
-        let current_date = DateTime::<Utc>::from(Utc::now()).date_naive();
+        let current_date = Utc::now().date_naive();
 
         let mut connection = get_connection!(self.conn_pool);
         let transaction = deferred_write_transaction!(connection);
@@ -85,7 +85,7 @@ where
     }
 
     async fn has_stations(&self, provider_id: DataProviderId, project_id: &str) -> Result<bool> {
-        let current_date = DateTime::<Utc>::from(Utc::now()).date_naive();
+        let current_date = Utc::now().date_naive();
 
         has_stations(
             get_connection!(self.conn_pool),
@@ -102,7 +102,7 @@ where
         project_id: &str,
         stations: &[StationFeature],
     ) -> Result<()> {
-        let current_date = DateTime::<Utc>::from(Utc::now()).date_naive();
+        let current_date = Utc::now().date_naive();
 
         let mut connection = get_connection!(self.conn_pool);
         let transaction = deferred_write_transaction!(connection);
@@ -136,21 +136,6 @@ macro_rules! get_connection {
     }};
 }
 pub(super) use get_connection;
-
-/// Starts a read-only snapshot-isolated transaction for a multiple read
-macro_rules! readonly_transaction {
-    ($connection:expr) => {{
-        use geoengine_datatypes::error::BoxedResultExt;
-        $connection
-            .build_transaction()
-            .read_only(true)
-            .deferrable(true) // get snapshot isolation
-            .start()
-            .await
-            .boxed_context(crate::datasets::external::wildlive::error::UnexpectedExecution)?
-    }};
-}
-pub(super) use readonly_transaction;
 
 /// Starts a deferred write transaction
 macro_rules! deferred_write_transaction {

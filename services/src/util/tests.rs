@@ -696,7 +696,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, DatabaseConnectionConfi
 
     let mut db_config = get_config_element::<Postgres>().unwrap();
     db_config.schema = format!("geoengine_test_{}", rand::rng().next_u64()); // generate random temp schema
-    debug!("Creating schema {}", dbg!(&db_config.schema));
+    debug!("Creating schema {}", db_config.schema);
 
     let db_config = DatabaseConnectionConfig {
         host: db_config.host,

@@ -84,7 +84,7 @@ struct QueryResultContent<T> {
 }
 
 impl<T> QueryResultContent<T> {
-    fn to_content(self) -> T {
+    fn into_content(self) -> T {
         self.content
     }
 }
@@ -115,7 +115,7 @@ pub(super) async fn projects_dataset(
     api_endpoint: &Url,
     api_token: Option<&str>,
 ) -> Result<Vec<ProjectFeature>> {
-    let projects = projects(&api_endpoint, api_token.clone()).await?;
+    let projects = projects(api_endpoint, api_token).await?;
     let station_coordinates = stations::<StationCoordinate>(
         api_endpoint,
         api_token,
@@ -130,12 +130,15 @@ pub(super) async fn projects_dataset(
         &projects,
     )
     .await?
-    .fold(HashMap::new(), |mut acc, content| {
-        acc.entry(content.stations_layout)
-            .or_insert_with(Vec::new)
-            .push(content.coordinate);
-        acc
-    });
+    .fold(
+        HashMap::new(),
+        |mut acc: std::collections::HashMap<_, Vec<Coordinate>>, content| {
+            acc.entry(content.stations_layout)
+                .or_default()
+                .push(content.coordinate);
+            acc
+        },
+    );
 
     let features = crate::util::spawn_blocking(move || {
         let mut features = Vec::<ProjectFeature>::with_capacity(projects.len());
@@ -146,7 +149,7 @@ pub(super) async fn projects_dataset(
                     .station_layouts
                     .iter()
                     .filter_map(|layout| station_coordinates.get(layout))
-                    .flat_map(|coordinates| coordinates.into_iter().map(Coordinate2D::from)),
+                    .flat_map(|coordinates| coordinates.iter().map(Coordinate2D::from)),
             ) else {
                 return Err(WildliveError::EmptyProjectBounds {
                     project: project.id,
@@ -282,15 +285,15 @@ where
         query.push_str(first);
     } else {
         stations = vec![];
-        return Ok(stations.into_iter().map(QueryResultContent::to_content));
-    };
+        return Ok(stations.into_iter().map(QueryResultContent::into_content));
+    }
     for station_layout in station_layouts {
         query.push_str("\" OR /inStationsLayout:\"");
         query.push_str(station_layout);
     }
     query.push_str("\") AND type:StationSetup");
 
-    let url = api_endpoint.join(&format!("search"))?;
+    let url = api_endpoint.join("search")?;
 
     debug!(target: "Query", "{url}");
 
@@ -310,7 +313,7 @@ where
     let results: QueryResults<T> = request.send().await?.json().await?;
     stations = results.results;
 
-    Ok(stations.into_iter().map(QueryResultContent::to_content))
+    Ok(stations.into_iter().map(QueryResultContent::into_content))
 }
 
 #[cfg(test)]
@@ -344,9 +347,7 @@ mod tests {
                 request::method("POST"),
                 request::path("/api/search"),
                 request::body(matchers::json_decoded(matchers::eq(SearchRequest {
-                    query: format!(
-                        "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup",
-                    ),
+                    query: "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup".to_string(),
                     filter: Some(
                         [
                             "/id",
@@ -386,7 +387,7 @@ mod tests {
                 )
                 .unwrap(),
             },]
-        )
+        );
     }
 
     fn json_responder(path: &Path) -> impl httptest::responders::Responder + use<> {
@@ -397,6 +398,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_downloads_a_project_stations_dataset() {
         let mock_server = httptest::Server::run();
 
@@ -415,9 +417,7 @@ mod tests {
                 request::method("POST"),
                 request::path("/api/search"),
                 request::body(matchers::json_decoded(matchers::eq(SearchRequest {
-                    query: format!(
-                        "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup",
-                    ),
+                    query: "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup".to_string(),
                     filter: Some(
                         [
                             "/id",
@@ -428,7 +428,7 @@ mod tests {
                             "/content/decimalLatitude",
                             "/content/decimalLongitude",
                         ]
-                        .map(|s| s.to_string())
+                        .map(ToString::to_string)
                         .to_vec(),
                     ),
                     page_num: 0,
@@ -623,6 +623,6 @@ mod tests {
                     geom: Coordinate2D::new(-62.0, -16.4),
                 },
             ]
-        )
+        );
     }
 }
