@@ -2451,6 +2451,7 @@ dependencies = [
  "ordered-float 5.0.0",
  "paste",
  "pbkdf2",
+ "postgres-protocol",
  "postgres-types",
  "pretty_assertions",
  "proj",
@@ -2487,6 +2488,7 @@ dependencies = [
  "vergen",
  "vergen-gitcl",
  "walkdir",
+ "wkt",
  "xml-rs",
  "zip",
 ]

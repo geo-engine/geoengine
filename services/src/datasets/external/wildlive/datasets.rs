@@ -1,5 +1,8 @@
-use super::{Result, WildliveError};
-use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D};
+use super::{Result, WildliveError, error};
+use geoengine_datatypes::{
+    error::BoxedResultExt,
+    primitives::{BoundingBox2D, Coordinate2D},
+};
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -14,6 +17,24 @@ pub(super) struct Project {
     pub description: String,
     #[serde(rename = "hasStationsLayouts")]
     pub station_layouts: Vec<String>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct ProjectFeature {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub geom: BoundingBox2D,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct StationFeature {
+    pub id: String,
+    pub project_id: String,
+    pub name: String,
+    pub description: String,
+    pub location: String,
+    pub geom: Coordinate2D,
 }
 
 #[derive(Debug, serde::Deserialize, PartialEq)]
@@ -93,9 +114,8 @@ impl From<&Coordinate> for Coordinate2D {
 pub(super) async fn projects_dataset(
     api_endpoint: &Url,
     api_token: Option<&str>,
-) -> Result<geojson::FeatureCollection> {
+) -> Result<Vec<ProjectFeature>> {
     let projects = projects(&api_endpoint, api_token.clone()).await?;
-    // let station_coordinates = station_coordinates(&api_endpoint, api_token, &projects).await?;
     let station_coordinates = stations::<StationCoordinate>(
         api_endpoint,
         api_token,
@@ -118,7 +138,7 @@ pub(super) async fn projects_dataset(
     });
 
     let features = crate::util::spawn_blocking(move || {
-        let mut features = Vec::<geojson::Feature>::with_capacity(projects.len());
+        let mut features = Vec::<ProjectFeature>::with_capacity(projects.len());
 
         for project in projects {
             let Some(bbox) = BoundingBox2D::from_coord_iter(
@@ -133,32 +153,20 @@ pub(super) async fn projects_dataset(
                 });
             };
 
-            features.push(geojson::Feature {
-                bbox: None,
-                geometry: Some(bbox.into()),
-                id: geojson::feature::Id::String(project.id).into(),
-                properties: {
-                    let mut properties = serde_json::Map::new();
-                    properties.insert("name".to_string(), project.name.as_str().into());
-                    properties.insert(
-                        "description".to_string(),
-                        project.description.as_str().into(),
-                    );
-                    Some(properties)
-                },
-                foreign_members: None,
+            features.push(ProjectFeature {
+                id: project.id.clone(),
+                name: project.name.clone(),
+                description: project.description.clone(),
+                geom: bbox,
             });
         }
 
         Ok(features)
     })
-    .await??;
+    .await
+    .boxed_context(error::UnexpectedExecution)??;
 
-    Ok(geojson::FeatureCollection {
-        bbox: None,
-        features,
-        foreign_members: None,
-    })
+    Ok(features)
 }
 
 pub(super) async fn projects(api_endpoint: &Url, api_token: Option<&str>) -> Result<Vec<Project>> {
@@ -211,7 +219,7 @@ pub(super) async fn project_stations_dataset(
     api_endpoint: &Url,
     api_token: Option<&str>,
     project_id: &str,
-) -> Result<geojson::FeatureCollection> {
+) -> Result<Vec<StationFeature>> {
     let mut project = vec![project(api_endpoint, api_token, project_id).await?];
     let stations = stations::<StationSetup>(
         api_endpoint,
@@ -233,43 +241,25 @@ pub(super) async fn project_stations_dataset(
 
     let project = project.remove(0);
     let features = crate::util::spawn_blocking(move || {
-        let mut features = Vec::<geojson::Feature>::new();
+        let mut features = Vec::<StationFeature>::new();
 
         for station in stations {
-            features.push(geojson::Feature {
-                bbox: None,
-                geometry: {
-                    let point = geojson::Value::Point(vec![
-                        station.decimal_longitude,
-                        station.decimal_latitude,
-                    ]);
-                    Some(geojson::Geometry::new(point))
-                },
-                id: geojson::feature::Id::String(station.id.clone()).into(),
-                properties: {
-                    let mut properties = serde_json::Map::new();
-                    properties.insert("name".to_string(), station.name.as_str().into());
-                    properties.insert(
-                        "description".to_string(),
-                        station.description.as_str().into(),
-                    );
-                    properties.insert("location".to_string(), station.location.as_str().into());
-                    properties.insert("projectId".to_string(), project.id.as_str().into());
-                    Some(properties)
-                },
-                foreign_members: None,
+            features.push(StationFeature {
+                id: station.id.clone(),
+                project_id: project.id.clone(),
+                name: station.name.clone(),
+                description: station.description.clone(),
+                location: station.location.clone(),
+                geom: Coordinate2D::new(station.decimal_longitude, station.decimal_latitude),
             });
         }
 
         features
     })
-    .await?;
+    .await
+    .boxed_context(error::UnexpectedExecution)?;
 
-    Ok(geojson::FeatureCollection {
-        bbox: None,
-        features,
-        foreign_members: None,
-    })
+    Ok(features)
 }
 
 async fn stations<T>(
@@ -323,32 +313,10 @@ where
     Ok(stations.into_iter().map(QueryResultContent::to_content))
 }
 
-pub(super) async fn station_names(
-    api_endpoint: &Url,
-    api_token: Option<&str>,
-    project_id: &str,
-) -> Result<Vec<StationName>> {
-    let project = project(api_endpoint, api_token, project_id).await?;
-    let station_names = stations::<StationName>(
-        api_endpoint,
-        api_token,
-        vec![
-            "/id".to_string(),
-            "/content/name".to_string(),
-            "/content/description".to_string(),
-        ],
-        &[project],
-    )
-    .await?;
-
-    Ok(station_names.collect())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use geoengine_datatypes::test_data;
-    use geojson::GeoJson;
     use httptest::{Expectation, all_of, matchers, matchers::request, responders};
     use pretty_assertions::assert_eq;
     use std::path::Path;
@@ -407,32 +375,17 @@ mod tests {
         let dataset = projects_dataset(&api_endpoint, None).await.unwrap();
 
         assert_eq!(
-            GeoJson::from(dataset).to_json_value(),
-            serde_json::json!({
-                "type": "FeatureCollection",
-                "features": [
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Polygon",
-                            "coordinates": [
-                                [
-                                    [-62.0,-16.3],
-                                    [-61.9,-16.3],
-                                    [-61.9,-16.4],
-                                    [-62.0,-16.4],
-                                    [-62.0,-16.3]
-                                ]
-                            ]
-                        },
-                        "properties": {
-                            "name": "CameraTrapping project in Bolivia",
-                            "description": "Research project for Jaguar wildlife monitoring"
-                        },
-                        "id": "wildlive/ef7833589d61b2d2a905",
-                    }
-                ]
-            })
+            dataset,
+            vec![ProjectFeature {
+                id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                name: "CameraTrapping project in Bolivia".to_string(),
+                description: "Research project for Jaguar wildlife monitoring".to_string(),
+                geom: BoundingBox2D::new(
+                    Coordinate2D::new(-62.0, -16.4),
+                    Coordinate2D::new(-61.9, -16.3)
+                )
+                .unwrap(),
+            },]
         )
     }
 
@@ -499,370 +452,177 @@ mod tests {
                 .unwrap();
 
         assert_eq!(
-            GeoJson::from(dataset).to_string_pretty().unwrap(),
-            serde_json::to_string_pretty(&serde_json::json!({
-                "type": "FeatureCollection",
-                "features": [
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.3
-                            ]
-                        },
-                        "properties": {
-                            "name": "VacaMuerta",
-                            "description": "Old station name: Vacamuerta",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/79e043c3053fb39df381"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "LaCachuela_arriba",
-                            "description": "Old station name: LaCachuelaArriba",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/c2bd44066dbda6f0d1ac"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "LaCachuela_CaminoCurichi",
-                            "description": "Old station name: CaminoCurichi",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/16f3b0b65b4a58acb782"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "CaminoCachuela",
-                            "description": "Old station name: CaminoCachuela",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/0ff0ce1ddfcfb0aff407"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "Lagarto",
-                            "description": "Old station name: Lagarto",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/52baefeffeb2648fdaf7"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -61.9,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "LajaDeNoviquia",
-                            "description": "Old station name: LajaDeNoviquia",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/024b9357f1e23877a243"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "Orquidia",
-                            "description": "Old station name: Orquidia",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/f421dc2239b8fd7a1980"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "Jaguar",
-                            "description": "Old station name: Jaguar",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/797cb6f275e9fc8afa4b"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "Salitral",
-                            "description": "Old station name: Salitral",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/a43254afb230ce163256"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "LaCachuela",
-                            "description": "Old station name: LaCachuela",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/229392d20de8b45e8114"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.3
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-06",
-                            "description": "Old station name: nuevo-4",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/3204d6391519562525ec"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.3
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-12",
-                            "description": "Old station name: nan",
-                            "location": "MonteFlorI",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/468ba2036b2a4ff004c9"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.3
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-11",
-                            "description": "Old station name: nuevo-5",
-                            "location": "MonteFlorI",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/ea64f18b8fa1dec31196"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-02",
-                            "description": "Old station name: Quebrada",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/259cfcfd85fcb0ce276d"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -61.9,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-05",
-                            "description": "Old station name: nuevo-3",
-                            "location": "Noviquia",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/358df8fa949f35e91a64"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-04",
-                            "description": "Old station name: nuevo-2",
-                            "location": "Noviquia",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/33516c1ce3b7e26c296d"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.3
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-13",
-                            "description": "Old station name: nan",
-                            "location": "NaN",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/498ae1629861699f5323"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.3
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-07",
-                            "description": "Old station name: NuevoManantial",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/6bf42fa2eb245604bb31"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.3
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-14",
-                            "description": "Old station name: LaCruz",
-                            "location": "LaCruz",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/2cd0a46deb9e47b0518f"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-01",
-                            "description": "Old station name: Popo",
-                            "location": "SanSebastian",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/8ced32ac3ca4f646a53b"
-                    },
-                    {
-                        "type": "Feature",
-                        "geometry": {
-                            "type": "Point",
-                            "coordinates": [
-                                -62.0,
-                                -16.4
-                            ]
-                        },
-                        "properties": {
-                            "name": "G-03",
-                            "description": "Old station name: nuevo-1",
-                            "location": "Noviquia",
-                            "projectId": "wildlive/ef7833589d61b2d2a905"
-                        },
-                        "id": "wildlive/de7f4396c2689d1fbf6d"
-                    }
-                ]
-            }))
-            .unwrap(),
+            dataset,
+            vec![
+                StationFeature {
+                    id: "wildlive/79e043c3053fb39df381".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "VacaMuerta".to_string(),
+                    description: "Old station name: Vacamuerta".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.3),
+                },
+                StationFeature {
+                    id: "wildlive/c2bd44066dbda6f0d1ac".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "LaCachuela_arriba".to_string(),
+                    description: "Old station name: LaCachuelaArriba".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/16f3b0b65b4a58acb782".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "LaCachuela_CaminoCurichi".to_string(),
+                    description: "Old station name: CaminoCurichi".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/0ff0ce1ddfcfb0aff407".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "CaminoCachuela".to_string(),
+                    description: "Old station name: CaminoCachuela".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/52baefeffeb2648fdaf7".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "Lagarto".to_string(),
+                    description: "Old station name: Lagarto".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/024b9357f1e23877a243".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "LajaDeNoviquia".to_string(),
+                    description: "Old station name: LajaDeNoviquia".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-61.9, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/f421dc2239b8fd7a1980".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "Orquidia".to_string(),
+                    description: "Old station name: Orquidia".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/797cb6f275e9fc8afa4b".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "Jaguar".to_string(),
+                    description: "Old station name: Jaguar".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/a43254afb230ce163256".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "Salitral".to_string(),
+                    description: "Old station name: Salitral".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/229392d20de8b45e8114".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "LaCachuela".to_string(),
+                    description: "Old station name: LaCachuela".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/3204d6391519562525ec".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-06".to_string(),
+                    description: "Old station name: nuevo-4".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.3),
+                },
+                StationFeature {
+                    id: "wildlive/468ba2036b2a4ff004c9".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-12".to_string(),
+                    description: "Old station name: nan".to_string(),
+                    location: "MonteFlorI".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.3),
+                },
+                StationFeature {
+                    id: "wildlive/ea64f18b8fa1dec31196".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-11".to_string(),
+                    description: "Old station name: nuevo-5".to_string(),
+                    location: "MonteFlorI".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.3),
+                },
+                StationFeature {
+                    id: "wildlive/259cfcfd85fcb0ce276d".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-02".to_string(),
+                    description: "Old station name: Quebrada".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/358df8fa949f35e91a64".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-05".to_string(),
+                    description: "Old station name: nuevo-3".to_string(),
+                    location: "Noviquia".to_string(),
+                    geom: Coordinate2D::new(-61.9, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/33516c1ce3b7e26c296d".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-04".to_string(),
+                    description: "Old station name: nuevo-2".to_string(),
+                    location: "Noviquia".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/498ae1629861699f5323".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-13".to_string(),
+                    description: "Old station name: nan".to_string(),
+                    location: "NaN".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.3),
+                },
+                StationFeature {
+                    id: "wildlive/6bf42fa2eb245604bb31".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-07".to_string(),
+                    description: "Old station name: NuevoManantial".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.3),
+                },
+                StationFeature {
+                    id: "wildlive/2cd0a46deb9e47b0518f".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-14".to_string(),
+                    description: "Old station name: LaCruz".to_string(),
+                    location: "LaCruz".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.3),
+                },
+                StationFeature {
+                    id: "wildlive/8ced32ac3ca4f646a53b".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-01".to_string(),
+                    description: "Old station name: Popo".to_string(),
+                    location: "SanSebastian".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+                StationFeature {
+                    id: "wildlive/de7f4396c2689d1fbf6d".to_string(),
+                    project_id: "wildlive/ef7833589d61b2d2a905".to_string(),
+                    name: "G-03".to_string(),
+                    description: "Old station name: nuevo-1".to_string(),
+                    location: "Noviquia".to_string(),
+                    geom: Coordinate2D::new(-62.0, -16.4),
+                },
+            ]
         )
     }
 }

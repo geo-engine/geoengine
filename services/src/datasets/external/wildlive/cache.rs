@@ -1,109 +1,404 @@
-use super::{Result, WildliveLayerId, error};
-use chrono::{DateTime, Utc};
-use snafu::ResultExt;
-use std::{
-    collections::{HashMap, hash_map::Entry},
-    fmt::Write,
-    path::PathBuf,
-    sync::Arc,
+use super::{
+    Result, WildliveLayerId,
+    datasets::{ProjectFeature, StationFeature},
+    error,
 };
-use tokio::sync::RwLock;
+use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
+use chrono::{DateTime, NaiveDate, Utc};
+use geoengine_datatypes::{dataset::DataProviderId, error::BoxedResultExt};
+use tokio_postgres::{
+    Socket, Transaction,
+    tls::{MakeTlsConnect, TlsConnect},
+};
+use tonic::async_trait;
+use wkt::to_wkt::ToWkt;
 
-pub trait DatasetFilename {
-    /// GeoJSON uses the file name as the layer name without the extension.
-    fn layer_name(&self) -> Result<String>;
-
-    /// The filename of the dataset.
-    fn filename(&self) -> Result<String>;
+pub trait DatasetInDb {
+    /// Table name of the dataset.
+    fn table_name(&self) -> &str;
 }
 
-/// A cache for the Wildlive datasets.
-/// Caches datasets for the current day.
-///
-/// Note: Currently, we store the data in a temporary directory.
-/// In the future, we might want to use a more clever solution, like a database or a cache.
-/// The data is also not cleaned up after use, so we need to be careful about memory usage.
-///
-/// TODO: store in Postgres?
-#[derive(Debug, Clone)]
-pub struct WildliveCache {
-    cache_dir: Arc<tempfile::TempDir>,
-    cache: Arc<RwLock<HashMap<String, PathBuf>>>,
-}
-
-impl WildliveCache {
-    pub fn new() -> Result<Self> {
-        Ok(Self {
-            cache_dir: dbg!(Arc::new(
-                tempfile::tempdir().context(error::TempDirCreation)?
-            )),
-            cache: Arc::new(RwLock::new(HashMap::new())),
-        })
-    }
-
-    pub async fn get(&self, filename: &String) -> Result<Option<PathBuf>> {
-        let cache = self.cache.read().await;
-
-        Ok(cache.get(filename).cloned())
-    }
-
-    pub async fn add(&self, filename: String, file_contents: String) -> Result<PathBuf> {
-        let mut cache = self.cache.write().await;
-
-        let entry = match cache.entry(filename.clone()) {
-            Entry::Occupied(entry) => return Ok(entry.get().clone()),
-            Entry::Vacant(entry) => entry,
-        };
-
-        let file_path = self.cache_dir.path().join(&filename);
-        tokio::fs::write(&file_path, file_contents)
-            .await
-            .context(error::UnableToWriteDataset)?;
-        entry.insert(file_path.clone());
-
-        Ok(file_path)
-    }
-}
-
-impl DatasetFilename for WildliveLayerId {
-    fn layer_name(&self) -> Result<String> {
-        let mut filename = String::new();
-
-        let current_date = DateTime::<Utc>::from(Utc::now())
-            .date_naive()
-            .format("%Y-%m-%d");
-        write!(&mut filename, "{current_date}_").context(error::UnableToCreateDatasetFilename)?;
-
+impl DatasetInDb for WildliveLayerId {
+    fn table_name(&self) -> &str {
         match self {
-            WildliveLayerId::Projects => filename.push_str("projects"),
-            WildliveLayerId::Stations { project_id } => {
-                filename.push_str("stations_");
-                insert_valid_file_chars(&mut filename, project_id);
-            }
-            WildliveLayerId::Captures { project_id } => {
-                filename.push_str("captures_");
-                insert_valid_file_chars(&mut filename, project_id);
-            }
-        };
-
-        Ok(filename)
-    }
-
-    fn filename(&self) -> Result<String> {
-        let mut filename = self.layer_name()?;
-
-        filename.push_str(".geojson");
-
-        Ok(filename)
-    }
-}
-
-fn insert_valid_file_chars(filename: &mut String, input: &str) {
-    for c in input.chars() {
-        if c.is_alphanumeric() || c == '_' || c == '-' {
-            filename.push(c)
-        } else {
-            filename.push('_');
+            WildliveLayerId::Projects => "wildlive_projects",
+            WildliveLayerId::Stations { project_id: _ } => "wildlive_stations",
+            WildliveLayerId::Captures { project_id: _ } => "wildlive_captures",
         }
     }
+}
+
+#[async_trait]
+/// Cache storage for the [`WildliveDataConnector`] provider
+/// Caches datasets for the current day.
+pub trait WildliveDbCache: Send + Sync {
+    async fn has_projects(&self, provider_id: DataProviderId) -> Result<bool>;
+
+    async fn insert_projects(
+        &self,
+        provider_id: DataProviderId,
+        projects: &[ProjectFeature],
+    ) -> Result<()>;
+
+    async fn has_stations(&self, provider_id: DataProviderId, project_id: &str) -> Result<bool>;
+
+    async fn insert_stations(
+        &self,
+        provider_id: DataProviderId,
+        project_id: &str,
+        stations: &[StationFeature],
+    ) -> Result<()>;
+}
+
+#[async_trait]
+impl<Tls> WildliveDbCache for crate::contexts::PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn has_projects(&self, provider_id: DataProviderId) -> Result<bool> {
+        let current_date = DateTime::<Utc>::from(Utc::now()).date_naive();
+
+        has_projects(get_connection!(self.conn_pool), provider_id, &current_date).await
+    }
+
+    async fn insert_projects(
+        &self,
+        provider_id: DataProviderId,
+        projects: &[ProjectFeature],
+    ) -> Result<()> {
+        let current_date = DateTime::<Utc>::from(Utc::now()).date_naive();
+
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = deferred_write_transaction!(connection);
+
+        delete_old_cached_projects(&transaction, provider_id, &current_date).await?;
+
+        insert_projects(&transaction, provider_id, &current_date, projects).await?;
+
+        transaction
+            .commit()
+            .await
+            .boxed_context(error::UnexpectedExecution)
+    }
+
+    async fn has_stations(&self, provider_id: DataProviderId, project_id: &str) -> Result<bool> {
+        let current_date = DateTime::<Utc>::from(Utc::now()).date_naive();
+
+        has_stations(
+            get_connection!(self.conn_pool),
+            provider_id,
+            &current_date,
+            project_id,
+        )
+        .await
+    }
+
+    async fn insert_stations(
+        &self,
+        provider_id: DataProviderId,
+        project_id: &str,
+        stations: &[StationFeature],
+    ) -> Result<()> {
+        let current_date = DateTime::<Utc>::from(Utc::now()).date_naive();
+
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = deferred_write_transaction!(connection);
+
+        delete_old_cached_stations(&transaction, provider_id, &current_date).await?;
+
+        insert_stations(
+            &transaction,
+            provider_id,
+            &current_date,
+            project_id,
+            stations,
+        )
+        .await?;
+
+        transaction
+            .commit()
+            .await
+            .boxed_context(error::UnexpectedExecution)
+    }
+}
+
+/// Gets a connection from the pool
+macro_rules! get_connection {
+    ($connection:expr) => {{
+        use geoengine_datatypes::error::BoxedResultExt;
+        $connection
+            .get()
+            .await
+            .boxed_context(crate::datasets::external::wildlive::error::UnexpectedExecution)?
+    }};
+}
+pub(super) use get_connection;
+
+/// Starts a read-only snapshot-isolated transaction for a multiple read
+macro_rules! readonly_transaction {
+    ($connection:expr) => {{
+        use geoengine_datatypes::error::BoxedResultExt;
+        $connection
+            .build_transaction()
+            .read_only(true)
+            .deferrable(true) // get snapshot isolation
+            .start()
+            .await
+            .boxed_context(crate::datasets::external::wildlive::error::UnexpectedExecution)?
+    }};
+}
+pub(super) use readonly_transaction;
+
+/// Starts a deferred write transaction
+macro_rules! deferred_write_transaction {
+    ($connection:expr) => {{
+        use geoengine_datatypes::error::BoxedResultExt;
+
+        let transaction = $connection
+            .transaction()
+            .await
+            .boxed_context(crate::datasets::external::wildlive::error::UnexpectedExecution)?;
+
+        // check constraints at the end to speed up insertions
+        transaction
+            .batch_execute("SET CONSTRAINTS ALL DEFERRED")
+            .await
+            .boxed_context(crate::datasets::external::wildlive::error::UnexpectedExecution)?;
+
+        transaction
+    }};
+}
+pub(super) use deferred_write_transaction;
+
+pub(crate) async fn delete_old_cached_projects(
+    transaction: &Transaction<'_>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+) -> Result<()> {
+    transaction
+        .execute(
+            // `cache_date <=` to delete potential conflicting entries
+            "
+            DELETE FROM wildlive_projects
+            WHERE
+                provider_id = $1 AND
+                cache_date <= $2
+            ;
+        ",
+            &[&provider_id, &current_date],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    Ok(())
+}
+
+pub(crate) async fn delete_old_cached_stations(
+    transaction: &Transaction<'_>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+) -> Result<()> {
+    transaction
+        .execute(
+            "
+            DELETE FROM wildlive_stations
+            WHERE
+                provider_id = $1 AND
+                cache_date < $2
+            ;
+        ",
+            &[&provider_id, &current_date],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    Ok(())
+}
+
+pub(crate) async fn has_projects<Tls>(
+    connection: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+) -> Result<bool>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let exists = connection
+        .query_one(
+            "
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM wildlive_stations
+                    WHERE
+                        provider_id = $1 AND
+                        cache_date = $2
+                )
+                ",
+            &[&provider_id, &current_date],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?
+        .get::<_, bool>(0);
+
+    Ok(exists)
+}
+
+pub(crate) async fn has_stations<Tls>(
+    connection: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+    project_id: &str,
+) -> Result<bool>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let exists = connection
+        .query_one(
+            "
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM wildlive_stations
+                    WHERE
+                        provider_id = $1 AND
+                        cache_date = $2 AND
+                        project_id = $3
+                )
+                ",
+            &[&provider_id, &current_date, &project_id],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?
+        .get::<_, bool>(0);
+
+    Ok(exists)
+}
+
+pub(crate) async fn insert_projects(
+    transaction: &Transaction<'_>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+    projects: &[ProjectFeature],
+) -> Result<()> {
+    let insert_statement = transaction
+        .prepare_typed(
+            "INSERT INTO
+                wildlive_projects (
+                    provider_id,
+                    cache_date,
+                    project_id,
+                    name,
+                    description,
+                    geom
+                ) VALUES (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    public.ST_GeomFromText($6)
+                );",
+            &[
+                tokio_postgres::types::Type::UUID,
+                tokio_postgres::types::Type::DATE,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT, // geometry
+            ],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    for feature in projects {
+        transaction
+            .execute(
+                &insert_statement,
+                &[
+                    &provider_id,
+                    &current_date,
+                    &feature.id,
+                    &feature.name,
+                    &feature.description,
+                    &feature.geom.to_wkt().to_string(),
+                ],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn insert_stations(
+    transaction: &Transaction<'_>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+    project_id: &str,
+    stations: &[StationFeature],
+) -> Result<()> {
+    let insert_statement = transaction
+        .prepare_typed(
+            "INSERT INTO
+                wildlive_stations (
+                    provider_id,
+                    cache_date,
+                    project_id,
+                    station_id,
+                    name,
+                    description,
+                    location,
+                    geom
+                ) VALUES (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    public.ST_GeomFromText($8)
+                );",
+            &[
+                tokio_postgres::types::Type::UUID,
+                tokio_postgres::types::Type::DATE,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT, // geometry
+            ],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    for feature in stations {
+        transaction
+            .execute(
+                &insert_statement,
+                &[
+                    &provider_id,
+                    &current_date,
+                    &project_id,
+                    &feature.id,
+                    &feature.name,
+                    &feature.description,
+                    &feature.location,
+                    &feature.geom.to_wkt().to_string(),
+                ],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+    }
+
+    Ok(())
 }

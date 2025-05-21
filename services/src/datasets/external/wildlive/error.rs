@@ -28,9 +28,9 @@ pub enum WildliveError {
     EmptyProjectBounds {
         project: String,
     },
-    #[snafu(display("Execution failed unexpectedly"), context(false))]
+    #[snafu(display("Unexpected execution error: Please contact the system administrator"))]
     UnexpectedExecution {
-        source: tokio::task::JoinError,
+        source: Box<dyn ErrorSource>,
     },
     #[snafu(display("Unable to create temporary directory: {source}"))]
     TempDirCreation {

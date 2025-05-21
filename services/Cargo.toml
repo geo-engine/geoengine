@@ -55,6 +55,7 @@ opentelemetry-otlp = { workspace = true }
 ordered-float = { workspace = true }
 paste = { workspace = true }
 pbkdf2 = { workspace = true }
+postgres-protocol = { workspace = true }
 postgres-types = { workspace = true }
 proj = { workspace = true }
 proj-sys = { workspace = true }
@@ -86,6 +87,7 @@ utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true }
 validator = { workspace = true }
 walkdir = { workspace = true }
+wkt = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]

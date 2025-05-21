@@ -944,6 +944,32 @@ CREATE TABLE ebv_provider_loading_infos (
     ) ON DELETE CASCADE DEFERRABLE
 );
 
+CREATE TABLE wildlive_projects (
+    provider_id uuid NOT NULL,
+    cache_date date NOT NULL,
+    project_id text NOT NULL,
+    name text NOT NULL,
+    description text NOT NULL,
+    geom public.GEOMETRY (POLYGON) NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, cache_date, project_id) DEFERRABLE
+);
+
+CREATE TABLE wildlive_stations (
+    provider_id uuid NOT NULL,
+    cache_date date NOT NULL,
+    station_id text NOT NULL,
+    project_id text NOT NULL,
+    name text NOT NULL,
+    description text NOT NULL,
+    location text NOT NULL,
+    geom public.GEOMETRY (POINT) NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, cache_date, project_id, station_id) DEFERRABLE
+);
+
 CREATE TYPE "MlModelMetadata" AS (
     file_name text,
     input_type "RasterDataType",

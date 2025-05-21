@@ -1,9 +1,5 @@
-use std::{
-    collections::HashMap,
-    sync::{Arc, LazyLock},
-};
-
 use crate::{
+    config,
     contexts::GeoEngineDb,
     datasets::listing::{Provenance, ProvenanceOutput},
     layers::{
@@ -17,10 +13,11 @@ use crate::{
         },
     },
     users::UserId,
+    util::postgres::DatabaseConnectionConfig,
     workflows::workflow::Workflow,
 };
 use async_trait::async_trait;
-use cache::{DatasetFilename, WildliveCache};
+use cache::DatasetInDb;
 use datasets::{project_stations_dataset, projects_dataset};
 use geoengine_datatypes::{
     collections::VectorDataType,
@@ -42,12 +39,13 @@ use geoengine_operators::{
         OgrSourceDatasetTimeType, OgrSourceErrorSpec, OgrSourceParameters,
     },
 };
-use geojson::GeoJson;
+use postgres_protocol::escape::escape_literal;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use tokio::sync::RwLock;
+use std::sync::Arc;
 use url::Url;
 
+pub use cache::WildliveDbCache;
 pub use error::WildliveError;
 
 mod cache;
@@ -55,10 +53,6 @@ mod datasets;
 mod error;
 
 type Result<T, E = WildliveError> = std::result::Result<T, E>;
-
-// TODO: remove on removal of data connector
-static CACHES: LazyLock<Arc<RwLock<HashMap<DataProviderId, WildliveCache>>>> =
-    LazyLock::new(|| Arc::new(RwLock::new(HashMap::new())));
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, FromSql, ToSql)]
 pub struct WildliveDataConnectorDefinition {
@@ -70,14 +64,19 @@ pub struct WildliveDataConnectorDefinition {
 }
 
 #[derive(Debug)]
-pub struct WildliveDataConnector {
+pub struct WildliveDataConnector<D: GeoEngineDb> {
     id: DataProviderId,
     api_endpoint: Url,
     user: Option<UserId>,
+    /// API key for bearer authentication
+    ///
+    /// ## TODO
+    /// - mechanism for key renewal
+    /// - use new type for secrets <https://github.com/geo-engine/geoengine/pull/1050>
     api_key: Option<String>,
     name: String,
     description: String,
-    cache: WildliveCache,
+    db: Arc<D>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -106,29 +105,16 @@ enum WildliveLayerId {
 
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for WildliveDataConnectorDefinition {
-    async fn initialize(self: Box<Self>, _db: D) -> crate::error::Result<Box<dyn DataProvider>> {
-        let caches = (*CACHES).clone();
-        let existing_cache = caches.read().await.get(&self.id).cloned();
-
-        let cache = match existing_cache {
-            Some(cache) => cache,
-            None => {
-                let mut cache_map = caches.write().await;
-                let cache = WildliveCache::new()?;
-
-                cache_map.entry(self.id.clone()).or_insert(cache).clone()
-            }
-        };
-
+    async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
         Ok(Box::new(WildliveDataConnector {
             id: self.id,
+            user: None, // TODO: set user
             api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/")
                 .map_err(|source| WildliveError::InvalidUrl { source })?,
-            user: None, // TODO: get user from db
             api_key: self.api_key,
             name: self.name,
             description: self.description,
-            cache,
+            db: Arc::new(db),
         }))
     }
 
@@ -150,7 +136,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for WildliveDataConnectorDefiniti
 }
 
 #[async_trait]
-impl DataProvider for WildliveDataConnector {
+impl<D: GeoEngineDb> DataProvider for WildliveDataConnector<D> {
     async fn provenance(&self, id: &DataId) -> crate::error::Result<ProvenanceOutput> {
         Ok(ProvenanceOutput {
             data: id.clone(),
@@ -167,7 +153,7 @@ impl DataProvider for WildliveDataConnector {
 }
 
 #[async_trait]
-impl LayerCollectionProvider for WildliveDataConnector {
+impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
     fn capabilities(&self) -> ProviderCapabilities {
         ProviderCapabilities {
             listing: true,
@@ -318,8 +304,9 @@ fn subset_range(offset: u32, limit: u32, length: usize) -> std::ops::Range<usize
 }
 
 #[async_trait]
-impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
-    for WildliveDataConnector
+impl<D: GeoEngineDb>
+    MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for WildliveDataConnector<D>
 {
     async fn meta_data(
         &self,
@@ -334,10 +321,8 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
             return Err(geoengine_operators::error::Error::InvalidDataId);
         };
 
-        let layer_id = WildliveLayerId::try_from(layer_id).map_err(|_| {
-            // TODO: be more verbose
-            geoengine_operators::error::Error::InvalidDataId
-        })?;
+        let layer_id = WildliveLayerId::try_from(layer_id)
+            .map_err(|_| geoengine_operators::error::Error::InvalidDataId)?;
 
         self.meta_data(&layer_id).await.map_err(|error| {
             geoengine_operators::error::Error::MetaData {
@@ -348,9 +333,9 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
 }
 
 #[async_trait]
-impl
+impl<D: GeoEngineDb>
     MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
-    for WildliveDataConnector
+    for WildliveDataConnector<D>
 {
     async fn meta_data(
         &self,
@@ -370,8 +355,8 @@ impl
 }
 
 #[async_trait]
-impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for WildliveDataConnector
+impl<D: GeoEngineDb> MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for WildliveDataConnector<D>
 {
     async fn meta_data(
         &self,
@@ -384,7 +369,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
     }
 }
 
-impl WildliveDataConnector {
+impl<D: GeoEngineDb> WildliveDataConnector<D> {
     fn layer_id(&self, id: WildliveLayerId) -> Result<ProviderLayerId> {
         Ok(ProviderLayerId {
             provider_id: self.id.clone(),
@@ -412,45 +397,26 @@ impl WildliveDataConnector {
         layer_id: &WildliveLayerId,
     ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
     {
-        let dataset_name = layer_id.filename()?;
-
-        let file_name = match self.cache.get(&dataset_name).await? {
-            Some(file_name) => file_name,
-            None => {
-                let geojson: geojson::FeatureCollection = match layer_id {
-                    WildliveLayerId::Projects => {
-                        projects_dataset(
-                            &self.api_endpoint,
-                            self.api_key.as_ref().map(String::as_str),
-                        )
-                        .await?
-                    }
-                    WildliveLayerId::Stations { project_id } => {
-                        project_stations_dataset(
-                            &self.api_endpoint,
-                            self.api_key.as_ref().map(String::as_str),
-                            &project_id,
-                        )
-                        .await?
-                    }
-                    WildliveLayerId::Captures { project_id: _ } => {
-                        todo!()
-                    }
-                };
-
-                self.cache
-                    .add(dataset_name.clone(), GeoJson::from(geojson).to_string())
-                    .await?
-            }
-        };
-
-        // TODO: remove outdated datasets after TTL
+        let db = self.db.as_ref();
+        let db_config = DatabaseConnectionConfig::from(
+            config::get_config_element::<config::Postgres>().unwrap(), // TODO: handle error
+        );
+        let layer_name = layer_id.table_name().to_string();
 
         match layer_id {
             WildliveLayerId::Projects => {
-                let columns: HashMap<String, VectorColumnInfo> = [
+                if !db.has_projects(self.id).await? {
+                    let dataset = projects_dataset(
+                        &self.api_endpoint,
+                        self.api_key.as_ref().map(String::as_str),
+                    )
+                    .await?;
+                    db.insert_projects(self.id, &dataset).await?;
+                }
+
+                let columns: [(String, VectorColumnInfo); 3] = [
                     (
-                        "id".to_string(),
+                        "project_id".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Text,
                             measurement: Measurement::Unitless,
@@ -470,15 +436,12 @@ impl WildliveDataConnector {
                             measurement: Measurement::Unitless,
                         },
                     ),
-                ]
-                .iter()
-                .cloned()
-                .collect();
+                ];
 
                 Ok(Box::new(StaticMetaData {
                     loading_info: OgrSourceDataset {
-                        layer_name: layer_id.layer_name()?,
-                        file_name,
+                        file_name: db_config.ogr_pg_config().into(),
+                        layer_name,
                         data_type: Some(VectorDataType::MultiPolygon),
                         time: OgrSourceDatasetTimeType::None,
                         default_geometry: None,
@@ -506,23 +469,43 @@ impl WildliveDataConnector {
                         force_ogr_spatial_filter: false,
                         on_error: OgrSourceErrorSpec::Abort,
                         sql_query: None,
-                        attribute_query: None,
-                        cache_ttl: CacheTtlSeconds::default(),
+                        attribute_query: Some(format!(
+                            "cache_date = current_date AND provider_id = {}",
+                            escape_literal(&self.id.to_string())
+                        )),
+                        cache_ttl: CacheTtlSeconds::new(60 * 60),
                     },
                     result_descriptor: VectorResultDescriptor {
                         data_type: VectorDataType::MultiPolygon,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns,
+                        columns: columns.iter().cloned().collect(),
                         time: None, // TODO
                         bbox: None, // TODO
                     },
                     phantom: std::marker::PhantomData,
                 }))
             }
-            WildliveLayerId::Stations { project_id: _ } => {
-                let columns: HashMap<String, VectorColumnInfo> = [
+            WildliveLayerId::Stations { project_id } => {
+                if !db.has_stations(self.id, &project_id).await? {
+                    let dataset = project_stations_dataset(
+                        &self.api_endpoint,
+                        self.api_key.as_ref().map(String::as_str),
+                        &project_id,
+                    )
+                    .await?;
+                    db.insert_stations(self.id, project_id, &dataset).await?;
+                }
+
+                let columns: [(String, VectorColumnInfo); 5] = [
                     (
-                        "id".to_string(),
+                        "station_id".to_string(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless,
+                        },
+                    ),
+                    (
+                        "project_id".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Text,
                             measurement: Measurement::Unitless,
@@ -549,15 +532,12 @@ impl WildliveDataConnector {
                             measurement: Measurement::Unitless,
                         },
                     ),
-                ]
-                .iter()
-                .cloned()
-                .collect();
+                ];
 
                 Ok(Box::new(StaticMetaData {
                     loading_info: OgrSourceDataset {
-                        layer_name: layer_id.layer_name()?,
-                        file_name,
+                        file_name: db_config.ogr_pg_config().into(),
+                        layer_name,
                         data_type: Some(VectorDataType::MultiPoint),
                         time: OgrSourceDatasetTimeType::None,
                         default_geometry: None,
@@ -585,13 +565,17 @@ impl WildliveDataConnector {
                         force_ogr_spatial_filter: false,
                         on_error: OgrSourceErrorSpec::Abort,
                         sql_query: None,
-                        attribute_query: None,
-                        cache_ttl: CacheTtlSeconds::default(),
+                        attribute_query: Some(format!(
+                            "cache_date = current_date AND provider_id = {} AND project_id = {}",
+                            escape_literal(&self.id.to_string()),
+                            escape_literal(project_id)
+                        )),
+                        cache_ttl: CacheTtlSeconds::new(60 * 60),
                     },
                     result_descriptor: VectorResultDescriptor {
                         data_type: VectorDataType::MultiPoint,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        columns,
+                        columns: columns.iter().cloned().collect(),
                         time: None, // TODO
                         bbox: None, // TODO
                     },
@@ -644,6 +628,10 @@ impl TryFrom<LayerId> for WildliveLayerId {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        contexts::{PostgresSessionContext, SessionContext},
+        ge_context,
+    };
     use geoengine_datatypes::{
         collections::VectorDataType,
         dataset::ExternalDataId,
@@ -657,6 +645,7 @@ mod tests {
         engine::VectorColumnInfo,
         source::{OgrSourceColumnSpec, OgrSourceDatasetTimeType, OgrSourceErrorSpec},
     };
+    use tokio_postgres::NoTls;
 
     #[test]
     fn it_serializes_collection_ids() {
@@ -725,8 +714,13 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn it_shows_an_overview_of_all_projects() {
+    #[ge_context::test]
+    async fn it_shows_an_overview_of_all_projects(
+        ctx: PostgresSessionContext<NoTls>,
+        db_config: DatabaseConnectionConfig,
+    ) {
+        // crate::util::tests::initialize_debugging_in_test();
+
         let connector = WildliveDataConnector {
             id: DataProviderId::from_u128(12_345_678_901_234_567_890_123_456_789_012_u128),
             api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/").unwrap(),
@@ -734,7 +728,7 @@ mod tests {
             description: "WildLIVE! Portal Connector".to_string(),
             user: None,
             api_key: None,
-            cache: WildliveCache::new().unwrap(),
+            db: Arc::new(ctx.db()),
         };
 
         let layer = connector
@@ -790,16 +784,19 @@ mod tests {
             })
             .await
             .unwrap();
+
+        // In the test config, it says `active_schema=pg_temp` before it was replaced with the test schema.
+        assert_common_prefix(
+            &loading_info.file_name.to_str().unwrap(),
+            &db_config.ogr_pg_config(),
+            "active_schema=",
+        );
+
         assert_eq!(
             loading_info,
             OgrSourceDataset {
-                file_name: connector
-                    .cache
-                    .get(&WildliveLayerId::Projects.filename().unwrap())
-                    .await
-                    .unwrap()
-                    .unwrap(),
-                layer_name: WildliveLayerId::Projects.layer_name().unwrap(),
+                file_name: loading_info.file_name.clone(),
+                layer_name: WildliveLayerId::Projects.table_name().to_string(),
                 data_type: Some(VectorDataType::MultiPolygon),
                 time: OgrSourceDatasetTimeType::None,
                 default_geometry: None,
@@ -810,7 +807,7 @@ mod tests {
                     int: vec![],
                     float: vec![],
                     text: vec![
-                        "id".to_string(),
+                        "project_id".to_string(),
                         "name".to_string(),
                         "description".to_string(),
                     ],
@@ -822,8 +819,10 @@ mod tests {
                 force_ogr_spatial_filter: false,
                 on_error: OgrSourceErrorSpec::Abort,
                 sql_query: None,
-                attribute_query: None,
-                cache_ttl: CacheTtlSeconds::default(),
+                attribute_query: Some(
+                    "cache_date = current_date AND provider_id = '0000009b-d30a-3c64-5943-dd1690a03a14'".to_string()
+                ),
+                cache_ttl: CacheTtlSeconds::new(3600),
             }
         );
 
@@ -834,7 +833,7 @@ mod tests {
                 spatial_reference: SpatialReference::epsg_4326().into(),
                 columns: [
                     (
-                        "id".to_string(),
+                        "project_id".to_string(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Text,
                             measurement: Measurement::Unitless,
@@ -862,7 +861,13 @@ mod tests {
                 bbox: None,
             }
         );
+    }
 
-        assert!(loading_info.file_name.exists());
+    fn assert_common_prefix(a: &str, b: &str, until: &str) {
+        let b_prefix = b.split_once(until).unwrap().0;
+        assert!(
+            a.starts_with(b_prefix),
+            "{a} does not start with {b_prefix}"
+        );
     }
 }
