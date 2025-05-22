@@ -1,5 +1,6 @@
 mod csv;
 mod gdal_source;
+mod multi_band_gdal_source;
 mod ogr_source;
 
 pub use self::csv::{
