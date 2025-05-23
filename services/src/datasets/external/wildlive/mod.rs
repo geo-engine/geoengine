@@ -18,7 +18,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use cache::DatasetInDb;
-use datasets::{project_stations_dataset, projects_dataset};
+use datasets::{captures_dataset, project_stations_dataset, projects_dataset};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DataId, DataProviderId, LayerId, NamedData},
@@ -36,7 +36,8 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{
         GdalLoadingInfo, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,
-        OgrSourceDatasetTimeType, OgrSourceErrorSpec, OgrSourceParameters,
+        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters,
+        OgrSourceTimeFormat,
     },
 };
 use postgres_protocol::escape::escape_literal;
@@ -282,9 +283,27 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 properties: Vec::new(),
                 metadata: Default::default(),
             }),
-            WildliveLayerId::Captures { project_id: _ } => {
-                todo!("implement WildliveDataProvider::load_layer for captures");
-            }
+            WildliveLayerId::Captures { project_id } => Ok(Layer {
+                id: self.layer_id(WildliveLayerId::Stations {
+                    project_id: project_id.clone(),
+                })?,
+                name: format!("Captures for project {project_id}"),
+                description: format!("Overview of all captures within project {project_id}"),
+                workflow: Workflow {
+                    operator: OgrSource {
+                        params: OgrSourceParameters {
+                            data: self.named_data(WildliveLayerId::Captures { project_id })?,
+                            attribute_projection: None,
+                            attribute_filters: None,
+                        },
+                    }
+                    .boxed()
+                    .into(),
+                },
+                symbology: None,
+                properties: Vec::new(),
+                metadata: Default::default(),
+            }),
         }
     }
 }
@@ -321,10 +340,16 @@ impl<D: GeoEngineDb>
         let layer_id = WildliveLayerId::try_from(layer_id)
             .map_err(|_| geoengine_operators::error::Error::InvalidDataId)?;
 
-        self.meta_data(&layer_id).await.map_err(|error| {
-            geoengine_operators::error::Error::MetaData {
-                source: Box::new(error),
-            }
+        meta_data(
+            self.id,
+            &self.api_endpoint,
+            self.api_key.as_deref(),
+            self.db.clone(),
+            layer_id,
+        )
+        .await
+        .map_err(|error| geoengine_operators::error::Error::MetaData {
+            source: Box::new(error),
         })
     }
 }
@@ -388,217 +413,301 @@ impl<D: GeoEngineDb> WildliveDataConnector<D> {
             name: LayerId::try_from(id)?.0,
         })
     }
+}
 
-    async fn meta_data(
-        &self,
-        layer_id: &WildliveLayerId,
-    ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
-    {
-        let db = self.db.as_ref();
-        let db_config = DatabaseConnectionConfig::from(
-            // TODO: - is there a way to get the current connection config?
-            //       - handle error
-            config::get_config_element::<config::Postgres>().expect("configuration is there"),
-        );
-        let layer_name = layer_id.table_name().to_string();
+async fn meta_data<D: GeoEngineDb>(
+    provider_id: DataProviderId,
+    api_endpoint: &Url,
+    api_key: Option<&str>,
+    db: Arc<D>,
+    layer_id: WildliveLayerId,
+) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>> {
+    let db_config = DatabaseConnectionConfig::from(
+        // TODO: - is there a way to get the current connection config?
+        //       - handle error
+        config::get_config_element::<config::Postgres>().expect("configuration is there"),
+    );
+    let layer_name = layer_id.table_name().to_string();
 
-        match layer_id {
-            WildliveLayerId::Projects => self.project_metadata(db, db_config, layer_name).await,
-            WildliveLayerId::Stations { project_id } => {
-                self.stations_metadata(db, db_config, layer_name, project_id)
-                    .await
-            }
-            WildliveLayerId::Captures { project_id: _ } => {
-                todo!("implement WildliveDataProvider::meta_data for captures");
-            }
-        }
-    }
-
-    async fn project_metadata(
-        &self,
-        db: &D,
-        db_config: DatabaseConnectionConfig,
-        layer_name: String,
-    ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
-    {
-        if !db.has_projects(self.id).await? {
-            let dataset = projects_dataset(&self.api_endpoint, self.api_key.as_deref()).await?;
-            db.insert_projects(self.id, &dataset).await?;
-        }
-
-        let columns: [(String, VectorColumnInfo); 3] = [
-            (
-                "project_id".to_string(),
-                VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                },
-            ),
-            (
-                "name".to_string(),
-                VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                },
-            ),
-            (
-                "description".to_string(),
-                VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                },
-            ),
-        ];
-
-        Ok(Box::new(StaticMetaData {
-            loading_info: OgrSourceDataset {
-                file_name: db_config.ogr_pg_config().into(),
+    match layer_id {
+        WildliveLayerId::Projects => {
+            project_metadata(
+                provider_id,
+                api_endpoint,
+                api_key,
+                db,
+                db_config,
                 layer_name,
-                data_type: Some(VectorDataType::MultiPolygon),
-                time: OgrSourceDatasetTimeType::None,
-                default_geometry: None,
-                columns: Some(OgrSourceColumnSpec {
-                    format_specifics: None,
-                    x: String::new(),
-                    y: None,
-                    int: vec![],
-                    float: vec![],
-                    text: columns
-                        .iter()
-                        .filter_map(|(name, info)| {
-                            if info.data_type == FeatureDataType::Text {
-                                Some(name.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
-                    bool: vec![],
-                    datetime: vec![],
-                    rename: None,
-                }),
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Abort,
-                sql_query: None,
-                attribute_query: Some(format!(
-                    "cache_date = current_date AND provider_id = {}",
-                    escape_literal(&self.id.to_string())
-                )),
-                cache_ttl: CacheTtlSeconds::new(60 * 60),
-            },
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPolygon,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                columns: columns.iter().cloned().collect(),
-                time: None, // TODO
-                bbox: None, // TODO
-            },
-            phantom: std::marker::PhantomData,
-        }))
-    }
-
-    async fn stations_metadata(
-        &self,
-        db: &D,
-        db_config: DatabaseConnectionConfig,
-        layer_name: String,
-        project_id: &str,
-    ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>>
-    {
-        if !db.has_stations(self.id, project_id).await? {
-            let dataset =
-                project_stations_dataset(&self.api_endpoint, self.api_key.as_deref(), project_id)
-                    .await?;
-            db.insert_stations(self.id, project_id, &dataset).await?;
+            )
+            .await
         }
-
-        let columns: [(String, VectorColumnInfo); 5] = [
-            (
-                "station_id".to_string(),
-                VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                },
-            ),
-            (
-                "project_id".to_string(),
-                VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                },
-            ),
-            (
-                "name".to_string(),
-                VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                },
-            ),
-            (
-                "description".to_string(),
-                VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                },
-            ),
-            (
-                "location".to_string(),
-                VectorColumnInfo {
-                    data_type: FeatureDataType::Text,
-                    measurement: Measurement::Unitless,
-                },
-            ),
-        ];
-
-        Ok(Box::new(StaticMetaData {
-            loading_info: OgrSourceDataset {
-                file_name: db_config.ogr_pg_config().into(),
+        WildliveLayerId::Stations { project_id } => {
+            stations_metadata(
+                provider_id,
+                api_endpoint,
+                api_key,
+                db,
+                db_config,
                 layer_name,
-                data_type: Some(VectorDataType::MultiPoint),
-                time: OgrSourceDatasetTimeType::None,
-                default_geometry: None,
-                columns: Some(OgrSourceColumnSpec {
-                    format_specifics: None,
-                    x: String::new(),
-                    y: None,
-                    int: vec![],
-                    float: vec![],
-                    text: columns
-                        .iter()
-                        .filter_map(|(name, info)| {
-                            if info.data_type == FeatureDataType::Text {
-                                Some(name.clone())
-                            } else {
-                                None
-                            }
-                        })
-                        .collect(),
-                    bool: vec![],
-                    datetime: vec![],
-                    rename: None,
-                }),
-                force_ogr_time_filter: false,
-                force_ogr_spatial_filter: false,
-                on_error: OgrSourceErrorSpec::Abort,
-                sql_query: None,
-                attribute_query: Some(format!(
-                    "cache_date = current_date AND provider_id = {} AND project_id = {}",
-                    escape_literal(&self.id.to_string()),
-                    escape_literal(project_id)
-                )),
-                cache_ttl: CacheTtlSeconds::new(60 * 60),
-            },
-            result_descriptor: VectorResultDescriptor {
-                data_type: VectorDataType::MultiPoint,
-                spatial_reference: SpatialReference::epsg_4326().into(),
-                columns: columns.iter().cloned().collect(),
-                time: None, // TODO
-                bbox: None, // TODO
-            },
-            phantom: std::marker::PhantomData,
-        }))
+                &project_id,
+            )
+            .await
+        }
+        WildliveLayerId::Captures { project_id } => {
+            captures_metadata(
+                provider_id,
+                api_endpoint,
+                api_key,
+                db,
+                db_config,
+                layer_name,
+                project_id,
+            )
+            .await
+        }
     }
+}
+
+async fn project_metadata<D: GeoEngineDb>(
+    provider_id: DataProviderId,
+    api_endpoint: &Url,
+    api_key: Option<&str>,
+    db: Arc<D>,
+    db_config: DatabaseConnectionConfig,
+    layer_name: String,
+) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>> {
+    if !db.has_projects(provider_id).await? {
+        let dataset = projects_dataset(api_endpoint, api_key).await?;
+        db.insert_projects(provider_id, &dataset).await?;
+    }
+
+    let unitless_column_info = VectorColumnInfo {
+        data_type: FeatureDataType::Text,
+        measurement: Measurement::Unitless,
+    };
+
+    let columns: [(String, VectorColumnInfo); 3] = [
+        ("project_id".to_string(), unitless_column_info.clone()),
+        ("name".to_string(), unitless_column_info.clone()),
+        ("description".to_string(), unitless_column_info.clone()),
+    ];
+
+    Ok(Box::new(StaticMetaData {
+        loading_info: OgrSourceDataset {
+            file_name: db_config.ogr_pg_config().into(),
+            layer_name,
+            data_type: Some(VectorDataType::MultiPolygon),
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: None,
+                x: String::new(),
+                y: None,
+                int: vec![],
+                float: vec![],
+                text: columns
+                    .iter()
+                    .filter_map(|(name, info)| {
+                        if info.data_type == FeatureDataType::Text {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Abort,
+            sql_query: None,
+            attribute_query: Some(format!(
+                "cache_date = current_date AND provider_id = {}",
+                escape_literal(&provider_id.to_string())
+            )),
+            cache_ttl: CacheTtlSeconds::new(60 * 60),
+        },
+        result_descriptor: VectorResultDescriptor {
+            data_type: VectorDataType::MultiPolygon,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            columns: columns.iter().cloned().collect(),
+            time: None, // TODO
+            bbox: None, // TODO
+        },
+        phantom: std::marker::PhantomData,
+    }))
+}
+
+async fn stations_metadata<D: GeoEngineDb>(
+    provider_id: DataProviderId,
+    api_endpoint: &Url,
+    api_key: Option<&str>,
+    db: Arc<D>,
+    db_config: DatabaseConnectionConfig,
+    layer_name: String,
+    project_id: &str,
+) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>> {
+    if !db.has_stations(provider_id, project_id).await? {
+        let dataset = project_stations_dataset(api_endpoint, api_key, project_id).await?;
+        db.insert_stations(provider_id, project_id, &dataset)
+            .await?;
+    }
+
+    let unitless_column_info = VectorColumnInfo {
+        data_type: FeatureDataType::Text,
+        measurement: Measurement::Unitless,
+    };
+
+    let columns: [(String, VectorColumnInfo); 5] = [
+        ("station_id".to_string(), unitless_column_info.clone()),
+        ("project_id".to_string(), unitless_column_info.clone()),
+        ("name".to_string(), unitless_column_info.clone()),
+        ("description".to_string(), unitless_column_info.clone()),
+        ("location".to_string(), unitless_column_info.clone()),
+    ];
+
+    Ok(Box::new(StaticMetaData {
+        loading_info: OgrSourceDataset {
+            file_name: db_config.ogr_pg_config().into(),
+            layer_name,
+            data_type: Some(VectorDataType::MultiPoint),
+            time: OgrSourceDatasetTimeType::None,
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: None,
+                x: String::new(),
+                y: None,
+                int: vec![],
+                float: vec![],
+                text: columns
+                    .iter()
+                    .filter_map(|(name, info)| {
+                        if info.data_type == FeatureDataType::Text {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Abort,
+            sql_query: None,
+            attribute_query: Some(format!(
+                "cache_date = current_date AND provider_id = {} AND project_id = {}",
+                escape_literal(&provider_id.to_string()),
+                escape_literal(project_id)
+            )),
+            cache_ttl: CacheTtlSeconds::new(60 * 60),
+        },
+        result_descriptor: VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            columns: columns.iter().cloned().collect(),
+            time: None, // TODO
+            bbox: None, // TODO
+        },
+        phantom: std::marker::PhantomData,
+    }))
+}
+
+async fn captures_metadata<D: GeoEngineDb>(
+    provider_id: DataProviderId,
+    api_endpoint: &Url,
+    api_key: Option<&str>,
+    db: Arc<D>,
+    db_config: DatabaseConnectionConfig,
+    layer_name: String,
+    project_id: String,
+) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>> {
+    if !db.has_captures(provider_id, &project_id).await? {
+        let dataset = captures_dataset(api_endpoint, api_key, &project_id).await?;
+        db.insert_captures(provider_id, &project_id, &dataset)
+            .await?;
+    }
+
+    let unitless_column_info = VectorColumnInfo {
+        data_type: FeatureDataType::Text,
+        measurement: Measurement::Unitless,
+    };
+
+    let columns: [(String, VectorColumnInfo); 8] = [
+        ("image_object_id".to_string(), unitless_column_info.clone()),
+        ("project_id".to_string(), unitless_column_info.clone()),
+        ("station_setup_id".to_string(), unitless_column_info.clone()),
+        (
+            "capture_time_stamp".to_string(),
+            VectorColumnInfo {
+                data_type: FeatureDataType::DateTime,
+                measurement: Measurement::Unitless,
+            },
+        ),
+        (
+            "accepted_name_usage_id".to_string(),
+            unitless_column_info.clone(),
+        ),
+        ("vernacular_name".to_string(), unitless_column_info.clone()),
+        ("scientific_name".to_string(), unitless_column_info.clone()),
+        ("content_url".to_string(), unitless_column_info.clone()),
+    ];
+
+    Ok(Box::new(StaticMetaData {
+        loading_info: OgrSourceDataset {
+            file_name: db_config.ogr_pg_config().into(),
+            layer_name,
+            data_type: Some(VectorDataType::MultiPoint),
+            time: OgrSourceDatasetTimeType::Start {
+                start_field: "capture_time_stamp".into(),
+                start_format: OgrSourceTimeFormat::Auto,
+                duration: OgrSourceDurationSpec::Zero,
+            },
+            default_geometry: None,
+            columns: Some(OgrSourceColumnSpec {
+                format_specifics: None,
+                x: String::new(),
+                y: None,
+                int: vec![],
+                float: vec![],
+                text: columns
+                    .iter()
+                    .filter_map(|(name, info)| {
+                        if info.data_type == FeatureDataType::Text {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
+                bool: vec![],
+                datetime: vec![],
+                rename: None,
+            }),
+            force_ogr_time_filter: false,
+            force_ogr_spatial_filter: false,
+            on_error: OgrSourceErrorSpec::Abort,
+            sql_query: None,
+            attribute_query: Some(format!(
+                "cache_date = current_date AND provider_id = {} AND project_id = {}",
+                escape_literal(&provider_id.to_string()),
+                escape_literal(&project_id)
+            )),
+            cache_ttl: CacheTtlSeconds::new(60 * 60),
+        },
+        result_descriptor: VectorResultDescriptor {
+            data_type: VectorDataType::MultiPoint,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            columns: columns.iter().cloned().collect(),
+            time: None, // TODO
+            bbox: None, // TODO
+        },
+        phantom: std::marker::PhantomData,
+    }))
 }
 
 impl TryFrom<WildliveCollectionId> for LayerCollectionId {

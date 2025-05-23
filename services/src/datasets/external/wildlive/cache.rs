@@ -1,6 +1,6 @@
 use super::{
     Result, WildliveLayerId,
-    datasets::{ProjectFeature, StationFeature},
+    datasets::{CaptureFeature, ProjectFeature, StationFeature},
     error,
 };
 use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
@@ -47,6 +47,15 @@ pub trait WildliveDbCache: Send + Sync {
         provider_id: DataProviderId,
         project_id: &str,
         stations: &[StationFeature],
+    ) -> Result<()>;
+
+    async fn has_captures(&self, provider_id: DataProviderId, project_id: &str) -> Result<bool>;
+
+    async fn insert_captures(
+        &self,
+        provider_id: DataProviderId,
+        project_id: &str,
+        captures: &[CaptureFeature],
     ) -> Result<()>;
 }
 
@@ -115,6 +124,46 @@ where
             &current_date,
             project_id,
             stations,
+        )
+        .await?;
+
+        transaction
+            .commit()
+            .await
+            .boxed_context(error::UnexpectedExecution)
+    }
+
+    async fn has_captures(&self, provider_id: DataProviderId, project_id: &str) -> Result<bool> {
+        let current_date = Utc::now().date_naive();
+
+        has_captures(
+            get_connection!(self.conn_pool),
+            provider_id,
+            &current_date,
+            project_id,
+        )
+        .await
+    }
+
+    async fn insert_captures(
+        &self,
+        provider_id: DataProviderId,
+        project_id: &str,
+        captures: &[CaptureFeature],
+    ) -> Result<()> {
+        let current_date = Utc::now().date_naive();
+
+        let mut connection = get_connection!(self.conn_pool);
+        let transaction = deferred_write_transaction!(connection);
+
+        delete_old_cached_captures(&transaction, provider_id, &current_date).await?;
+
+        insert_captures(
+            &transaction,
+            provider_id,
+            &current_date,
+            project_id,
+            captures,
         )
         .await?;
 
@@ -203,6 +252,28 @@ pub(crate) async fn delete_old_cached_stations(
     Ok(())
 }
 
+pub(crate) async fn delete_old_cached_captures(
+    transaction: &Transaction<'_>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+) -> Result<()> {
+    transaction
+        .execute(
+            "
+            DELETE FROM wildlive_captures
+            WHERE
+                provider_id = $1 AND
+                cache_date < $2
+            ;
+        ",
+            &[&provider_id, &current_date],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    Ok(())
+}
+
 pub(crate) async fn has_projects<Tls>(
     connection: PooledConnection<'_, PostgresConnectionManager<Tls>>,
     provider_id: DataProviderId,
@@ -252,6 +323,39 @@ where
                 SELECT EXISTS (
                     SELECT 1
                     FROM wildlive_stations
+                    WHERE
+                        provider_id = $1 AND
+                        cache_date = $2 AND
+                        project_id = $3
+                )
+                ",
+            &[&provider_id, &current_date, &project_id],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?
+        .get::<_, bool>(0);
+
+    Ok(exists)
+}
+
+pub(crate) async fn has_captures<Tls>(
+    connection: PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+    project_id: &str,
+) -> Result<bool>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let exists = connection
+        .query_one(
+            "
+                SELECT EXISTS (
+                    SELECT 1
+                    FROM wildlive_captures
                     WHERE
                         provider_id = $1 AND
                         cache_date = $2 AND
@@ -378,6 +482,83 @@ pub(crate) async fn insert_stations(
                     &feature.name,
                     &feature.description,
                     &feature.location,
+                    &feature.geom.to_wkt().to_string(),
+                ],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+    }
+
+    Ok(())
+}
+
+pub(crate) async fn insert_captures(
+    transaction: &Transaction<'_>,
+    provider_id: DataProviderId,
+    current_date: &NaiveDate,
+    project_id: &str,
+    captures: &[CaptureFeature],
+) -> Result<()> {
+    let insert_statement = transaction
+        .prepare_typed(
+            "INSERT INTO
+                wildlive_captures (
+                    provider_id,
+                    cache_date,
+                    image_object_id,
+                    project_id,
+                    station_setup_id,
+                    capture_time_stamp timestamp with time zone NOT NULL,
+                    accepted_name_usage_id,
+                    vernacular_name,
+                    scientific_name,
+                    content_url,
+                    geom
+                ) VALUES (
+                    $1,
+                    $2,
+                    $3,
+                    $4,
+                    $5,
+                    $6,
+                    $7,
+                    $8,
+                    $9,
+                    $10,
+                    public.ST_GeomFromText($11)
+                );",
+            &[
+                tokio_postgres::types::Type::UUID,
+                tokio_postgres::types::Type::DATE,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TIMESTAMPTZ,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT,
+                tokio_postgres::types::Type::TEXT, // geometry
+            ],
+        )
+        .await
+        .boxed_context(error::UnexpectedExecution)?;
+
+    for feature in captures {
+        transaction
+            .execute(
+                &insert_statement,
+                &[
+                    &provider_id,
+                    &current_date,
+                    &feature.id,
+                    &feature.station_setup_id,
+                    &project_id,
+                    &feature.capture_time_stamp,
+                    &feature.accepted_name_usage_id,
+                    &feature.vernacular_name,
+                    &feature.scientific_name,
+                    &feature.content_url,
                     &feature.geom.to_wkt().to_string(),
                 ],
             )

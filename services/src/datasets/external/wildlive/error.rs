@@ -42,4 +42,10 @@ pub enum WildliveError {
     UnableToWriteDataset {
         source: std::io::Error,
     },
+
+    InvalidCaptureTimeStamp {
+        source: Box<dyn ErrorSource>,
+    },
+
+    UnableToLookupStation,
 }
