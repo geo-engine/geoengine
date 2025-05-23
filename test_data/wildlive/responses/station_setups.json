@@ -1,0 +1,239 @@
+{
+  "pageNum": 0,
+  "pageSize": -1,
+  "size": 21,
+  "facets": [],
+  "results": [
+    {
+      "id": "wildlive/79e043c3053fb39df381",
+      "content": {
+        "name": "VacaMuerta",
+        "description": "Old station name: Vacamuerta",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62,
+        "id": "wildlive/79e043c3053fb39df381"
+      }
+    },
+    {
+      "id": "wildlive/c2bd44066dbda6f0d1ac",
+      "content": {
+        "name": "LaCachuela_arriba",
+        "description": "Old station name: LaCachuelaArriba",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/c2bd44066dbda6f0d1ac"
+      }
+    },
+    {
+      "id": "wildlive/16f3b0b65b4a58acb782",
+      "content": {
+        "name": "LaCachuela_CaminoCurichi",
+        "description": "Old station name: CaminoCurichi",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/16f3b0b65b4a58acb782"
+      }
+    },
+    {
+      "id": "wildlive/0ff0ce1ddfcfb0aff407",
+      "content": {
+        "name": "CaminoCachuela",
+        "description": "Old station name: CaminoCachuela",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/0ff0ce1ddfcfb0aff407"
+      }
+    },
+    {
+      "id": "wildlive/52baefeffeb2648fdaf7",
+      "content": {
+        "name": "Lagarto",
+        "description": "Old station name: Lagarto",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/52baefeffeb2648fdaf7"
+      }
+    },
+    {
+      "id": "wildlive/024b9357f1e23877a243",
+      "content": {
+        "name": "LajaDeNoviquia",
+        "description": "Old station name: LajaDeNoviquia",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -61.9,
+        "id": "wildlive/024b9357f1e23877a243"
+      }
+    },
+    {
+      "id": "wildlive/f421dc2239b8fd7a1980",
+      "content": {
+        "name": "Orquidia",
+        "description": "Old station name: Orquidia",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/f421dc2239b8fd7a1980"
+      }
+    },
+    {
+      "id": "wildlive/797cb6f275e9fc8afa4b",
+      "content": {
+        "name": "Jaguar",
+        "description": "Old station name: Jaguar",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/797cb6f275e9fc8afa4b"
+      }
+    },
+    {
+      "id": "wildlive/a43254afb230ce163256",
+      "content": {
+        "name": "Salitral",
+        "description": "Old station name: Salitral",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/a43254afb230ce163256"
+      }
+    },
+    {
+      "id": "wildlive/229392d20de8b45e8114",
+      "content": {
+        "name": "LaCachuela",
+        "description": "Old station name: LaCachuela",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/229392d20de8b45e8114"
+      }
+    },
+    {
+      "id": "wildlive/3204d6391519562525ec",
+      "content": {
+        "name": "G-06",
+        "description": "Old station name: nuevo-4",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62,
+        "id": "wildlive/3204d6391519562525ec"
+      }
+    },
+    {
+      "id": "wildlive/468ba2036b2a4ff004c9",
+      "content": {
+        "name": "G-12",
+        "description": "Old station name: nan",
+        "location": "MonteFlorI",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62,
+        "id": "wildlive/468ba2036b2a4ff004c9"
+      }
+    },
+    {
+      "id": "wildlive/ea64f18b8fa1dec31196",
+      "content": {
+        "name": "G-11",
+        "description": "Old station name: nuevo-5",
+        "location": "MonteFlorI",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62,
+        "id": "wildlive/ea64f18b8fa1dec31196"
+      }
+    },
+    {
+      "id": "wildlive/259cfcfd85fcb0ce276d",
+      "content": {
+        "name": "G-02",
+        "description": "Old station name: Quebrada",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/259cfcfd85fcb0ce276d"
+      }
+    },
+    {
+      "id": "wildlive/358df8fa949f35e91a64",
+      "content": {
+        "name": "G-05",
+        "description": "Old station name: nuevo-3",
+        "location": "Noviquia",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -61.9,
+        "id": "wildlive/358df8fa949f35e91a64"
+      }
+    },
+    {
+      "id": "wildlive/33516c1ce3b7e26c296d",
+      "content": {
+        "name": "G-04",
+        "description": "Old station name: nuevo-2",
+        "location": "Noviquia",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/33516c1ce3b7e26c296d"
+      }
+    },
+    {
+      "id": "wildlive/498ae1629861699f5323",
+      "content": {
+        "name": "G-13",
+        "description": "Old station name: nan",
+        "location": "NaN",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62,
+        "id": "wildlive/498ae1629861699f5323"
+      }
+    },
+    {
+      "id": "wildlive/6bf42fa2eb245604bb31",
+      "content": {
+        "name": "G-07",
+        "description": "Old station name: NuevoManantial",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62,
+        "id": "wildlive/6bf42fa2eb245604bb31"
+      }
+    },
+    {
+      "id": "wildlive/2cd0a46deb9e47b0518f",
+      "content": {
+        "name": "G-14",
+        "description": "Old station name: LaCruz",
+        "location": "LaCruz",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62,
+        "id": "wildlive/2cd0a46deb9e47b0518f"
+      }
+    },
+    {
+      "id": "wildlive/8ced32ac3ca4f646a53b",
+      "content": {
+        "name": "G-01",
+        "description": "Old station name: Popo",
+        "location": "SanSebastian",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/8ced32ac3ca4f646a53b"
+      }
+    },
+    {
+      "id": "wildlive/de7f4396c2689d1fbf6d",
+      "content": {
+        "name": "G-03",
+        "description": "Old station name: nuevo-1",
+        "location": "Noviquia",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62,
+        "id": "wildlive/de7f4396c2689d1fbf6d"
+      }
+    }
+  ]
+}

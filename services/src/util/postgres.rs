@@ -27,8 +27,8 @@ impl DatabaseConnectionConfig {
 
     pub fn ogr_pg_config(&self) -> String {
         format!(
-            "PG:host={} port={} dbname={} user={} password={}",
-            self.host, self.port, self.database, self.user, self.password
+            "PG:host={} port={} dbname={} user={} password={} active_schema={}",
+            self.host, self.port, self.database, self.user, self.password, self.schema
         )
     }
 }

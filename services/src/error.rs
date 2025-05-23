@@ -534,6 +534,11 @@ pub enum Error {
     MlModelName {
         source: geoengine_datatypes::machine_learning::MlModelNameError,
     },
+
+    #[snafu(display("WildLIVE connector error: {source}"), context(false))]
+    Wildlive {
+        source: crate::datasets::external::WildliveError,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {

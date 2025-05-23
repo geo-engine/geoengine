@@ -1,0 +1,57 @@
+{
+  "pageNum": 0,
+  "pageSize": -1,
+  "size": 1,
+  "facets": [],
+  "results": [
+    {
+      "id": "wildlive/ef7833589d61b2d2a905",
+      "type": "Project",
+      "content": {
+        "name": "CameraTrapping project in Bolivia",
+        "description": "Research project for Jaguar wildlife monitoring",
+        "@context": ["https://wildlive.senckenberg.de/wlmo/0.3/context"],
+        "projectStatistics": {
+          "stationsLayoutsCount": 2,
+          "stationSetupCount": 21,
+          "captureEventCount": 1702,
+          "observationWithImageCount": 2658,
+          "annotatedSpeciesCount": 3735,
+          "annotatedSpeciesTypes": [
+            "https://www.gbif.org/species/2441022",
+            "https://www.gbif.org/species/5219426",
+            "https://www.gbif.org/species/2440995"
+          ],
+          "annotatedSpeciesTypesVernacular": [
+            "Aurochs",
+            "Jaguar",
+            "Collared Peccary"
+          ],
+          "annotatedSpeciesTypesScientific": [
+            "Bos taurus Linnaeus, 1758",
+            "Panthera onca (Linnaeus, 1758)",
+            "Pecari tajacu (Linnaeus, 1758)"
+          ]
+        },
+        "id": "wildlive/ef7833589d61b2d2a905",
+        "provObject": "wildlive/23bde451dc80c2bd449c",
+        "hasStationsLayouts": [
+          "wildlive/667cc39364fd45136c7a",
+          "wildlive/151c43fdd5881eba0bd5"
+        ]
+      },
+      "metadata": {
+        "hashes": {
+          "alg": "SHA-256",
+          "content": "d102b9e950385afd364c482020dd9be0f8d55d0127632cd00941a39c0ce207a7",
+          "full": "79f3f9495387454db94c20f414aab9ce3e5e08e30e5218f3f560a4cde8c71f32"
+        },
+        "createdOn": 1746721958739,
+        "createdBy": "admin",
+        "modifiedOn": 1746730126995,
+        "modifiedBy": "admin",
+        "txnId": 1746730126994929
+      }
+    }
+  ]
+}

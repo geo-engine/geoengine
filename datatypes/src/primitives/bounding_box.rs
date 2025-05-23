@@ -8,6 +8,7 @@ use float_cmp::ApproxEq;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use wkt::{ToWkt, Wkt};
 
 #[derive(Copy, Clone, Serialize, Deserialize, PartialEq, Debug, ToSql, FromSql)]
 #[repr(C)]
@@ -443,6 +444,20 @@ impl BoundingBox2D {
 
         (lower_left, lower_right, upper_left, upper_right)
     }
+
+    /// Iterates over the four corners of the bounding box in counter-clockwise order
+    ///
+    /// Note: It repeats the first coordinate at the end
+    fn coords_counter_clockwise(&self) -> impl Iterator<Item = Coordinate2D> {
+        [
+            self.upper_left(),
+            self.lower_left(),
+            self.lower_right(),
+            self.upper_right(),
+            self.upper_left(),
+        ]
+        .into_iter()
+    }
 }
 
 impl AxisAlignedRectangle for BoundingBox2D {
@@ -580,6 +595,22 @@ impl TryFrom<BoundingBox2D> for gdal::vector::Geometry {
     }
 }
 
+impl From<BoundingBox2D> for geojson::Geometry {
+    fn from(bounds: BoundingBox2D) -> Self {
+        let value = geojson::Value::Polygon(vec![
+            bounds
+                .coords_counter_clockwise()
+                .map(|c| vec![c.x, c.y])
+                .collect(),
+        ]);
+        geojson::Geometry {
+            bbox: None,
+            value,
+            foreign_members: None,
+        }
+    }
+}
+
 impl ApproxEq for BoundingBox2D {
     type Margin = float_cmp::F64Margin;
 
@@ -613,6 +644,14 @@ pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
     }
 
     Some(extent)
+}
+
+impl ToWkt<f64> for BoundingBox2D {
+    fn to_wkt(&self) -> Wkt<f64> {
+        Wkt::Polygon(wkt::types::Polygon(vec![wkt::types::LineString(
+            self.coords_counter_clockwise().map(Into::into).collect(),
+        )]))
+    }
 }
 
 #[cfg(test)]

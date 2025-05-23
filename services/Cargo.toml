@@ -31,6 +31,7 @@ clap_derive.workspace = true
 clap.workspace = true
 config = { workspace = true }
 convert_case = { workspace = true }
+csv = { workspace = true }
 erased-serde = { workspace = true }
 flexi_logger = { workspace = true }
 float-cmp = { workspace = true }
@@ -54,6 +55,7 @@ opentelemetry-otlp = { workspace = true }
 ordered-float = { workspace = true }
 paste = { workspace = true }
 pbkdf2 = { workspace = true }
+postgres-protocol = { workspace = true }
 postgres-types = { workspace = true }
 proj = { workspace = true }
 proj-sys = { workspace = true }
@@ -70,6 +72,7 @@ snafu = { workspace = true }
 stac = { workspace = true }
 strum = { workspace = true }
 strum_macros = { workspace = true }
+tempfile = { workspace = true }
 time = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
@@ -84,6 +87,7 @@ utoipa-swagger-ui = { workspace = true }
 uuid = { workspace = true }
 validator = { workspace = true }
 walkdir = { workspace = true }
+wkt = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
@@ -95,7 +99,6 @@ httptest = { workspace = true }
 pretty_assertions = { workspace = true }
 prost = { workspace = true }             # must be compatbile with aruna-rust-api
 serial_test = { workspace = true }
-tempfile = { workspace = true }
 xml-rs = { workspace = true }
 
 [build-dependencies]
