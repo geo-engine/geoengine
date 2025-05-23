@@ -984,7 +984,9 @@ CREATE TABLE wildlive_captures (
     geom public.GEOMETRY (POINT) NOT NULL,
 
     -- TODO: check if we need it
-    PRIMARY KEY (provider_id, cache_date, project_id, image_object_id) DEFERRABLE
+    PRIMARY KEY (
+        provider_id, cache_date, project_id, image_object_id
+    ) DEFERRABLE
 );
 
 CREATE TYPE "MlModelMetadata" AS (
