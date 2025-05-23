@@ -233,7 +233,7 @@ where
                 // TODO: collect into a ndarray directly
 
                 // TODO: use flat array instead of nested Vecs
-                let mut pixels: Vec<Vec<TIn>> = vec![vec![TIn::zero(); num_bands]; width * height];
+                let mut move_axis_pixels: Vec<Vec<TIn>> = vec![vec![TIn::zero(); num_bands]; width * height];
 
                 for (tile_index, tile) in tiles.into_iter().enumerate() {
                     // TODO: use map_elements or map_elements_parallel to avoid the double loop
@@ -243,18 +243,18 @@ where
                             let pixel_value = tile
                                 .get_at_grid_index(GridIdx2D::from([y as isize, x as isize]))?
                                 .unwrap_or(TIn::NO_DATA); // TODO: properly handle missing values or skip the pixel entirely instead
-                            pixels[pixel_index][tile_index] = pixel_value;
+                            move_axis_pixels[pixel_index][tile_index] = pixel_value;
                         }
                     }
                 }
 
-                let pixels = pixels.into_iter().flatten().collect::<Vec<TIn>>();
+                let pixels = move_axis_pixels.into_iter().flatten().collect::<Vec<TIn>>();
                 let input_name = &session.inputs[0].name;
 
 
                 let outputs = if self.model_metadata.input_is_single_pixel() {
 
-                    let samples = Array2::from_shape_vec((pixels.len(), num_bands), pixels).expect(
+                    let samples = Array2::from_shape_vec((width*height, num_bands), pixels).expect(
                         "Array2 should be valid because it is created from a Vec with the correct size",
                     );
 
@@ -354,6 +354,7 @@ mod tests {
     };
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
+        machine_learning::MlTensorShape3D,
         primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
@@ -363,63 +364,6 @@ mod tests {
         util::test::TestDefault,
     };
     use ndarray::{Array1, Array2, arr2, array};
-
-    fn generate_model_metadata_from_onnx(
-        path: &Path,
-    ) -> Result<MlModelMetadata, MachineLearningError> {
-        // TODO: proper error if model file cannot be found
-        let session = ort::session::Session::builder()
-            .context(Ort)?
-            .commit_from_file(path)
-            .context(Ort)?;
-
-        // Onnx model may have multiple inputs, but we only support one input (with multiple features/bands)
-        ensure!(
-            session.inputs.len() == 1,
-            MultipleInputsNotSupported {
-                num_inputs: session.inputs.len()
-            }
-        );
-
-        // Onnx model input type must be a Tensor in order to accept a 2d ndarray as input
-        let ort::value::ValueType::Tensor {
-            ty: input_tensor_element_type,
-            dimensions: input_dimensions,
-            dimension_symbols: _dimension_symbols,
-        } = &session.inputs[0].input_type
-        else {
-            return Err(MachineLearningError::InvalidInputType {
-                input_type: session.inputs[0].input_type.clone(),
-            });
-        };
-
-        // Input dimensions must be convertable to a valid tensor shape
-        let input_shape = try_onnx_tensor_to_ml_tensorshape_3d(input_dimensions)?;
-
-        // Onnx model must output one prediction per pixel as
-        // (1) a Tensor with a single dimension of unknown size (dim = [-1]), or
-        // (2) a Tensor with two dimensions, the first of unknown size and the second of size 1 (dim = [-1, 1])
-        let ort::value::ValueType::Tensor {
-            ty: output_tensor_element_type,
-            dimensions: output_dimensions,
-            dimension_symbols: _,
-        } = &session.outputs[0].output_type
-        else {
-            return Err(MachineLearningError::InvalidOutputType {
-                output_type: session.outputs[0].output_type.clone(),
-            });
-        };
-
-        let output_shape = try_onnx_tensor_to_ml_tensorshape_3d(output_dimensions)?;
-
-        Ok(MlModelMetadata {
-            file_path: path.to_owned(),
-            input_type: try_raster_datatype_from_tensor_element_type(*input_tensor_element_type)?,
-            input_shape,
-            output_shape,
-            output_type: try_raster_datatype_from_tensor_element_type(*output_tensor_element_type)?,
-        })
-    }
 
     #[test]
     fn ort() {
@@ -632,15 +576,19 @@ mod tests {
         }
         .boxed();
 
+        let ml_model_metadata = MlModelMetadata {
+            file_path: test_data!("ml/onnx/test_classification.onnx").to_owned(),
+            input_type: RasterDataType::F32,
+            input_shape: MlTensorShape3D::new_single_pixel_bands(2),
+            output_shape: MlTensorShape3D::new_single_pixel_single_band(),
+            output_type: RasterDataType::I64,
+        };
+
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             shape_array: [2, 2],
         };
-        exe_ctx.ml_models.insert(
-            model_name,
-            generate_model_metadata_from_onnx(test_data!("ml/onnx/test_classification.onnx"))
-                .unwrap(),
-        );
+        exe_ctx.ml_models.insert(model_name, ml_model_metadata);
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
@@ -841,14 +789,19 @@ mod tests {
         }
         .boxed();
 
+        let ml_model_metadata = MlModelMetadata {
+            file_path: test_data!("ml/onnx/test_regression.onnx").to_owned(),
+            input_type: RasterDataType::F32,
+            input_shape: MlTensorShape3D::new_single_pixel_bands(3),
+            output_shape: MlTensorShape3D::new_single_pixel_single_band(),
+            output_type: RasterDataType::F32,
+        };
+
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             shape_array: [2, 2],
         };
-        exe_ctx.ml_models.insert(
-            model_name,
-            generate_model_metadata_from_onnx(test_data!("ml/onnx/test_regression.onnx")).unwrap(),
-        );
+        exe_ctx.ml_models.insert(model_name, ml_model_metadata);
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
