@@ -241,7 +241,7 @@ pub(crate) async fn delete_old_cached_stations(
             DELETE FROM wildlive_stations
             WHERE
                 provider_id = $1 AND
-                cache_date < $2
+                cache_date <= $2
             ;
         ",
             &[&provider_id, &current_date],
@@ -263,7 +263,7 @@ pub(crate) async fn delete_old_cached_captures(
             DELETE FROM wildlive_captures
             WHERE
                 provider_id = $1 AND
-                cache_date < $2
+                cache_date <= $2
             ;
         ",
             &[&provider_id, &current_date],
@@ -508,7 +508,7 @@ pub(crate) async fn insert_captures(
                     image_object_id,
                     project_id,
                     station_setup_id,
-                    capture_time_stamp timestamp with time zone NOT NULL,
+                    capture_time_stamp,
                     accepted_name_usage_id,
                     vernacular_name,
                     scientific_name,
@@ -552,8 +552,8 @@ pub(crate) async fn insert_captures(
                     &provider_id,
                     &current_date,
                     &feature.id,
-                    &feature.station_setup_id,
                     &project_id,
+                    &feature.station_setup_id,
                     &feature.capture_time_stamp,
                     &feature.accepted_name_usage_id,
                     &feature.vernacular_name,

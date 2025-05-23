@@ -43,7 +43,6 @@ pub struct StationFeature {
 #[derive(Debug, PartialEq)]
 pub struct CaptureFeature {
     pub id: String,
-    pub project_id: String,
     pub station_setup_id: String,
     pub capture_time_stamp: DateTime<Utc>,
     pub accepted_name_usage_id: String,
@@ -566,7 +565,6 @@ pub(super) async fn captures_dataset(
 
         captures.push(CaptureFeature {
             id: image_object.id,
-            project_id: project_id.to_string(),
             station_setup_id: image_object.station_setup_id,
             capture_time_stamp: image_object
                 .capture_time_stamp
@@ -1004,7 +1002,6 @@ mod tests {
             dataset[0],
             CaptureFeature {
                 id: "wildlive/75243d4b79e5c91bd3b3".into(),
-                project_id: "wildlive/ef7833589d61b2d2a905".into(),
                 station_setup_id: "wildlive/ea64f18b8fa1dec31196".into(),
                 capture_time_stamp: "2019-02-26T14:48:27Z".parse().unwrap(),
                 accepted_name_usage_id: "https://www.gbif.org/species/5219426".into(),

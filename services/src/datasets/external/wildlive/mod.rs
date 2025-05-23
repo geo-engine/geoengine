@@ -213,15 +213,26 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 })
             }
             WildliveCollectionId::Project { project_id } => {
-                let mut items: Vec<_> = vec![CollectionItem::Layer(LayerListing {
-                    r#type: Default::default(),
-                    id: self.layer_id(WildliveLayerId::Stations {
-                        project_id: project_id.clone(),
-                    })?,
-                    name: "Stations".to_string(),
-                    description: "Overview of all project stations".to_string(),
-                    properties: Vec::new(),
-                })];
+                let mut items: Vec<_> = vec![
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
+                        id: self.layer_id(WildliveLayerId::Stations {
+                            project_id: project_id.clone(),
+                        })?,
+                        name: "Stations".to_string(),
+                        description: "Overview of all project stations".to_string(),
+                        properties: Vec::new(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
+                        id: self.layer_id(WildliveLayerId::Captures {
+                            project_id: project_id.clone(),
+                        })?,
+                        name: "Captures".to_string(),
+                        description: "Overview of all project captures".to_string(),
+                        properties: Vec::new(),
+                    }),
+                ];
 
                 Ok(LayerCollection {
                     id: self.collection_id(WildliveCollectionId::Project { project_id })?,
@@ -284,7 +295,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 metadata: Default::default(),
             }),
             WildliveLayerId::Captures { project_id } => Ok(Layer {
-                id: self.layer_id(WildliveLayerId::Stations {
+                id: self.layer_id(WildliveLayerId::Captures {
                     project_id: project_id.clone(),
                 })?,
                 name: format!("Captures for project {project_id}"),
@@ -628,6 +639,7 @@ async fn captures_metadata<D: GeoEngineDb>(
 ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>> {
     if !db.has_captures(provider_id, &project_id).await? {
         let dataset = captures_dataset(api_endpoint, api_key, &project_id).await?;
+
         db.insert_captures(provider_id, &project_id, &dataset)
             .await?;
     }
@@ -685,7 +697,16 @@ async fn captures_metadata<D: GeoEngineDb>(
                     })
                     .collect(),
                 bool: vec![],
-                datetime: vec![],
+                datetime: columns
+                    .iter()
+                    .filter_map(|(name, info)| {
+                        if info.data_type == FeatureDataType::DateTime {
+                            Some(name.clone())
+                        } else {
+                            None
+                        }
+                    })
+                    .collect(),
                 rename: None,
             }),
             force_ogr_time_filter: false,
@@ -845,7 +866,7 @@ mod tests {
 
         let connector = WildliveDataConnector {
             id: DataProviderId::from_u128(12_345_678_901_234_567_890_123_456_789_012_u128),
-            api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/").unwrap(),
+            api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/").unwrap(), // TODO: mock
             name: "WildLIVE! Portal Connector".to_string(),
             description: "WildLIVE! Portal Connector".to_string(),
             user: None,
@@ -990,6 +1011,221 @@ mod tests {
         assert!(
             a.starts_with(b_prefix),
             "{a} does not start with {b_prefix}"
+        );
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_shows_a_captures_dataset(
+        ctx: PostgresSessionContext<NoTls>,
+        db_config: DatabaseConnectionConfig,
+    ) {
+        // crate::util::tests::initialize_debugging_in_test();
+
+        let connector = WildliveDataConnector {
+            id: DataProviderId::from_u128(12_345_678_901_234_567_890_123_456_789_012_u128),
+            api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/").unwrap(), // TODO: mock
+            name: "WildLIVE! Portal Connector".to_string(),
+            description: "WildLIVE! Portal Connector".to_string(),
+            user: None,
+            api_key: None,
+            db: Arc::new(ctx.db()),
+        };
+
+        let project_id = "wildlive/ef7833589d61b2d2a905";
+
+        let layer = connector
+            .load_layer(
+                &WildliveLayerId::Captures {
+                    project_id: project_id.into(),
+                }
+                .try_into()
+                .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(
+            layer,
+            Layer {
+                id: ProviderLayerId {
+                    provider_id: connector.id,
+                    layer_id: WildliveLayerId::Captures {
+                        project_id: project_id.into(),
+                    }
+                    .try_into()
+                    .unwrap(),
+                },
+                name: format!("Captures for project {project_id}"),
+                description: format!("Overview of all captures within project {project_id}"),
+                workflow: Workflow {
+                    operator: OgrSource {
+                        params: OgrSourceParameters {
+                            data: connector
+                                .named_data(WildliveLayerId::Captures {
+                                    project_id: project_id.into()
+                                })
+                                .unwrap(),
+                            attribute_projection: None,
+                            attribute_filters: None,
+                        },
+                    }
+                    .boxed()
+                    .into(),
+                },
+                symbology: None,
+                properties: Vec::new(),
+                metadata: Default::default(),
+            }
+        );
+
+        let metadata: Box<
+            dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>,
+        > = MetaDataProvider::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+            ::meta_data(&connector, &DataId::External(ExternalDataId {
+                provider_id: layer.id.provider_id,
+                layer_id: layer.id.layer_id,
+            }))
+            .await
+            .unwrap();
+
+        let loading_info = metadata
+            .loading_info(VectorQueryRectangle {
+                spatial_bounds: BoundingBox2D::new(
+                    Coordinate2D { x: 0.0, y: 0.0 },
+                    Coordinate2D { x: 1.0, y: 1.0 },
+                )
+                .unwrap(),
+                time_interval: TimeInterval::new(0, 1).unwrap(),
+                spatial_resolution: SpatialResolution::new(1.0, 1.0).unwrap(),
+                attributes: ColumnSelection::all(),
+            })
+            .await
+            .unwrap();
+
+        // In the test config, it says `active_schema=pg_temp` before it was replaced with the test schema.
+        assert_common_prefix(
+            loading_info.file_name.to_str().unwrap(),
+            &db_config.ogr_pg_config(),
+            "active_schema=",
+        );
+
+        assert_eq!(
+            loading_info,
+            OgrSourceDataset {
+                file_name: loading_info.file_name.clone(),
+                layer_name: WildliveLayerId::Captures {
+                    project_id: project_id.into()
+                }
+                .table_name()
+                .to_string(),
+                data_type: Some(VectorDataType::MultiPoint),
+                time: OgrSourceDatasetTimeType::Start {
+                    start_field: "capture_time_stamp".into(),
+                    start_format: OgrSourceTimeFormat::Auto,
+                    duration: OgrSourceDurationSpec::Zero
+                },
+                default_geometry: None,
+                columns: Some(OgrSourceColumnSpec {
+                    format_specifics: None,
+                    x: String::new(),
+                    y: None,
+                    int: vec![],
+                    float: vec![],
+                    text: [
+                        "image_object_id",
+                        "project_id",
+                        "station_setup_id",
+                        "accepted_name_usage_id",
+                        "vernacular_name",
+                        "scientific_name",
+                        "content_url",
+                    ]
+                    .map(ToString::to_string)
+                    .to_vec(),
+                    bool: vec![],
+                    datetime: ["capture_time_stamp"].map(ToString::to_string).to_vec(),
+                    rename: None,
+                }),
+                force_ogr_time_filter: false,
+                force_ogr_spatial_filter: false,
+                on_error: OgrSourceErrorSpec::Abort,
+                sql_query: None,
+                attribute_query: Some(format!(
+                    "cache_date = current_date AND provider_id = '0000009b-d30a-3c64-5943-dd1690a03a14' AND project_id = '{project_id}'"
+                )),
+                cache_ttl: CacheTtlSeconds::new(3600),
+            }
+        );
+
+        assert_eq!(
+            metadata.result_descriptor().await.unwrap(),
+            VectorResultDescriptor {
+                data_type: VectorDataType::MultiPoint,
+                spatial_reference: SpatialReference::epsg_4326().into(),
+                columns: [
+                    (
+                        "accepted_name_usage_id".into(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "vernacular_name".into(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "scientific_name".into(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "station_setup_id".into(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "content_url".into(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless
+                        },
+                    ),
+                    (
+                        "image_object_id".into(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless
+                        },
+                    ),
+                    (
+                        "project_id".into(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::Text,
+                            measurement: Measurement::Unitless
+                        }
+                    ),
+                    (
+                        "capture_time_stamp".into(),
+                        VectorColumnInfo {
+                            data_type: FeatureDataType::DateTime,
+                            measurement: Measurement::Unitless
+                        }
+                    )
+                ]
+                .iter()
+                .cloned()
+                .collect(),
+                time: None,
+                bbox: None,
+            }
         );
     }
 }
