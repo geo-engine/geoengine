@@ -81,7 +81,6 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
         exe_context.tiling_specification().tile_size_in_pixels,
     )?;
     // initialize model
-    // TODO: re-use session accross queries?
     let session = load_onnx_model_from_metadata(&ml_model_metadata)?;
     // Check that the model is initializable and that the types are vaild
     check_onnx_model_matches_metadata(&session, &ml_model_metadata)?;
