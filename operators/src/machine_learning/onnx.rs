@@ -336,18 +336,10 @@ impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
-    use std::path::Path;
-
     use super::*;
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-        },
-        machine_learning::{
-            error::MultipleInputsNotSupported,
-            onnx_util::{
-                try_onnx_tensor_to_ml_tensorshape_3d, try_raster_datatype_from_tensor_element_type,
-            },
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -842,5 +834,181 @@ mod tests {
                 epsilon = 0.1
             );
         }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_adds_tiles_3d() {
+        let data: Vec<RasterTile2D<f32>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![0.1f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![1.0f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let data2: Vec<RasterTile2D<f32>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![0.2f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![2.0f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let mrs1 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data.clone(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::F32,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        let mrs2 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data2.clone(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::F32,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        let stacker = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![mrs1, mrs2],
+            },
+        }
+        .boxed();
+
+        // load a very simple model that checks whether the first band is greater than the second band
+        let model_name = MlModelName {
+            namespace: None,
+            name: "test_a_plus_b".into(),
+        };
+
+        let onnx = Onnx {
+            params: OnnxParams {
+                model: model_name.clone(),
+            },
+            sources: SingleRasterSource { raster: stacker },
+        }
+        .boxed();
+
+        let ml_model_metadata = MlModelMetadata {
+            file_path: test_data!("ml/onnx/test_a_plus_b.onnx").to_owned(),
+            input_type: RasterDataType::F32,
+            input_shape: MlTensorShape3D::new_y_x_bands(512, 512, 2),
+            output_shape: MlTensorShape3D::new_y_x_bands(512, 512, 1),
+            output_type: RasterDataType::F32,
+        };
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+            shape_array: [512, 512],
+        };
+        exe_ctx.ml_models.insert(model_name, ml_model_metadata);
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (0., 511.).into(),
+                (1023., 0.).into(),
+            ),
+            time_interval: TimeInterval::new_unchecked(0, 5),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: [0].try_into().unwrap(),
+        };
+
+        let query_ctx = MockQueryContext::test_default();
+
+        let op = onnx
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let qp = op.query_processor().unwrap().get_f32().unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        let expected: Vec<RasterTile2D<f32>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![0.3f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![3.0f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        assert!(expected.tiles_equal_ignoring_cache_hint(&result));
     }
 }
