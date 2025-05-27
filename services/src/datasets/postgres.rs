@@ -27,7 +27,7 @@ use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use geoengine_operators::source::{GdalLoadingInfo, MultiBandGdalLoadingInfo, OgrSourceDataset};
 use postgres_types::{FromSql, ToSql};
 
 pub async fn resolve_dataset_name_to_id<Tls>(
@@ -589,6 +589,25 @@ where
             MetaDataDefinition::GdalMetadataNetCdfCf(m) => Box::new(m),
             _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         })
+    }
+}
+
+#[async_trait]
+impl<Tls> MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn meta_data(
+        &self,
+        id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<dyn MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+    > {
+        todo!()
     }
 }
 

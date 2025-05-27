@@ -13,7 +13,7 @@ use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
 use geoengine_operators::cache::shared_cache::SharedCache;
@@ -25,7 +25,9 @@ use geoengine_operators::engine::{
 use geoengine_operators::meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking};
 use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use geoengine_operators::source::{
+    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo, OgrSourceDataset,
+};
 use rayon::ThreadPool;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -162,6 +164,7 @@ impl QueryContextImpl {
     }
 }
 
+#[async_trait::async_trait]
 impl QueryContext for QueryContextImpl {
     fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
@@ -195,6 +198,23 @@ impl QueryContext for QueryContextImpl {
 
     fn cache(&self) -> Option<Arc<geoengine_operators::cache::shared_cache::SharedCache>> {
         self.cache.clone()
+    }
+
+    // TODO: implement on metadataprovider instead
+    async fn dataset_timesteps(
+        &self,
+        data: &DataId,
+        query_time_interval: TimeInterval,
+    ) -> Result<Vec<TimeInterval>, geoengine_operators::error::Error> {
+        todo!()
+    }
+
+    async fn dataset_tiles(
+        &self,
+        data: &DataId,
+        query: RasterQueryRectangle,
+    ) -> Result<Vec<GdalDatasetParameters>, geoengine_operators::error::Error> {
+        todo!()
     }
 }
 
@@ -234,6 +254,7 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+        + MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         + LayerProviderDb
         + MlModelDb,
 {
@@ -469,6 +490,36 @@ where
                     })?
                     .meta_data(data_id)
                     .await
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl<D> MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for ExecutionContextImpl<D>
+where
+    D: DatasetDb
+        + MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+        + LayerProviderDb,
+{
+    async fn meta_data(
+        &self,
+        data_id: &DataId,
+    ) -> Result<
+        Box<dyn MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+        geoengine_operators::error::Error,
+    > {
+        match data_id {
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
+            DataId::External(external) => {
+                todo!()
             }
         }
     }

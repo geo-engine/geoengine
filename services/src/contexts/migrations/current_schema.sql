@@ -929,3 +929,20 @@ CREATE TABLE quota_log (
     data text
 );
 CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
+
+CREATE TYPE "SpatialPartition2D" AS (
+    upper_left_coordinate "Coordinate2D",
+    lower_right_coordinate "Coordinate2D"
+);
+
+
+CREATE TABLE dataset_tiles (
+    dataset_id uuid NOT NULL,
+    bbox "SpatialPartition2D" NOT NULL,
+    time "TimeInterval" NOT NULL,
+    band OID NOT NULL,
+    z_index OID NOT NULL,
+    gdal_params "GdalDatasetParameters" NOT NULL
+    -- TODO: PRIMARY key, indexes
+);
+

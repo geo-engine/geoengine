@@ -5,11 +5,16 @@ use std::{
 
 use crate::{
     cache::shared_cache::SharedCache, error, meta::quota::QuotaChecker,
-    util::create_rayon_thread_pool,
+    source::GdalDatasetParameters, util::create_rayon_thread_pool,
 };
 use crate::{meta::quota::QuotaTracking, util::Result};
 use futures::Stream;
-use geoengine_datatypes::{raster::TilingSpecification, util::test::TestDefault};
+use geoengine_datatypes::{
+    dataset::DataId,
+    primitives::{RasterQueryRectangle, TimeInterval},
+    raster::TilingSpecification,
+    util::test::TestDefault,
+};
 use pin_project::pin_project;
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -50,6 +55,7 @@ impl TestDefault for ChunkByteSize {
     }
 }
 
+#[async_trait::async_trait]
 pub trait QueryContext: Send + Sync {
     fn chunk_byte_size(&self) -> ChunkByteSize;
     fn tiling_specification(&self) -> TilingSpecification;
@@ -63,6 +69,21 @@ pub trait QueryContext: Send + Sync {
 
     fn abort_registration(&self) -> &QueryAbortRegistration;
     fn abort_trigger(&mut self) -> Result<QueryAbortTrigger>;
+
+    /// Return the time steps of the dataset that are available for the given time interval.
+    async fn dataset_timesteps(
+        &self,
+        data: &DataId,
+        query_time_interval: TimeInterval,
+    ) -> Result<Vec<TimeInterval>>;
+
+    /// Return the dataset tiles of the dataset that are available for the given query rectangle, sorted by descending z-index.
+    // TODO: limit this function to single Geo Engine tiles (bounds and single band)
+    async fn dataset_tiles(
+        &self,
+        data: &DataId,
+        query: RasterQueryRectangle,
+    ) -> Result<Vec<GdalDatasetParameters>>;
 }
 
 /// This type allow wrapping multiple streams with `QueryAbortWrapper`s that
@@ -199,6 +220,7 @@ impl MockQueryContext {
     }
 }
 
+#[async_trait::async_trait]
 impl QueryContext for MockQueryContext {
     fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
@@ -232,5 +254,21 @@ impl QueryContext for MockQueryContext {
 
     fn cache(&self) -> Option<Arc<SharedCache>> {
         self.cache.clone()
+    }
+
+    async fn dataset_timesteps(
+        &self,
+        data: &DataId,
+        query_time_interval: TimeInterval,
+    ) -> Result<Vec<TimeInterval>> {
+        todo!()
+    }
+
+    async fn dataset_tiles(
+        &self,
+        data: &DataId,
+        query: RasterQueryRectangle,
+    ) -> Result<Vec<GdalDatasetParameters>> {
+        todo!()
     }
 }
