@@ -1,6 +1,7 @@
 pub use crate::contexts::migrations::{
     current_schema::CurrentSchemaMigration, migration_0015_log_quota::Migration0015LogQuota,
     migration_0016_merge_providers::Migration0016MergeProviders,
+    migration_0017_ml_model_tensor_shape::Migration0017MlModelTensorShape,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -10,6 +11,7 @@ mod current_schema;
 mod database_migration;
 mod migration_0015_log_quota;
 mod migration_0016_merge_providers;
+mod migration_0017_ml_model_tensor_shape;
 
 #[cfg(test)]
 mod schema_info;
@@ -25,6 +27,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
     vec![
         Box::new(Migration0015LogQuota), // cf. [`migration_0015_log_quota.rs`] why we start at `0015`
         Box::new(Migration0016MergeProviders),
+        Box::new(Migration0017MlModelTensorShape),
     ]
 }
 

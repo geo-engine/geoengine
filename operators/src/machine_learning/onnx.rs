@@ -4,7 +4,9 @@ use crate::engine::{
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::machine_learning::error::{InputBandsMismatch, InputTypeMismatch, Ort};
+use crate::machine_learning::MachineLearningError;
+use crate::machine_learning::error::{InputTypeMismatch, Ort};
+use crate::machine_learning::onnx_util::{check_model_input_features, check_model_shape};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -12,13 +14,14 @@ use futures::stream::BoxStream;
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    Grid, GridIdx2D, GridIndexAccess, GridSize, Pixel, RasterTile2D,
+    Grid, GridIdx2D, GridIndexAccess, GridShapeAccess, GridSize, Pixel, RasterTile2D,
 };
-use ndarray::Array2;
+use ndarray::{Array2, Array4};
 use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
-use std::path::PathBuf;
+
+use super::onnx_util::load_onnx_model_from_metadata;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,14 +57,11 @@ impl RasterOperator for Onnx {
 
         let model_metadata = context.ml_model_metadata(&self.params.model).await?;
 
-        // check that number of input bands fits number of model features
-        ensure!(
-            model_metadata.num_input_bands == in_descriptor.bands.count(),
-            InputBandsMismatch {
-                model_input_bands: model_metadata.num_input_bands,
-                source_bands: in_descriptor.bands.count(),
-            }
-        );
+        let tiling_shape = context.tiling_specification().tile_size_in_pixels;
+
+        // check that we can use the model input / output shape with the operator
+        check_model_shape(&model_metadata, tiling_shape)?;
+        check_model_input_features(&model_metadata, tiling_shape, in_descriptor.bands.count())?;
 
         // check that input type fits model input type
         ensure!(
@@ -112,6 +112,7 @@ impl InitializedRasterOperator for InitializedOnnx {
 
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let source = self.source.query_processor()?;
+
         Ok(call_on_generic_raster_processor!(
             source, input => {
                 call_generic_raster_processor!(
@@ -119,7 +120,7 @@ impl InitializedRasterOperator for InitializedOnnx {
                     OnnxProcessor::new(
                         input,
                         self.result_descriptor.clone(),
-                        self.model_metadata.file_path.clone(),
+                        self.model_metadata.clone(),
                     )
                     .boxed()
                 )
@@ -143,7 +144,7 @@ impl InitializedRasterOperator for InitializedOnnx {
 pub(crate) struct OnnxProcessor<TIn, TOut> {
     source: Box<dyn RasterQueryProcessor<RasterType = TIn>>, // as most ml algorithms work on f32 we use this as input type
     result_descriptor: RasterResultDescriptor,
-    model_path: PathBuf,
+    model_metadata: MlModelMetadata,
     phantom: std::marker::PhantomData<TOut>,
 }
 
@@ -151,12 +152,12 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
     pub fn new(
         source: Box<dyn RasterQueryProcessor<RasterType = TIn>>,
         result_descriptor: RasterResultDescriptor,
-        model_path: PathBuf,
+        model_metadata: MlModelMetadata,
     ) -> Self {
         Self {
             source,
             result_descriptor,
-            model_path,
+            model_metadata,
             phantom: Default::default(),
         }
     }
@@ -168,11 +169,17 @@ where
     TIn: Pixel + NoDataValue,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
     ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>>,
+    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>>,
     ort::Error: std::convert::From<
             <ort::value::Value as std::convert::TryFrom<
                 ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
             >>::Error,
         >,
+    ort::Error: From<
+        <ort::value::Value as std::convert::TryFrom<
+            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
+        >>::Error,
+    >,
 {
     type RasterType = TOut;
 
@@ -187,22 +194,7 @@ where
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         // TODO: re-use session accross queries?
-        let session = ort::session::Session::builder()
-            .context(Ort)?
-            .commit_from_file(&self.model_path)
-            .context(Ort)
-            .inspect_err(|e| {
-                tracing::debug!(
-                    "Could not create ONNX session for {:?}. Error: {}",
-                    self.model_path.file_name(),
-                    e
-                );
-            })?;
-
-        tracing::debug!(
-            "Created ONNX session for {:?}",
-            &self.model_path.file_name()
-        );
+        let session = load_onnx_model_from_metadata(&self.model_metadata)?;
 
         let stream = self
             .source
@@ -234,13 +226,14 @@ where
                 let global_geo_transform = first_tile.global_geo_transform;
                 let cache_hint = first_tile.cache_hint;
 
-                let width = tiles[0].grid_array.axis_size_x();
-                let height = tiles[0].grid_array.axis_size_y();
+                let tile_shape = tiles[0].grid_shape();
+                let width = tile_shape.axis_size_x();
+                let height = tile_shape.axis_size_y();
 
                 // TODO: collect into a ndarray directly
 
                 // TODO: use flat array instead of nested Vecs
-                let mut pixels: Vec<Vec<TIn>> = vec![vec![TIn::zero(); num_bands]; width * height];
+                let mut move_axis_pixels: Vec<Vec<TIn>> = vec![vec![TIn::zero(); num_bands]; width * height];
 
                 for (tile_index, tile) in tiles.into_iter().enumerate() {
                     // TODO: use map_elements or map_elements_parallel to avoid the double loop
@@ -250,24 +243,40 @@ where
                             let pixel_value = tile
                                 .get_at_grid_index(GridIdx2D::from([y as isize, x as isize]))?
                                 .unwrap_or(TIn::NO_DATA); // TODO: properly handle missing values or skip the pixel entirely instead
-                            pixels[pixel_index][tile_index] = pixel_value;
+                            move_axis_pixels[pixel_index][tile_index] = pixel_value;
                         }
                     }
                 }
 
-                let pixels = pixels.into_iter().flatten().collect::<Vec<TIn>>();
-                let rows = width * height;
-                let cols = num_bands;
-
-                let samples = Array2::from_shape_vec((rows, cols), pixels).expect(
-                    "Array2 should be valid because it is created from a Vec with the correct size",
-                );
-
+                let pixels = move_axis_pixels.into_iter().flatten().collect::<Vec<TIn>>();
                 let input_name = &session.inputs[0].name;
 
-                let outputs = session
-                    .run(ort::inputs![input_name => samples].context(Ort)?)
-                    .context(Ort)?;
+
+                let outputs = if self.model_metadata.input_is_single_pixel() {
+
+                    let samples = Array2::from_shape_vec((width*height, num_bands), pixels).expect(
+                        "Array2 should be valid because it is created from a Vec with the correct size",
+                    );
+
+                    session
+                        .run(ort::inputs![input_name => samples].context(Ort)?)
+                        .context(Ort)
+                } else if self.model_metadata.input_shape.yx_matches_tile_shape(&tile_shape){
+                    let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
+                        "Array4 should be valid because it is created from a Vec with the correct size",
+                    );
+
+                    session
+                        .run(ort::inputs![input_name => samples].context(Ort)?)
+                        .context(Ort)
+                } else {
+                    Err(
+                        MachineLearningError::InvalidInputPixelShape {
+                            tensor_shape: self.model_metadata.input_shape,
+                            tiling_shape: tile_shape
+                        }
+                    )
+                }.map_err(error::Error::from)?;
 
                 // assume the first output is the prediction and ignore the other outputs (e.g. probabilities for classification)
                 // we don't access the output by name because it can vary, e.g. "output_label" vs "variable"
@@ -327,16 +336,17 @@ impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
         },
-        machine_learning::metadata_from_file::load_model_metadata,
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
     };
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
+        machine_learning::MlTensorShape3D,
         primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
@@ -346,8 +356,6 @@ mod tests {
         util::test::TestDefault,
     };
     use ndarray::{Array1, Array2, arr2, array};
-
-    use super::*;
 
     #[test]
     fn ort() {
@@ -560,14 +568,19 @@ mod tests {
         }
         .boxed();
 
+        let ml_model_metadata = MlModelMetadata {
+            file_path: test_data!("ml/onnx/test_classification.onnx").to_owned(),
+            input_type: RasterDataType::F32,
+            input_shape: MlTensorShape3D::new_single_pixel_bands(2),
+            output_shape: MlTensorShape3D::new_single_pixel_single_band(),
+            output_type: RasterDataType::I64,
+        };
+
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             shape_array: [2, 2],
         };
-        exe_ctx.ml_models.insert(
-            model_name,
-            load_model_metadata(test_data!("ml/onnx/test_classification.onnx")).unwrap(),
-        );
+        exe_ctx.ml_models.insert(model_name, ml_model_metadata);
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
@@ -768,14 +781,19 @@ mod tests {
         }
         .boxed();
 
+        let ml_model_metadata = MlModelMetadata {
+            file_path: test_data!("ml/onnx/test_regression.onnx").to_owned(),
+            input_type: RasterDataType::F32,
+            input_shape: MlTensorShape3D::new_single_pixel_bands(3),
+            output_shape: MlTensorShape3D::new_single_pixel_single_band(),
+            output_type: RasterDataType::F32,
+        };
+
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
             shape_array: [2, 2],
         };
-        exe_ctx.ml_models.insert(
-            model_name,
-            load_model_metadata(test_data!("ml/onnx/test_regression.onnx")).unwrap(),
-        );
+        exe_ctx.ml_models.insert(model_name, ml_model_metadata);
 
         let query_rect = RasterQueryRectangle {
             spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
@@ -816,5 +834,181 @@ mod tests {
                 epsilon = 0.1
             );
         }
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_adds_tiles_3d() {
+        let data: Vec<RasterTile2D<f32>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![0.1f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![1.0f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let data2: Vec<RasterTile2D<f32>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![0.2f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![2.0f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        let mrs1 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data.clone(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::F32,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        let mrs2 = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: data2.clone(),
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::F32,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: None,
+                    bbox: None,
+                    resolution: None,
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        let stacker = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Default,
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![mrs1, mrs2],
+            },
+        }
+        .boxed();
+
+        // load a very simple model that checks whether the first band is greater than the second band
+        let model_name = MlModelName {
+            namespace: None,
+            name: "test_a_plus_b".into(),
+        };
+
+        let onnx = Onnx {
+            params: OnnxParams {
+                model: model_name.clone(),
+            },
+            sources: SingleRasterSource { raster: stacker },
+        }
+        .boxed();
+
+        let ml_model_metadata = MlModelMetadata {
+            file_path: test_data!("ml/onnx/test_a_plus_b.onnx").to_owned(),
+            input_type: RasterDataType::F32,
+            input_shape: MlTensorShape3D::new_y_x_bands(512, 512, 2),
+            output_shape: MlTensorShape3D::new_y_x_bands(512, 512, 1),
+            output_type: RasterDataType::F32,
+        };
+
+        let mut exe_ctx = MockExecutionContext::test_default();
+        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
+            shape_array: [512, 512],
+        };
+        exe_ctx.ml_models.insert(model_name, ml_model_metadata);
+
+        let query_rect = RasterQueryRectangle {
+            spatial_bounds: SpatialPartition2D::new_unchecked(
+                (0., 511.).into(),
+                (1023., 0.).into(),
+            ),
+            time_interval: TimeInterval::new_unchecked(0, 5),
+            spatial_resolution: SpatialResolution::one(),
+            attributes: [0].try_into().unwrap(),
+        };
+
+        let query_ctx = MockQueryContext::test_default();
+
+        let op = onnx
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let qp = op.query_processor().unwrap().get_f32().unwrap();
+
+        let result = qp
+            .raster_query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .collect::<Vec<_>>()
+            .await;
+        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+
+        let expected: Vec<RasterTile2D<f32>> = vec![
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 0].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![0.3f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+            RasterTile2D {
+                time: TimeInterval::new_unchecked(0, 5),
+                tile_position: [-1, 1].into(),
+                band: 0,
+                global_geo_transform: TestDefault::test_default(),
+                grid_array: Grid::new([512, 512].into(), vec![3.0f32; 512 * 512])
+                    .unwrap()
+                    .into(),
+                properties: Default::default(),
+                cache_hint: CacheHint::default(),
+            },
+        ];
+
+        assert!(expected.tiles_equal_ignoring_cache_hint(&result));
     }
 }
