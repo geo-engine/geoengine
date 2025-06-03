@@ -1,0 +1,59 @@
+{
+  "pageNum": 0,
+  "pageSize": -1,
+  "size": 3,
+  "facets": [],
+  "results": [
+    {
+      "id": "wildlive/a1eaa469eec33a0d3a39",
+      "content": {
+        "hasTarget": {
+          "hasSelector": {
+            "value": "xywh=2671,1043,1808,999"
+          },
+          "source": "wildlive/75243d4b79e5c91bd3b3"
+        },
+        "hasBody": {
+          "acceptedNameUsageID": "https://www.gbif.org/species/5219426",
+          "vernacularName": "Jaguar",
+          "scientificName": "Panthera onca (Linnaeus, 1758)"
+        },
+        "id": "wildlive/a1eaa469eec33a0d3a39"
+      }
+    },
+    {
+      "id": "wildlive/ebe8d5f722782b0bee73",
+      "content": {
+        "hasTarget": {
+          "hasSelector": {
+            "value": "xywh=2834,1168,2092,1244"
+          },
+          "source": "wildlive/7f8e06ea4ae305a2822d"
+        },
+        "hasBody": {
+          "acceptedNameUsageID": "https://www.gbif.org/species/5219426",
+          "vernacularName": "Jaguar",
+          "scientificName": "Panthera onca (Linnaeus, 1758)"
+        },
+        "id": "wildlive/ebe8d5f722782b0bee73"
+      }
+    },
+    {
+      "id": "wildlive/7ef5664c43cf26299b09",
+      "content": {
+        "hasTarget": {
+          "hasSelector": {
+            "value": "xywh=2734,1147,1877,833"
+          },
+          "source": "wildlive/da842858a8fd792ccfbf"
+        },
+        "hasBody": {
+          "acceptedNameUsageID": "https://www.gbif.org/species/5219426",
+          "vernacularName": "Jaguar",
+          "scientificName": "Panthera onca (Linnaeus, 1758)"
+        },
+        "id": "wildlive/7ef5664c43cf26299b09"
+      }
+    }
+  ]
+}

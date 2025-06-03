@@ -2,6 +2,7 @@ pub use crate::contexts::migrations::{
     current_schema::CurrentSchemaMigration, migration_0015_log_quota::Migration0015LogQuota,
     migration_0016_merge_providers::Migration0016MergeProviders,
     migration_0017_ml_model_tensor_shape::Migration0017MlModelTensorShape,
+    migration_0018_wildlive_connector::Migration0018WildliveConnector,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -12,6 +13,7 @@ mod database_migration;
 mod migration_0015_log_quota;
 mod migration_0016_merge_providers;
 mod migration_0017_ml_model_tensor_shape;
+mod migration_0018_wildlive_connector;
 
 #[cfg(test)]
 mod schema_info;
@@ -28,7 +30,37 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0015LogQuota), // cf. [`migration_0015_log_quota.rs`] why we start at `0015`
         Box::new(Migration0016MergeProviders),
         Box::new(Migration0017MlModelTensorShape),
+        Box::new(Migration0018WildliveConnector),
     ]
+}
+
+#[cfg(test)]
+/// Returns an iterator over all migrations that are in the range from `from` to `to`, inclusive.
+///
+/// # Panics
+/// - If the `from` version is not found in the migrations.
+/// - If the `to` version is not found in the migrations.
+/// - If the `from` version is after the `to` version.
+///
+fn migrations_by_range(from: &str, to: &str) -> Vec<Box<dyn Migration>> {
+    let migrations = all_migrations();
+    let from_index = migrations
+        .iter()
+        .position(|m| m.version() == from)
+        .expect("Migration with the given 'from' version not found");
+    let to_index = migrations
+        .iter()
+        .position(|m| m.version() == to)
+        .expect("Migration with the given 'to' version not found");
+    assert!(
+        from_index <= to_index,
+        "The 'from' version must not be after the 'to' version"
+    );
+    migrations
+        .into_iter()
+        .skip(from_index)
+        .take(to_index - from_index + 1)
+        .collect()
 }
 
 #[cfg(test)]
