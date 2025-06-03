@@ -462,7 +462,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::RasterDataType as ApiRasterDataType;
+    use crate::api::model::datatypes::{MlTensorShape3D, RasterDataType as ApiRasterDataType};
     use crate::config::QuotaTrackingMode;
     use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -4956,7 +4956,8 @@ mod tests {
             metadata: MlModelMetadata {
                 file_name: "myUnrealmodel.onnx".to_owned(),
                 input_type: ApiRasterDataType::F32,
-                num_input_bands: 17,
+                input_shape: MlTensorShape3D::new_single_pixel_bands(17),
+                output_shape: MlTensorShape3D::new_single_pixel_single_band(),
                 output_type: ApiRasterDataType::F64,
             },
             name: MlModelName::new(None, "myUnrealModel"),
