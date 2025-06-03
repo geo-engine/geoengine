@@ -1,26 +1,27 @@
 use super::{
-    Migration0016MergeProviders,
+    Migration0017MlModelTensorShape,
     database_migration::{DatabaseVersion, Migration},
 };
 use crate::error::Result;
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
-/// This migration merges the two providers tables into one
-pub struct Migration0017WildliveConnector;
+/// This migration adds a new provider type into the `DataProviderDefinition` type
+/// and creates a new cache tables for the Wildlive connector.
+pub struct Migration0018WildliveConnector;
 
 #[async_trait]
-impl Migration for Migration0017WildliveConnector {
+impl Migration for Migration0018WildliveConnector {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some(Migration0016MergeProviders.version())
+        Some(Migration0017MlModelTensorShape.version())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0017_widlive_connector".into()
+        "0018_widlive_connector".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        tx.batch_execute(include_str!("migration_0017_wildlive_connector.sql"))
+        tx.batch_execute(include_str!("migration_0018_wildlive_connector.sql"))
             .await?;
 
         Ok(())
@@ -28,7 +29,10 @@ impl Migration for Migration0017WildliveConnector {
 }
 #[cfg(test)]
 mod tests {
-    use crate::contexts::migrations::all_migrations;
+    use super::*;
+    use crate::contexts::migrations::{
+        Migration0015LogQuota, Migration0016MergeProviders, migrations_by_range,
+    };
     use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{config::get_config_element, contexts::migrate_database};
     use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
@@ -45,9 +49,15 @@ mod tests {
         let mut conn = pool.get().await.unwrap();
 
         // initial schema
-        migrate_database(&mut conn, &all_migrations()[0..=0])
-            .await
-            .unwrap();
+        migrate_database(
+            &mut conn,
+            &migrations_by_range(
+                &Migration0015LogQuota.version(),
+                &Migration0015LogQuota.version(),
+            ),
+        )
+        .await
+        .unwrap();
 
         // insert test data on initial schema
         assert_eq!(
@@ -58,9 +68,15 @@ mod tests {
         );
 
         // perform this migration
-        migrate_database(&mut conn, &all_migrations()[1..=2])
-            .await
-            .unwrap();
+        migrate_database(
+            &mut conn,
+            &migrations_by_range(
+                &Migration0016MergeProviders.version(),
+                &Migration0018WildliveConnector.version(),
+            ),
+        )
+        .await
+        .unwrap();
 
         // verify that entries are in the new table
         assert_eq!(
