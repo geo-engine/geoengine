@@ -1427,6 +1427,30 @@ impl From<GdalLoadingInfoTemporalSlice>
     }
 }
 
+#[type_tag(value = "GdalMultiBand")]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMultiBand {
+    pub result_descriptor: RasterResultDescriptor, // TODO: omit, already part of dataset
+}
+
+impl From<geoengine_operators::source::GdalMultiBand> for GdalMultiBand {
+    fn from(value: geoengine_operators::source::GdalMultiBand) -> Self {
+        Self {
+            r#type: Default::default(),
+            result_descriptor: value.result_descriptor.into(),
+        }
+    }
+}
+
+impl From<GdalMultiBand> for geoengine_operators::source::GdalMultiBand {
+    fn from(value: GdalMultiBand) -> Self {
+        Self {
+            result_descriptor: value.result_descriptor.into(),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum CsvHeader {

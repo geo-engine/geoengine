@@ -13,7 +13,7 @@ use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
 
 use super::datatypes::{DataId, DatasetId};
-use super::operators::TypedResultDescriptor;
+use super::operators::{GdalMultiBand, TypedResultDescriptor};
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
@@ -26,6 +26,7 @@ pub enum MetaDataDefinition {
     GdalStatic(GdalMetaDataStatic),
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
     GdalMetaDataList(GdalMetaDataList),
+    GdalMultiBand(GdalMultiBand),
 }
 
 impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
@@ -57,6 +58,9 @@ impl From<crate::datasets::storage::MetaDataDefinition> for MetaDataDefinition {
             crate::datasets::storage::MetaDataDefinition::GdalMetaDataList(x) => {
                 Self::GdalMetaDataList(x.into())
             }
+            crate::datasets::storage::MetaDataDefinition::GdalMultiBand(x) => {
+                Self::GdalMultiBand(x.into())
+            }
         }
     }
 }
@@ -70,6 +74,7 @@ impl From<MetaDataDefinition> for crate::datasets::storage::MetaDataDefinition {
             MetaDataDefinition::GdalStatic(x) => Self::GdalStatic(x.into()),
             MetaDataDefinition::GdalMetadataNetCdfCf(x) => Self::GdalMetadataNetCdfCf(x.into()),
             MetaDataDefinition::GdalMetaDataList(x) => Self::GdalMetaDataList(x.into()),
+            MetaDataDefinition::GdalMultiBand(x) => Self::GdalMultiBand(x.into()),
         }
     }
 }

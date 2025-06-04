@@ -49,7 +49,7 @@ use geoengine_datatypes::{
 use itertools::Itertools;
 pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
-    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
+    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, GdalMultiBand,
 };
 use log::debug;
 use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
