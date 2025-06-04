@@ -367,6 +367,9 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
             TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => {
                 DataProviderDefinition::<D>::update(def, other)
             }
+            TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
         }
     }
 }

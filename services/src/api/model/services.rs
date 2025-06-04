@@ -1000,6 +1000,46 @@ impl From<crate::datasets::dataset_listing_provider::DatasetLayerListingProvider
     }
 }
 
+#[type_tag(value = "WildLIVE!")]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct WildliveDataConnectorDefinition {
+    pub id: DataProviderId,
+    pub name: String,
+    pub description: String,
+    pub api_key: Option<String>,
+    pub priority: Option<i16>,
+}
+
+impl From<WildliveDataConnectorDefinition>
+    for crate::datasets::external::WildliveDataConnectorDefinition
+{
+    fn from(value: WildliveDataConnectorDefinition) -> Self {
+        crate::datasets::external::WildliveDataConnectorDefinition {
+            id: value.id.into(),
+            name: value.name,
+            description: value.description,
+            api_key: value.api_key,
+            priority: value.priority,
+        }
+    }
+}
+
+impl From<crate::datasets::external::WildliveDataConnectorDefinition>
+    for WildliveDataConnectorDefinition
+{
+    fn from(value: crate::datasets::external::WildliveDataConnectorDefinition) -> Self {
+        WildliveDataConnectorDefinition {
+            r#type: Default::default(),
+            id: value.id.into(),
+            name: value.name,
+            description: value.description,
+            api_key: Some(SECRET_REPLACEMENT.to_string()),
+            priority: value.priority,
+        }
+    }
+}
+
 #[derive(PartialEq, Debug, Serialize, Deserialize, Clone, ToSchema)]
 #[allow(clippy::enum_variant_names)] // TODO: think about better names
 #[schema(discriminator = "type")]
@@ -1016,6 +1056,7 @@ pub enum TypedDataProviderDefinition {
     NetCdfCfDataProviderDefinition(NetCdfCfDataProviderDefinition),
     PangaeaDataProviderDefinition(PangaeaDataProviderDefinition),
     SentinelS2L2ACogsProviderDefinition(SentinelS2L2ACogsProviderDefinition),
+    WildliveDataConnectorDefinition(WildliveDataConnectorDefinition),
 }
 
 impl From<TypedDataProviderDefinition> for crate::layers::external::TypedDataProviderDefinition {
@@ -1032,6 +1073,7 @@ impl From<TypedDataProviderDefinition> for crate::layers::external::TypedDataPro
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def.into()),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::PangaeaDataProviderDefinition(def.into()),
             TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def.into()),
+            TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => crate::layers::external::TypedDataProviderDefinition::WildliveDataConnectorDefinition(def.into()),
         }
     }
 }
@@ -1050,6 +1092,7 @@ impl From<crate::layers::external::TypedDataProviderDefinition> for TypedDataPro
             crate::layers::external::TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def.into()),
             crate::layers::external::TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => TypedDataProviderDefinition::PangaeaDataProviderDefinition(def.into()),
             crate::layers::external::TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def.into()),
+            crate::layers::external::TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => TypedDataProviderDefinition::WildliveDataConnectorDefinition(def.into()),
         }
     }
 }
