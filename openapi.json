@@ -10165,6 +10165,9 @@
           },
           {
             "$ref": "#/components/schemas/SentinelS2L2ACogsProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/WildliveDataConnectorDefinition"
           }
         ],
         "discriminator": {
@@ -10180,7 +10183,8 @@
             "GfbioCollections": "#/components/schemas/GfbioCollectionsDataProviderDefinition",
             "NetCdfCf": "#/components/schemas/NetCdfCfDataProviderDefinition",
             "Pangaea": "#/components/schemas/PangaeaDataProviderDefinition",
-            "SentinelS2L2ACogs": "#/components/schemas/SentinelS2L2ACogsProviderDefinition"
+            "SentinelS2L2ACogs": "#/components/schemas/SentinelS2L2ACogsProviderDefinition",
+            "WildLIVE!": "#/components/schemas/WildliveDataConnectorDefinition"
           }
         }
       },
@@ -10964,6 +10968,45 @@
         "enum": [
           "2.0.0"
         ]
+      },
+      "WildliveDataConnectorDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "name",
+          "description"
+        ],
+        "properties": {
+          "apiKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "WildLIVE!"
+            ]
+          }
+        }
       },
       "WmsService": {
         "type": "string",
