@@ -10,9 +10,10 @@ lcov.info
 /.idea
 /.vscode
 Settings.toml
+.env
 
 # Venvs
-env
+/.venv
 
 # Data
 upload/

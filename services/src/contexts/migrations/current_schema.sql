@@ -817,6 +817,14 @@ CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
     gdal_config "StringPair" []
 );
 
+CREATE TYPE "WildliveDataConnectorDefinition" AS (
+    id uuid,
+    "name" text,
+    description text,
+    api_key text,
+    priority smallint
+);
+
 CREATE TYPE "DataProviderDefinition" AS (
     -- one of
     aruna_data_provider_definition "ArunaDataProviderDefinition",
@@ -833,7 +841,8 @@ CREATE TYPE "DataProviderDefinition" AS (
     sentinel_s2_l2_a_cogs_provider_definition
     "SentinelS2L2ACogsProviderDefinition",
     copernicus_dataspace_provider_definition
-    "CopernicusDataspaceDataProviderDefinition"
+    "CopernicusDataspaceDataProviderDefinition",
+    wildlive_data_connector_definition "WildliveDataConnectorDefinition"
 );
 
 CREATE TABLE layer_providers (
@@ -935,11 +944,63 @@ CREATE TABLE ebv_provider_loading_infos (
     ) ON DELETE CASCADE DEFERRABLE
 );
 
+CREATE TABLE wildlive_projects (
+    provider_id uuid NOT NULL,
+    cache_date date NOT NULL,
+    project_id text NOT NULL,
+    name text NOT NULL,
+    description text NOT NULL,
+    geom public.GEOMETRY (POLYGON) NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, cache_date, project_id) DEFERRABLE
+);
+
+CREATE TABLE wildlive_stations (
+    provider_id uuid NOT NULL,
+    cache_date date NOT NULL,
+    station_id text NOT NULL,
+    project_id text NOT NULL,
+    name text NOT NULL,
+    description text NOT NULL,
+    location text NOT NULL,
+    geom public.GEOMETRY (POINT) NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, cache_date, project_id, station_id) DEFERRABLE
+);
+
+CREATE TABLE wildlive_captures (
+    provider_id uuid NOT NULL,
+    cache_date date NOT NULL,
+    image_object_id text NOT NULL,
+    project_id text NOT NULL,
+    station_setup_id text NOT NULL,
+    capture_time_stamp timestamp with time zone NOT NULL,
+    accepted_name_usage_id text NOT NULL,
+    vernacular_name text NOT NULL,
+    scientific_name text NOT NULL,
+    content_url text NOT NULL,
+    geom public.GEOMETRY (POINT) NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (
+        provider_id, cache_date, project_id, image_object_id
+    ) DEFERRABLE
+);
+
+CREATE TYPE "MlTensorShape3D" AS (
+    x OID,
+    y OID,
+    bands OID
+);
+
 CREATE TYPE "MlModelMetadata" AS (
     file_name text,
     input_type "RasterDataType",
-    num_input_bands OID,
-    output_type "RasterDataType"
+    output_type "RasterDataType",
+    input_shape "MlTensorShape3D",
+    output_shape "MlTensorShape3D"
 );
 
 CREATE TYPE "MlModelName" AS (namespace text, name text);
