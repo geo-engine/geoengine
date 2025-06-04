@@ -8,7 +8,10 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
-    source::{GdalLoadingInfo, MultiBandGdalLoadingInfo, OgrSourceDataset},
+    source::{
+        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+        OgrSourceDataset,
+    },
 };
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -422,8 +425,12 @@ where
 }
 
 #[async_trait]
-impl<D> MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for DatasetLayerListingProvider<D>
+impl<D>
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for DatasetLayerListingProvider<D>
 where
     D: DatasetProvider + Send + Sync + 'static,
 {
@@ -431,7 +438,13 @@ where
         &self,
         _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
-        Box<dyn MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
         geoengine_operators::error::Error,
     > {
         // never called but handled by the dataset provider

@@ -11,7 +11,8 @@ use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo, OgrSourceDataset,
+    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
 };
 use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
@@ -35,7 +36,11 @@ pub trait ExecutionContext: Send
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    + MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    >
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;

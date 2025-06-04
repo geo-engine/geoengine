@@ -26,7 +26,8 @@ use geoengine_operators::meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking};
 use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo, OgrSourceDataset,
+    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
 };
 use rayon::ThreadPool;
 use std::str::FromStr;
@@ -254,8 +255,11 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb
+        + MetaDataProvider<
+            MultiBandGdalLoadingInfo,
+            RasterResultDescriptor,
+            MultiBandGdalLoadingInfoQueryRectangle,
+        > + LayerProviderDb
         + MlModelDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -496,18 +500,31 @@ where
 }
 
 #[async_trait]
-impl<D> MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    for ExecutionContextImpl<D>
+impl<D>
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for ExecutionContextImpl<D>
 where
     D: DatasetDb
-        + MetaDataProvider<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb,
+        + MetaDataProvider<
+            MultiBandGdalLoadingInfo,
+            RasterResultDescriptor,
+            MultiBandGdalLoadingInfoQueryRectangle,
+        > + LayerProviderDb,
 {
     async fn meta_data(
         &self,
         data_id: &DataId,
     ) -> Result<
-        Box<dyn MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
         geoengine_operators::error::Error,
     > {
         match data_id {

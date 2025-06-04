@@ -10,11 +10,12 @@ pub use self::gdal_source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
     GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator, GdalMetaDataList,
     GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf,
-    GdalRetryOptions, GdalSource, GdalSourceError, GdalSourceParameters, GdalSourceProcessor,
-    GdalSourceTimePlaceholder, TimeReference,
+    GdalMultiBand, GdalRetryOptions, GdalSource, GdalSourceError, GdalSourceParameters,
+    GdalSourceProcessor, GdalSourceTimePlaceholder, TimeReference,
 };
 pub use self::multi_band_gdal_source::{
     GdalSourceError as MultiBandGdalSourceError, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, TileFile,
 };
 pub use self::ogr_source::{
     AttributeFilter, CsvHeader, FormatSpecifics, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,

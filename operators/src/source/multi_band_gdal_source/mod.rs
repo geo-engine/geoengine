@@ -33,7 +33,10 @@ use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::dataset::{self, DataId};
-use geoengine_datatypes::primitives::SpatialGridQueryRectangle;
+use geoengine_datatypes::primitives::{
+    QueryRectangle, SpatialGridQueryRectangle, SpatialPartition2D, SpatialQueryRectangle,
+};
+use geoengine_datatypes::raster::TilingSpatialGridDefinition;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
@@ -50,7 +53,7 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use itertools::Itertools;
-pub use loading_info::MultiBandGdalLoadingInfo;
+pub use loading_info::{MultiBandGdalLoadingInfo, TileFile};
 use log::debug;
 use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
 use postgres_types::{FromSql, ToSql};
@@ -66,6 +69,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+
 mod db_types;
 mod error;
 mod loading_info;
@@ -114,8 +118,31 @@ impl OperatorData for GdalSourceParameters {
     }
 }
 
-type MultiBandGdalMetaData =
-    Box<dyn MetaData<MultiBandGdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>;
+type MultiBandGdalMetaData = Box<
+    dyn MetaData<
+            MultiBandGdalLoadingInfo,
+            RasterResultDescriptor,
+            MultiBandGdalLoadingInfoQueryRectangle,
+        >,
+>;
+
+pub type MultiBandGdalLoadingInfoQueryRectangle =
+    QueryRectangle<SpatialQueryRectangle<SpatialPartition2D>, BandSelection>;
+
+fn raster_query_rectangle_to_loading_info_query_rectangle(
+    raster_query_rectangle: RasterQueryRectangle,
+    tiling_spatial_grid: TilingSpatialGridDefinition,
+) -> MultiBandGdalLoadingInfoQueryRectangle {
+    MultiBandGdalLoadingInfoQueryRectangle {
+        spatial_query: SpatialQueryRectangle::new(
+            tiling_spatial_grid
+                .tiling_geo_transform()
+                .grid_to_spatial_bounds(&raster_query_rectangle.spatial_query.grid_bounds()),
+        ),
+        time_interval: raster_query_rectangle.time_interval,
+        attributes: raster_query_rectangle.attributes,
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
 #[serde(rename_all = "camelCase")]
@@ -614,9 +641,15 @@ where
             }
         };
 
-        let loading_info = self.meta_data.loading_info(query.clone()).await?;
+        let loading_info = self
+            .meta_data
+            .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
+                query.clone(),
+                produced_tiling_grid,
+            ))
+            .await?;
 
-        let time_steps = loading_info.time_steps();
+        let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes.as_vec();
         let spatial_tiles = tiling_strategy
             .tile_information_iterator_from_grid_bounds(query.spatial_query.grid_bounds())
