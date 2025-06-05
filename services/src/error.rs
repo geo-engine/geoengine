@@ -7,7 +7,7 @@ use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::HttpResponse;
 use actix_web::http::StatusCode;
-use geoengine_datatypes::dataset::LayerId;
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::util::helpers::ge_report;
 use ordered_float::FloatIsNan;
@@ -114,11 +114,11 @@ pub enum Error {
     #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
-    #[snafu(display("A permission error occured: {source}."))]
+    #[snafu(display("A permission error occurred: {source}."))]
     PermissionDb {
         source: Box<dyn ErrorSource>,
     },
-    #[snafu(display("A role error occured: {source}."))]
+    #[snafu(display("A role error occurred: {source}."))]
     RoleDb {
         source: Box<dyn ErrorSource>,
     },
@@ -514,6 +514,17 @@ pub enum Error {
     CannotAccessVolumePath {
         volume_name: String,
     },
+
+    #[snafu(display("A provider with id '{}' already exists", provider_id))]
+    ProviderIdAlreadyExists {
+        provider_id: DataProviderId,
+    },
+
+    #[snafu(display("An existing provider's type cannot be modified"))]
+    ProviderTypeUnmodifiable,
+
+    #[snafu(display("An existing provider's id cannot be modified"))]
+    ProviderIdUnmodifiable,
 
     #[snafu(display("Unknown resource name {} of kind {}", name, kind))]
     UnknownResource {
