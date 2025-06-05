@@ -1,5 +1,5 @@
 use super::database_migration::{DatabaseVersion, Migration};
-use crate::contexts::migrations::Migration0016MergeProviders;
+use crate::contexts::migrations::Migration0018WildliveConnector;
 use crate::error::Result;
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
@@ -10,7 +10,7 @@ pub struct Migration0019ProviderPermissions;
 #[async_trait]
 impl Migration for Migration0019ProviderPermissions {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some(Migration0016MergeProviders.version())
+        Some(Migration0018WildliveConnector.version())
     }
 
     fn version(&self) -> DatabaseVersion {
