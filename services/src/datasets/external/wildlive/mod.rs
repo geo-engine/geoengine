@@ -46,6 +46,8 @@ use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use url::Url;
 
+use crate::api::model::services::SECRET_REPLACEMENT;
+use crate::layers::external::TypedDataProviderDefinition;
 pub use cache::WildliveDbCache;
 pub use error::WildliveError;
 
@@ -56,6 +58,7 @@ mod error;
 type Result<T, E = WildliveError> = std::result::Result<T, E>;
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, FromSql, ToSql)]
+#[serde(rename_all = "camelCase")]
 pub struct WildliveDataConnectorDefinition {
     pub id: DataProviderId,
     pub name: String,
@@ -133,6 +136,21 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for WildliveDataConnectorDefiniti
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::WildliveDataConnectorDefinition(mut new) => {
+                if new.api_key == Some(SECRET_REPLACEMENT.to_string()) {
+                    new.api_key.clone_from(&self.api_key);
+                }
+                TypedDataProviderDefinition::WildliveDataConnectorDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 
