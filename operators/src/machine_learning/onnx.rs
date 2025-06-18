@@ -7,7 +7,7 @@ use crate::machine_learning::MachineLearningError;
 use crate::machine_learning::error::{InputTypeMismatch, Ort};
 use crate::machine_learning::onnx_util::{check_model_input_features, check_model_shape};
 use crate::util::Result;
-use crate::{error, ge_tracing_trace};
+use crate::{error, ge_tracing_removed_trace};
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
@@ -245,7 +245,7 @@ where
                 };
 
                 if skip_tile {
-                    ge_tracing_trace!("Skipping Tile {tile_position:?}");
+                    ge_tracing_removed_trace!("Skipping Tile {tile_position:?}");
                     return Ok(RasterTile2D::new(
                         time,
                         tile_position,
@@ -263,7 +263,7 @@ where
                 };
                 let mut output_mask = Grid::new_filled(self.tile_shape, output_mask_fill_value);
                 if out_mask_mode != MergeMasks::Never {
-                    ge_tracing_trace!("Merging masks with {out_mask_mode:?}");
+                    ge_tracing_removed_trace!("Merging masks with {out_mask_mode:?}");
                     for c in &tiles {
                         if let Some(mg) = c.grid_array.as_masked_grid() {
                             output_mask.update_indexed_elements(|idx: GridIdx2D, value| {

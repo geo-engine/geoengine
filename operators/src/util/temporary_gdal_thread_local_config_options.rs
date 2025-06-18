@@ -1,4 +1,4 @@
-use crate::ge_tracing_trace;
+use crate::ge_tracing_removed_trace;
 
 use super::Result;
 
@@ -18,7 +18,7 @@ impl TemporaryGdalThreadLocalConfigOptions {
 
             // TODO: check if overriding existing config (local & global) is ok for the given key
             gdal::config::set_thread_local_config_option(key, value)?;
-            ge_tracing_trace!("set {key}={value}");
+            ge_tracing_removed_trace!("set {key}={value}");
 
             original_configs.push((key.clone(), old));
         }

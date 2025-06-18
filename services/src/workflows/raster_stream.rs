@@ -13,7 +13,7 @@ use geoengine_operators::{
     engine::{
         QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator, WorkflowOperatorPath,
     },
-    ge_tracing_debug, ge_tracing_trace,
+    ge_tracing_removed_debug, ge_tracing_removed_trace,
 };
 
 pub struct RasterWebsocketStreamHandler {
@@ -110,7 +110,7 @@ impl RasterWebsocketStreamHandler {
 
         self.state = match state {
             RasterWebsocketStreamHandlerState::Closed => {
-                ge_tracing_debug!("Closing websocket handler!");
+                ge_tracing_removed_debug!("Closing websocket handler!");
                 self.finished(ctx);
                 return;
             }
@@ -121,9 +121,9 @@ impl RasterWebsocketStreamHandler {
                             let tile = stream.next().await;
 
                             match &tile {
-                                Some(Ok(_)) => ge_tracing_trace!("Got next tile."),
+                                Some(Ok(_)) => ge_tracing_removed_trace!("Got next tile."),
                                 Some(Err(e)) => tracing::warn!("Got error! {e}"),
-                                None => ge_tracing_debug!("Got None --> Closing."),
+                                None => ge_tracing_removed_debug!("Got None --> Closing."),
                             }
 
                             (tile, stream)

@@ -6,7 +6,7 @@ use crate::engine::{
     WorkflowOperatorPath,
 };
 use crate::util::Result;
-use crate::{ge_tracing_debug, ge_tracing_trace};
+use crate::{ge_tracing_removed_debug, ge_tracing_removed_trace};
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
@@ -30,7 +30,7 @@ impl<S> InitializedOperatorWrapper<S> {
 
 impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn InitializedRasterOperator>> {
     fn result_descriptor(&self) -> &RasterResultDescriptor {
-        ge_tracing_debug!(
+        ge_tracing_removed_debug!(
             event = "raster result descriptor",
             path = self.source.path().to_string()
         );
@@ -40,7 +40,7 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
     #[allow(clippy::too_many_lines)]
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let path = self.source.path();
-        ge_tracing_debug!(event = "query processor", path = path.to_string());
+        ge_tracing_removed_debug!(event = "query processor", path = path.to_string());
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
@@ -137,11 +137,11 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
                         )))
                     }
                 };
-                ge_tracing_debug!(event = "query processor created");
+                ge_tracing_removed_debug!(event = "query processor created");
                 Ok(res_processor)
             }
             Err(err) => {
-                ge_tracing_debug!(event = "query processor failed");
+                ge_tracing_removed_debug!(event = "query processor failed");
                 Err(err)
             }
         }
@@ -162,12 +162,12 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
 
 impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn InitializedVectorOperator>> {
     fn result_descriptor(&self) -> &VectorResultDescriptor {
-        ge_tracing_debug!(event = "vector result descriptor");
+        ge_tracing_removed_debug!(event = "vector result descriptor");
         self.source.result_descriptor()
     }
 
     fn query_processor(&self) -> Result<TypedVectorQueryProcessor> {
-        ge_tracing_debug!(event = "query processor");
+        ge_tracing_removed_debug!(event = "query processor");
         let processor_result = self.source.query_processor();
         match processor_result {
             Ok(p) => {
@@ -176,7 +176,7 @@ impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn Initialize
                     p => Box::new(QueryProcessorWrapper::new(p,
                     self.span, self.source.path(), self.source.name(), self.source.data()))
                 );
-                ge_tracing_debug!(event = "query processor created");
+                ge_tracing_removed_debug!(event = "query processor created");
                 Ok(result)
             }
             Err(err) => {
@@ -290,7 +290,7 @@ where
 
         let _enter = span.enter();
 
-        ge_tracing_trace!(
+        ge_tracing_removed_trace!(
             event = %"query_start",
             path = %self.path,
             bbox = %format!("[{},{},{},{}]",
@@ -306,11 +306,11 @@ where
         );
 
         let stream_result = self.processor.query(query, ctx).await;
-        ge_tracing_trace!(event = %"query_ready");
+        ge_tracing_removed_trace!(event = %"query_ready");
 
         match stream_result {
             Ok(stream) => {
-                ge_tracing_trace!(event = %"query_ok");
+                ge_tracing_removed_trace!(event = %"query_ok");
                 Ok(StreamStatisticsAdapter::new(
                     stream,
                     span.clone(),
@@ -322,7 +322,7 @@ where
                 .boxed())
             }
             Err(err) => {
-                ge_tracing_trace!(event = %"query_error");
+                ge_tracing_removed_trace!(event = %"query_error");
                 Err(err)
             }
         }

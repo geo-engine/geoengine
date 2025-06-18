@@ -1,7 +1,7 @@
 use geoengine_datatypes::util::ByteSize;
 use snafu::ensure;
 
-use crate::ge_tracing_trace;
+use crate::ge_tracing_removed_trace;
 
 use super::error::CacheError;
 
@@ -126,7 +126,7 @@ impl CacheSize {
     pub fn add_bytes_allow_overflow(&mut self, bytes: usize) {
         self.byte_size_used += bytes;
         if self.is_overflowing() {
-            ge_tracing_trace!(
+            ge_tracing_removed_trace!(
                 "overflowing cache size by {} bytes, total size: {}, added bytes: {}",
                 self.byte_size_used - self.byte_size_total,
                 self.byte_size_total,

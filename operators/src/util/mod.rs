@@ -64,10 +64,10 @@ pub fn duplicate_or_empty_str_slice<S: AsRef<str>>(strings: &[S]) -> DuplicateOr
     DuplicateOrEmpty::Ok
 }
 
-pub mod ge_tracing {
+pub mod ge_tracing_removed {
 
     #[macro_export]
-    macro_rules! ge_tracing_trace {
+    macro_rules! ge_tracing_removed_trace {
         ($($tts:tt)*) => {
             if cfg!(debug_assertions) {
                 tracing::trace!($($tts)*);
@@ -76,7 +76,7 @@ pub mod ge_tracing {
     }
 
     #[macro_export]
-    macro_rules! ge_tracing_debug {
+    macro_rules! ge_tracing_removed_debug {
         ($($tts:tt)*) => {
             if cfg!(debug_assertions) {
                 tracing::debug!($($tts)*);
