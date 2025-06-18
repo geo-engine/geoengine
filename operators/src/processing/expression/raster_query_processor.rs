@@ -1,6 +1,7 @@
 use super::RasterExpressionError;
 use crate::{
     engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
+    ge_tracing_trace,
     util::Result,
 };
 use async_trait::async_trait;
@@ -338,7 +339,19 @@ where
         let grid_shape = rasters.0.grid_shape();
         let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
 
-        Result::Ok(out)
+        let out_2 = match out {
+            GridOrEmpty::Empty(t) => GridOrEmpty::Empty(t),
+            GridOrEmpty::Grid(t) => {
+                if t.validity_mask.data.iter().all(|&t| !t) {
+                    ge_tracing_trace!("Converting empty expression output to EmptyGrid");
+                    GridOrEmpty::new_empty_shape(t.grid_shape())
+                } else {
+                    GridOrEmpty::Grid(t)
+                }
+            }
+        };
+
+        Result::Ok(out_2)
     }
 
     fn num_bands() -> u32 {

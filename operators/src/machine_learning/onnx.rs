@@ -3,21 +3,27 @@ use crate::engine::{
     OperatorName, QueryContext, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
-use crate::error;
 use crate::machine_learning::MachineLearningError;
 use crate::machine_learning::error::{InputTypeMismatch, Ort};
 use crate::machine_learning::onnx_util::{check_model_input_features, check_model_shape};
 use crate::util::Result;
+use crate::{error, ge_tracing_trace};
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
+use geoengine_datatypes::machine_learning::{
+    MergeMasks, MlModelMetadata, MlModelName, SkipEmptyTiles,
+};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    Grid, GridIdx2D, GridIndexAccess, GridShapeAccess, GridSize, Pixel, RasterTile2D,
+    EmptyGrid2D, Grid, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
+    MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
 };
 use ndarray::{Array2, Array4};
-use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
+use ort::{
+    tensor::{IntoTensorElementType, PrimitiveTensorElementType},
+    value::TensorRef,
+};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
@@ -91,6 +97,7 @@ impl RasterOperator for Onnx {
             result_descriptor: out_descriptor,
             source,
             model_metadata,
+            tile_shape: context.tiling_specification().grid_shape(),
         }))
     }
 
@@ -103,6 +110,7 @@ pub struct InitializedOnnx {
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     model_metadata: MlModelMetadata,
+    tile_shape: GridShape2D,
 }
 
 impl InitializedRasterOperator for InitializedOnnx {
@@ -121,6 +129,7 @@ impl InitializedRasterOperator for InitializedOnnx {
                         input,
                         self.result_descriptor.clone(),
                         self.model_metadata.clone(),
+                        self.tile_shape,
                     )
                     .boxed()
                 )
@@ -146,6 +155,7 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
     result_descriptor: RasterResultDescriptor,
     model_metadata: MlModelMetadata,
     phantom: std::marker::PhantomData<TOut>,
+    tile_shape: GridShape2D,
 }
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
@@ -153,12 +163,14 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
         source: Box<dyn RasterQueryProcessor<RasterType = TIn>>,
         result_descriptor: RasterResultDescriptor,
         model_metadata: MlModelMetadata,
+        tile_shape: GridShape2D,
     ) -> Self {
         Self {
             source,
             result_descriptor,
             model_metadata,
             phantom: Default::default(),
+            tile_shape,
         }
     }
 }
@@ -166,23 +178,12 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
 #[async_trait]
 impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
-    TIn: Pixel + NoDataValue,
+    TIn: Pixel + NoDataValue + IntoTensorElementType + PrimitiveTensorElementType,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
-    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>>,
-    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>>,
-    ort::Error: std::convert::From<
-            <ort::value::Value as std::convert::TryFrom<
-                ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
-            >>::Error,
-        >,
-    ort::Error: From<
-        <ort::value::Value as std::convert::TryFrom<
-            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
-        >>::Error,
-    >,
 {
     type RasterType = TOut;
 
+    #[allow(clippy::too_many_lines)]
     async fn raster_query<'a>(
         &'a self,
         query: RasterQueryRectangle,
@@ -190,11 +191,17 @@ where
     ) -> Result<BoxStream<'a, Result<RasterTile2D<TOut>>>> {
         let num_bands = self.source.raster_result_descriptor().bands.count() as usize;
 
+        let out_mask_mode = MergeMasks::Any;
+        let in_no_data_value = TIn::NO_DATA;
+        let skip_empty_tiles = SkipEmptyTiles::All;
+
         let mut source_query = query.clone();
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         // TODO: re-use session accross queries?
-        let session = load_onnx_model_from_metadata(&self.model_metadata)?;
+        // TODO: use another method: https://github.com/pykeio/ort/issues/402#issuecomment-2949993914
+        let mut session = load_onnx_model_from_metadata(&self.model_metadata)?;
+        let input_name = session.inputs[0].name.clone(); // clone input name to avoid mutabliity problems
 
         let stream = self
             .source
@@ -218,6 +225,7 @@ where
                     });
                 }
 
+                // TODO: collect into a ndarray directly
                 let tiles = chunk.into_iter().collect::<Result<Vec<_>>>()?;
 
                 let first_tile = &tiles[0];
@@ -226,11 +234,49 @@ where
                 let global_geo_transform = first_tile.global_geo_transform;
                 let cache_hint = first_tile.cache_hint;
 
-                let tile_shape = tiles[0].grid_shape();
+                let tile_shape = self.tile_shape;
                 let width = tile_shape.axis_size_x();
                 let height = tile_shape.axis_size_y();
 
-                // TODO: collect into a ndarray directly
+                let skip_tile = match skip_empty_tiles {
+                    SkipEmptyTiles::Never => false,
+                    SkipEmptyTiles::All => tiles.iter().all(geoengine_datatypes::raster::BaseTile::is_empty),
+                    SkipEmptyTiles::Any => tiles.iter().any(geoengine_datatypes::raster::BaseTile::is_empty),
+                };
+
+                if skip_tile {
+                    ge_tracing_trace!("Skipping Tile {tile_position:?}");
+                    return Ok(RasterTile2D::new(
+                        time,
+                        tile_position,
+                        0,
+                        global_geo_transform,
+                        EmptyGrid2D::new(tile_shape).into(),
+                        cache_hint,
+                    ))
+                }
+
+                // merge masks
+                let output_mask_fill_value = match out_mask_mode {
+                    MergeMasks::All => false,
+                    MergeMasks::Any | MergeMasks::Never => true
+                };
+                let mut output_mask = Grid::new_filled(self.tile_shape, output_mask_fill_value);
+                if out_mask_mode != MergeMasks::Never {
+                    ge_tracing_trace!("Merging masks with {out_mask_mode:?}");
+                    for c in &tiles {
+                        if let Some(mg) = c.grid_array.as_masked_grid() {
+                            output_mask.update_indexed_elements(|idx: GridIdx2D, value| {
+                                let mask_value = mg.mask_ref().get_at_grid_index_unchecked(idx);
+                                match out_mask_mode {
+                                    MergeMasks::All => mask_value || value,
+                                    MergeMasks::Any => mask_value && value,
+                                    MergeMasks::Never => value,
+                                }
+                            });
+                        }
+                    }
+                }
 
                 // TODO: use flat array instead of nested Vecs
                 let mut move_axis_pixels: Vec<Vec<TIn>> = vec![vec![TIn::zero(); num_bands]; width * height];
@@ -242,32 +288,26 @@ where
                             let pixel_index = y * width + x;
                             let pixel_value = tile
                                 .get_at_grid_index(GridIdx2D::from([y as isize, x as isize]))?
-                                .unwrap_or(TIn::NO_DATA); // TODO: properly handle missing values or skip the pixel entirely instead
+                                .unwrap_or(in_no_data_value); // TODO: properly handle missing values or skip the pixel entirely instead
                             move_axis_pixels[pixel_index][tile_index] = pixel_value;
                         }
                     }
                 }
 
                 let pixels = move_axis_pixels.into_iter().flatten().collect::<Vec<TIn>>();
-                let input_name = &session.inputs[0].name;
-
-
                 let outputs = if self.model_metadata.input_is_single_pixel() {
-
                     let samples = Array2::from_shape_vec((width*height, num_bands), pixels).expect(
                         "Array2 should be valid because it is created from a Vec with the correct size",
                     );
-
                     session
-                        .run(ort::inputs![input_name => samples].context(Ort)?)
+                        .run(ort::inputs![&input_name => TensorRef::from_array_view(&samples).context(Ort)?])
                         .context(Ort)
                 } else if self.model_metadata.input_shape.yx_matches_tile_shape(&tile_shape){
                     let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
                         "Array4 should be valid because it is created from a Vec with the correct size",
                     );
-
                     session
-                        .run(ort::inputs![input_name => samples].context(Ort)?)
+                        .run(ort::inputs![&input_name => TensorRef::from_array_view(&samples).context(Ort)?])
                         .context(Ort)
                 } else {
                     Err(
@@ -284,8 +324,8 @@ where
 
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
-                let (predictions, offset) = predictions.into_owned().into_raw_vec_and_offset();
-                debug_assert!(offset.is_none() || offset == Some(0));
+                let (shape, out_tensor_data) = predictions.to_owned();
+                debug_assert!(shape.num_elements() == width*height); // TODO: use shape directly to check
 
                 // TODO: create no data mask from input no data masks
                 Ok(RasterTile2D::new(
@@ -293,7 +333,7 @@ where
                     tile_position,
                     0,
                     global_geo_transform,
-                    Grid::new([width, height].into(), predictions)?.into(),
+                    MaskedGrid::new(Grid::new([width, height].into(), Vec::from(out_tensor_data))?, output_mask)?.into(),
                     cache_hint,
                 ))
             });
@@ -359,37 +399,35 @@ mod tests {
 
     #[test]
     fn ort() {
-        let session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name;
+        let input_name = &session.inputs[0].name.clone();
 
         let new_samples = arr2(&[[0.1f32, 0.2], [0.2, 0.3], [0.2, 0.2], [0.3, 0.1]]);
 
         let outputs = session
-            .run(ort::inputs![input_name => new_samples].unwrap())
+            .run(ort::inputs![input_name => TensorRef::from_array_view(&new_samples).unwrap()])
             .unwrap();
 
-        let predictions = outputs["output_label"]
+        let (_shape, data) = outputs["output_label"]
             .try_extract_tensor::<i64>()
             .unwrap()
-            .into_owned()
-            .into_dimensionality()
-            .unwrap();
+            .to_owned();
 
-        assert_eq!(predictions, &array![33i64, 33, 42, 42]);
+        assert_eq!(data, &[33i64, 33, 42, 42]);
     }
 
     #[test]
     fn ort_dynamic() {
-        let session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name;
+        let input_name = &session.inputs[0].name.clone();
 
         let pixels = vec![
             vec![0.1f32, 0.2],
@@ -407,27 +445,25 @@ mod tests {
         let new_samples = Array2::from_shape_vec((rows, cols), pixels).unwrap();
 
         let outputs = session
-            .run(ort::inputs![input_name => new_samples].unwrap())
+            .run(ort::inputs![input_name =>  TensorRef::from_array_view(&new_samples).unwrap()])
             .unwrap();
 
-        let predictions = outputs["output_label"]
+        let (_shape, data) = outputs["output_label"]
             .try_extract_tensor::<i64>()
             .unwrap()
-            .into_owned()
-            .into_dimensionality()
-            .unwrap();
+            .to_owned();
 
-        assert_eq!(predictions, &array![33i64, 33, 42, 42]);
+        assert_eq!(data, &[33i64, 33, 42, 42]);
     }
 
     #[test]
     fn regression() {
-        let session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_regression.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name;
+        let input_name = &session.inputs[0].name.clone();
 
         let pixels = vec![
             vec![0.1f32, 0.1, 0.2],
@@ -445,11 +481,11 @@ mod tests {
         let new_samples = Array2::from_shape_vec((rows, cols), pixels).unwrap();
 
         let outputs = session
-            .run(ort::inputs![input_name => new_samples].unwrap())
+            .run(ort::inputs![input_name =>  TensorRef::from_array_view(&new_samples).unwrap()])
             .unwrap();
 
         let predictions: Array1<f32> = outputs["variable"]
-            .try_extract_tensor::<f32>()
+            .try_extract_array::<f32>()
             .unwrap()
             .to_owned()
             .to_shape((4,))

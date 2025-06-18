@@ -4,8 +4,8 @@ use super::{
     error::CacheError,
     util::CacheSize,
 };
-use crate::engine::CanonicOperatorName;
 use crate::util::Result;
+use crate::{engine::CanonicOperatorName, ge_tracing_trace};
 use async_trait::async_trait;
 use futures::Stream;
 use geoengine_datatypes::{
@@ -991,7 +991,7 @@ where
 
         if log_enabled!(LOG_LEVEL_THRESHOLD) {
             let storeable_element_size = storeable_element.byte_size();
-            tracing::trace!(
+            ge_tracing_trace!(
                 "Inserting element into landing zone for query {:?} on operator {}. Element size: {} bytes, storable element size: {} bytes, ratio: {}",
                 query_id,
                 key,

@@ -1,4 +1,5 @@
 use crate::{engine::WorkflowOperatorPath, meta::quota::QuotaTracking};
+use crate::{ge_tracing_debug, ge_tracing_trace};
 use futures::{Stream, ready};
 use pin_project::pin_project;
 use std::{
@@ -67,7 +68,7 @@ where
 
         let _enter = this.span.enter();
 
-        tracing::trace!(
+        ge_tracing_trace!(
             event = %"poll_next",
             poll_next_count = *this.poll_next_count,
         );
@@ -76,7 +77,7 @@ where
         match v {
             Some(_) => {
                 *this.element_count += 1;
-                tracing::debug!(
+                ge_tracing_debug!(
                     event = %"poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
@@ -90,7 +91,7 @@ where
                 );
             }
             None => {
-                tracing::debug!(
+                ge_tracing_debug!(
                     event = %"poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,

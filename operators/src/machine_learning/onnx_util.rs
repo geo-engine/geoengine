@@ -101,8 +101,9 @@ pub fn check_input_output_mapping_supported(
 }
 
 pub fn try_onnx_tensor_to_ml_tensorshape_3d(
-    tensor_dimensions: &[i64],
+    tensor_dimensions: &ort::tensor::Shape,
 ) -> Result<MlTensorShape3D, MachineLearningError> {
+    let tensor_dimensions: &[i64] = tensor_dimensions.as_ref();
     match *tensor_dimensions {
         [-1..=1] => Ok(MlTensorShape3D {
             x: 1,
@@ -161,7 +162,7 @@ pub fn check_onnx_model_input_matches_metadata(
     );
     let dimensions = input
         .input_type
-        .tensor_dimensions()
+        .tensor_shape()
         .expect("input must be a tensor. checked before!");
 
     let shape = try_onnx_tensor_to_ml_tensorshape_3d(dimensions)?;
@@ -219,7 +220,7 @@ pub fn check_onnx_model_output_matches_metadata(
 
     let dimensions = output
         .output_type
-        .tensor_dimensions()
+        .tensor_shape()
         .expect("input must be a tensor. checked before!");
 
     let shape = try_onnx_tensor_to_ml_tensorshape_3d(dimensions)?;

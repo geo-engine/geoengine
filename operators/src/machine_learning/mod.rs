@@ -63,7 +63,7 @@ pub enum MachineLearningError {
         "The input shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
     MetadataModelInputShapeMismatch {
-        model_dimensions: Vec<i64>,
+        model_dimensions: ort::tensor::Shape,
         model_shape: MlTensorShape3D,
         metadata_shape: MlTensorShape3D,
     },
@@ -71,7 +71,7 @@ pub enum MachineLearningError {
         "The output shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
     MetadataModelOutputShapeMismatch {
-        model_dimensions: Vec<i64>,
+        model_dimensions: ort::tensor::Shape,
         model_shape: MlTensorShape3D,
         metadata_shape: MlTensorShape3D,
     },

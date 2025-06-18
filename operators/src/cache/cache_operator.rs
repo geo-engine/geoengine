@@ -9,6 +9,7 @@ use crate::engine::{
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
+use crate::ge_tracing_debug;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
@@ -77,11 +78,11 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
                         CacheQueryProcessor::new(p, self.source.canonic_name()),
                     )),
                 };
-                tracing::debug!(event = "query processor created");
+                ge_tracing_debug!(event = "query processor created");
                 Ok(res_processor)
             }
             Err(err) => {
-                tracing::debug!(event = "query processor failed");
+                ge_tracing_debug!(event = "query processor failed");
                 Err(err)
             }
         }
@@ -131,12 +132,12 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
                         ))
                     }
                 };
-                tracing::debug!(event = "query processor created");
+                ge_tracing_debug!(event = "query processor created");
 
                 Ok(res_processor)
             }
             Err(err) => {
-                tracing::debug!(event = "query processor failed");
+                ge_tracing_debug!(event = "query processor failed");
                 Err(err)
             }
         }
