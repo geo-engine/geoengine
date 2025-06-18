@@ -1,6 +1,7 @@
 use crate::config::QuotaTrackingMode;
 use crate::users::{UserDb, UserId, UserSession};
 use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
+use geoengine_operators::ge_tracing_trace;
 use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -97,7 +98,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                 let flush_buffer = match message {
                     QuotaMessage::ComputationUnit(computation) => {
                         // TODO: issue a tracing event instead?
-                        log::trace!(
+                        ge_tracing_trace!(
                             "Quota received. User: {}, Workflow: {}, Computation: {}",
                             computation.user,
                             computation.workflow,
@@ -115,7 +116,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         self.buffer_used >= self.buffer_size
                     }
                     QuotaMessage::Flush => {
-                        log::trace!("Flush `increment_quota_buffer'");
+                        ge_tracing_trace!("Flush `increment_quota_buffer'");
                         true
                     }
                 };

@@ -4,8 +4,8 @@ use super::{
     error::CacheError,
     util::CacheSize,
 };
-use crate::util::Result;
 use crate::{engine::CanonicOperatorName, ge_tracing_trace};
+use crate::{ge_tracing_debug, util::Result};
 use async_trait::async_trait;
 use futures::Stream;
 use geoengine_datatypes::{
@@ -169,7 +169,7 @@ where
             self.landing_zone_size.remove_element_bytes(&entry);
 
             // debug output
-            log::debug!(
+            ge_tracing_debug!(
                 "Removed query {}. Landing zone size: {}. Landing zone size used: {}, Landing zone used percentage: {}.",
                 query_id,
                 self.landing_zone_size.total_byte_size(),
@@ -198,7 +198,7 @@ where
             self.cache_size.remove_element_bytes(cache_entry_id);
             self.cache_size.remove_element_bytes(&entry);
 
-            log::debug!(
+            ge_tracing_debug!(
                 "Removed cache entry {}. Cache size: {}. Cache size used: {}, Cache used percentage: {}.",
                 cache_entry_id,
                 self.cache_size.total_byte_size(),
@@ -243,7 +243,7 @@ where
             .ok_or(CacheError::QueryNotFoundInLandingZone)?;
 
         if landing_zone_element.cache_hint().is_expired() {
-            log::trace!("Element is already expired");
+            ge_tracing_trace!("Element is already expired");
             return Err(CacheError::TileExpiredBeforeInsertion);
         }
 
@@ -266,7 +266,7 @@ where
             "The Landing Zone must have enough space for the element since we checked it before",
         );
 
-        log::trace!(
+        ge_tracing_trace!(
             "Inserted tile for query {} into landing zone. Landing zone size: {}. Landing zone size used: {}. Landing zone used percentage: {}",
             query_id,
             self.landing_zone_size.total_byte_size(),
@@ -316,7 +316,7 @@ where
         }
 
         // debug output
-        log::trace!(
+        ge_tracing_trace!(
             "Added query {} to landing zone. Landing zone size: {}. Landing zone size used: {}, Landing zone used percentage: {}.",
             query_id,
             self.landing_zone_size.total_byte_size(),
@@ -355,7 +355,7 @@ where
         );
 
         // debug output
-        log::trace!(
+        ge_tracing_trace!(
             "Added cache entry {}. Cache size: {}. Cache size used: {}, Cache used percentage: {}.",
             cache_entry_id,
             self.cache_size.total_byte_size(),
