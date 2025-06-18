@@ -170,19 +170,25 @@ impl MlTensorShape3D {
     }
 }
 
-#[derive(PartialEq, Debug)]
+#[derive(PartialEq, Debug, Eq, Serialize, Deserialize, Copy, Clone)]
+#[derive(Default)]
 pub enum MergeMasks {
     Never,
+    #[default]
     Any,
     All,
 }
 
-#[derive(PartialEq, Debug)]
+
+#[derive(PartialEq, Debug, Eq, Serialize, Deserialize, Copy, Clone)]
+#[derive(Default)]
 pub enum SkipEmptyTiles {
     Never,
     Any,
+    #[default]
     All,
 }
+
 
 // For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
 // To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.

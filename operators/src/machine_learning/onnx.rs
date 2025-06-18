@@ -33,6 +33,20 @@ use super::onnx_util::load_onnx_model_from_metadata;
 #[serde(rename_all = "camelCase")]
 pub struct OnnxParams {
     pub model: MlModelName,
+    #[serde(default)]
+    pub skip_on_empty_tiles: SkipEmptyTiles,
+    #[serde(default)]
+    pub validity_mask_merge: MergeMasks,
+}
+
+impl OnnxParams {
+    pub fn new_with_defaults(model: MlModelName) -> Self {
+        Self {
+            model,
+            skip_on_empty_tiles: SkipEmptyTiles::default(),
+            validity_mask_merge: MergeMasks::default(),
+        }
+    }
 }
 
 /// This `QueryProcessor` applies a ml model in Onnx format on all bands of its input raster series.
@@ -98,6 +112,8 @@ impl RasterOperator for Onnx {
             source,
             model_metadata,
             tile_shape: context.tiling_specification().grid_shape(),
+            skip_on_empty_tiles: self.params.skip_on_empty_tiles,
+            validity_mask_merge: self.params.validity_mask_merge,
         }))
     }
 
@@ -111,6 +127,8 @@ pub struct InitializedOnnx {
     source: Box<dyn InitializedRasterOperator>,
     model_metadata: MlModelMetadata,
     tile_shape: GridShape2D,
+    skip_on_empty_tiles: SkipEmptyTiles,
+    validity_mask_merge: MergeMasks,
 }
 
 impl InitializedRasterOperator for InitializedOnnx {
@@ -130,6 +148,8 @@ impl InitializedRasterOperator for InitializedOnnx {
                         self.result_descriptor.clone(),
                         self.model_metadata.clone(),
                         self.tile_shape,
+                        self.skip_on_empty_tiles,
+                        self.validity_mask_merge
                     )
                     .boxed()
                 )
@@ -156,6 +176,8 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
     model_metadata: MlModelMetadata,
     phantom: std::marker::PhantomData<TOut>,
     tile_shape: GridShape2D,
+    skip_on_empty_tiles: SkipEmptyTiles,
+    validity_mask_merge: MergeMasks,
 }
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
@@ -164,6 +186,8 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
         result_descriptor: RasterResultDescriptor,
         model_metadata: MlModelMetadata,
         tile_shape: GridShape2D,
+        skip_on_empty_tiles: SkipEmptyTiles,
+        validity_mask_merge: MergeMasks,
     ) -> Self {
         Self {
             source,
@@ -171,6 +195,8 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
             model_metadata,
             phantom: Default::default(),
             tile_shape,
+            skip_on_empty_tiles,
+            validity_mask_merge,
         }
     }
 }
@@ -191,9 +217,9 @@ where
     ) -> Result<BoxStream<'a, Result<RasterTile2D<TOut>>>> {
         let num_bands = self.source.raster_result_descriptor().bands.count() as usize;
 
-        let out_mask_mode = MergeMasks::Any;
+        let out_mask_mode = self.validity_mask_merge; // MergeMasks::Any;
         let in_no_data_value = TIn::NO_DATA;
-        let skip_empty_tiles = SkipEmptyTiles::All;
+        let skip_empty_tiles = self.skip_on_empty_tiles; // SkipEmptyTiles::All;
 
         let mut source_query = query.clone();
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
@@ -597,9 +623,7 @@ mod tests {
         };
 
         let onnx = Onnx {
-            params: OnnxParams {
-                model: model_name.clone(),
-            },
+            params: OnnxParams::new_with_defaults(model_name.clone()),
             sources: SingleRasterSource { raster: stacker },
         }
         .boxed();
@@ -810,9 +834,7 @@ mod tests {
         };
 
         let onnx = Onnx {
-            params: OnnxParams {
-                model: model_name.clone(),
-            },
+            params: OnnxParams::new_with_defaults(model_name.clone()),
             sources: SingleRasterSource { raster: stacker },
         }
         .boxed();
@@ -972,9 +994,7 @@ mod tests {
         };
 
         let onnx = Onnx {
-            params: OnnxParams {
-                model: model_name.clone(),
-            },
+            params: OnnxParams::new_with_defaults(model_name.clone()),
             sources: SingleRasterSource { raster: stacker },
         }
         .boxed();
