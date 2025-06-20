@@ -10,6 +10,7 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::util::Result;
+use crate::{ge_tracing_removed_debug, ge_tracing_removed_trace};
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
 use futures::{Stream, StreamExt, TryStreamExt, ready};
@@ -77,11 +78,11 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
                         CacheQueryProcessor::new(p, self.source.canonic_name()),
                     )),
                 };
-                tracing::debug!(event = "query processor created");
+                ge_tracing_removed_debug!(event = "query processor created");
                 Ok(res_processor)
             }
             Err(err) => {
-                tracing::debug!(event = "query processor failed");
+                ge_tracing_removed_debug!(event = "query processor failed");
                 Err(err)
             }
         }
@@ -131,12 +132,12 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
                         ))
                     }
                 };
-                tracing::debug!(event = "query processor created");
+                ge_tracing_removed_debug!(event = "query processor created");
 
                 Ok(res_processor)
             }
             Err(err) => {
-                tracing::debug!(event = "query processor failed");
+                ge_tracing_removed_debug!(event = "query processor failed");
                 Err(err)
             }
         }
@@ -212,7 +213,7 @@ where
 
         if let Ok(Some(cache_result)) = cache_result {
             // cache hit
-            log::debug!("cache hit for operator {}", self.cache_key);
+            ge_tracing_removed_debug!("cache hit for operator {}", self.cache_key);
 
             let wrapped_result_steam =
                 E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query.clone());
@@ -221,13 +222,13 @@ where
         }
 
         // cache miss
-        log::debug!("cache miss for operator {}", self.cache_key);
+        ge_tracing_removed_debug!("cache miss for operator {}", self.cache_key);
         let source_stream = self.processor.query(query.clone(), ctx).await?;
 
         let query_id = shared_cache.insert_query(&self.cache_key, &query).await;
 
         if let Err(e) = query_id {
-            log::debug!("could not insert query into cache: {e}");
+            ge_tracing_removed_debug!("could not insert query into cache: {e}");
             return Ok(source_stream);
         }
 
@@ -245,19 +246,19 @@ where
                         let result = tile_cache
                             .insert_query_element(&cache_key, &query_id, tile)
                             .await;
-                        log::trace!(
+                        ge_tracing_removed_trace!(
                             "inserted tile into cache for cache key {cache_key} and query id {query_id}. result: {result:?}"
                         );
                     }
                     SourceStreamEvent::Abort => {
                         tile_cache.abort_query(&cache_key, &query_id).await;
-                        log::debug!(
+                        ge_tracing_removed_debug!(
                             "aborted cache insertion for cache key {cache_key} and query id {query_id}"
                         );
                     }
                     SourceStreamEvent::Finished => {
                         let result = tile_cache.finish_query(&cache_key, &query_id).await;
-                        log::debug!(
+                        ge_tracing_removed_debug!(
                             "finished cache insertion for cache key {cache_key} and query id {query_id}, result: {result:?}"
                         );
                     }
