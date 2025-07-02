@@ -885,8 +885,6 @@ where
                 chunk_byte_size,
             );
 
-            
-
             if let Some(rename) = dataset_information
                 .columns
                 .as_ref()

@@ -309,8 +309,6 @@ where
             .builders
             .values()
             .map(|builder| {
-                
-
                 if builder.as_any().is::<Float64Builder>() {
                     estimate_primitive_arrow_array_size::<Float64Type>(builder.as_ref())
                 } else if builder.as_any().is::<Int64Builder>() {

@@ -2058,8 +2058,6 @@ mod tests {
             .await
             .unwrap();
 
-        
-
         if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
                 .downcast::<RasterDatasetFromWorkflowResult>()

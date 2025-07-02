@@ -689,8 +689,6 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
     ) -> ServiceResponse {
         let app = test::init_service({
-            
-
             App::new()
                 .app_data(web::Data::new(app_ctx))
                 .wrap(

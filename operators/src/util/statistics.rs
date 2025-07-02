@@ -81,7 +81,13 @@ where
             5.0,
         ];
         // Initialize marker increment
-        let increment = [0.0, quantile / 2.0, quantile, f64::midpoint(1.0, quantile), 1.0];
+        let increment = [
+            0.0,
+            quantile / 2.0,
+            quantile,
+            f64::midpoint(1.0, quantile),
+            1.0,
+        ];
 
         // Initialize marker values
         let mut markers = [0.0; 5];

@@ -135,7 +135,6 @@ impl<'a> PointInPolygonTester<'a> {
     fn precalculate_multi_polygon_bounds(
         polygon_bounds: &[Vec<BoundingBox2D>],
     ) -> Vec<BoundingBox2D> {
-        
         polygon_bounds
             .iter()
             .map(|polygons| {
