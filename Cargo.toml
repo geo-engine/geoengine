@@ -128,7 +128,7 @@ opentelemetry = { version = "0.30", default-features = false, features = [
 ] }
 opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic"] }
-ort = "2.0.0-rc.9"
+ort = { version = "2.0.0-rc.10", features = ["ndarray"] }
 ouroboros = "0.18"
 paste = "1.0"
 pbkdf2 = "0.12.2"
