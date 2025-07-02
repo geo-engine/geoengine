@@ -470,8 +470,10 @@ impl GdalRasterLoader {
                     .intersects(&ds.spatial_partition()) =>
             {
                 debug!(
-                    "Loading tile {:?}, from {:?}, band: {}",
-                    &tile_information, ds.file_path, ds.rasterband_channel
+                    "Loading tile {:?}, from {}, band: {}",
+                    &tile_information,
+                    ds.file_path.display(),
+                    ds.rasterband_channel
                 );
                 Self::load_tile_data_async(ds, tile_information, tile_time, cache_hint).await
             }
@@ -542,11 +544,11 @@ impl GdalRasterLoader {
             };
             let elapsed = start.elapsed();
             debug!(
-                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {:?}",
+                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {}",
                 error,
                 err_result.is_err(),
                 elapsed,
-                dataset_params.file_path
+                dataset_params.file_path.display()
             );
             return err_result;
         }
