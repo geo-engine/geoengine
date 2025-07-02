@@ -45,6 +45,13 @@ pub trait DataProviderDefinition<D: GeoEngineDb>: Send + Sync + std::fmt::Debug 
     fn priority(&self) -> i16 {
         0
     }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        new
+    }
 }
 
 /// A provider of layers that are not hosted by Geo Engine itself but some external party
@@ -318,6 +325,50 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
             }
             Self::WildliveDataConnectorDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
+            }
+        }
+    }
+
+    fn update(&self, other: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match self {
+            TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::GbifDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
+            }
+            TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other)
             }
         }
     }
