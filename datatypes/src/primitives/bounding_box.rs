@@ -648,9 +648,13 @@ pub fn bboxes_extent<I: Iterator<Item = Option<BoundingBox2D>>>(
 
 impl ToWkt<f64> for BoundingBox2D {
     fn to_wkt(&self) -> Wkt<f64> {
-        Wkt::Polygon(wkt::types::Polygon(vec![wkt::types::LineString(
-            self.coords_counter_clockwise().map(Into::into).collect(),
-        )]))
+        Wkt::Polygon(wkt::types::Polygon::new(
+            vec![wkt::types::LineString::new(
+                self.coords_counter_clockwise().map(Into::into).collect(),
+                wkt::types::Dimension::XY,
+            )],
+            wkt::types::Dimension::XY,
+        ))
     }
 }
 

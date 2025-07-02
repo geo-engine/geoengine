@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used)] // okay in benchmarks
 
-use criterion::{Criterion, black_box, criterion_group, criterion_main};
+use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::collections::{
     BuilderProvider, FeatureCollectionInfos, FeatureCollectionModifications,
     GeoFeatureCollectionRowBuilder, MultiPointCollection,
@@ -8,6 +8,7 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{
     Coordinate2D, FeatureDataType, FeatureDataValue, TimeInterval,
 };
+use std::hint::black_box;
 
 fn multi_point_collection_benchmarks(c: &mut Criterion) {
     let mut group = c.benchmark_group("MultiPointCollection");

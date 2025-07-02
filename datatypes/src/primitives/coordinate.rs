@@ -362,12 +362,15 @@ impl From<&Coordinate2D> for wkt::types::Coord<f64> {
 
 impl ToWkt<f64> for Coordinate2D {
     fn to_wkt(&self) -> Wkt<f64> {
-        Wkt::Point(wkt::types::Point(Some(wkt::types::Coord {
-            x: self.x,
-            y: self.y,
-            z: None,
-            m: None,
-        })))
+        Wkt::Point(wkt::types::Point::new(
+            Some(wkt::types::Coord {
+                x: self.x,
+                y: self.y,
+                z: None,
+                m: None,
+            }),
+            wkt::types::Dimension::XY,
+        ))
     }
 }
 

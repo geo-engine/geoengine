@@ -362,13 +362,19 @@ impl MultiPointAccess for MultiPointRef<'_> {
 impl ToWkt<f64> for MultiPointRef<'_> {
     fn to_wkt(&self) -> Wkt<f64> {
         let points = self.points();
-        let mut multi_point = wkt::types::MultiPoint(Vec::with_capacity(points.len()));
+        let mut multi_point = Vec::with_capacity(points.len());
 
         for point in points {
-            multi_point.0.push(wkt::types::Point(Some(point.into())));
+            multi_point.push(wkt::types::Point::new(
+                Some(point.into()),
+                wkt::types::Dimension::XY,
+            ));
         }
 
-        Wkt::MultiPoint(multi_point)
+        Wkt::MultiPoint(wkt::types::MultiPoint::new(
+            multi_point,
+            wkt::types::Dimension::XY,
+        ))
     }
 }
 

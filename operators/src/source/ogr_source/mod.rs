@@ -885,7 +885,7 @@ where
                 chunk_byte_size,
             );
 
-            let batch_result = if let Some(rename) = dataset_information
+            if let Some(rename) = dataset_information
                 .columns
                 .as_ref()
                 .and_then(|c| c.rename.as_ref())
@@ -894,9 +894,7 @@ where
                 batch_result.and_then(|c| c.rename_columns(names.as_slice()).map_err(Into::into))
             } else {
                 batch_result
-            };
-
-            batch_result
+            }
         })
         .await?
     }

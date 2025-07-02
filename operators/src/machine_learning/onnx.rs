@@ -18,6 +18,7 @@ use geoengine_datatypes::raster::{
 };
 use ndarray::{Array2, Array4};
 use ort::tensor::{IntoTensorElementType, PrimitiveTensorElementType};
+use ort::value::Tensor;
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 
@@ -166,20 +167,8 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
 #[async_trait]
 impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
-    TIn: Pixel + NoDataValue,
+    TIn: Pixel + NoDataValue + PrimitiveTensorElementType,
     TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
-    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>>,
-    ort::value::Value: std::convert::TryFrom<ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>>,
-    ort::Error: std::convert::From<
-            <ort::value::Value as std::convert::TryFrom<
-                ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 2]>>,
-            >>::Error,
-        >,
-    ort::Error: From<
-        <ort::value::Value as std::convert::TryFrom<
-            ndarray::ArrayBase<ndarray::OwnedRepr<TIn>, ndarray::Dim<[usize; 4]>>,
-        >>::Error,
-    >,
 {
     type RasterType = TOut;
 
@@ -194,7 +183,7 @@ where
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         // TODO: re-use session accross queries?
-        let session = load_onnx_model_from_metadata(&self.model_metadata)?;
+        let mut session = load_onnx_model_from_metadata(&self.model_metadata)?;
 
         let stream = self
             .source
@@ -249,25 +238,24 @@ where
                 }
 
                 let pixels = move_axis_pixels.into_iter().flatten().collect::<Vec<TIn>>();
-                let input_name = &session.inputs[0].name;
-
+                let input_name = &session.inputs[0].name.clone();
 
                 let outputs = if self.model_metadata.input_is_single_pixel() {
 
-                    let samples = Array2::from_shape_vec((width*height, num_bands), pixels).expect(
+                    let samples = Tensor::from_array(Array2::from_shape_vec((width*height, num_bands), pixels).expect(
                         "Array2 should be valid because it is created from a Vec with the correct size",
-                    );
+                    )).context(Ort)?;
 
                     session
-                        .run(ort::inputs![input_name => samples].context(Ort)?)
+                        .run(ort::inputs![input_name => samples])
                         .context(Ort)
                 } else if self.model_metadata.input_shape.yx_matches_tile_shape(&tile_shape){
-                    let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
+                    let samples = Tensor::from_array(Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
                         "Array4 should be valid because it is created from a Vec with the correct size",
-                    );
+                    )).context(Ort)?;
 
                     session
-                        .run(ort::inputs![input_name => samples].context(Ort)?)
+                        .run(ort::inputs![input_name => samples])
                         .context(Ort)
                 } else {
                     Err(
@@ -280,7 +268,7 @@ where
 
                 // assume the first output is the prediction and ignore the other outputs (e.g. probabilities for classification)
                 // we don't access the output by name because it can vary, e.g. "output_label" vs "variable"
-                let predictions = outputs[0].try_extract_tensor::<TOut>().context(Ort)?;
+                let predictions = outputs[0].try_extract_array::<TOut>().context(Ort)?;
 
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
@@ -356,24 +344,27 @@ mod tests {
         util::test::TestDefault,
     };
     use ndarray::{Array1, Array2, arr2, array};
+    use ort::value::Tensor;
 
     #[test]
     fn ort() {
-        let session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name;
+        let input_name = &session.inputs[0].name.clone();
 
         let new_samples = arr2(&[[0.1f32, 0.2], [0.2, 0.3], [0.2, 0.2], [0.3, 0.1]]);
 
         let outputs = session
-            .run(ort::inputs![input_name => new_samples].unwrap())
+            .run(ort::inputs! {
+                input_name => Tensor::from_array(new_samples).unwrap()
+            })
             .unwrap();
 
         let predictions = outputs["output_label"]
-            .try_extract_tensor::<i64>()
+            .try_extract_array::<i64>()
             .unwrap()
             .into_owned()
             .into_dimensionality()
@@ -384,12 +375,12 @@ mod tests {
 
     #[test]
     fn ort_dynamic() {
-        let session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name;
+        let input_name = &session.inputs[0].name.clone();
 
         let pixels = vec![
             vec![0.1f32, 0.2],
@@ -407,11 +398,13 @@ mod tests {
         let new_samples = Array2::from_shape_vec((rows, cols), pixels).unwrap();
 
         let outputs = session
-            .run(ort::inputs![input_name => new_samples].unwrap())
+            .run(ort::inputs! {
+                input_name => Tensor::from_array(new_samples).unwrap()
+            })
             .unwrap();
 
         let predictions = outputs["output_label"]
-            .try_extract_tensor::<i64>()
+            .try_extract_array::<i64>()
             .unwrap()
             .into_owned()
             .into_dimensionality()
@@ -422,12 +415,12 @@ mod tests {
 
     #[test]
     fn regression() {
-        let session = ort::session::Session::builder()
+        let mut session = ort::session::Session::builder()
             .unwrap()
             .commit_from_file(test_data!("ml/onnx/test_regression.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name;
+        let input_name = &session.inputs[0].name.clone();
 
         let pixels = vec![
             vec![0.1f32, 0.1, 0.2],
@@ -445,11 +438,13 @@ mod tests {
         let new_samples = Array2::from_shape_vec((rows, cols), pixels).unwrap();
 
         let outputs = session
-            .run(ort::inputs![input_name => new_samples].unwrap())
+            .run(ort::inputs! {
+                input_name => Tensor::from_array(new_samples).unwrap()
+            })
             .unwrap();
 
         let predictions: Array1<f32> = outputs["variable"]
-            .try_extract_tensor::<f32>()
+            .try_extract_array::<f32>()
             .unwrap()
             .to_owned()
             .to_shape((4,))

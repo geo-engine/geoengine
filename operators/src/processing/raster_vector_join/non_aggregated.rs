@@ -1110,10 +1110,10 @@ mod tests {
                     &[(
                         "ndvi",
                         FeatureData::Float(vec![
-                            (6. + 60.) / 2.,
-                            (5. + 50.) / 2.,
-                            (1. + 10.) / 2.,
-                            (2. + 20.) / 2.
+                            f64::midpoint(6., 60.),
+                            f64::midpoint(5., 50.),
+                            f64::midpoint(1., 10.),
+                            f64::midpoint(2., 20.)
                         ])
                     )],
                 )

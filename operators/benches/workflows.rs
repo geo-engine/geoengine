@@ -297,7 +297,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
     ) -> Box<dyn RasterOperator> {
         let query_resolution = query_rect.spatial_resolution;
         let query_time = query_rect.time_interval;
-        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
+        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -query_resolution.y);
         let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
 
         let mock_data = tile_iter
@@ -367,7 +367,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
     ) -> Box<dyn RasterOperator> {
         let query_resolution = query_rect.spatial_resolution;
         let query_time = query_rect.time_interval;
-        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
+        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -query_resolution.y);
         let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
 
         let mock_data = tile_iter
@@ -466,7 +466,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
     ) -> Box<dyn RasterOperator> {
         let query_resolution = query_rect.spatial_resolution;
         let query_time = query_rect.time_interval;
-        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
+        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -query_resolution.y);
         let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
         let mock_data = tile_iter
             .enumerate()
@@ -550,7 +550,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
     ) -> Box<dyn RasterOperator> {
         let query_resolution = query_rect.spatial_resolution;
         let query_time = query_rect.time_interval;
-        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -1. * query_resolution.y);
+        let tileing_strategy = tiling_spec.strategy(query_resolution.x, -query_resolution.y);
         let tile_iter = tileing_strategy.tile_information_iterator(query_rect.spatial_partition());
         let mock_data = tile_iter
             .enumerate()

@@ -13,7 +13,7 @@ pub fn assert_image_equals(expected: &Path, found: &[u8]) {
         image::load_from_memory(&left_buf).expect("Failed to make image from `expected` path");
     let right = image::load_from_memory(found).expect("Failed to make image from `found` bytes");
 
-    assert_eq!(left, right, "Images differ: {expected:?}");
+    assert_eq!(left, right, "Images differ: {}", expected.display());
 }
 
 /// Compare two images
@@ -30,7 +30,7 @@ pub fn assert_image_equals_with_format(expected: &Path, found: &[u8], format: Im
     let right = image::load_from_memory_with_format(found, format.into())
         .expect("Failed to make image from `found` bytes");
 
-    assert_eq!(left, right, "Images differ: {expected:?}");
+    assert_eq!(left, right, "Images differ: {}", expected.display());
 }
 
 /// Image format

@@ -323,7 +323,8 @@ mod tests {
             TilesEqualIgnoringCacheHint, TilingSpecification,
         },
         spatial_reference::SpatialReference,
-        util::test::TestDefault,
+        test_data,
+        util::{assert_image_equals, test::TestDefault},
     };
 
     #[test]
@@ -744,7 +745,6 @@ mod tests {
         // save_test_bytes(&bytes, "gaussian_blur.png");
     }
 
-    #[ignore] // TODO: remove
     #[tokio::test]
     async fn test_ndvi_partial_derivative() {
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -780,8 +780,6 @@ mod tests {
         };
         let query_ctx = MockQueryContext::test_default();
 
-        // let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
-
         let colorizer = Colorizer::linear_gradient(
             vec![
                 (0.0, RgbaColor::white()).try_into().unwrap(),
@@ -807,10 +805,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            bytes,
-            include_bytes!("../../../../test_data/wms/partial_derivative.png")
-        );
+        assert_image_equals(test_data!("wms/partial_derivative.png"), &bytes);
 
         // Use for getting the image to compare against
         // save_test_bytes(&bytes, "sobel_filter.png");

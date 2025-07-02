@@ -618,26 +618,34 @@ impl<'g> MultiPolygonAccess for MultiPolygonRef<'g> {
 impl ToWkt<f64> for MultiPolygonRef<'_> {
     fn to_wkt(&self) -> Wkt<f64> {
         let multi_polygon = self.polygons();
-        let mut wkt_multi_polygon =
-            wkt::types::MultiPolygon(Vec::with_capacity(multi_polygon.len()));
+        let mut wkt_multi_polygon = Vec::with_capacity(multi_polygon.len());
 
         for polygon in multi_polygon {
-            let mut wkt_polygon = wkt::types::Polygon(Vec::with_capacity(polygon.len()));
+            let mut wkt_polygon = Vec::with_capacity(polygon.len());
 
             for ring in polygon {
-                let mut wkt_line_string = wkt::types::LineString(Vec::with_capacity(ring.len()));
+                let mut wkt_line_string = Vec::with_capacity(ring.len());
 
                 for coord in *ring {
-                    wkt_line_string.0.push(coord.into());
+                    wkt_line_string.push(coord.into());
                 }
 
-                wkt_polygon.0.push(wkt_line_string);
+                wkt_polygon.push(wkt::types::LineString::new(
+                    wkt_line_string,
+                    wkt::types::Dimension::XY,
+                ));
             }
 
-            wkt_multi_polygon.0.push(wkt_polygon);
+            wkt_multi_polygon.push(wkt::types::Polygon::new(
+                wkt_polygon,
+                wkt::types::Dimension::XY,
+            ));
         }
 
-        Wkt::MultiPolygon(wkt_multi_polygon)
+        Wkt::MultiPolygon(wkt::types::MultiPolygon::new(
+            wkt_multi_polygon,
+            wkt::types::Dimension::XY,
+        ))
     }
 }
 

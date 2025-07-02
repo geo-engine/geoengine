@@ -135,7 +135,7 @@ impl<'a> PointInPolygonTester<'a> {
     fn precalculate_multi_polygon_bounds(
         polygon_bounds: &[Vec<BoundingBox2D>],
     ) -> Vec<BoundingBox2D> {
-        let res = polygon_bounds
+        polygon_bounds
             .iter()
             .map(|polygons| {
                 polygons
@@ -144,8 +144,7 @@ impl<'a> PointInPolygonTester<'a> {
                     .reduce(|acc, poly| acc.union(&poly))
                     .expect("all polygones in a collection must be valid")
             })
-            .collect::<Vec<BoundingBox2D>>();
-        res
+            .collect::<Vec<BoundingBox2D>>()
     }
 
     fn ring_contains_coordinate(
