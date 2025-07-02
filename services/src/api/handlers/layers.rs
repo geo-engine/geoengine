@@ -2058,7 +2058,9 @@ mod tests {
             .await
             .unwrap();
 
-        let response = if let TaskStatus::Completed { info, .. } = status {
+        
+
+        if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
                 .downcast::<RasterDatasetFromWorkflowResult>()
                 .unwrap()
@@ -2066,9 +2068,7 @@ mod tests {
                 .clone()
         } else {
             panic!("Task must be completed");
-        };
-
-        response
+        }
     }
 
     async fn raster_operator_to_geotiff_bytes<C: SessionContext>(

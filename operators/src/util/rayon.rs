@@ -15,8 +15,7 @@ fn rayon_destroy_global_thread_pool() {
         rayon::ThreadPoolBuilder::new()
             .num_threads(1)
             .spawn_handler(|_thread| {
-                Err(std::io::Error::new(
-                    std::io::ErrorKind::Other,
+                Err(std::io::Error::other(
                     "Do not spawn rayon global pool on purpose",
                 ))
             })

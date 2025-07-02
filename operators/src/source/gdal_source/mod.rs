@@ -675,7 +675,7 @@ where
         debug_assert!(pixel_size_x.is_sign_positive());
         // and the y-axis should only be positive if the y-axis of the spatial reference system also "points down".
         // NOTE: at the moment we do not allow "down pointing" y-axis.
-        let pixel_size_y = spatial_resolution.y * -1.0;
+        let pixel_size_y = -spatial_resolution.y;
         debug_assert!(pixel_size_y.is_sign_negative());
 
         let tiling_strategy = self

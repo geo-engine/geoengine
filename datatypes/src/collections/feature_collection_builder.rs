@@ -309,7 +309,9 @@ where
             .builders
             .values()
             .map(|builder| {
-                let values_size = if builder.as_any().is::<Float64Builder>() {
+                
+
+                if builder.as_any().is::<Float64Builder>() {
                     estimate_primitive_arrow_array_size::<Float64Type>(builder.as_ref())
                 } else if builder.as_any().is::<Int64Builder>() {
                     estimate_primitive_arrow_array_size::<Int64Type>(builder.as_ref())
@@ -351,9 +353,7 @@ where
                         builder.type_id()
                     );
                     0
-                };
-
-                values_size
+                }
             })
             .sum::<usize>();
 

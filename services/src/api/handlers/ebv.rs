@@ -689,7 +689,9 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
     ) -> ServiceResponse {
         let app = test::init_service({
-            let app = App::new()
+            
+
+            App::new()
                 .app_data(web::Data::new(app_ctx))
                 .wrap(
                     middleware::ErrorHandlers::default()
@@ -698,9 +700,7 @@ mod tests {
                 )
                 .wrap(middleware::NormalizePath::trim())
                 .configure(configure_extractors)
-                .service(web::scope("/ebv").configure(init_ebv_routes::<PostgresContext<NoTls>>()));
-
-            app
+                .service(web::scope("/ebv").configure(init_ebv_routes::<PostgresContext<NoTls>>()))
         })
         .await;
         test::call_service(&app, req.to_request())
