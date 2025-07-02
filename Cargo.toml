@@ -133,7 +133,7 @@ ouroboros = "0.18"
 paste = "1.0"
 pbkdf2 = "0.12.2"
 pest = "2.8"
-pest_derive = "2.7"
+pest_derive = "2.8"
 pin-project = "1.1"
 postgres-protocol = "0.6"
 postgres-types = { version = "0.2", features = [
@@ -196,7 +196,7 @@ tracing-subscriber = { version = "0.3", features = [
 ] }
 typetag = "0.2"
 url = { version = "2.5", features = ["serde"] }
-utoipa = { version = "5.3", features = [
+utoipa = { version = "5.4", features = [
     "actix_extras",
     "chrono",
     "debug",
@@ -215,4 +215,4 @@ vergen-gitcl = "1.0"
 walkdir = "2.4"
 wkt = "0.14"
 xml-rs = "0.8"
-zip = "2.2"
+zip = "4.2"
