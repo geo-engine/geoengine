@@ -199,7 +199,7 @@ impl OgrDatasetIterator {
         if use_ogr_spatial_filter {
             debug!(
                 "using spatial filter {:?} for layer {:?}",
-                query_rectangle.spatial_query, &dataset_information.layer_name
+                query_rectangle.spatial_bounds, &dataset_information.layer_name
             );
             // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
             features_provider.set_spatial_filter(&query_rectangle.spatial_query().spatial_bounds());

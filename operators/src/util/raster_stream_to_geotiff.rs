@@ -148,7 +148,7 @@ where
     let out_pixel_bounds = query_rect.spatial_query().grid_bounds();
 
     let uncompressed_byte_size =
-        query_rect.spatial_query.grid_bounds().number_of_elements() * std::mem::size_of::<T>();
+        query_rect.spatial_bounds.grid_bounds().number_of_elements() * std::mem::size_of::<T>();
 
     let use_big_tiff =
         gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;

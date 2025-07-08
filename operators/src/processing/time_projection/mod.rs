@@ -255,7 +255,7 @@ fn expand_query_rectangle(
     query: &VectorQueryRectangle,
 ) -> Result<VectorQueryRectangle, TimeProjectionError> {
     Ok(VectorQueryRectangle::new(
-        query.spatial_query,
+        query.spatial_bounds,
         expand_time_interval(step, step_reference, query.time_interval)?,
         ColumnSelection::all(),
     ))

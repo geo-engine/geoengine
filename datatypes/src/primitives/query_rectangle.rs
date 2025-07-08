@@ -1,6 +1,5 @@
 use super::{
-    AxisAlignedRectangle, BoundingBox2D, SpatialBounded, SpatialPartition2D, SpatialPartitioned,
-    TimeInterval,
+    AxisAlignedRectangle, BoundingBox2D, SpatialBounded, SpatialPartition2D, TimeInterval,
 };
 use crate::raster::{GeoTransform, GridBoundingBox2D};
 use crate::{
@@ -14,14 +13,14 @@ use snafu::ensure;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryRectangle<SpatialBounds, AttributeSelection: QueryAttributeSelection> {
-    pub spatial_query: SpatialBounds,
+    pub spatial_bounds: SpatialBounds,
     pub time_interval: TimeInterval,
     pub attributes: AttributeSelection,
 }
 
 impl<SpatialBounds: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialBounds, A> {
     pub fn spatial_query(&self) -> SpatialBounds {
-        self.spatial_query
+        self.spatial_bounds
     }
 
     pub fn temporal_query(&self) -> TimeInterval {
@@ -29,7 +28,7 @@ impl<SpatialBounds: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialBoun
     }
 
     pub fn spatial_query_mut(&mut self) -> &mut SpatialBounds {
-        &mut self.spatial_query
+        &mut self.spatial_bounds
     }
 
     pub fn temporal_query_mut(&mut self) -> &mut TimeInterval {
@@ -45,25 +44,23 @@ impl<SpatialBounds: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialBoun
     }
 }
 
-pub type VectorQueryRectangle =
-    QueryRectangle<SpatialQueryRectangle<BoundingBox2D>, ColumnSelection>;
-pub type RasterQueryRectangle = QueryRectangle<SpatialGridQueryRectangle, BandSelection>;
-pub type PlotQueryRectangle =
-    QueryRectangle<SpatialQueryRectangle<BoundingBox2D>, PlotSeriesSelection>;
+pub type RasterSpatialQueryRectangle = SpatialGridQueryRectangle;
+pub type VectorSpatialQueryRectangle = BoundingBox2D;
+pub type PlotSpatialQueryRectangle = BoundingBox2D;
+
+pub type VectorQueryRectangle = QueryRectangle<VectorSpatialQueryRectangle, ColumnSelection>;
+pub type RasterQueryRectangle = QueryRectangle<RasterSpatialQueryRectangle, BandSelection>;
+pub type PlotQueryRectangle = QueryRectangle<PlotSpatialQueryRectangle, PlotSeriesSelection>;
 
 // Implementation for VectorQueryRectangle and PlotQueryRectangle
-impl<S, A> QueryRectangle<SpatialQueryRectangle<S>, A>
+impl<S, A> QueryRectangle<S, A>
 where
-    S: SpatialBounded,
+    S: SpatialBounded + Copy,
     A: QueryAttributeSelection,
 {
-    pub fn new(
-        spatial_bounds: SpatialQueryRectangle<S>,
-        time_interval: TimeInterval,
-        attributes: A,
-    ) -> Self {
+    pub fn new(spatial_bounds: S, time_interval: TimeInterval, attributes: A) -> Self {
         Self {
-            spatial_query: spatial_bounds,
+            spatial_bounds,
             time_interval,
             attributes,
         }
@@ -72,7 +69,7 @@ where
     /// Creates a new `QueryRectangle` from a `BoundingBox2D`, and a `TimeInterval`
     pub fn with_bounds(spatial_bounds: S, time_interval: TimeInterval, attributes: A) -> Self {
         Self {
-            spatial_query: SpatialQueryRectangle { spatial_bounds },
+            spatial_bounds,
             time_interval,
             attributes,
         }
@@ -83,12 +80,20 @@ where
         raster_query: &RasterQueryRectangle,
         geo_transform: GeoTransform,
         attributes: A,
-    ) -> QueryRectangle<SpatialQueryRectangle<BoundingBox2D>, A> {
+    ) -> QueryRectangle<S, A>
+    where
+        S: AxisAlignedRectangle,
+    {
         let bounds =
-            geo_transform.grid_to_spatial_bounds(&raster_query.spatial_query.grid_bounds());
-        let bounding_box = bounds.as_bbox();
+            geo_transform.grid_to_spatial_bounds(&raster_query.spatial_bounds.grid_bounds());
+        let bounding_box = S::from_min_max(bounds.lower_left(), bounds.upper_right())
+            .expect("Bounds are already valid");
 
         QueryRectangle::with_bounds(bounding_box, raster_query.time_interval, attributes)
+    }
+
+    pub fn spatial_bounds(&self) -> S {
+        self.spatial_bounds
     }
 }
 
@@ -104,7 +109,7 @@ impl RasterQueryRectangle {
     ) -> Self {
         Self::new(
             SpatialGridQueryRectangle::with_bounding_box_and_geo_transform(
-                vector_query.spatial_query.spatial_bounds(),
+                vector_query.spatial_bounds.spatial_bounds(),
                 geo_transform,
             ),
             vector_query.time_interval,
@@ -131,20 +136,23 @@ impl RasterQueryRectangle {
         attributes: BandSelection,
     ) -> Self {
         Self {
-            spatial_query: spatial_bounds,
+            spatial_bounds,
             time_interval,
             attributes,
         }
     }
 
-    pub fn from_qrect_and_geo_transform<A: QueryAttributeSelection>(
-        query: &QueryRectangle<SpatialQueryRectangle<BoundingBox2D>, A>,
+    pub fn from_qrect_and_geo_transform<
+        S: SpatialBounded + AxisAlignedRectangle,
+        A: QueryAttributeSelection,
+    >(
+        query: &QueryRectangle<S, A>,
         bands: BandSelection,
         geo_transform: GeoTransform,
     ) -> Self {
         Self::new(
             SpatialGridQueryRectangle::with_bounding_box_and_geo_transform(
-                query.spatial_query.spatial_bounds,
+                query.spatial_bounds().as_bbox(),
                 geo_transform,
             ),
             query.time_interval,
@@ -155,32 +163,10 @@ impl RasterQueryRectangle {
     #[must_use]
     pub fn select_bands(&self, bands: BandSelection) -> Self {
         Self {
-            spatial_query: self.spatial_query,
+            spatial_bounds: self.spatial_bounds,
             time_interval: self.time_interval,
             attributes: bands,
         }
-    }
-}
-
-pub type RasterSpatialQueryRectangle = SpatialGridQueryRectangle;
-pub type VectorSpatialQueryRectangle = SpatialQueryRectangle<BoundingBox2D>;
-pub type PlotSpatialQueryRectangle = SpatialQueryRectangle<BoundingBox2D>;
-
-/// A spatial rectangle with a specified resolution
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct SpatialQueryRectangle<SpatialBounds> {
-    pub spatial_bounds: SpatialBounds,
-}
-
-impl<S> SpatialQueryRectangle<S> {
-    pub fn new(spatial_bounds: S) -> Self {
-        Self { spatial_bounds }
-    }
-}
-
-impl SpatialBounded for SpatialQueryRectangle<BoundingBox2D> {
-    fn spatial_bounds(&self) -> BoundingBox2D {
-        self.spatial_bounds
     }
 }
 
@@ -280,12 +266,6 @@ impl PlotSeriesSelection {
 }
 
 impl QueryAttributeSelection for PlotSeriesSelection {}
-
-impl SpatialPartitioned for SpatialQueryRectangle<SpatialPartition2D> {
-    fn spatial_partition(&self) -> SpatialPartition2D {
-        self.spatial_bounds
-    }
-}
 
 /*
 impl From<QueryRectangle<BoundingBox2D>> for QueryRectangle<SpatialPartition2D> {

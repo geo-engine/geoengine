@@ -287,7 +287,7 @@ where
 
         let _enter = span.enter();
 
-        let spbox = query.spatial_query;
+        let spbox = query.spatial_bounds;
         let time = query.time_interval;
         tracing::trace!(
             event = %"query_start",

@@ -273,7 +273,7 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
             .collect();
 
         let query = VectorQueryRectangle::new(
-            query.spatial_query,
+            query.spatial_bounds,
             query.time_interval,
             ColumnSelection::all(), // TODO: use columns names?
         );

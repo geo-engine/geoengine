@@ -132,7 +132,7 @@ where
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
     ) -> Self {
-        let grid_bounds = query_rect_to_answer.spatial_query.grid_bounds();
+        let grid_bounds = query_rect_to_answer.spatial_bounds.grid_bounds();
         let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
 
         let first_tile_spec = TileInformation {

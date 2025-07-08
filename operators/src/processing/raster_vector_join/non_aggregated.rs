@@ -109,7 +109,7 @@ where
 
         let bbox = collection
             .bbox()
-            .and_then(|bbox| bbox.intersection(&query.spatial_query.spatial_bounds));
+            .and_then(|bbox| bbox.intersection(&query.spatial_bounds()));
 
         let time = collection
             .time_bounds()

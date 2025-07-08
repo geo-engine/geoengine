@@ -49,7 +49,7 @@ fn bbox_time_query(
         CoordinateProjector::from_known_srs(query_projection, SpatialReference::epsg_4326())
             .context(CannotReprojectBbox)?;
 
-    let bbox = query.spatial_query.spatial_bounds; // TODO: use SpatialPartition2D directly
+    let bbox = query.spatial_bounds(); // TODO: use SpatialPartition2D directly
 
     // TODO: query the whole zone instead? (for Sentinel-2)
     let bbox = bbox

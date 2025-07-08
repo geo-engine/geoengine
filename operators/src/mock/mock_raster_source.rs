@@ -146,7 +146,7 @@ where
                 t.time.intersects(&query.time_interval)
                     && t.tile_information()
                         .global_pixel_bounds()
-                        .intersects(&query.spatial_query.grid_bounds())
+                        .intersects(&query.spatial_bounds.grid_bounds())
             })
             .cloned()
             .collect();
@@ -167,7 +167,7 @@ where
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
             tiling_strategy
-                .global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_query.grid_bounds()),
+                .global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_bounds.grid_bounds()),
             self.result_descriptor.bands.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,

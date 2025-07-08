@@ -212,7 +212,7 @@ where
     fn intersects_query(&self, query: &Self::Query) -> bool {
         self.tile_information()
             .global_pixel_bounds()
-            .intersects(&query.spatial_query.grid_bounds())
+            .intersects(&query.spatial_bounds.grid_bounds())
             && self.time.intersects(&query.time_interval)
             && query.attributes.as_slice().contains(&self.band)
     }

@@ -287,7 +287,7 @@ async fn create_dataset<C: SessionContext>(
     let source_tiling_spatial_grid =
         origin_result_descriptor.tiling_grid_definition(exe_ctx.tiling_specification());
     let query_tiling_spatial_grid =
-        source_tiling_spatial_grid.with_other_bounds(query_rectangle.spatial_query.grid_bounds());
+        source_tiling_spatial_grid.with_other_bounds(query_rectangle.spatial_bounds.grid_bounds());
     let result_descriptor_bounds = origin_result_descriptor
         .spatial_grid_descriptor()
         .intersection_with_tiling_grid(&query_tiling_spatial_grid)

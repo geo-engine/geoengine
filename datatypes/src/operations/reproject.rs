@@ -3,8 +3,7 @@ use crate::{
     primitives::{
         AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Line, MultiLineString,
         MultiLineStringAccess, MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef,
-        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialQueryRectangle,
-        SpatialResolution,
+        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialResolution,
     },
     raster::{
         BoundedGrid, GeoTransform, GridBoundingBox, GridBounds, GridIdx, GridIdx2D, GridShape,
@@ -612,14 +611,14 @@ pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
 /// this method performs the transformation of a query rectangle in `target` projection
 /// to a new query rectangle with coordinates in the `source` projection
 pub fn reproject_spatial_query<S: AxisAlignedRectangle>(
-    query: SpatialQueryRectangle<S>,
+    spatial_bounds: S,
     source: SpatialReference,
     target: SpatialReference,
-) -> Result<Option<SpatialQueryRectangle<S>>> {
+) -> Result<Option<S>> {
     let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
-    let target_bbox_clipped = query.spatial_bounds.reproject_clipped(&proj_to_from)?;
+    let target_bbox_clipped = spatial_bounds.reproject_clipped(&proj_to_from)?;
 
-    Ok(target_bbox_clipped.map(|b| SpatialQueryRectangle::new(b)))
+    Ok(target_bbox_clipped)
 }
 
 /// Reproject a bounding box to the `target` projection and return the input and output bounding box

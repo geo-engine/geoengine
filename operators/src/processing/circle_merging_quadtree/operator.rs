@@ -414,7 +414,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             .with_scaled_radii(self.radius_model_scale)?;
 
         let initial_grid_fold_state = Result::<GridFoldState>::Ok(GridFoldState {
-            grid: Grid::new(query.spatial_query.spatial_bounds(), scaled_radius_model),
+            grid: Grid::new(query.spatial_bounds.spatial_bounds(), scaled_radius_model),
             column_mapping: self.attribute_mapping.clone(),
             cache_hint: CacheHint::max_duration(),
         });
@@ -488,7 +488,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             } = grid?;
 
             let mut cmq = CircleMergingQuadtree::new(
-                query.spatial_query.spatial_bounds(),
+                query.spatial_bounds.spatial_bounds(),
                 *grid.radius_model(),
                 1,
             );

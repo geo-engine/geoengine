@@ -247,7 +247,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
                     source,
                     self.result_descriptor.clone(),
                     move |query: VectorQueryRectangle| {
-                        reproject_spatial_query(query.spatial_query(), source_srs, target_srs)
+                        reproject_spatial_query(query.spatial_bounds(), source_srs, target_srs)
                             .map(|sqr| {
                                 sqr.map(|x| {
                                     VectorQueryRectangle::new(
@@ -1248,7 +1248,7 @@ mod tests {
         );
 
         let reprojected = reproject_spatial_query(
-            query.spatial_query(),
+            query.spatial_bounds(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
             SpatialReference::epsg_4326(),
         )
@@ -1258,7 +1258,7 @@ mod tests {
         assert!(approx_eq!(
             BoundingBox2D,
             expected,
-            reprojected.spatial_bounds,
+            reprojected,
             epsilon = 0.000_001
         ));
     }

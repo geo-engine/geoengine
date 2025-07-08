@@ -95,7 +95,7 @@ where
         let rd = raster_processor.raster_result_descriptor();
 
         for time_span in FeatureTimeSpanIter::new(collection.time_intervals()) {
-            let spatial_bounds = query.spatial_query.spatial_bounds();
+            let spatial_bounds = query.spatial_bounds.spatial_bounds();
 
             let pixel_bounds = rd
                 .tiling_grid_definition(ctx.tiling_specification())

@@ -184,7 +184,7 @@ where
         // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
         let spatial_hit = self
             .spatial_bounds
-            .is_none_or(|sb| sb.intersects_bbox(&query.spatial_query.spatial_bounds));
+            .is_none_or(|sb| sb.intersects_bbox(&query.spatial_bounds()));
 
         temporal_hit && spatial_hit
     }
@@ -281,11 +281,9 @@ macro_rules! impl_cache_result_check {
                 &self,
                 query_rect: &VectorQueryRectangle,
             ) -> Result<Self, CacheError> {
-                let query_spatial_query = query_rect.spatial_query();
-
                 let geoms_filter_bools = self.geometries().map(|g| {
                     g.bbox()
-                        .map(|bbox| bbox.intersects_bbox(&query_spatial_query.spatial_bounds))
+                        .map(|bbox| bbox.intersects_bbox(&query_rect.spatial_bounds()))
                         .unwrap_or(false)
                 });
 

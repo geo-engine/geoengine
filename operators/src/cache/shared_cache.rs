@@ -865,12 +865,10 @@ impl CacheQueryMatch for RasterQueryRectangle {
 
 impl CacheQueryMatch for VectorQueryRectangle {
     fn is_match(&self, query: &VectorQueryRectangle) -> bool {
-        let cache_spatial_query = self.spatial_query();
-        let query_spatial_query = query.spatial_query();
+        let cache_spatial_query = self.spatial_bounds();
+        let query_spatial_query = query.spatial_bounds();
 
-        cache_spatial_query
-            .spatial_bounds
-            .contains_bbox(&query_spatial_query.spatial_bounds)
+        cache_spatial_query.contains_bbox(&query_spatial_query)
             && self.time_interval.contains(&query.time_interval)
             && self.attributes == query.attributes
     }

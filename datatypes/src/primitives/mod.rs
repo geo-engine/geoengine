@@ -41,8 +41,8 @@ pub use no_geometry::NoGeometry;
 pub use query_rectangle::{
     BandSelection, ColumnSelection, PlotQueryRectangle, PlotSeriesSelection,
     PlotSpatialQueryRectangle, QueryAttributeSelection, QueryRectangle, RasterQueryRectangle,
-    RasterSpatialQueryRectangle, SpatialGridQueryRectangle, SpatialQueryRectangle,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
+    RasterSpatialQueryRectangle, SpatialGridQueryRectangle, VectorQueryRectangle,
+    VectorSpatialQueryRectangle,
 };
 pub use spatial_partition::{
     AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned, partitions_extent,

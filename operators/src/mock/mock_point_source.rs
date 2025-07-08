@@ -34,12 +34,10 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
         let chunk_size = usize::from(ctx.chunk_byte_size()) / std::mem::size_of::<Coordinate2D>();
-        let spatial_query = query.spatial_query();
+        let spatial_query = query.spatial_bounds();
 
         Ok(stream::iter(&self.points)
-            .filter(move |&coord| {
-                std::future::ready(spatial_query.spatial_bounds.contains_coordinate(coord))
-            })
+            .filter(move |&coord| std::future::ready(spatial_query.contains_coordinate(coord)))
             .chunks(chunk_size)
             .map(move |chunk| {
                 Ok(MultiPointCollection::from_data(

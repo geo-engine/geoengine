@@ -458,7 +458,7 @@ where
         let (time_interval, state) = self.shift.shift(query.time_interval)?;
 
         let query =
-            VectorQueryRectangle::new(query.spatial_query, time_interval, ColumnSelection::all());
+            VectorQueryRectangle::new(query.spatial_bounds, time_interval, ColumnSelection::all());
         let stream = self.processor.vector_query(query, ctx).await?;
 
         let stream = stream.then(move |collection| async move {
@@ -503,7 +503,8 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval)?;
-        let query = RasterQueryRectangle::new(query.spatial_query, time_interval, query.attributes); // TODO: use grid bounds?
+        let query =
+            RasterQueryRectangle::new(query.spatial_bounds, time_interval, query.attributes); // TODO: use grid bounds?
         let stream = self.processor.raster_query(query, ctx).await?;
 
         let stream = stream.map(move |raster| {

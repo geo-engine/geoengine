@@ -1402,7 +1402,7 @@ mod tests {
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection, VectorDataType},
         operations::image::{RasterColorizer, RgbaColor},
-        primitives::{BoundingBox2D, ColumnSelection, SpatialQueryRectangle},
+        primitives::{BoundingBox2D, ColumnSelection},
         raster::{GridShape2D, TilingSpecification},
         spatial_reference::SpatialReferenceOption,
     };
@@ -1743,16 +1743,11 @@ mod tests {
 
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_query: SpatialQueryRectangle::<BoundingBox2D> {
-                        spatial_bounds: BoundingBox2D::new(
-                            (1.85, 50.88).into(),
-                            (4.82, 52.95).into(),
-                        )?,
-                    },
-                    time_interval: Default::default(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &query_ctx,
             )
             .await?;
