@@ -402,7 +402,7 @@ impl BoxPlotAccumKind {
     fn median(values: &[f64]) -> f64 {
         if values.len() % 2 == 0 {
             let i = values.len() / 2;
-            (values[i] + values[i - 1]) / 2.0
+            f64::midpoint(values[i], values[i - 1])
         } else {
             values[values.len() / 2]
         }

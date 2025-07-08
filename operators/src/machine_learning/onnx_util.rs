@@ -6,8 +6,8 @@ use ort::session::Session;
 use snafu::{ResultExt, ensure};
 
 use crate::machine_learning::error::{
-    InvalidInputPixelShape, InvalidInputTensorShape, InvalidInputType, InvalidOutputPixelShape,
-    InvalidOutputType, MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
+    InvalidInputPixelShape, InvalidInputTensorShape, InvalidOutputPixelShape, InvalidOutputType,
+    MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
     MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, UnsupportedInOutMapping,
     UnsupportedNumberOfOutputAttributes,
 };
@@ -165,21 +165,27 @@ pub fn check_onnx_model_input_matches_metadata(
         .tensor_shape()
         .expect("input must be a tensor. checked before!");
 
-    let shape = try_onnx_tensor_to_ml_tensorshape_3d(dimensions)?;
+    let (true, Some(input_tensor_type), Some(tensor_shape)) = (
+        input.input_type.is_tensor(),
+        input.input_type.tensor_type(),
+        input.input_type.tensor_shape(),
+    ) else {
+        return Err(MachineLearningError::InvalidInputType {
+            input_type: input.input_type.clone(),
+        });
+    };
+
+    let shape = try_onnx_tensor_to_ml_tensorshape_3d(tensor_shape)?;
 
     ensure!(
         shape == metadata_input,
         MetadataModelInputShapeMismatch {
-            model_dimensions: dimensions.clone(),
+            model_dimensions: (*tensor_shape).to_vec(),
             model_shape: shape,
             metadata_shape: metadata_input
         }
     );
 
-    let input_tensor_type = input
-        .input_type
-        .tensor_type()
-        .expect("input must be a tensor. ckecked above!");
     let input_raster_type = try_raster_datatype_from_tensor_element_type(input_tensor_type)?;
 
     ensure!(
@@ -228,7 +234,7 @@ pub fn check_onnx_model_output_matches_metadata(
     ensure!(
         shape == metadata_output,
         MetadataModelOutputShapeMismatch {
-            model_dimensions: dimensions.clone(),
+            model_dimensions: (*dimensions).to_vec(),
             model_shape: shape,
             metadata_shape: metadata_output
         }

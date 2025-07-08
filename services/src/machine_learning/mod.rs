@@ -58,9 +58,11 @@ impl MlModel {
                 &self
                     .upload
                     .root_path()
+                    .map_err(Box::new)
                     .context(CouldNotFindMlModelFileMachineLearningError)?,
                 self.metadata.file_name.as_ref(),
             )
+            .map_err(Box::new)
             .context(CouldNotFindMlModelFileMachineLearningError)?,
             input_type: self.metadata.input_type.into(),
             output_type: self.metadata.output_type.into(),

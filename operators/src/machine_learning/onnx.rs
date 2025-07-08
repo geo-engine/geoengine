@@ -225,7 +225,6 @@ where
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
 
         // TODO: re-use session accross queries?
-        // TODO: use another method: https://github.com/pykeio/ort/issues/402#issuecomment-2949993914
         let mut session = load_onnx_model_from_metadata(&self.model_metadata)?;
         let input_name = session.inputs[0].name.clone(); // clone input name to avoid mutabliity problems
 
@@ -346,7 +345,7 @@ where
 
                 // assume the first output is the prediction and ignore the other outputs (e.g. probabilities for classification)
                 // we don't access the output by name because it can vary, e.g. "output_label" vs "variable"
-                let predictions = outputs[0].try_extract_tensor::<TOut>().context(Ort)?;
+                let predictions = outputs[0].try_extract_array::<TOut>().context(Ort)?;
 
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
@@ -422,6 +421,7 @@ mod tests {
         util::test::TestDefault,
     };
     use ndarray::{Array1, Array2, arr2, array};
+    use ort::value::Tensor;
 
     #[test]
     fn ort() {
