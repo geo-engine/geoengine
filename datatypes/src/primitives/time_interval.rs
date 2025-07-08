@@ -88,6 +88,23 @@ impl TimeInterval {
             }
         );
 
+        ensure!(
+            start_instant <= end_instant,
+            error::TimeIntervalEndBeforeStart {
+                start: start_instant,
+                end: end_instant
+            }
+        );
+        ensure!(
+            start_instant >= TimeInstance::MIN && end_instant <= TimeInstance::MAX,
+            error::TimeIntervalOutOfBounds {
+                start: start_instant,
+                end: end_instant,
+                min: TimeInstance::MIN,
+                max: TimeInstance::MAX,
+            }
+        );
+
         Ok(Self {
             start: start_instant,
             end: end_instant,
@@ -246,10 +263,10 @@ impl TimeInterval {
                 i2: *other,
             }
         );
-        Ok(Self {
-            start: TimeInstance::min(self.start, other.start),
-            end: TimeInstance::max(self.end, other.end),
-        })
+        Self::new(
+            TimeInstance::min(self.start, other.start),
+            TimeInstance::max(self.end, other.end),
+        )
     }
 
     pub fn start(&self) -> TimeInstance {

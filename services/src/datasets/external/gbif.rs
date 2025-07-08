@@ -1549,7 +1549,7 @@ mod tests {
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheHint, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, FeatureData, MultiPoint, TimeInterval,
     };
     use geoengine_datatypes::primitives::{ColumnSelection, TimeInstance};
     use geoengine_datatypes::util::test::TestDefault;
@@ -2213,15 +2213,11 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all(),
-                })
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ))
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -2412,15 +2408,11 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all(),
-                })
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ))
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -2550,15 +2542,11 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into(),
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all(),
-                })
+                .loading_info(VectorQueryRectangle::with_bounds(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ))
                 .await
                 .map_err(|e| e.to_string())?;
 
@@ -2657,16 +2645,16 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            };
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            );
+
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
@@ -3026,16 +3014,16 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            };
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            );
+
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
@@ -3145,16 +3133,16 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            };
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            );
+
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
@@ -3256,13 +3244,12 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new_instant(1_517_011_200_000).unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            };
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::new_instant(1_517_011_200_000).unwrap(),
+                ColumnSelection::all(),
+            );
+
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
@@ -3300,13 +3287,12 @@ mod tests {
                 return Err(format!("{result:?} != {expected:?}"));
             }
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new_instant(1_517_443_200_000).unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            };
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::new_instant(1_517_443_200_000).unwrap(),
+                ColumnSelection::all(),
+            );
+
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
@@ -3350,7 +3336,6 @@ mod tests {
         add_test_data(&db_config).await;
 
         let result = test(ctx, db_config).await;
-
         assert!(result.is_ok());
     }
 
@@ -3399,17 +3384,16 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::new(
                     TimeInstance::from_millis_unchecked(1_517_011_200_000),
                     TimeInstance::from_millis_unchecked(1_517_443_200_000),
                 )
                 .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            };
+                ColumnSelection::all(),
+            );
+
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
@@ -3447,17 +3431,16 @@ mod tests {
                 return Err(format!("{result:?} != {expected:?}"));
             }
 
-            let query_rectangle = VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                    .unwrap(),
-                time_interval: TimeInterval::new(
+            let query_rectangle = VectorQueryRectangle::with_bounds(
+                BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                TimeInterval::new(
                     TimeInstance::from_millis_unchecked(1_517_011_200_000),
                     TimeInstance::from_millis_unchecked(1_517_443_200_001),
                 )
                 .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            };
+                ColumnSelection::all(),
+            );
+
             let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor

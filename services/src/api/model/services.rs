@@ -12,7 +12,8 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
 
-use super::datatypes::DataId;
+use super::datatypes::{DataId, DatasetId};
+use super::operators::TypedResultDescriptor;
 
 #[allow(clippy::large_enum_variant)]
 #[derive(Serialize, Deserialize, Debug, Clone, ToSchema, PartialEq)]
@@ -218,6 +219,56 @@ impl From<&Volume> for crate::datasets::upload::Volume {
         Self {
             name: VolumeName(value.name.clone()),
             path: value.path.as_ref().map_or_else(PathBuf::new, PathBuf::from),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct Dataset {
+    pub id: DatasetId,
+    pub name: DatasetName,
+    pub display_name: String,
+    pub description: String,
+    pub result_descriptor: TypedResultDescriptor,
+    pub source_operator: String,
+    pub symbology: Option<Symbology>,
+    pub provenance: Option<Vec<Provenance>>,
+    pub tags: Option<Vec<String>>,
+}
+
+impl From<Dataset> for crate::datasets::storage::Dataset {
+    fn from(value: Dataset) -> Self {
+        crate::datasets::storage::Dataset {
+            id: value.id.into(),
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            result_descriptor: value.result_descriptor.into(),
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value
+                .provenance
+                .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>()),
+            tags: value.tags,
+        }
+    }
+}
+
+impl From<crate::datasets::storage::Dataset> for Dataset {
+    fn from(value: crate::datasets::storage::Dataset) -> Self {
+        Dataset {
+            id: value.id.into(),
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            result_descriptor: value.result_descriptor.into(),
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value
+                .provenance
+                .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>()),
+            tags: value.tags,
         }
     }
 }

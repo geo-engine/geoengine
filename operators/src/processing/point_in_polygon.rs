@@ -301,10 +301,7 @@ impl VectorQueryProcessor for PointInPolygonFilterProcessor {
                 .query(query.clone(), ctx)
                 .await?
                 .and_then(move |points| {
-                    let query: geoengine_datatypes::primitives::QueryRectangle<
-                        geoengine_datatypes::primitives::BoundingBox2D,
-                        geoengine_datatypes::primitives::ColumnSelection,
-                    > = query.clone();
+                    let query: VectorQueryRectangle = query.clone();
                     async move {
                         if points.is_empty() {
                             return Ok(points);
@@ -392,7 +389,7 @@ mod tests {
 
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, SpatialResolution, TimeInterval,
+        BoundingBox2D, Coordinate2D, MultiPoint, MultiPolygon, TimeInterval,
     };
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -505,6 +502,8 @@ mod tests {
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
+
         let polygon_source =
             MockFeatureCollectionSource::single(MultiPolygonCollection::from_data(
                 vec![MultiPolygon::new(vec![vec![vec![
@@ -528,21 +527,17 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -578,6 +573,8 @@ mod tests {
             )?)
             .boxed();
 
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
+
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
             sources: PointInPolygonFilterSource {
@@ -586,21 +583,17 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -647,6 +640,8 @@ mod tests {
             )?)
             .boxed();
 
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
+
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
             sources: PointInPolygonFilterSource {
@@ -655,21 +650,17 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -737,6 +728,8 @@ mod tests {
         ])
         .boxed();
 
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
+
         let operator = PointInPolygonFilter {
             params: PointInPolygonFilterParams {},
             sources: PointInPolygonFilterSource {
@@ -745,23 +738,19 @@ mod tests {
             },
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await?;
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
 
-        let ctx_one_chunk = MockQueryContext::new(ChunkByteSize::MAX);
-        let ctx_minimal_chunks = MockQueryContext::new(ChunkByteSize::MIN);
+        let ctx_one_chunk = exe_ctx.mock_query_context(ChunkByteSize::MAX);
+        let ctx_minimal_chunks = exe_ctx.mock_query_context(ChunkByteSize::MIN);
 
         let query = query_processor
             .query(query_rectangle.clone(), &ctx_minimal_chunks)
@@ -839,12 +828,11 @@ mod tests {
         .await
         .unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::with_bounds(
+            BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 

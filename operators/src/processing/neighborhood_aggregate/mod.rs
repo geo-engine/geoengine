@@ -13,9 +13,9 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
+    Grid2D, GridBoundingBox2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
 use num::Integer;
 use num_traits::AsPrimitive;
@@ -252,7 +252,7 @@ impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = SpatialPartition2D,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -261,7 +261,7 @@ where
     A: AggregateFunction + 'static,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -271,15 +271,19 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async move {
-            let sub_query = NeighborhoodAggregateTileNeighborhood::<P, A>::new(
-                self.neighborhood.clone(),
-                self.tiling_specification,
-            );
+            let sub_query =
+                NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
+
+            let tiling_strat = self
+                .source
+                .result_descriptor()
+                .tiling_grid_definition(self.tiling_specification)
+                .generate_data_tiling_strategy();
 
             Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
                 &self.source,
                 query,
-                self.tiling_specification,
+                tiling_strat,
                 ctx,
                 sub_query,
             )
@@ -299,11 +303,10 @@ where
 mod tests {
 
     use super::*;
-
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor,
+            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -315,12 +318,12 @@ mod tests {
         dataset::NamedData,
         operations::image::{Colorizer, RgbaColor},
         primitives::{
-            CacheHint, DateTime, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+            CacheHint, Coordinate2D, DateTime, RasterQueryRectangle, SpatialPartition2D,
             TimeInstance, TimeInterval,
         },
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, RenameBands, TileInformation,
-            TilesEqualIgnoringCacheHint, TilingSpecification,
+            GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, RasterDataType, RasterTile2D,
+            RenameBands, TileInformation, TilesEqualIgnoringCacheHint, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -337,9 +340,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters {
-                        data: NamedData::with_system_name("matrix-input"),
-                    },
+                    params: GdalSourceParameters::new(NamedData::with_system_name("matrix-input")),
                 }
                 .boxed(),
             },
@@ -366,7 +367,8 @@ mod tests {
                     "raster": {
                         "type": "GdalSource",
                         "params": {
-                            "data": "matrix-input"
+                            "data": "matrix-input",
+                            "overviewLevel": null
                         }
                     }
                 }
@@ -386,9 +388,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters {
-                        data: NamedData::with_system_name("matrix-input"),
-                    },
+                    params: GdalSourceParameters::new(NamedData::with_system_name("matrix-input")),
                 }
                 .boxed(),
             },
@@ -411,7 +411,8 @@ mod tests {
                     "raster": {
                         "type": "GdalSource",
                         "params": {
-                            "data": "matrix-input"
+                            "data": "matrix-input",
+                            "overviewLevel": null
                         }
                     }
                 }
@@ -438,10 +439,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution() {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 3].into(),
-        ));
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
 
         let raster = make_raster();
 
@@ -461,12 +460,11 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 3.).into(), (6., 0.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(0, 20),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
+            TimeInterval::new_unchecked(0, 20),
+            BandSelection::first(),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
@@ -501,10 +499,8 @@ mod tests {
 
     #[tokio::test]
     async fn check_make_raster() {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 3].into(),
-        ));
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
 
         let raster = make_raster();
 
@@ -515,12 +511,11 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 3.).into(), (6., 0.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(0, 20),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
+            TimeInterval::new_unchecked(0, 20),
+            BandSelection::first(),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
@@ -662,8 +657,10 @@ mod tests {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: None,
-                    bbox: None,
-                    resolution: None,
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                        GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -689,7 +686,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters { data: ndvi_id },
+                    params: GdalSourceParameters::new(ndvi_id),
                 }
                 .boxed(),
             },
@@ -700,15 +697,19 @@ mod tests {
         .unwrap();
 
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
+        let result_descriptor = processor.result_descriptor();
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
-            time_interval: TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            result_descriptor
+                .tiling_grid_definition(query_ctx.tiling_specification())
+                .tiling_geo_transform()
+                .spatial_to_grid_bounds(
+                    &SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
+                ),
+            TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            BandSelection::first(),
+        );
 
         let colorizer = Colorizer::linear_gradient(
             vec![
@@ -726,8 +727,8 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            360,
-            180,
+            600,
+            600,
             None,
             Some(colorizer),
             Box::pin(futures::future::pending()),
@@ -735,13 +736,13 @@ mod tests {
         .await
         .unwrap();
 
+        // Use for getting the image to compare against
+        // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur_bla.png");
+
         assert_eq!(
             bytes,
             include_bytes!("../../../../test_data/wms/gaussian_blur.png")
         );
-
-        // Use for getting the image to compare against
-        // save_test_bytes(&bytes, "gaussian_blur.png");
     }
 
     #[ignore] // TODO: remove
@@ -759,7 +760,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters { data: ndvi_id },
+                    params: GdalSourceParameters::new(ndvi_id),
                 }
                 .boxed(),
             },
@@ -770,15 +771,20 @@ mod tests {
         .unwrap();
 
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
+        let result_descriptor = processor.result_descriptor();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into())
-                .unwrap(),
-            time_interval: TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
         let query_ctx = MockQueryContext::test_default();
+
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            result_descriptor
+                .tiling_grid_definition(query_ctx.tiling_specification())
+                .tiling_geo_transform()
+                .spatial_to_grid_bounds(
+                    &SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
+                ),
+            TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            BandSelection::first(),
+        );
 
         // let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 
@@ -818,10 +824,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_mean_convolution_multi_bands() {
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 3].into(),
-        ));
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 3].into()));
 
         let operator = NeighborhoodAggregate {
             params: NeighborhoodAggregateParams {
@@ -849,12 +853,11 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 3.).into(), (6., 0.).into()).unwrap(),
-            time_interval: TimeInterval::new_unchecked(0, 20),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::new(vec![0, 2]).unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
+            TimeInterval::new_unchecked(0, 20),
+            BandSelection::new(vec![0, 2]).unwrap(),
+        );
         let query_ctx = MockQueryContext::test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();

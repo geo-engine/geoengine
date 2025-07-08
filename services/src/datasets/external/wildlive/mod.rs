@@ -779,7 +779,7 @@ mod tests {
         dataset::ExternalDataId,
         primitives::{
             BoundingBox2D, CacheTtlSeconds, ColumnSelection, Coordinate2D, FeatureDataType,
-            Measurement, SpatialResolution, TimeInterval,
+            Measurement, TimeInterval,
         },
         spatial_reference::SpatialReference,
     };
@@ -922,7 +922,6 @@ mod tests {
                 )
                 .unwrap(),
                 time_interval: TimeInterval::new(0, 1).unwrap(),
-                spatial_resolution: SpatialResolution::new(1.0, 1.0).unwrap(),
                 attributes: ColumnSelection::all(),
             })
             .await
@@ -1096,7 +1095,6 @@ mod tests {
                 )
                 .unwrap(),
                 time_interval: TimeInterval::new(0, 1).unwrap(),
-                spatial_resolution: SpatialResolution::new(1.0, 1.0).unwrap(),
                 attributes: ColumnSelection::all(),
             })
             .await

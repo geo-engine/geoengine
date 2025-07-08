@@ -202,7 +202,7 @@ impl OgrDatasetIterator {
                 query_rectangle.spatial_bounds, &dataset_information.layer_name
             );
             // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
+            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds());
         }
 
         Ok((features_provider, time_filter.is_some()))

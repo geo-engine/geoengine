@@ -14,10 +14,9 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
-    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
-    VectorQueryRectangle,
+    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel};
+use geoengine_datatypes::raster::{DynamicRasterDataType, GridBoundingBox2D, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 use ouroboros::self_referencing;
 
@@ -25,13 +24,12 @@ use ouroboros::self_referencing;
 #[async_trait]
 pub trait QueryProcessor: Send + Sync {
     type Output;
-    type SpatialBounds: AxisAlignedRectangle + Send + Sync;
+    type SpatialBounds: Send + Sync;
     type Selection: QueryAttributeSelection;
     type ResultDescription: ResultDescriptor<
             QueryRectangleSpatialBounds = Self::SpatialBounds,
             QueryRectangleAttributeSelection = Self::Selection,
         >;
-
     /// inner logic of the processor
     async fn _query<'a>(
         &'a self,
@@ -110,7 +108,7 @@ impl<S, T> RasterQueryProcessor for S
 where
     S: QueryProcessor<
             Output = RasterTile2D<T>,
-            SpatialBounds = SpatialPartition2D,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         > + Sync
@@ -230,7 +228,7 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -528,6 +526,21 @@ impl TypedRasterQueryProcessor {
             Self::I64(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
             Self::F32(r) => RasterTypeConversionQueryProcessor::new(r).boxed(),
             Self::F64(r) => r,
+        }
+    }
+
+    pub fn result_descriptor(&self) -> &RasterResultDescriptor {
+        match self {
+            Self::U8(r) => r.raster_result_descriptor(),
+            Self::U16(r) => r.raster_result_descriptor(),
+            Self::U32(r) => r.raster_result_descriptor(),
+            Self::U64(r) => r.raster_result_descriptor(),
+            Self::I8(r) => r.raster_result_descriptor(),
+            Self::I16(r) => r.raster_result_descriptor(),
+            Self::I32(r) => r.raster_result_descriptor(),
+            Self::I64(r) => r.raster_result_descriptor(),
+            Self::F32(r) => r.raster_result_descriptor(),
+            Self::F64(r) => r.raster_result_descriptor(),
         }
     }
 }

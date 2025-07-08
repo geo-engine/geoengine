@@ -1,13 +1,10 @@
 use crate::util::Result;
 use futures::{Stream, ready};
 use geoengine_datatypes::{
-    primitives::{
-        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
-        TimeInterval,
-    },
+    primitives::{CacheExpiration, CacheHint, RasterQueryRectangle, TimeInstance, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
-        Pixel, RasterTile2D, TilingSpecification,
+        Pixel, RasterTile2D, TilingStrategy,
     },
 };
 use pin_project::pin_project;
@@ -307,6 +304,11 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     fn update_current_time(&mut self, new_time: TimeInterval) {
+        debug_assert!(
+            !new_time.is_instant(),
+            "Tile time is the data validity and must not be an instant!"
+        );
+
         if let Some(old_time) = self.current_time {
             if old_time == new_time {
                 return;
@@ -358,6 +360,21 @@ impl<T: Pixel> StateContainer<T> {
         }
 
         true
+    }
+
+    fn store_tile(&mut self, tile: RasterTile2D<T>) {
+        debug_assert!(self.next_tile.is_none());
+        let current_time = self
+            .current_time
+            .expect("Time must be set when the first tile arrives");
+        debug_assert!(current_time.start() <= tile.time.start());
+        debug_assert!(
+            current_time.start() < tile.time.start()
+                || (self.current_idx.y() < tile.tile_position.y()
+                    || (self.current_idx.y() == tile.tile_position.y()
+                        && self.current_idx.x() < tile.tile_position.x()))
+        );
+        self.next_tile = Some(tile);
     }
 }
 
@@ -413,27 +430,28 @@ where
         }
     }
 
+    /// Creates a new `SparseTilesFillAdapter` that fills the gaps of the input stream with empty tiles.
+    /// The input stream must be sorted by `GridIdx` and `TimeInterval`.
+    /// The adaper will fill the gaps within the `query_rect_to_answer` with empty tiles.
+    ///
+    /// # Panics
+    /// If the `query_rect_to_answer` has a different `origin_coordinate` than the `tiling_spec`.
+    ///
     pub fn new_like_subquery(
         stream: S,
         query_rect_to_answer: &RasterQueryRectangle,
-        tiling_spec: TilingSpecification,
+        tiling_strat: TilingStrategy,
         cache_expiration: FillerTileCacheExpirationStrategy,
         time_bounds: FillerTimeBounds,
     ) -> Self {
-        debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
-
-        let tiling_strat = tiling_spec.strategy(
-            query_rect_to_answer.spatial_resolution.x,
-            -query_rect_to_answer.spatial_resolution.y,
-        );
-
-        let grid_bounds = tiling_strat.tile_grid_box(query_rect_to_answer.spatial_partition());
+        let grid_bounds = tiling_strat
+            .raster_spatial_query_to_tiling_grid_box(query_rect_to_answer.grid_bounds());
         Self::new(
             stream,
             grid_bounds,
             query_rect_to_answer.attributes.count(),
             tiling_strat.geo_transform,
-            tiling_spec.tile_size_in_pixels,
+            tiling_strat.tile_size_in_pixels,
             cache_expiration,
             query_rect_to_answer.time_interval,
             time_bounds,
@@ -479,7 +497,7 @@ where
                             this.sc.state = State::PollingForNextTile; // return the received tile and set state to polling for the next tile
                             tile
                         } else {
-                            this.sc.next_tile = Some(tile);
+                            this.sc.store_tile(tile);
                             this.sc.state = State::FillAndProduceNextTile; // save the tile and go to fill mode
                             this.sc.current_no_data_tile()
                         }
@@ -585,7 +603,7 @@ where
                                 tile
                             } else {
                                 // the tile is not the next to produce. Save it and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
@@ -606,13 +624,13 @@ where
                                 } else {
                                     // save the tile and go to fill mode.
                                     this.sc.update_current_time(tile.time);
-                                    this.sc.next_tile = Some(tile);
+                                    this.sc.store_tile(tile);
                                     this.sc.state = State::FillAndProduceNextTile;
                                     this.sc.current_no_data_tile()
                                 }
                             } else {
                                 // the received tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
@@ -629,12 +647,12 @@ where
                                         .end(),
                                     tile.time.start(),
                                 )?);
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             } else {
                                 // the received tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }

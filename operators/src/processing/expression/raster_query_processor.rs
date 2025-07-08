@@ -6,13 +6,11 @@ use crate::{
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
-    primitives::{
-        BandSelection, CacheHint, RasterQueryRectangle, SpatialPartition2D, TimeInterval,
-    },
+    primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
-        ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
-        GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel,
-        RasterTile2D,
+        ConvertDataType, FromIndexFnParallel, GeoTransform, GridBoundingBox2D, GridIdx2D,
+        GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
+        MapElementsParallel, Pixel, RasterTile2D,
     },
 };
 use geoengine_expression::LinkedExpression;
@@ -62,7 +60,7 @@ where
     Tuple: ExpressionTupleProcessor<TO>,
 {
     type Output = RasterTile2D<TO>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -75,7 +73,6 @@ where
         let source_query = RasterQueryRectangle {
             spatial_bounds: query.spatial_bounds,
             time_interval: query.time_interval,
-            spatial_resolution: query.spatial_resolution,
             attributes: BandSelection::first_n(Tuple::num_bands()),
         };
 
@@ -97,7 +94,7 @@ where
                     ) = Tuple::metadata(&rasters);
 
                     let program = self.program.clone();
-                    let map_no_data = self.map_no_data;
+                    let map_no_data: bool = self.map_no_data;
 
                     let out = crate::util::spawn_blocking_with_thread_pool(
                         ctx.thread_pool().clone(),
