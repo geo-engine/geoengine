@@ -76,6 +76,9 @@ where
     }
 
     /// Creates a new `QueryRectangle` with bounds and time from a `RasterQueryRectangle` and supplied attributes.
+    ///
+    /// # Panics
+    /// If the `geo_transform` can't transform the raster bounds into a valid `SpatialPartition`
     pub fn from_raster_query_and_geo_transform_replace_attributes(
         raster_query: &RasterQueryRectangle,
         geo_transform: GeoTransform,
