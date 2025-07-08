@@ -77,6 +77,7 @@ use geoengine_operators::source::{FileNotFoundHandling, GdalDatasetParameters};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
 use geoengine_operators::util::gdal::{create_ndvi_meta_data, create_ports_meta_data};
+use log::debug;
 use rand::RngCore;
 use std::fs::File;
 use std::io::BufReader;
@@ -699,6 +700,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, DatabaseConnectionConfi
 
     let mut db_config = get_config_element::<Postgres>().unwrap();
     db_config.schema = format!("geoengine_test_{}", rand::rng().next_u64()); // generate random temp schema
+    debug!("Creating schema {}", db_config.schema);
 
     let db_config = DatabaseConnectionConfig {
         host: db_config.host,

@@ -1,0 +1,131 @@
+GET https://wildlive.senckenberg.de/api/search?query=type:project
+Content-Type: application/json
+
+###
+
+GET https://wildlive.senckenberg.de/api/objects/wildlive/ef7833589d61b2d2a905
+Content-Type: application/json
+
+###
+
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup",
+    "filter": [
+        "/id",
+        "/content/inStationsLayout",
+        "/content/decimalLatitude",
+        "/content/decimalLongitude"
+    ],
+    "page_num": 0,
+    "page_size": 10000
+}
+
+###
+
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup",
+    "filter": [
+        "/id",
+        "/content/id",
+        "/content/name",
+        "/content/location",
+        "/content/description",
+        "/content/decimalLatitude",
+        "/content/decimalLongitude"
+    ],
+    "page_num": 0,
+    "page_size": 10000
+}
+
+###
+
+# @name session
+POST https://webapp.senckenberg.de/auth/realms/wildlive-portal/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=client_credentials
+&client_id=geoengine
+&client_secret={{$dotenv WILDLIVE_CLIENT_SECRET}}
+
+###
+
+GET https://wildlive.senckenberg.de/api/objects/wildlive/ef7833589d61b2d2a905
+Authorization: Bearer {{session.response.body.$.access_token}}
+
+###
+
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "type:ImageObject AND (/atStation:\"wildlive/a43254afb230ce163256\")",
+    "filter": [
+        "/id",
+        "/content/id",
+        "/content/captureTimeStamp",
+        "/content/atStation",
+        "/content/hasAnnotations",
+        "/content/contentUrl"
+    ],
+    "page_num": 0,
+    "page_size": 10000
+}
+
+###
+
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "type:ImageObject AND (/atStation:\"wildlive/797cb6f275e9fc8afa4b\" OR /atStation:\"wildlive/468ba2036b2a4ff004c9\" OR /atStation:\"wildlive/358df8fa949f35e91a64\" OR /atStation:\"wildlive/6bf42fa2eb245604bb31\" OR /atStation:\"wildlive/ea64f18b8fa1dec31196\" OR /atStation:\"wildlive/3204d6391519562525ec\" OR /atStation:\"wildlive/c2bd44066dbda6f0d1ac\" OR /atStation:\"wildlive/52baefeffeb2648fdaf7\" OR /atStation:\"wildlive/024b9357f1e23877a243\" OR /atStation:\"wildlive/229392d20de8b45e8114\" OR /atStation:\"wildlive/498ae1629861699f5323\" OR /atStation:\"wildlive/2cd0a46deb9e47b0518f\" OR /atStation:\"wildlive/a43254afb230ce163256\" OR /atStation:\"wildlive/33516c1ce3b7e26c296d\" OR /atStation:\"wildlive/16f3b0b65b4a58acb782\" OR /atStation:\"wildlive/8ced32ac3ca4f646a53b\" OR /atStation:\"wildlive/0ff0ce1ddfcfb0aff407\" OR /atStation:\"wildlive/f421dc2239b8fd7a1980\" OR /atStation:\"wildlive/259cfcfd85fcb0ce276d\" OR /atStation:\"wildlive/79e043c3053fb39df381\" OR /atStation:\"wildlive/de7f4396c2689d1fbf6d\")",
+        "filter": [
+        "/id",
+        "/content/id",
+        "/content/captureTimeStamp",
+        "/content/atStation",
+        "/content/hasAnnotations",
+        "/content/contentUrl"
+    ],
+    "page_num": 0,
+    "page_size": 10000
+}
+
+###
+
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "type:Annotation AND (/id:\"wildlive/a7df5ba275af85c1d28d\")",
+    "filter": [
+        "/id",
+        "/content/id",
+        "/content/hasTarget",
+        "/content/hasBody"
+    ],
+    "page_num": 0,
+    "page_size": 10000
+}
+
+###
+
+POST https://wildlive.senckenberg.de/api/search
+Content-Type: application/json
+
+{
+    "query": "type:Annotation AND (/id:\"wildlive/a1eaa469eec33a0d3a39\" OR /id:\"wildlive/ebe8d5f722782b0bee73\" OR /id:\"wildlive/7ef5664c43cf26299b09\")",
+        "filter": [
+        "/id",
+        "/content/id",
+        "/content/hasTarget",
+        "/content/hasBody"
+    ],
+    "page_num": 0,
+    "page_size": 10000
+}

@@ -378,6 +378,10 @@ impl VisualPointClusteringProcessor {
                 FeatureDataValue::Text(value) | FeatureDataValue::NullableText(Some(value)),
                 AttributeAggregateType::StringSample,
             ) => AttributeAggregate::StringSample(StringSampler::from_value(value)),
+            (
+                FeatureDataValue::DateTime(value) | FeatureDataValue::NullableDateTime(Some(value)),
+                AttributeAggregateType::StringSample,
+            ) => AttributeAggregate::StringSample(StringSampler::from_value(value.to_string())),
             _ => AttributeAggregate::Null,
         }
     }

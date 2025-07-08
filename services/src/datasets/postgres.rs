@@ -718,9 +718,11 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
+        let typed_meta_data = meta_data.to_typed_metadata();
+
         tx.execute(
-            "UPDATE datasets SET meta_data = $2 WHERE id = $1;",
-            &[&dataset, &meta_data],
+            "UPDATE datasets SET meta_data = $2, result_descriptor = $3 WHERE id = $1;",
+            &[&dataset, &meta_data, &typed_meta_data.result_descriptor],
         )
         .await?;
 

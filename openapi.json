@@ -5452,15 +5452,6 @@
           "eastNorth"
         ]
       },
-      "BTreeMap": {
-        "type": "object",
-        "additionalProperties": {
-          "type": "string"
-        },
-        "propertyNames": {
-          "type": "string"
-        }
-      },
       "BandSelection": {
         "type": "array",
         "items": {
@@ -5513,7 +5504,15 @@
         ],
         "properties": {
           "classes": {
-            "$ref": "#/components/schemas/BTreeMap"
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "propertyNames": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
           },
           "measurement": {
             "type": "string"
@@ -6997,20 +6996,22 @@
         "required": [
           "fileName",
           "inputType",
-          "numInputBands",
-          "outputType"
+          "outputType",
+          "inputShape",
+          "outputShape"
         ],
         "properties": {
           "fileName": {
             "type": "string"
           },
+          "inputShape": {
+            "$ref": "#/components/schemas/MlTensorShape3D"
+          },
           "inputType": {
             "$ref": "#/components/schemas/RasterDataType"
           },
-          "numInputBands": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
+          "outputShape": {
+            "$ref": "#/components/schemas/MlTensorShape3D"
           },
           "outputType": {
             "$ref": "#/components/schemas/RasterDataType"
@@ -7046,6 +7047,32 @@
             "enum": [
               "mlModel"
             ]
+          }
+        }
+      },
+      "MlTensorShape3D": {
+        "type": "object",
+        "description": "A struct describing tensor shape for `MlModelMetadata`",
+        "required": [
+          "y",
+          "x",
+          "bands"
+        ],
+        "properties": {
+          "bands": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "x": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "y": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },

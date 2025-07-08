@@ -8,6 +8,8 @@ use geoengine_datatypes::raster::GridBounds;
 use geoengine_macros::type_tag;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
+use serde::de::Error as SerdeError;
+use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
 use snafu::ResultExt;
 use std::borrow::Cow;
@@ -1048,7 +1050,36 @@ impl<'de> Deserialize<'de> for SerializableClasses {
 pub struct ClassificationMeasurement {
     pub measurement: String,
     // use a BTreeMap to preserve the order of the keys
-    pub classes: SerializableClasses,
+    #[serde(serialize_with = "serialize_classes")]
+    #[serde(deserialize_with = "deserialize_classes")]
+    pub classes: BTreeMap<u8, String>,
+}
+
+fn serialize_classes<S>(classes: &BTreeMap<u8, String>, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: Serializer,
+{
+    let mut map = serializer.serialize_map(Some(classes.len()))?;
+    for (k, v) in classes {
+        map.serialize_entry(&k.to_string(), v)?;
+    }
+    map.end()
+}
+
+fn deserialize_classes<'de, D>(deserializer: D) -> Result<BTreeMap<u8, String>, D::Error>
+where
+    D: Deserializer<'de>,
+{
+    let map = BTreeMap::<String, String>::deserialize(deserializer)?;
+    let mut classes = BTreeMap::new();
+    for (k, v) in map {
+        classes.insert(
+            k.parse::<u8>()
+                .map_err(|e| D::Error::custom(format!("Failed to parse key as u8: {e}")))?,
+            v,
+        );
+    }
+    Ok(classes)
 }
 
 impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
@@ -1058,7 +1089,7 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
         Self {
             r#type: Default::default(),
             measurement: value.measurement,
-            classes: SerializableClasses(value.classes),
+            classes: value.classes,
         }
     }
 }
@@ -1066,12 +1097,10 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
 impl From<ClassificationMeasurement>
     for geoengine_datatypes::primitives::ClassificationMeasurement
 {
-    fn from(
-        value: ClassificationMeasurement,
-    ) -> geoengine_datatypes::primitives::ClassificationMeasurement {
-        geoengine_datatypes::primitives::ClassificationMeasurement {
-            measurement: value.measurement,
-            classes: value.classes.0,
+    fn from(measurement: ClassificationMeasurement) -> Self {
+        Self {
+            measurement: measurement.measurement,
+            classes: measurement.classes,
         }
     }
 }
@@ -2263,5 +2292,105 @@ impl<'a> FromSql<'a> for CacheTtlSeconds {
 
     fn accepts(ty: &postgres_types::Type) -> bool {
         <i32 as FromSql>::accepts(ty)
+    }
+}
+
+/// A struct describing tensor shape for `MlModelMetadata`
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize, ToSchema, FromSql, ToSql)]
+pub struct MlTensorShape3D {
+    pub y: u32,
+    pub x: u32,
+    pub bands: u32, // TODO: named attributes?
+}
+
+impl MlTensorShape3D {
+    pub fn new_y_x_attr(y: u32, x: u32, bands: u32) -> Self {
+        Self { y, x, bands }
+    }
+
+    pub fn new_single_pixel_bands(bands: u32) -> Self {
+        Self { y: 1, x: 1, bands }
+    }
+
+    pub fn new_single_pixel_single_band() -> Self {
+        Self::new_single_pixel_bands(1)
+    }
+}
+
+impl From<geoengine_datatypes::machine_learning::MlTensorShape3D> for MlTensorShape3D {
+    fn from(value: geoengine_datatypes::machine_learning::MlTensorShape3D) -> Self {
+        Self {
+            y: value.y,
+            x: value.x,
+            bands: value.bands,
+        }
+    }
+}
+
+impl From<MlTensorShape3D> for geoengine_datatypes::machine_learning::MlTensorShape3D {
+    fn from(value: MlTensorShape3D) -> Self {
+        Self {
+            y: value.y,
+            x: value.x,
+            bands: value.bands,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::api::model::datatypes::ClassificationMeasurement;
+    use crate::error::Error;
+    use std::collections::BTreeMap;
+
+    #[test]
+    fn it_serializes_classification_measurement() -> Result<(), Error> {
+        let measurement = ClassificationMeasurement {
+            r#type: Default::default(),
+            measurement: "Test".to_string(),
+            classes: BTreeMap::<u8, String>::from([
+                (0, "Class 0".to_string()),
+                (1, "Class 1".to_string()),
+            ]),
+        };
+
+        let serialized = serde_json::to_string(&measurement)?;
+
+        assert_eq!(
+            serialized,
+            r#"{"type":"classification","measurement":"Test","classes":{"0":"Class 0","1":"Class 1"}}"#
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn it_deserializes_classification_measurement() -> Result<(), Error> {
+        let measurement = ClassificationMeasurement {
+            r#type: Default::default(),
+            measurement: "Test".to_string(),
+            classes: BTreeMap::<u8, String>::from([
+                (0, "Class 0".to_string()),
+                (1, "Class 1".to_string()),
+            ]),
+        };
+
+        let serialized = r#"{"type":"classification","measurement":"Test","classes":{"0":"Class 0","1":"Class 1"}}"#;
+        let deserialized: ClassificationMeasurement = serde_json::from_str(serialized)?;
+
+        assert_eq!(measurement, deserialized);
+        Ok(())
+    }
+
+    #[test]
+    fn it_throws_error_on_deserializing_non_integer_classification_measurement_class_value() {
+        let serialized =
+            r#"{"type":"classification","measurement":"Test","classes":{"Zero":"Class 0"}}"#;
+        let deserialized = serde_json::from_str::<ClassificationMeasurement>(serialized);
+
+        assert!(deserialized.is_err());
+        assert_eq!(
+            deserialized.unwrap_err().to_string(),
+            "Failed to parse key as u8: invalid digit found in string at line 1 column 75"
+        );
     }
 }

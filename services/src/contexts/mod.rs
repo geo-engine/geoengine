@@ -1,5 +1,6 @@
 use crate::api::model::services::Volume;
 use crate::config::{Cache, QuotaTrackingMode, get_config_element};
+use crate::datasets::external::WildliveDbCache;
 use crate::datasets::external::netcdfcf::NetCdfCfProviderDb;
 use crate::datasets::storage::DatasetDb;
 use crate::error::Result;
@@ -102,6 +103,7 @@ pub trait GeoEngineDb:
     + LayerProviderDb
     + MlModelDb
     + NetCdfCfProviderDb
+    + WildliveDbCache
     + PermissionDb
     + ProjectDb
     + RoleDb
