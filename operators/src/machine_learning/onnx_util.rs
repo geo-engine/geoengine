@@ -154,16 +154,6 @@ pub fn check_onnx_model_input_matches_metadata(
     );
 
     let input = &inputs[0];
-    ensure!(
-        input.input_type.is_tensor(),
-        InvalidInputType {
-            input_type: input.input_type.clone()
-        }
-    );
-    let dimensions = input
-        .input_type
-        .tensor_shape()
-        .expect("input must be a tensor. checked before!");
 
     let (true, Some(input_tensor_type), Some(tensor_shape)) = (
         input.input_type.is_tensor(),
