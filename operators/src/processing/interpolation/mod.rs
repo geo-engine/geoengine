@@ -254,7 +254,7 @@ impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = RasterSpatialQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -262,7 +262,7 @@ where
     I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

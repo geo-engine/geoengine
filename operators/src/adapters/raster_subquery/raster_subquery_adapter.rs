@@ -209,7 +209,7 @@ where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
             Output = RasterTile2D<PixelType>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = RasterSpatialQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -226,7 +226,7 @@ where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
             Output = RasterTile2D<PixelType>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = RasterSpatialQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,

@@ -13,14 +13,14 @@ use snafu::ensure;
 /// A spatio-temporal rectangle with a specified resolution and the selected bands
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QueryRectangle<SpatialQuery, AttributeSelection: QueryAttributeSelection> {
-    pub spatial_query: SpatialQuery,
+pub struct QueryRectangle<SpatialBounds, AttributeSelection: QueryAttributeSelection> {
+    pub spatial_query: SpatialBounds,
     pub time_interval: TimeInterval,
     pub attributes: AttributeSelection,
 }
 
-impl<SpatialQuery: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialQuery, A> {
-    pub fn spatial_query(&self) -> SpatialQuery {
+impl<SpatialBounds: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialBounds, A> {
+    pub fn spatial_query(&self) -> SpatialBounds {
         self.spatial_query
     }
 
@@ -28,7 +28,7 @@ impl<SpatialQuery: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialQuery
         self.time_interval
     }
 
-    pub fn spatial_query_mut(&mut self) -> &mut SpatialQuery {
+    pub fn spatial_query_mut(&mut self) -> &mut SpatialBounds {
         &mut self.spatial_query
     }
 

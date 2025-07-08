@@ -538,7 +538,7 @@ where
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

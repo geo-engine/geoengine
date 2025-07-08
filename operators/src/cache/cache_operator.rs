@@ -159,7 +159,7 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 struct CacheQueryProcessor<P, E, Q, U, R>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialQuery = Q, Selection = U, ResultDescription = R>,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U, ResultDescription = R>,
 {
     processor: P,
     cache_key: CanonicOperatorName,
@@ -168,7 +168,7 @@ where
 impl<P, E, Q, U, R> CacheQueryProcessor<P, E, Q, U, R>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialQuery = Q, Selection = U, ResultDescription = R> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U, ResultDescription = R> + Sized,
 {
     pub fn new(processor: P, cache_key: CanonicOperatorName) -> Self {
         CacheQueryProcessor {
@@ -181,7 +181,7 @@ where
 #[async_trait]
 impl<P, E, S, U, R> QueryProcessor for CacheQueryProcessor<P, E, S, U, R>
 where
-    P: QueryProcessor<Output = E, SpatialQuery = S, Selection = U, ResultDescription = R> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = S, Selection = U, ResultDescription = R> + Sized,
     S: Clone + Send + Sync + 'static,
     U: QueryAttributeSelection,
     E: CacheElement<Query = QueryRectangle<S, U>>
@@ -195,13 +195,13 @@ where
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = U>,
 {
     type Output = E;
-    type SpatialQuery = S;
+    type SpatialBounds = S;
     type Selection = U;
     type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialQuery, Self::Selection>,
+        query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let shared_cache = ctx

@@ -297,13 +297,13 @@ impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<PixelOut>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = RasterSpatialQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

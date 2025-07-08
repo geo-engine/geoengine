@@ -138,7 +138,7 @@ where
     Q: RasterQueryProcessor<RasterType = PIn>,
 {
     type Output = RasterTile2D<POut>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

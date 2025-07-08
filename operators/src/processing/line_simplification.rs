@@ -297,7 +297,7 @@ impl<P, G, A> QueryProcessor for LineSimplificationProcessor<P, G, A>
 where
     P: QueryProcessor<
             Output = FeatureCollection<G>,
-            SpatialQuery = VectorSpatialQueryRectangle,
+            SpatialBounds = VectorSpatialQueryRectangle,
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         >,
@@ -309,7 +309,7 @@ where
         >,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

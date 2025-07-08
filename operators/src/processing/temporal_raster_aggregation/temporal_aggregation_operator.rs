@@ -217,7 +217,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>
         + QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = SpatialGridQueryRectangle,
+            SpatialBounds = SpatialGridQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -469,14 +469,14 @@ impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = RasterSpatialQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

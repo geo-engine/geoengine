@@ -392,7 +392,7 @@ struct GridFoldState {
 #[async_trait]
 impl QueryProcessor for VisualPointClusteringProcessor {
     type Output = MultiPointCollection;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

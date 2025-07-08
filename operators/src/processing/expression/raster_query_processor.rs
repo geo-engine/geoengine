@@ -62,7 +62,7 @@ where
     Tuple: ExpressionTupleProcessor<TO>,
 {
     type Output = RasterTile2D<TO>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

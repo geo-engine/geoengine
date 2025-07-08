@@ -238,7 +238,7 @@ where
 #[async_trait]
 impl<Q, T, S, A, R> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
-    Q: QueryProcessor<Output = T, SpatialQuery = S, Selection = A, ResultDescription = R>,
+    Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = A, ResultDescription = R>,
     S: std::fmt::Debug + Send + Sync + 'static + Clone + Copy,
     A: QueryAttributeSelection + 'static,
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = A>
@@ -246,13 +246,13 @@ where
     T: Send,
 {
     type Output = T;
-    type SpatialQuery = S;
+    type SpatialBounds = S;
     type Selection = A;
     type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialQuery, Self::Selection>,
+        query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let qc = self.next_query_count();

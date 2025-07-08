@@ -376,7 +376,7 @@ struct CsvSourceProcessor {
 #[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

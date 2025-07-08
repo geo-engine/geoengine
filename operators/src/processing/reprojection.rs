@@ -346,7 +346,7 @@ impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
     Q: QueryProcessor<
             Output = FeatureCollection<G>,
-            SpatialQuery = VectorSpatialQueryRectangle,
+            SpatialBounds = VectorSpatialQueryRectangle,
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         >,
@@ -354,7 +354,7 @@ where
     G: Geometry + ArrowTyped,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -593,7 +593,7 @@ impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = SpatialGridQueryRectangle,
+            SpatialBounds = SpatialGridQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -622,14 +622,14 @@ impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = RasterSpatialQueryRectangle,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = RasterSpatialQueryRectangle;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

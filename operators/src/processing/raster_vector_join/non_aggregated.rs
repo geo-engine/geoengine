@@ -389,7 +389,7 @@ where
     FeatureCollection<G>: GeometryCollection + PixelCoverCreator<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = VectorSpatialQueryRectangle;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
