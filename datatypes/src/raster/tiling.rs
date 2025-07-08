@@ -3,9 +3,7 @@ use super::{
     SpatialGridDefinition,
 };
 use crate::{
-    primitives::{
-        Coordinate2D, RasterSpatialQueryRectangle, SpatialPartition2D, SpatialPartitioned,
-    },
+    primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned},
     raster::GridBounds,
     util::test::TestDefault,
 };
@@ -113,9 +111,9 @@ impl TilingStrategy {
     ///
     pub fn raster_spatial_query_to_tiling_grid_box(
         &self,
-        raster_spatial_query: &RasterSpatialQueryRectangle,
+        raster_spatial_query: GridBoundingBox2D,
     ) -> GridBoundingBox2D {
-        self.global_pixel_grid_bounds_to_tile_grid_bounds(raster_spatial_query.grid_bounds())
+        self.global_pixel_grid_bounds_to_tile_grid_bounds(raster_spatial_query)
     }
 
     /// Returns an iterator over all tile indices that intersect with the given `grid_bounds`.

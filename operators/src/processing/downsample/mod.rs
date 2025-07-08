@@ -13,8 +13,7 @@ use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution, TimeInstance,
-    TimeInterval,
+    RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
@@ -240,14 +239,14 @@ impl<Q, P> QueryProcessor for DownsampleProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

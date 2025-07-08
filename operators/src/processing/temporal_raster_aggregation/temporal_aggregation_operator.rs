@@ -25,11 +25,8 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialGridQueryRectangle,
-    TimeInstance,
-};
-use geoengine_datatypes::raster::{Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInstance};
+use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use log::debug;
 use serde::{Deserialize, Serialize};
@@ -217,7 +214,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>
         + QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = SpatialGridQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -469,14 +466,14 @@ impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

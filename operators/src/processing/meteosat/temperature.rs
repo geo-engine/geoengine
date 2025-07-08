@@ -12,10 +12,11 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
-    RasterQueryRectangle, RasterSpatialQueryRectangle,
+    RasterQueryRectangle,
 };
 use geoengine_datatypes::raster::{
-    MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    GridBoundingBox2D, MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -293,14 +294,14 @@ impl<Q, P> QueryProcessor for TemperatureProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

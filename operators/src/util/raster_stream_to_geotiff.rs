@@ -131,7 +131,7 @@ where
         geo_transform: initial_tile_info.global_geo_transform,
     };
     let num_tiles_per_timestep = strat
-        .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_query().grid_bounds())
+        .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.grid_bounds())
         .number_of_elements();
     let num_timesteps = tiles.len() / num_tiles_per_timestep;
 
@@ -140,15 +140,13 @@ where
 
     let coordinate_of_ul_query_pixel = strat
         .geo_transform
-        .grid_idx_to_pixel_upper_left_coordinate_2d(
-            query_rect.spatial_query().grid_bounds().min_index(),
-        );
+        .grid_idx_to_pixel_upper_left_coordinate_2d(query_rect.grid_bounds().min_index());
     let output_geo_transform =
         GeoTransform::new(coordinate_of_ul_query_pixel, x_pixel_size, y_pixel_size);
-    let out_pixel_bounds = query_rect.spatial_query().grid_bounds();
+    let out_pixel_bounds = query_rect.grid_bounds();
 
     let uncompressed_byte_size =
-        query_rect.spatial_bounds.grid_bounds().number_of_elements() * std::mem::size_of::<T>();
+        query_rect.grid_bounds().number_of_elements() * std::mem::size_of::<T>();
 
     let use_big_tiff =
         gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
@@ -181,8 +179,8 @@ where
 
     let mut dataset = driver.create_with_band_type_with_options::<T, _>(
         &file_path,
-        query_rect.spatial_query().grid_bounds().axis_size_x(),
-        query_rect.spatial_query().grid_bounds().axis_size_y(),
+        query_rect.grid_bounds().axis_size_x(),
+        query_rect.grid_bounds().axis_size_y(),
         num_timesteps,
         &options,
     )?;
@@ -515,16 +513,14 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         let file_path = file_path.join("raster.tiff");
         let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
 
-        let width = query_rect.spatial_query().grid_bounds().axis_size_x();
-        let height = query_rect.spatial_query().grid_bounds().axis_size_y();
+        let width = query_rect.grid_bounds().axis_size_x();
+        let height = query_rect.grid_bounds().axis_size_y();
 
-        let output_pixel_grid_bounds = query_rect.spatial_query().grid_bounds();
+        let output_pixel_grid_bounds = query_rect.grid_bounds();
 
         let out_geo_transform_origin = tiling_strategy
             .geo_transform
-            .grid_idx_to_pixel_upper_left_coordinate_2d(
-                query_rect.spatial_query().grid_bounds().min_index(),
-            );
+            .grid_idx_to_pixel_upper_left_coordinate_2d(query_rect.grid_bounds().min_index());
 
         let output_geo_transform = GeoTransform::new(
             out_geo_transform_origin,

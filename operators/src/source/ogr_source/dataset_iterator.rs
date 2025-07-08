@@ -8,7 +8,7 @@ use crate::util::gdal::gdal_open_dataset_ex;
 use gdal::vector::sql::Dialect;
 use gdal::vector::{Feature, LayerAccess};
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::primitives::{SpatialBounded, VectorQueryRectangle};
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use log::debug;
 use ouroboros::self_referencing;
 use std::cell::Cell;
@@ -202,7 +202,7 @@ impl OgrDatasetIterator {
                 query_rectangle.spatial_bounds, &dataset_information.layer_name
             );
             // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-            features_provider.set_spatial_filter(&query_rectangle.spatial_query().spatial_bounds());
+            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds());
         }
 
         Ok((features_provider, time_filter.is_some()))

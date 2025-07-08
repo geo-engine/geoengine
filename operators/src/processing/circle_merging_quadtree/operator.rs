@@ -6,11 +6,11 @@ use futures::stream::{BoxStream, FuturesUnordered};
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::primitives::{
-    Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint, MultiPointAccess,
-    SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
+    BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
+    MultiPointAccess, SpatialBounded, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -392,7 +392,7 @@ struct GridFoldState {
 #[async_trait]
 impl QueryProcessor for VisualPointClusteringProcessor {
     type Output = MultiPointCollection;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

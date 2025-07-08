@@ -445,7 +445,7 @@ where
         time_bounds: FillerTimeBounds,
     ) -> Self {
         let grid_bounds = tiling_strat
-            .raster_spatial_query_to_tiling_grid_box(&query_rect_to_answer.spatial_query());
+            .raster_spatial_query_to_tiling_grid_box(query_rect_to_answer.grid_bounds());
         Self::new(
             stream,
             grid_bounds,

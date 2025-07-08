@@ -287,7 +287,7 @@ where
                             let num_spatial_tiles = *num_spatial_tiles.get_or_insert_with(|| {
                                 Self::number_of_tiles_in_grid_bounds(
                                     &tile_a.tile_information(),
-                                    query_rect.spatial_query().grid_bounds(), // TODO: this should be calculated from the tile grid bounds and not the spatial bounds.
+                                    query_rect.grid_bounds(), // TODO: this should be calculated from the tile grid bounds and not the spatial bounds.
                                 )
                             });
 
@@ -440,7 +440,7 @@ where
                     let num_spatial_tiles = *num_spatial_tiles.get_or_insert_with(|| {
                         Self::number_of_tiles_in_grid_bounds(
                             &tiles[0].tile_information(),
-                            query_rect.spatial_query().grid_bounds(),
+                            query_rect.grid_bounds(),
                         )
                     });
 

@@ -13,9 +13,9 @@ use futures::{
     stream::{BoxStream, TryFold},
 };
 use futures::{Stream, StreamExt, TryFutureExt};
+use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, RasterSpatialQueryRectangle};
 use geoengine_datatypes::raster::{
     EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep, TilingStrategy,
 };
@@ -132,8 +132,8 @@ where
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
     ) -> Self {
-        let grid_bounds = query_rect_to_answer.spatial_bounds.grid_bounds();
-        let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
+        let tile_bounds = tiling_strategy
+            .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect_to_answer.spatial_bounds);
 
         let first_tile_spec = TileInformation {
             global_geo_transform: tiling_strategy.geo_transform,
@@ -209,7 +209,7 @@ where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
             Output = RasterTile2D<PixelType>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -226,7 +226,7 @@ where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
             Output = RasterTile2D<PixelType>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,

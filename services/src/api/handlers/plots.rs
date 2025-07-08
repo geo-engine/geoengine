@@ -140,7 +140,7 @@ async fn get_plot_handler<C: ApplicationContext>(
         Some(query_rect)
     } else {
         let repr_spatial_query = reproject_spatial_query(
-            query_rect.spatial_query(),
+            query_rect.spatial_bounds(),
             workflow_spatial_ref,
             request_spatial_ref,
         )?;

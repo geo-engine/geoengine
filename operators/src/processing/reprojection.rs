@@ -26,11 +26,10 @@ use geoengine_datatypes::{
         reproject_spatial_query,
     },
     primitives::{
-        BandSelection, ColumnSelection, Geometry, RasterQueryRectangle,
-        RasterSpatialQueryRectangle, SpatialGridQueryRectangle, SpatialPartition2D,
-        VectorQueryRectangle, VectorSpatialQueryRectangle,
+        BandSelection, BoundingBox2D, ColumnSelection, Geometry, RasterQueryRectangle,
+        SpatialPartition2D, VectorQueryRectangle,
     },
-    raster::{Pixel, RasterTile2D, TilingSpecification},
+    raster::{GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
     util::arrow::ArrowTyped,
 };
@@ -346,7 +345,7 @@ impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
     Q: QueryProcessor<
             Output = FeatureCollection<G>,
-            SpatialBounds = VectorSpatialQueryRectangle,
+            SpatialBounds = BoundingBox2D,
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         >,
@@ -354,7 +353,7 @@ where
     G: Geometry + ArrowTyped,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -364,7 +363,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let rewritten_spatial_query =
-            reproject_spatial_query(query.spatial_query(), self.from, self.to)?;
+            reproject_spatial_query(query.spatial_bounds(), self.from, self.to)?;
 
         let rewritten_query = rewritten_spatial_query
             .map(|rwq| VectorQueryRectangle::new(rwq, query.time_interval, query.attributes));
@@ -593,7 +592,7 @@ impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = SpatialGridQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -622,14 +621,14 @@ impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

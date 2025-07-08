@@ -290,11 +290,11 @@ impl ClassHistogramRasterQueryProcessor {
 
         let rd = self.input.result_descriptor();
 
-        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+        let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
+            BandSelection::first(),
             rd.tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform(),
-            BandSelection::first(),
         );
 
         call_on_generic_raster_processor!(&self.input, processor => {
@@ -355,7 +355,7 @@ impl ClassHistogramVectorQueryProcessor {
             .collect();
 
         let query = VectorQueryRectangle::new(
-            query.spatial_query(),
+            query.spatial_bounds(),
             query.time_interval,
             ColumnSelection::all(), // TODO: figure out why this is a vector query?
         );

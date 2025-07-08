@@ -372,11 +372,11 @@ impl HistogramRasterQueryProcessor {
         let rd = self.input.result_descriptor();
 
         // TODO: compute only number of buckets if possible
-        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+        let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
+            BandSelection::new_single(self.band_idx),
             rd.tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform(),
-            BandSelection::new_single(self.band_idx),
         );
 
         call_on_generic_raster_processor!(&self.input, processor => {
@@ -401,11 +401,11 @@ impl HistogramRasterQueryProcessor {
 
         let rd = self.input.result_descriptor();
 
-        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+        let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
+            BandSelection::new_single(self.band_idx),
             rd.tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform(),
-            BandSelection::new_single(self.band_idx),
         );
 
         call_on_generic_raster_processor!(&self.input, processor => {

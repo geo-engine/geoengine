@@ -171,65 +171,64 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
         let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
 
         if let MultiPoint(points_processor) = &self.input {
-            let query_grid_bounds = query.spatial_query().grid_bounds();
+            let query_grid_bounds = query.grid_bounds();
             let query_spatial_partition =
                 tiling_geo_transform.grid_to_spatial_bounds(&query_grid_bounds);
 
-            let tiles =
-                stream::iter(tiling_strategy.tile_information_iterator_from_grid_bounds(
-                    query.spatial_query().grid_bounds(),
-                ))
-                .then(move |tile_info| async move {
-                    let tile_spatial_bounds = tile_info.spatial_partition();
+            let tiles = stream::iter(
+                tiling_strategy.tile_information_iterator_from_grid_bounds(query.grid_bounds()),
+            )
+            .then(move |tile_info| async move {
+                let tile_spatial_bounds = tile_info.spatial_partition();
 
-                    let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
+                let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
 
-                    let vector_query = VectorQueryRectangle::with_bounds(
-                        tile_spatial_bounds.as_bbox(),
-                        query.time_interval,
-                        ColumnSelection::all(), // FIXME: should be configurable
-                    );
+                let vector_query = VectorQueryRectangle::with_bounds(
+                    tile_spatial_bounds.as_bbox(),
+                    query.time_interval,
+                    ColumnSelection::all(), // FIXME: should be configurable
+                );
 
-                    let mut chunks = points_processor.query(vector_query, ctx).await?;
+                let mut chunks = points_processor.query(vector_query, ctx).await?;
 
-                    let mut cache_hint = CacheHint::max_duration();
+                let mut cache_hint = CacheHint::max_duration();
 
-                    let mut grid_data =
-                        GridWithFlexibleBoundType::new_filled(tile_info.global_pixel_bounds(), 0.);
-                    while let Some(chunk) = chunks.next().await {
-                        let chunk = chunk?;
+                let mut grid_data =
+                    GridWithFlexibleBoundType::new_filled(tile_info.global_pixel_bounds(), 0.);
+                while let Some(chunk) = chunks.next().await {
+                    let chunk = chunk?;
 
-                        cache_hint.merge_with(&chunk.cache_hint);
+                    cache_hint.merge_with(&chunk.cache_hint);
 
-                        grid_data = spawn_blocking(move || {
-                            for &coord in chunk.coordinates() {
-                                if !tile_spatial_bounds.contains_coordinate(&coord)
-                                    || !query_spatial_partition.contains_coordinate(&coord)
-                                // TODO: old code checks if the pixel center is in the query bounds.
-                                {
-                                    continue;
-                                }
-                                let GridIdx([y, x]) = tiling_geo_transform
-                                    .coordinate_to_grid_idx_2d(coord)
-                                    - tile_info.global_upper_left_pixel_idx();
-                                grid_data.data[x as usize + y as usize * grid_size_x] += 1.;
+                    grid_data = spawn_blocking(move || {
+                        for &coord in chunk.coordinates() {
+                            if !tile_spatial_bounds.contains_coordinate(&coord)
+                                || !query_spatial_partition.contains_coordinate(&coord)
+                            // TODO: old code checks if the pixel center is in the query bounds.
+                            {
+                                continue;
                             }
-                            grid_data
-                        })
-                        .await
-                        .expect("Should only forward panics from spawned task");
-                    }
+                            let GridIdx([y, x]) = tiling_geo_transform
+                                .coordinate_to_grid_idx_2d(coord)
+                                - tile_info.global_upper_left_pixel_idx();
+                            grid_data.data[x as usize + y as usize * grid_size_x] += 1.;
+                        }
+                        grid_data
+                    })
+                    .await
+                    .expect("Should only forward panics from spawned task");
+                }
 
-                    let tile_grid = grid_data.unbounded();
+                let tile_grid = grid_data.unbounded();
 
-                    Ok(RasterTile2D::new_with_tile_info(
-                        query.time_interval,
-                        tile_info,
-                        0,
-                        GridOrEmpty::Grid(tile_grid.into()),
-                        cache_hint,
-                    ))
-                });
+                Ok(RasterTile2D::new_with_tile_info(
+                    query.time_interval,
+                    tile_info,
+                    0,
+                    GridOrEmpty::Grid(tile_grid.into()),
+                    cache_hint,
+                ))
+            });
             Ok(tiles.boxed())
         } else {
             Ok(generate_zeroed_tiles(
@@ -257,7 +256,7 @@ fn generate_zeroed_tiles<'a>(
 
     stream::iter(
         tiling_strategy
-            .tile_information_iterator_from_grid_bounds(query.spatial_query().grid_bounds())
+            .tile_information_iterator_from_grid_bounds(query.grid_bounds())
             .map(move |tile_info| {
                 let tile_data = vec![0.; tile_shape.number_of_elements()];
                 let tile_grid = Grid2D::new(tile_shape, tile_data)

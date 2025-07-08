@@ -16,8 +16,7 @@ use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution, TimeInstance,
-    TimeInterval,
+    RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     Bilinear, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
@@ -254,7 +253,7 @@ impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -262,7 +261,7 @@ where
     I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

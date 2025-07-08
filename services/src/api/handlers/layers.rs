@@ -25,7 +25,7 @@ use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{FromRequest, HttpResponse, Responder, web};
-use geoengine_datatypes::primitives::{BandSelection, SpatialGridQueryRectangle};
+use geoengine_datatypes::primitives::BandSelection;
 use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
 
 use serde::{Deserialize, Serialize};
@@ -803,11 +803,9 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let result_descriptor = raster_operator.result_descriptor();
 
-    let sqr = SpatialGridQueryRectangle::new(
-        result_descriptor
-            .tiling_grid_definition(execution_context.tiling_specification())
-            .tiling_grid_bounds(),
-    );
+    let sqr = result_descriptor
+        .tiling_grid_definition(execution_context.tiling_specification())
+        .tiling_grid_bounds();
 
     let qr_time = result_descriptor
         .time

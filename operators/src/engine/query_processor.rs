@@ -13,11 +13,10 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, ColumnSelection, PlotQueryRectangle,
-    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, RasterSpatialQueryRectangle,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
+    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel};
+use geoengine_datatypes::raster::{DynamicRasterDataType, GridBoundingBox2D, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 use ouroboros::self_referencing;
 
@@ -109,7 +108,7 @@ impl<S, T> RasterQueryProcessor for S
 where
     S: QueryProcessor<
             Output = RasterTile2D<T>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         > + Sync
@@ -155,7 +154,7 @@ impl<S, VD> VectorQueryProcessor for S
 where
     S: QueryProcessor<
             Output = VD,
-            SpatialBounds = VectorSpatialQueryRectangle,
+            SpatialBounds = BoundingBox2D,
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         > + Sync
@@ -229,7 +228,7 @@ where
     T: Pixel,
 {
     type Output = RasterTile2D<T>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -252,7 +251,7 @@ where
     V: 'static,
 {
     type Output = V;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

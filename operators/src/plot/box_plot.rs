@@ -319,12 +319,12 @@ impl BoxPlotRasterQueryProcessor {
     ) -> Result<Option<BoxPlotAttribute>> {
         let result_descrpitor = input.result_descriptor();
 
-        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+        let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
+            BandSelection::first(),
             result_descrpitor
                 .tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform(),
-            BandSelection::first(),
         );
 
         call_on_generic_raster_processor!(input, processor => {

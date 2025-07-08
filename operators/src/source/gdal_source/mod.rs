@@ -30,12 +30,11 @@ use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
-use geoengine_datatypes::primitives::SpatialGridQueryRectangle;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
         BandSelection, CacheHint, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-        RasterSpatialQueryRectangle, TimeInstance, TimeInterval,
+        TimeInstance, TimeInterval,
     },
     raster::{
         ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D,
@@ -533,14 +532,14 @@ impl GdalRasterLoader {
     /// A stream of futures producing `RasterTile2D` for a single slice in time
     ///
     fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-        spatial_query: SpatialGridQueryRectangle,
+        spatial_query: GridBoundingBox2D,
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
         reader_mode: GdalReaderMode,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
         stream::iter(
             tiling_strategy
-                .tile_information_iterator_from_grid_bounds(spatial_query.grid_bounds())
+                .tile_information_iterator_from_grid_bounds(spatial_query)
                 .map(move |tile| {
                     GdalRasterLoader::load_tile_async(
                         info.params.clone(),
@@ -558,7 +557,7 @@ impl GdalRasterLoader {
         S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>>,
     >(
         loading_info_stream: S,
-        spatial_query: SpatialGridQueryRectangle,
+        spatial_query: GridBoundingBox2D,
         tiling_strategy: TilingStrategy,
         reader_mode: GdalReaderMode,
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> + use<S, T> {
@@ -605,7 +604,7 @@ where
     P: Pixel + gdal::raster::GdalType + FromPrimitive,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -652,7 +651,7 @@ where
 
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
 
-        let query_pixel_bounds = query.spatial_query().grid_bounds();
+        let query_pixel_bounds = query.grid_bounds();
 
         let mut empty = false;
 
@@ -734,7 +733,7 @@ where
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             stream::iter(skipping_loading_info),
-            query.spatial_query(),
+            query.grid_bounds(),
             tiling_strategy,
             reader_mode,
         );
@@ -1268,9 +1267,7 @@ mod tests {
     use crate::util::gdal::add_ndvi_dataset;
     use float_cmp::assert_approx_eq;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{
-        AxisAlignedRectangle, SpatialGridQueryRectangle, SpatialPartition2D, TimeInstance,
-    };
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{BoundedGrid, GridShape2D, SpatialGridDefinition};
     use geoengine_datatypes::raster::{
         EmptyGrid2D, GridBounds, GridIdx2D, TilesEqualIgnoringCacheHint,
@@ -1302,7 +1299,7 @@ mod tests {
         exe_ctx: &MockExecutionContext,
         query_ctx: &MockQueryContext,
         name: NamedData,
-        spatial_query: SpatialGridQueryRectangle,
+        spatial_query: GridBoundingBox2D,
         time_interval: TimeInterval,
     ) -> Vec<Result<RasterTile2D<u8>>> {
         let op = GdalSource {
@@ -1729,9 +1726,7 @@ mod tests {
         let mut exe_ctx = MockExecutionContext::test_default();
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
 
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001); // 2014-01-01
 
@@ -1772,9 +1767,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
 
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_393_632_000_000); // 2014-01-01 - 2014-03-01
 
@@ -1800,9 +1793,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
         let time_interval = TimeInterval::new_unchecked(1_380_585_600_000, 1_380_585_600_000); // 2013-10-01 - 2013-10-01
 
         let c = query_gdal_source(&exe_ctx, &query_ctx, id, spatial_query, time_interval).await;
@@ -1822,9 +1813,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
         let time_interval = TimeInterval::new_unchecked(1_420_074_000_000, 1_420_074_000_000); // 2015-01-01 - 2015-01-01
 
         let c = query_gdal_source(&exe_ctx, &query_ctx, id, spatial_query, time_interval).await;
@@ -1846,9 +1835,7 @@ mod tests {
         let query_ctx = MockQueryContext::test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
         let time_interval = TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000); // 2013-12-01 - 2014-01-01
 
         let c = query_gdal_source(&exe_ctx, &query_ctx, id, spatial_query, time_interval).await;

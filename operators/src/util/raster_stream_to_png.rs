@@ -131,9 +131,8 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
     let output_cache_hint = CacheHint::max_duration();
 
-    let output_grid = GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(
-        query_rect.spatial_bounds.grid_bounds(),
-    );
+    let output_grid =
+        GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(query_rect.grid_bounds());
 
     let accu = Ok((output_grid, output_cache_hint));
 
@@ -168,7 +167,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     let rgb_channel_count = query_rect.attributes.count() as usize;
     let no_data_color = rgb_params.no_data_color;
     let tile_template: GridOrEmpty<GridBoundingBox2D, u32> =
-        GridOrEmpty::new_empty_shape(query_rect.spatial_bounds.grid_bounds());
+        GridOrEmpty::new_empty_shape(query_rect.grid_bounds());
     let output_cache_hint = CacheHint::max_duration();
     let red_band_index = band_positions[0];
     let green_band_index = band_positions[1];

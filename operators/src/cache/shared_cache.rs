@@ -853,12 +853,10 @@ pub trait CacheQueryMatch<RHS = Self> {
 
 impl CacheQueryMatch for RasterQueryRectangle {
     fn is_match(&self, query: &RasterQueryRectangle) -> bool {
-        let cache_spatial_query = self.spatial_query();
-        let query_spatial_query = query.spatial_query();
+        let cache_spatial_query = self.grid_bounds();
+        let query_spatial_query = query.grid_bounds();
 
-        cache_spatial_query
-            .grid_bounds()
-            .contains(&query_spatial_query.grid_bounds())
+        cache_spatial_query.contains(&query_spatial_query)
             && self.time_interval.contains(&query.time_interval)
     }
 }

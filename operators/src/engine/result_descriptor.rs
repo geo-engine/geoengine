@@ -6,8 +6,7 @@ use geoengine_datatypes::operations::reproject::{CoordinateProjection, Reproject
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, Coordinate2D,
     FeatureDataType, Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle,
-    SpatialGridQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-    VectorSpatialQueryRectangle,
+    SpatialPartition2D, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
@@ -297,7 +296,7 @@ pub struct RasterResultDescriptor {
 
 impl ResultDescriptor for RasterResultDescriptor {
     type DataType = RasterDataType;
-    type QueryRectangleSpatialBounds = SpatialGridQueryRectangle;
+    type QueryRectangleSpatialBounds = GridBoundingBox2D;
     type QueryRectangleAttributeSelection = BandSelection;
 
     fn data_type(&self) -> Self::DataType {
@@ -456,7 +455,7 @@ impl VectorResultDescriptor {
 
 impl ResultDescriptor for VectorResultDescriptor {
     type DataType = VectorDataType;
-    type QueryRectangleSpatialBounds = VectorSpatialQueryRectangle;
+    type QueryRectangleSpatialBounds = BoundingBox2D;
     type QueryRectangleAttributeSelection = ColumnSelection;
 
     fn data_type(&self) -> Self::DataType {

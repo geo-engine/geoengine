@@ -1,60 +1,61 @@
 mod dataset_iterator;
 
+use self::dataset_iterator::OgrDatasetIterator;
+use crate::{
+    adapters::FeatureCollectionStreamExt,
+    engine::{
+        CanonicOperatorName, InitializedVectorOperator, MetaData, OperatorData, OperatorName,
+        QueryContext, QueryProcessor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    },
+    error::{self, Error},
+    util::{Result, input::StringOrNumberRange, safe_lock_mutex},
+};
+use async_trait::async_trait;
 use futures::FutureExt;
 use futures::future::{BoxFuture, Future};
 use futures::stream::{BoxStream, FusedStream};
 use futures::task::Context;
 use futures::{Stream, StreamExt, ready};
-use gdal::vector::sql::ResultSet;
-use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
-use geoengine_datatypes::collections::{
-    BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
-    FeatureCollectionModifications, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    VectorDataType,
-};
-use geoengine_datatypes::primitives::CacheTtlSeconds;
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
-    FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
-    NoGeometry, SpatialBounded, TimeInstance, TimeInterval, TimeStep, TypedGeometry,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
-};
-use geoengine_datatypes::util::arrow::ArrowTyped;
-use log::debug;
-use postgres_protocol::escape::{escape_identifier, escape_literal};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::ops::{Add, DerefMut};
-use std::path::PathBuf;
-use std::pin::Pin;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::task::Poll;
-use tokio::sync::Mutex;
-
-use self::dataset_iterator::OgrDatasetIterator;
-use crate::adapters::FeatureCollectionStreamExt;
-use crate::engine::{
-    CanonicOperatorName, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
-};
-use crate::error::Error;
-use crate::util::input::StringOrNumberRange;
-use crate::util::{Result, safe_lock_mutex};
-use crate::{
-    engine::{
-        InitializedVectorOperator, MetaData, QueryContext, SourceOperator,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+use gdal::{
+    errors::GdalError,
+    vector::{
+        Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType, sql::ResultSet,
     },
-    error,
 };
-use async_trait::async_trait;
-use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::ColumnSelection;
+use geoengine_datatypes::{
+    collections::{
+        BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
+        FeatureCollectionModifications, FeatureCollectionRowBuilder,
+        GeoFeatureCollectionRowBuilder, VectorDataType,
+    },
+    primitives::{
+        AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, Coordinate2D, DateTime,
+        DateTimeParseFormat, FeatureDataType, FeatureDataValue, Geometry, MultiLineString,
+        MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry,
+        VectorQueryRectangle,
+    },
+    util::arrow::ArrowTyped,
+};
+use log::debug;
 use pin_project::pin_project;
+use postgres_protocol::escape::{escape_identifier, escape_literal};
 use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Add, DerefMut},
+    path::PathBuf,
+    pin::Pin,
+    str::FromStr,
+    sync::Arc,
+    task::Poll,
+};
+use tokio::sync::Mutex;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -538,7 +539,7 @@ where
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -1314,7 +1315,7 @@ where
 
         // filter out geometries that are not contained in the query's bounding box
         if !was_spatial_filtered_by_ogr
-            && !geometry.intersects_bbox(&query_rectangle.spatial_query().spatial_bounds())
+            && !geometry.intersects_bbox(&query_rectangle.spatial_bounds())
         {
             return Ok(());
         }

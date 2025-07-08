@@ -13,11 +13,9 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle,
-};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
+    Grid2D, GridBoundingBox2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
 use num::Integer;
 use num_traits::AsPrimitive;
@@ -254,7 +252,7 @@ impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -263,7 +261,7 @@ where
     A: AggregateFunction + 'static,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

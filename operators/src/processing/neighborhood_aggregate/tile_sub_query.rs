@@ -403,7 +403,7 @@ mod tests {
         );
 
         assert_eq!(
-            tile_query_rectangle.spatial_query().grid_bounds(),
+            tile_query_rectangle.grid_bounds(),
             GridBoundingBox2D::new([-514, -2], [1, 513]).unwrap()
         );
 

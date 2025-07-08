@@ -1,6 +1,4 @@
-use super::{
-    AxisAlignedRectangle, BoundingBox2D, SpatialBounded, SpatialPartition2D, TimeInterval,
-};
+use super::{AxisAlignedRectangle, BoundingBox2D, TimeInterval};
 use crate::raster::{GeoTransform, GridBoundingBox2D};
 use crate::{
     error::{DuplicateBandInQueryBandSelection, QueryBandSelectionMustNotBeEmpty},
@@ -44,21 +42,16 @@ impl<SpatialBounds: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialBoun
     }
 }
 
-pub type RasterSpatialQueryRectangle = SpatialGridQueryRectangle;
-pub type VectorSpatialQueryRectangle = BoundingBox2D;
-pub type PlotSpatialQueryRectangle = BoundingBox2D;
-
-pub type VectorQueryRectangle = QueryRectangle<VectorSpatialQueryRectangle, ColumnSelection>;
-pub type RasterQueryRectangle = QueryRectangle<RasterSpatialQueryRectangle, BandSelection>;
-pub type PlotQueryRectangle = QueryRectangle<PlotSpatialQueryRectangle, PlotSeriesSelection>;
+pub type VectorQueryRectangle = QueryRectangle<BoundingBox2D, ColumnSelection>;
+pub type RasterQueryRectangle = QueryRectangle<GridBoundingBox2D, BandSelection>;
+pub type PlotQueryRectangle = QueryRectangle<BoundingBox2D, PlotSeriesSelection>;
 
 // Implementation for VectorQueryRectangle and PlotQueryRectangle
-impl<S, A> QueryRectangle<S, A>
+impl<A> QueryRectangle<BoundingBox2D, A>
 where
-    S: SpatialBounded + Copy,
     A: QueryAttributeSelection,
 {
-    pub fn new(spatial_bounds: S, time_interval: TimeInterval, attributes: A) -> Self {
+    pub fn new(spatial_bounds: BoundingBox2D, time_interval: TimeInterval, attributes: A) -> Self {
         Self {
             spatial_bounds,
             time_interval,
@@ -67,7 +60,11 @@ where
     }
 
     /// Creates a new `QueryRectangle` from a `BoundingBox2D`, and a `TimeInterval`
-    pub fn with_bounds(spatial_bounds: S, time_interval: TimeInterval, attributes: A) -> Self {
+    pub fn with_bounds(
+        spatial_bounds: BoundingBox2D,
+        time_interval: TimeInterval,
+        attributes: A,
+    ) -> Self {
         Self {
             spatial_bounds,
             time_interval,
@@ -83,84 +80,53 @@ where
         raster_query: &RasterQueryRectangle,
         geo_transform: GeoTransform,
         attributes: A,
-    ) -> QueryRectangle<S, A>
-    where
-        S: AxisAlignedRectangle,
-    {
-        let bounds =
-            geo_transform.grid_to_spatial_bounds(&raster_query.spatial_bounds.grid_bounds());
-        let bounding_box = S::from_min_max(bounds.lower_left(), bounds.upper_right())
+    ) -> QueryRectangle<BoundingBox2D, A> {
+        let bounds = geo_transform.grid_to_spatial_bounds(&raster_query.grid_bounds());
+        let bounding_box = BoundingBox2D::from_min_max(bounds.lower_left(), bounds.upper_right())
             .expect("Bounds are already valid");
 
         QueryRectangle::with_bounds(bounding_box, raster_query.time_interval, attributes)
     }
 
-    pub fn spatial_bounds(&self) -> S {
+    pub fn spatial_bounds(&self) -> BoundingBox2D {
         self.spatial_bounds
     }
 }
 
 impl RasterQueryRectangle {
-    /// Creates a new `QueryRectangle` that describes the requested grid.
-    /// The spatial query is derived from a vector query rectangle and a `GeoTransform`.
-    /// The temporal query is defined by a `TimeInterval`.
-    /// NOTE: If the distance between the upper left of the spatial partition and the origin coordinate is not at a multiple of the spatial resolution, the grid bounds will be shifted.
-    pub fn with_spatial_query_and_geo_transform<S: SpatialBounded, A: QueryAttributeSelection>(
-        vector_query: &QueryRectangle<S, A>,
-        geo_transform: GeoTransform,
-        attributes: BandSelection,
-    ) -> Self {
-        Self::new(
-            SpatialGridQueryRectangle::with_bounding_box_and_geo_transform(
-                vector_query.spatial_bounds.spatial_bounds(),
-                geo_transform,
-            ),
-            vector_query.time_interval,
-            attributes,
-        )
-    }
-
     pub fn new_with_grid_bounds(
         grid_bounds: GridBoundingBox2D,
         time_interval: TimeInterval,
         attributes: BandSelection,
     ) -> Self {
-        Self::new(
-            SpatialGridQueryRectangle::new(grid_bounds),
-            time_interval,
-            attributes,
-        )
+        Self::new(grid_bounds, time_interval, attributes)
     }
 
-    /// Creates a new `QueryRectangle` with a spatial grid query defined by a `SpatialGridQueryRectangle` and a temporal query defined by a `TimeInterval`.
+    /// Creates a new `QueryRectangle` with a spatial grid query defined by a `GridBoundingBox2D` and a temporal query defined by a `TimeInterval`.
     pub fn new(
-        spatial_bounds: SpatialGridQueryRectangle,
+        grid_bounds: GridBoundingBox2D,
         time_interval: TimeInterval,
         attributes: BandSelection,
     ) -> Self {
         Self {
-            spatial_bounds,
+            spatial_bounds: grid_bounds,
             time_interval,
             attributes,
         }
     }
 
-    pub fn from_qrect_and_geo_transform<
-        S: SpatialBounded + AxisAlignedRectangle,
-        A: QueryAttributeSelection,
-    >(
-        query: &QueryRectangle<S, A>,
+    /// Creates a new `QueryRectangle` that describes the requested grid.
+    /// The spatial query is derived from a vector query rectangle and a `GeoTransform`.
+    /// The temporal query is defined by a `TimeInterval`.
+    /// NOTE: If the distance between the upper left of the spatial partition and the origin coordinate is not at a multiple of the spatial resolution, the grid bounds will be shifted.
+    pub fn from_bounds_and_geo_transform<A: QueryAttributeSelection>(
+        query: &QueryRectangle<BoundingBox2D, A>,
         bands: BandSelection,
         geo_transform: GeoTransform,
     ) -> Self {
-        Self::new(
-            SpatialGridQueryRectangle::with_bounding_box_and_geo_transform(
-                query.spatial_bounds().as_bbox(),
-                geo_transform,
-            ),
-            query.time_interval,
-            bands,
-        )
+        let grid_bounds =
+            geo_transform.bounding_box_2d_to_intersecting_grid_bounds(&query.spatial_bounds());
+        Self::new(grid_bounds, query.time_interval, bands)
     }
 
     #[must_use]
@@ -170,6 +136,10 @@ impl RasterQueryRectangle {
             time_interval: self.time_interval,
             attributes: bands,
         }
+    }
+
+    pub fn grid_bounds(&self) -> GridBoundingBox2D {
+        self.spatial_bounds
     }
 }
 
@@ -269,69 +239,3 @@ impl PlotSeriesSelection {
 }
 
 impl QueryAttributeSelection for PlotSeriesSelection {}
-
-/*
-impl From<QueryRectangle<BoundingBox2D>> for QueryRectangle<SpatialPartition2D> {
-    fn from(value: QueryRectangle<BoundingBox2D>) -> Self {
-impl From<QueryRectangle<BoundingBox2D, ColumnSelection>>
-    for QueryRectangle<BoundingBox2D, PlotSeriesSelection>
-{
-    fn from(value: QueryRectangle<BoundingBox2D, ColumnSelection>) -> Self {
-        Self {
-            spatial_bounds: value.spatial_bounds,
-            time_interval: value.time_interval,
-            spatial_resolution: value.spatial_resolution,
-            attributes: value.attributes.into(),
-        }
-    }
-}
-*/
-
-/// A spatio-temporal grid query with a geotransform and a size in pixels.
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct SpatialGridQueryRectangle {
-    grid_bounds: GridBoundingBox2D,
-}
-
-impl SpatialGridQueryRectangle {
-    /// Creates a new `SpatialGridQueryRectangle` from a geo transform and a grid bounds.
-    pub fn new(grid_bounds: GridBoundingBox2D) -> Self {
-        Self { grid_bounds }
-    }
-
-    pub fn grid_bounds(&self) -> GridBoundingBox2D {
-        self.grid_bounds
-    }
-
-    /// Creates a new `SpatialGridQueryRectangle` from a spatial partition and a geo transform.
-    pub fn with_partition_and_geo_transform(
-        spatial_partition: SpatialPartition2D,
-        geo_transform: GeoTransform,
-    ) -> Self {
-        let grid_bounds = geo_transform.spatial_to_grid_bounds(&spatial_partition);
-
-        Self::new(grid_bounds)
-    }
-
-    /// Creates a new `SpatialGridQueryRectangle` from a spatial bounding box and a geo transform.
-    pub fn with_bounding_box_and_geo_transform(
-        spatial_bounds: BoundingBox2D,
-        geo_transform: GeoTransform,
-    ) -> Self {
-        let grid_bounds =
-            geo_transform.bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
-
-        Self::new(grid_bounds)
-    }
-
-    pub fn with_vector_query_geo_transform(
-        vector_spatial_query: VectorSpatialQueryRectangle,
-        geo_transform: GeoTransform,
-    ) -> Self {
-        let pixel_bounds = geo_transform
-            .bounding_box_2d_to_intersecting_grid_bounds(&vector_spatial_query.spatial_bounds());
-
-        Self::new(pixel_bounds)
-    }
-}

@@ -2,9 +2,7 @@ use crate::util::Result;
 use futures::future::JoinAll;
 use futures::stream::{Fuse, FusedStream, Stream};
 use futures::{Future, StreamExt, ready};
-use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, SpatialGridQueryRectangle, TimeInterval,
-};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridIdx2D, GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy,
 };
@@ -66,14 +64,14 @@ impl<Q> From<(Q, Vec<u32>)> for RasterStackerSource<Q> {
 
 #[derive(Debug)]
 pub struct PartialQueryRect {
-    pub spatial_query: SpatialGridQueryRectangle,
+    pub spatial_bounds: GridBoundingBox2D,
     pub time_interval: TimeInterval,
 }
 
 impl PartialQueryRect {
     fn raster_query_rectangle(&self, attributes: BandSelection) -> RasterQueryRectangle {
         RasterQueryRectangle {
-            spatial_bounds: self.spatial_query,
+            spatial_bounds: self.spatial_bounds,
             time_interval: self.time_interval,
             attributes,
         }
@@ -83,7 +81,7 @@ impl PartialQueryRect {
 impl From<RasterQueryRectangle> for PartialQueryRect {
     fn from(value: RasterQueryRectangle) -> Self {
         Self {
-            spatial_query: value.spatial_bounds,
+            spatial_bounds: value.spatial_bounds,
             time_interval: value.time_interval,
         }
     }
@@ -274,7 +272,7 @@ where
 
                         *num_spatial_tiles = Some(Self::number_of_tiles_in_grid_bounds(
                             &ok_tiles[0].tile_information(),
-                            query_rect.spatial_query.grid_bounds(), //TODO: use direct mehtod instead of conversion
+                            query_rect.spatial_bounds, //TODO: use direct mehtod instead of conversion
                         ));
 
                         *stream_state = StreamState::ProducingTimeSlice {
@@ -331,13 +329,13 @@ where
                             Some(tile.tile_position),
                             Self::grid_idx_for_nth_tile(
                                 &tile.tile_information(),
-                                query_rect.spatial_query.grid_bounds(),
+                                query_rect.spatial_bounds,
                                 *current_spatial_tile
                             ),
                             "RasteStacker got tile with unexpected tile_position: expected {:?}, got {:?} for source {}",
                             Self::grid_idx_for_nth_tile(
                                 &tile.tile_information(),
-                                query_rect.spatial_query.grid_bounds(),
+                                query_rect.spatial_bounds,
                                 *current_spatial_tile
                             ),
                             tile.tile_position,
@@ -589,9 +587,7 @@ mod tests {
                     .into(),
             ],
             PartialQueryRect {
-                spatial_query: SpatialGridQueryRectangle::new(
-                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                ),
+                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
         );
@@ -702,9 +698,7 @@ mod tests {
                     .into(),
             ],
             PartialQueryRect {
-                spatial_query: SpatialGridQueryRectangle::new(
-                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                ),
+                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
         );
@@ -981,9 +975,7 @@ mod tests {
                     .into(),
             ],
             PartialQueryRect {
-                spatial_query: SpatialGridQueryRectangle::new(
-                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                ),
+                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
         );
@@ -1277,9 +1269,7 @@ mod tests {
                     .into(),
             ],
             PartialQueryRect {
-                spatial_query: SpatialGridQueryRectangle::new(
-                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                ),
+                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
         );
@@ -1939,9 +1929,7 @@ mod tests {
                     .into(),
             ],
             PartialQueryRect {
-                spatial_query: SpatialGridQueryRectangle::new(
-                    GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                ),
+                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 time_interval: TimeInterval::new_unchecked(0, 10),
             },
         );

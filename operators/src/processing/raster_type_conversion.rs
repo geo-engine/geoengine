@@ -7,8 +7,8 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{StreamExt, TryFutureExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
-    primitives::{BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle},
-    raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
+    primitives::{BandSelection, RasterQueryRectangle},
+    raster::{ConvertDataType, GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
 
@@ -138,7 +138,7 @@ where
     Q: RasterQueryProcessor<RasterType = PIn>,
 {
     type Output = RasterTile2D<POut>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

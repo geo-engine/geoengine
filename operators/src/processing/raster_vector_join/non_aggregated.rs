@@ -15,8 +15,8 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, ColumnSelection, FeatureDataType, Geometry, RasterQueryRectangle,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
+    BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureDataType, Geometry,
+    RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridIdx2D, GridIndexAccess, RasterTile2D,
@@ -389,7 +389,7 @@ where
     FeatureCollection<G>: GeometryCollection + PixelCoverCreator<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

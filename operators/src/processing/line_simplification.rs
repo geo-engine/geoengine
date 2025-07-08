@@ -15,8 +15,8 @@ use geoengine_datatypes::{
     },
     error::{BoxedResultExt, ErrorSource},
     primitives::{
-        ColumnSelection, Geometry, MultiLineString, MultiLineStringRef, MultiPolygon,
-        MultiPolygonRef, SpatialResolution, VectorQueryRectangle, VectorSpatialQueryRectangle,
+        BoundingBox2D, ColumnSelection, Geometry, MultiLineString, MultiLineStringRef,
+        MultiPolygon, MultiPolygonRef, SpatialResolution, VectorQueryRectangle,
     },
     util::arrow::ArrowTyped,
 };
@@ -297,7 +297,7 @@ impl<P, G, A> QueryProcessor for LineSimplificationProcessor<P, G, A>
 where
     P: QueryProcessor<
             Output = FeatureCollection<G>,
-            SpatialBounds = VectorSpatialQueryRectangle,
+            SpatialBounds = BoundingBox2D,
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         >,
@@ -309,7 +309,7 @@ where
         >,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

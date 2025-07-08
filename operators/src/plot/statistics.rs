@@ -364,11 +364,11 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             let rd = raster_processor.result_descriptor();
 
-            let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+            let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
                 &query,
+                BandSelection::first(),
                 rd.tiling_grid_definition(ctx.tiling_specification())
                     .tiling_geo_transform(),
-                BandSelection::first(),
             );
 
             queries.push(

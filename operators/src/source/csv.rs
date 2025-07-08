@@ -1,27 +1,3 @@
-use std::path::PathBuf;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::{fs::File, sync::atomic::AtomicBool};
-
-use csv::{Position, Reader, StringRecord};
-use futures::stream::BoxStream;
-use futures::task::{Context, Poll};
-use futures::{Stream, StreamExt};
-use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{
-    ColumnSelection, SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
-};
-use serde::{Deserialize, Serialize};
-use snafu::{OptionExt, ResultExt, ensure};
-
-use geoengine_datatypes::collections::{
-    BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
-};
-use geoengine_datatypes::{
-    primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
-    spatial_reference::SpatialReference,
-};
-
 use crate::engine::{
     CanonicOperatorName, InitializedVectorOperator, OperatorData, OperatorName, QueryContext,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
@@ -31,7 +7,27 @@ use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::util::{Result, safe_lock_mutex};
 use async_trait::async_trait;
+use csv::{Position, Reader, StringRecord};
+use futures::stream::BoxStream;
+use futures::task::{Context, Poll};
+use futures::{Stream, StreamExt};
+use geoengine_datatypes::collections::{
+    BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
+};
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::{
+    primitives::{
+        BoundingBox2D, ColumnSelection, Coordinate2D, TimeInterval, VectorQueryRectangle,
+    },
+    spatial_reference::SpatialReference,
+};
+use serde::{Deserialize, Serialize};
+use snafu::{OptionExt, ResultExt, ensure};
+use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
+use std::{fs::File, sync::atomic::AtomicBool};
 
 /// Parameters for the CSV Source Operator
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
@@ -376,7 +372,7 @@ struct CsvSourceProcessor {
 #[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -386,12 +382,7 @@ impl QueryProcessor for CsvSourceProcessor {
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
-        Ok(CsvSourceStream::new(
-            self.params.clone(),
-            query.spatial_query().spatial_bounds(),
-            10,
-        )?
-        .boxed())
+        Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds(), 10)?.boxed())
     }
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {

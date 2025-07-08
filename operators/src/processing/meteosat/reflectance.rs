@@ -17,10 +17,11 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement,
-    RasterQueryRectangle, RasterSpatialQueryRectangle,
+    RasterQueryRectangle,
 };
 use geoengine_datatypes::raster::{
-    GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    GridBoundingBox2D, GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -297,13 +298,13 @@ impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<PixelOut>,
-            SpatialBounds = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 

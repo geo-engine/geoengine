@@ -11,8 +11,7 @@ use geoengine_datatypes::collections::{
     GeometryRandomAccess,
 };
 use geoengine_datatypes::primitives::{
-    ColumnSelection, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
-    VectorSpatialQueryRectangle,
+    BoundingBox2D, ColumnSelection, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -356,7 +355,7 @@ where
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

@@ -9,7 +9,7 @@ use crate::tasks::{Task, TaskId, TaskManager, TaskStatusInfo};
 use crate::workflows::workflow::WorkflowId;
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::primitives::{BandSelection, TimeInterval};
-use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::raster::{GridBoundingBox2D, TilingSpecification};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
@@ -119,7 +119,7 @@ impl<C: SessionContext, R: InitializedRasterOperator> RasterDatasetFromWorkflowT
         let processor = self.initialized_operator.query_processor()?;
 
         let query_rect: &geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::SpatialGridQueryRectangle,
+            GridBoundingBox2D,
             BandSelection,
         > = &self.info.query;
 
@@ -287,7 +287,7 @@ async fn create_dataset<C: SessionContext>(
     let source_tiling_spatial_grid =
         origin_result_descriptor.tiling_grid_definition(exe_ctx.tiling_specification());
     let query_tiling_spatial_grid =
-        source_tiling_spatial_grid.with_other_bounds(query_rectangle.spatial_bounds.grid_bounds());
+        source_tiling_spatial_grid.with_other_bounds(query_rectangle.grid_bounds());
     let result_descriptor_bounds = origin_result_descriptor
         .spatial_grid_descriptor()
         .intersection_with_tiling_grid(&query_tiling_spatial_grid)

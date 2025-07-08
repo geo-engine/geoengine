@@ -14,8 +14,8 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    ColumnSelection, FeatureDataType, FeatureDataValue, Geometry, VectorQueryRectangle,
-    VectorSpatialQueryRectangle,
+    BoundingBox2D, ColumnSelection, FeatureDataType, FeatureDataValue, Geometry,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -130,7 +130,7 @@ where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
 {
     type Output = FeatureCollection<G>;
-    type SpatialBounds = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 

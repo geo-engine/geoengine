@@ -257,7 +257,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         let spatial_bounds = SpatialGridDescriptor::new_source(spatial_grid)
             .tiling_grid_definition(tiling_specification)
             .tiling_geo_transform()
-            .grid_to_spatial_bounds(&query.spatial_bounds.grid_bounds());
+            .grid_to_spatial_bounds(&query.grid_bounds());
 
         let spatial_bounds_query = VectorQueryRectangle::with_bounds(
             spatial_bounds.as_bbox(),
