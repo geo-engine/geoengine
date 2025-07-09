@@ -160,7 +160,7 @@ where
         let pixel_size_x = spatial_resolution.x;
         debug_assert!(pixel_size_x.is_sign_positive());
         // and the pixel size on  the y-axis is always decreasing
-        let pixel_size_y = spatial_resolution.y * -1.0;
+        let pixel_size_y = -spatial_resolution.y;
         debug_assert!(pixel_size_y.is_sign_negative());
 
         let tiling_strategy = self

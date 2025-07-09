@@ -93,7 +93,7 @@ impl Channel {
 
         let s1 = 42164.0 - sn * cosxcosy;
         let s2 = sn * sinx * cosy;
-        let s3 = -1.0 * sn * siny;
+        let s3 = -sn * siny;
         let sxy = (s1.powi(2) + s2.powi(2)).sqrt();
 
         //
