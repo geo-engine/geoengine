@@ -66,6 +66,7 @@ pub fn duplicate_or_empty_str_slice<S: AsRef<str>>(strings: &[S]) -> DuplicateOr
 
 pub mod ge_tracing_removed {
 
+    /// This trace! macro call is removed on release builds!
     #[macro_export]
     macro_rules! ge_tracing_removed_trace {
         ($($tts:tt)*) => {
@@ -75,6 +76,7 @@ pub mod ge_tracing_removed {
         }
     }
 
+    /// This debug! macro call is removed on release builds!
     #[macro_export]
     macro_rules! ge_tracing_removed_debug {
         ($($tts:tt)*) => {

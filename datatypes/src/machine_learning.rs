@@ -170,6 +170,10 @@ impl MlTensorShape3D {
     }
 }
 
+/// This indicates how the masks of input bands are mapped to the output
+///   - Never: Don't merge masks. Pixels are always valid
+///   - Any: Pixels are valid as long as any pixel at the same position in the inputs is valid
+///   - All: Pixel is valid if all inputs are valid
 #[derive(PartialEq, Debug, Eq, Serialize, Deserialize, Copy, Clone, Default)]
 pub enum MergeMasks {
     Never,
@@ -178,6 +182,10 @@ pub enum MergeMasks {
     All,
 }
 
+/// This indicates when a received tile should be skipped.
+///   - Never: Tile will never be skipped
+///   - Any: If any band is empty
+///   - All: If all bands are empty
 #[derive(PartialEq, Debug, Eq, Serialize, Deserialize, Copy, Clone, Default)]
 pub enum SkipEmptyTiles {
     Never,

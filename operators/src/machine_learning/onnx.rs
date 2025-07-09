@@ -34,7 +34,7 @@ use super::onnx_util::load_onnx_model_from_metadata;
 pub struct OnnxParams {
     pub model: MlModelName,
     #[serde(default)]
-    pub skip_on_empty_tiles: SkipEmptyTiles,
+    pub skip_empty_tiles: SkipEmptyTiles,
     #[serde(default)]
     pub validity_mask_merge: MergeMasks,
 }
@@ -43,7 +43,7 @@ impl OnnxParams {
     pub fn new_with_defaults(model: MlModelName) -> Self {
         Self {
             model,
-            skip_on_empty_tiles: SkipEmptyTiles::default(),
+            skip_empty_tiles: SkipEmptyTiles::default(),
             validity_mask_merge: MergeMasks::default(),
         }
     }
@@ -112,7 +112,7 @@ impl RasterOperator for Onnx {
             source,
             model_metadata,
             tile_shape: context.tiling_specification().grid_shape(),
-            skip_on_empty_tiles: self.params.skip_on_empty_tiles,
+            skip_on_empty_tiles: self.params.skip_empty_tiles,
             validity_mask_merge: self.params.validity_mask_merge,
         }))
     }
