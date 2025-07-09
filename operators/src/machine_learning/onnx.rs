@@ -329,9 +329,9 @@ where
                         .run(ort::inputs![&input_name => TensorRef::from_array_view(&samples).context(Ort)?])
                         .context(Ort)
                 } else if self.model_metadata.input_shape.yx_matches_tile_shape(&tile_shape){
-                    let samples = Tensor::from_array(Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
+                    let samples = Array4::from_shape_vec((1, height, width, num_bands), pixels).expect( // y,x, attributes
                         "Array4 should be valid because it is created from a Vec with the correct size",
-                    ));
+                    );
                     session
                         .run(ort::inputs![&input_name => TensorRef::from_array_view(&samples).context(Ort)?])
                         .context(Ort)
@@ -346,7 +346,7 @@ where
 
                 // assume the first output is the prediction and ignore the other outputs (e.g. probabilities for classification)
                 // we don't access the output by name because it can vary, e.g. "output_label" vs "variable"
-                let predictions = outputs[0].try_extract_array::<TOut>().context(Ort)?;
+                let predictions = outputs[0].try_extract_tensor::<TOut>().context(Ort)?;
 
                 // extract the values as a raw vector because we expect one prediction per pixel.
                 // this works for 1d tensors as well as 2d tensors with a single column
@@ -422,7 +422,6 @@ mod tests {
         util::test::TestDefault,
     };
     use ndarray::{Array1, Array2, arr2, array};
-    use ort::value::Tensor;
 
     #[test]
     fn ort() {
