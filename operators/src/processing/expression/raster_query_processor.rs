@@ -1,7 +1,6 @@
 use super::RasterExpressionError;
 use crate::{
     engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
-    ge_tracing_removed_trace,
     util::Result,
 };
 use async_trait::async_trait;
@@ -343,7 +342,7 @@ where
             GridOrEmpty::Empty(t) => GridOrEmpty::Empty(t),
             GridOrEmpty::Grid(t) => {
                 if t.validity_mask.data.iter().all(|&t| !t) {
-                    ge_tracing_removed_trace!("Converting empty expression output to EmptyGrid");
+                    tracing::trace!("Converting empty expression output to EmptyGrid");
                     GridOrEmpty::new_empty_shape(t.grid_shape())
                 } else {
                     GridOrEmpty::Grid(t)

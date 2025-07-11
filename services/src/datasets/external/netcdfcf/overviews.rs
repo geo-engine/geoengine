@@ -28,7 +28,7 @@ use geoengine_operators::{
     source::GdalMetaDataList,
     util::gdal::{gdal_parameters_from_dataset, raster_descriptor_from_dataset_and_sref},
 };
-use log::debug;
+use tracing::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{

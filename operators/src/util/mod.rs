@@ -64,29 +64,6 @@ pub fn duplicate_or_empty_str_slice<S: AsRef<str>>(strings: &[S]) -> DuplicateOr
     DuplicateOrEmpty::Ok
 }
 
-pub mod ge_tracing_removed {
-
-    /// This trace! macro call is removed on release builds!
-    #[macro_export]
-    macro_rules! ge_tracing_removed_trace {
-        ($($tts:tt)*) => {
-            if cfg!(debug_assertions) {
-                tracing::trace!($($tts)*);
-            }
-        }
-    }
-
-    /// This debug! macro call is removed on release builds!
-    #[macro_export]
-    macro_rules! ge_tracing_removed_debug {
-        ($($tts:tt)*) => {
-            if cfg!(debug_assertions) {
-                tracing::debug!($($tts)*);
-            }
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

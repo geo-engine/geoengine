@@ -1,24 +1,21 @@
 use crate::api::model::responses::ErrorResponse;
 use crate::config::get_config_element;
 use crate::error::Result;
-
 use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::header::{HeaderName, HeaderValue};
 use actix_http::uri::PathAndQuery;
 use actix_http::{Extensions, HttpMessage, StatusCode};
-
 use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{HttpRequest, HttpResponse, http, middleware, web};
 use futures::future::BoxFuture;
 use geoengine_datatypes::primitives::CacheHint;
-use log::debug;
-
 use std::any::Any;
 use std::num::NonZeroUsize;
 use std::time::Duration;
 use tracing::Span;
-use tracing::log::info;
+use tracing::debug;
+use tracing::info;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 use url::Url;
 use utoipa::{ToSchema, openapi::OpenApi};

@@ -44,7 +44,7 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
-use log::debug;
+use tracing::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;

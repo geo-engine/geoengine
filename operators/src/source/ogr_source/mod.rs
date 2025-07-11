@@ -36,7 +36,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
 use geoengine_datatypes::util::arrow::ArrowTyped;
-use log::debug;
+use tracing::debug;
 use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
 use postgres_types::{FromSql, ToSql};

@@ -6,7 +6,7 @@ use crate::datasets::external::netcdfcf::{NetCdfOverview, error};
 use crate::error::Result;
 use error::NetCdfCf4DProviderError;
 use geoengine_datatypes::dataset::DataProviderId;
-use log::debug;
+use tracing::debug;
 #[allow(unused_imports)]
 use serde::{Deserialize, Serialize};
 use url::Url;

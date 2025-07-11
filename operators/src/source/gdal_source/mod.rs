@@ -4,7 +4,6 @@ use crate::adapters::{
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
 };
-use crate::ge_tracing_removed_debug;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
@@ -52,7 +51,6 @@ pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use log::debug;
 use num::FromPrimitive;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -63,6 +61,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use tracing::debug;
 
 mod db_types;
 mod error;
@@ -727,19 +726,19 @@ where
         ) {
             (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
             (None, None) => {
-                ge_tracing_removed_debug!(
+                tracing::debug!(
                     "The provider did not provide a time range that covers the query. Falling back to query time range. "
                 );
                 FillerTimeBounds::new(query.time_interval.start(), query.time_interval.end())
             }
             (Some(start), None) => {
-                ge_tracing_removed_debug!(
+                tracing::debug!(
                     "The provider did only provide a time range start that covers the query. Falling back to query time end. "
                 );
                 FillerTimeBounds::new(start, query.time_interval.end())
             }
             (None, Some(end)) => {
-                ge_tracing_removed_debug!(
+                tracing::debug!(
                     "The provider did only provide a time range end that covers the query. Falling back to query time start. "
                 );
                 FillerTimeBounds::new(query.time_interval.start(), end)
@@ -1050,7 +1049,7 @@ where
         gdal_dataset_geotransform,
         dataset_params.geo_transform
     ) {
-        ge_tracing_removed_debug!(
+        tracing::debug!(
             "GdalDatasetParameters geo transform is different to the one retrieved from GDAL dataset: {:?} != {:?}",
             dataset_params.geo_transform,
             gdal_dataset_geotransform,

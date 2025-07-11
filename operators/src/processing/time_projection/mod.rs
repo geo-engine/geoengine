@@ -15,7 +15,7 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{ColumnSelection, Geometry, TimeInterval};
 use geoengine_datatypes::primitives::{TimeInstance, TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
-use log::debug;
+use tracing::debug;
 use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};

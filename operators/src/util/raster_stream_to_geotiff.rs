@@ -23,7 +23,7 @@ use geoengine_datatypes::raster::{
     TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use log::debug;
+use tracing::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryInto;

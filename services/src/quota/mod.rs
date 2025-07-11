@@ -1,7 +1,6 @@
 use crate::config::QuotaTrackingMode;
 use crate::users::{UserDb, UserId, UserSession};
 use geoengine_datatypes::{primitives::DateTime, util::test::TestDefault};
-use geoengine_operators::ge_tracing_removed_trace;
 use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTracking};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -98,7 +97,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                 let flush_buffer = match message {
                     QuotaMessage::ComputationUnit(computation) => {
                         // TODO: issue a tracing event instead?
-                        ge_tracing_removed_trace!(
+                        tracing::trace!(
                             "Quota received. User: {}, Workflow: {}, Computation: {}",
                             computation.user,
                             computation.workflow,
@@ -116,7 +115,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         self.buffer_used >= self.buffer_size
                     }
                     QuotaMessage::Flush => {
-                        ge_tracing_removed_trace!("Flush `increment_quota_buffer'");
+                        tracing::trace!("Flush `increment_quota_buffer'");
                         true
                     }
                 };
@@ -129,7 +128,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         .bulk_increment_quota_used(self.increment_quota_buffer.drain())
                         .await
                     {
-                        log::error!("Could not increment quota for users {error:?}");
+                        tracing::error!("Could not increment quota for users {error:?}");
                     }
 
                     if let Err(error) = self
@@ -137,7 +136,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         .log_quota_used(self.quota_log_buffer.drain(..))
                         .await
                     {
-                        log::error!("Could not log quota used {error:?}");
+                        tracing::error!("Could not log quota used {error:?}");
                     }
 
                     self.buffer_used = 0;

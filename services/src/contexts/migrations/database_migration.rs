@@ -1,7 +1,7 @@
 use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
 use async_trait::async_trait;
 use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
-use log::info;
+use tracing::info;
 use snafu::ensure;
 use tokio_postgres::{
     Socket, Transaction,

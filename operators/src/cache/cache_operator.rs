@@ -10,7 +10,6 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::util::Result;
-use crate::{ge_tracing_removed_debug, ge_tracing_removed_trace};
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
 use futures::{Stream, StreamExt, TryStreamExt, ready};
@@ -78,11 +77,11 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
                         CacheQueryProcessor::new(p, self.source.canonic_name()),
                     )),
                 };
-                ge_tracing_removed_debug!(event = "query processor created");
+                tracing::debug!(event = "query processor created");
                 Ok(res_processor)
             }
             Err(err) => {
-                ge_tracing_removed_debug!(event = "query processor failed");
+                tracing::debug!(event = "query processor failed");
                 Err(err)
             }
         }
@@ -132,12 +131,12 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
                         ))
                     }
                 };
-                ge_tracing_removed_debug!(event = "query processor created");
+                tracing::debug!(event = "query processor created");
 
                 Ok(res_processor)
             }
             Err(err) => {
-                ge_tracing_removed_debug!(event = "query processor failed");
+                tracing::debug!(event = "query processor failed");
                 Err(err)
             }
         }
@@ -213,7 +212,7 @@ where
 
         if let Ok(Some(cache_result)) = cache_result {
             // cache hit
-            ge_tracing_removed_debug!("cache hit for operator {}", self.cache_key);
+            tracing::debug!("cache hit for operator {}", self.cache_key);
 
             let wrapped_result_steam =
                 E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query.clone());
@@ -222,13 +221,13 @@ where
         }
 
         // cache miss
-        ge_tracing_removed_debug!("cache miss for operator {}", self.cache_key);
+        tracing::debug!("cache miss for operator {}", self.cache_key);
         let source_stream = self.processor.query(query.clone(), ctx).await?;
 
         let query_id = shared_cache.insert_query(&self.cache_key, &query).await;
 
         if let Err(e) = query_id {
-            ge_tracing_removed_debug!("could not insert query into cache: {e}");
+            tracing::debug!("could not insert query into cache: {e}");
             return Ok(source_stream);
         }
 
@@ -246,19 +245,19 @@ where
                         let result = tile_cache
                             .insert_query_element(&cache_key, &query_id, tile)
                             .await;
-                        ge_tracing_removed_trace!(
+                        tracing::trace!(
                             "inserted tile into cache for cache key {cache_key} and query id {query_id}. result: {result:?}"
                         );
                     }
                     SourceStreamEvent::Abort => {
                         tile_cache.abort_query(&cache_key, &query_id).await;
-                        ge_tracing_removed_debug!(
+                        tracing::debug!(
                             "aborted cache insertion for cache key {cache_key} and query id {query_id}"
                         );
                     }
                     SourceStreamEvent::Finished => {
                         let result = tile_cache.finish_query(&cache_key, &query_id).await;
-                        ge_tracing_removed_debug!(
+                        tracing::debug!(
                             "finished cache insertion for cache key {cache_key} and query id {query_id}, result: {result:?}"
                         );
                     }
@@ -322,13 +321,13 @@ where
                     .stream_event_sender
                     .send(SourceStreamEvent::Element(element.clone()));
                 if let Err(e) = r {
-                    log::warn!("could not send tile to cache: {}", ge_report(e));
+                    tracing::warn!("could not send tile to cache: {}", ge_report(e));
                 }
             } else {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Abort);
                 if let Err(e) = r {
-                    log::warn!("could not send abort to cache: {}", ge_report(e));
+                    tracing::warn!("could not send abort to cache: {}", ge_report(e));
                 }
             }
         } else {
@@ -336,15 +335,15 @@ where
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Abort);
                 if let Err(e) = r {
-                    log::warn!("could not send abort to cache: {}", ge_report(e));
+                    tracing::warn!("could not send abort to cache: {}", ge_report(e));
                 }
             } else {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Finished);
                 if let Err(e) = r {
-                    log::warn!("could not send finished to cache: {}", ge_report(e));
+                    tracing::warn!("could not send finished to cache: {}", ge_report(e));
                 }
-                log::debug!("stream finished, mark cache entry as finished.");
+                tracing::debug!("stream finished, mark cache entry as finished.");
             }
             *this.finished = true;
         }
@@ -365,7 +364,7 @@ where
             // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
             let r = self.stream_event_sender.send(SourceStreamEvent::Abort);
             if let Err(e) = r {
-                log::debug!("could not send abort to cache: {e}");
+                tracing::debug!("could not send abort to cache: {e}");
             }
         }
     }

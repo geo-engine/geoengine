@@ -34,12 +34,12 @@ use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::meta::quota::QuotaChecker;
 use geoengine_operators::util::create_rayon_thread_pool;
-use log::info;
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio_postgres::error::SqlState;
+use tracing::info;
 use uuid::Uuid;
 
 // TODO: do not report postgres error details to user

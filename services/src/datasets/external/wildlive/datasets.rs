@@ -4,7 +4,7 @@ use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{BoundingBox2D, Coordinate2D},
 };
-use log::debug;
+use tracing::debug;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::collections::{BTreeMap, HashMap};

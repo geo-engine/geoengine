@@ -30,7 +30,7 @@ use geoengine_datatypes::primitives::{
 };
 use geoengine_datatypes::raster::{Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
-use log::debug;
+use tracing::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;

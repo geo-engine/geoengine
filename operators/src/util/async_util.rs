@@ -1,5 +1,5 @@
 use futures::{Future, FutureExt, future::BoxFuture};
-use log::debug;
+use tracing::debug;
 use rayon::ThreadPool;
 use std::sync::Arc;
 use tokio::task::JoinHandle;

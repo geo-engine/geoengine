@@ -403,14 +403,14 @@ where
         let valid_until = if valid_session {
             row.get(4)
         } else {
-            log::debug!("Session expired, trying to extend");
+            tracing::debug!("Session expired, trying to extend");
             let refresh_result = self.refresh_oidc_session_tokens(session, &tx).await;
 
             if let Err(refresh_error) = refresh_result {
-                log::debug!("Session extension failed {refresh_error}");
+                tracing::debug!("Session extension failed {refresh_error}");
                 return Err(Error::InvalidSession);
             }
-            log::debug!("Session extended");
+            tracing::debug!("Session extended");
             refresh_result
                 .expect("Refresh result should exist")
                 .db_valid_until

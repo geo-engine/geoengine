@@ -112,7 +112,6 @@ httptest = "0.16"
 image = "0.25"
 itertools = "0.14"
 libloading = "0.8"
-log = "0.4"
 lru = "0.16.0"
 lz4_flex = "0.11"
 mime = "0.3"
@@ -186,7 +185,7 @@ tonic = { version = "0.11", features = [
     "tls",
     "tls-roots",
 ] } # must be compatible with `aruna-rust-api`
-tracing = "0.1"
+tracing = {version="0.1", features = ["max_level_debug", "release_max_level_info"]}
 tracing-actix-web = "0.7"
 tracing-opentelemetry = "0.31" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
 tracing-subscriber = { version = "0.3", features = [
@@ -194,6 +193,7 @@ tracing-subscriber = { version = "0.3", features = [
     "ansi",
     "tracing-log",
 ] }
+tracing-appender = "0.2.3"
 typetag = "0.2"
 url = { version = "2.5", features = ["serde"] }
 utoipa = { version = "5.4", features = [

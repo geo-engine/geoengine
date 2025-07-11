@@ -26,7 +26,7 @@ geoengine-datatypes = { path = "../datatypes" }
 geoengine-expression = { path = "../expression" }
 itertools = { workspace = true }
 libloading = { workspace = true }
-log = { workspace = true }
+tracing = { workspace = true }
 lru = { workspace = true }
 lz4_flex = { workspace = true }
 ndarray = { workspace = true }
@@ -48,7 +48,6 @@ stream-cancel = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true }
 tokio-postgres = { workspace = true }
-tracing = { workspace = true }
 typetag = { workspace = true }
 uuid = { workspace = true }
 strum = { workspace = true }

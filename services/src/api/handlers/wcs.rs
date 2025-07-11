@@ -24,10 +24,10 @@ use geoengine_operators::util::input::RasterOrVectorOperator;
 use geoengine_operators::util::raster_stream_to_geotiff::{
     GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
 };
-use log::info;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use tracing::info;
 use url::Url;
 use uuid::Uuid;
 
@@ -407,7 +407,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
     let initialized = if request_spatial_ref == workflow_spatial_ref {
         initialized
     } else {
-        log::debug!(
+        tracing::debug!(
             "WCS query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
         );
 
