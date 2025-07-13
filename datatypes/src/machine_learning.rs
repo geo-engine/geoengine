@@ -170,39 +170,29 @@ impl MlTensorShape3D {
     }
 }
 
-/// This indicates how the masks of input bands are mapped to the output
-///   - Never: Don't merge masks. Pixels are always valid
-///   - Any: Pixels are valid as long as any pixel at the same position in the inputs is valid
-///   - All: Pixel is valid if all inputs are valid
+/// Strategies to handle no-data in model inputs.
+/// - Never: The onnx model is always called and output pixels are always valid. Even if all input bands are empty.
+/// - IfAllInputsAreEmpty: If all inputs are empty (no-data), the output is also empty (no-data). This is usefull if the model can handle missing data.
+/// - IfAnyInputIsEmpty: If any input model is empty (no-data), the output is also empty (no-data). This is usefull if the model can't handle missing data.
 #[derive(PartialEq, Debug, Eq, Serialize, Deserialize, Copy, Clone, Default)]
-pub enum MergeMasks {
+pub enum SkipOnNoData {
     Never,
+    IfAnyInputIsNoData,
     #[default]
-    Any,
-    All,
-}
-
-/// This indicates when a received tile should be skipped.
-///   - Never: Tile will never be skipped
-///   - Any: If any band is empty
-///   - All: If all bands are empty
-#[derive(PartialEq, Debug, Eq, Serialize, Deserialize, Copy, Clone, Default)]
-pub enum SkipEmptyTiles {
-    Never,
-    Any,
-    #[default]
-    All,
+    IfAllInputsAreNoData,
 }
 
 // For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
 // To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.
-#[derive(Debug, Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
 pub struct MlModelMetadata {
     pub file_path: PathBuf,
     pub input_type: RasterDataType,
     pub output_type: RasterDataType,
     pub input_shape: MlTensorShape3D,
     pub output_shape: MlTensorShape3D, // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+    pub in_no_data_code: Option<f32>,
+    pub out_no_data_code: Option<f32>,
 }
 
 impl MlModelMetadata {

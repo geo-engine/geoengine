@@ -6961,11 +6961,25 @@
           "fileName": {
             "type": "string"
           },
+          "inNoDataCode": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
           "inputShape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
           },
           "inputType": {
             "$ref": "#/components/schemas/RasterDataType"
+          },
+          "outNoDataCode": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
           },
           "outputShape": {
             "$ref": "#/components/schemas/MlTensorShape3D"

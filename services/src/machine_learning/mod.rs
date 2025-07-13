@@ -46,6 +46,8 @@ pub struct MlModelMetadata {
     pub output_type: RasterDataType,
     pub input_shape: MlTensorShape3D,
     pub output_shape: MlTensorShape3D,
+    pub in_no_data_code: Option<f32>,
+    pub out_no_data_code: Option<f32>,
     // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
 }
 
@@ -68,6 +70,8 @@ impl MlModel {
             output_type: self.metadata.output_type.into(),
             input_shape: self.metadata.input_shape.into(),
             output_shape: self.metadata.output_shape.into(),
+            in_no_data_code: self.metadata.in_no_data_code,
+            out_no_data_code: self.metadata.out_no_data_code,
         };
 
         Ok(meta)

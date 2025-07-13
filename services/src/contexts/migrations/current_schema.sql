@@ -1000,7 +1000,9 @@ CREATE TYPE "MlModelMetadata" AS (
     input_type "RasterDataType",
     output_type "RasterDataType",
     input_shape "MlTensorShape3D",
-    output_shape "MlTensorShape3D"
+    output_shape "MlTensorShape3D",
+    in_no_data_code real,
+    out_no_data_code real
 );
 
 CREATE TYPE "MlModelName" AS (namespace text, name text);

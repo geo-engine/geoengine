@@ -202,6 +202,8 @@ mod tests {
                 output_type: RasterDataType::I64,
                 input_shape: MlTensorShape3D::new_y_x_attr(1, 1, 2),
                 output_shape: MlTensorShape3D::new_y_x_attr(1, 1, 1),
+                in_no_data_code: None,
+                out_no_data_code: None,
             },
         };
 

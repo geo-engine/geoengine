@@ -4959,6 +4959,8 @@ mod tests {
                 input_shape: MlTensorShape3D::new_single_pixel_bands(17),
                 output_shape: MlTensorShape3D::new_single_pixel_single_band(),
                 output_type: ApiRasterDataType::F64,
+                in_no_data_code: None,
+                out_no_data_code: None,
             },
             name: MlModelName::new(None, "myUnrealModel"),
             upload: upload_id,

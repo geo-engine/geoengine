@@ -12,12 +12,11 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::machine_learning::{
-    MergeMasks, MlModelMetadata, MlModelName, SkipEmptyTiles,
+    MlModelMetadata, MlModelName,  SkipOnNoData,
 };
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    EmptyGrid2D, Grid, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
-    MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
+    EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize, MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements
 };
 use ndarray::{Array2, Array4};
 use ort::{
@@ -29,22 +28,26 @@ use snafu::{ResultExt, ensure};
 
 use super::onnx_util::load_onnx_model_from_metadata;
 
+/// The Onnx operator applies an onnx model to a stack of raster bands and produces a single output tile from each stack.
+/// *Each of the bands might be empty.*
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct OnnxParams {
+    /// the name of the model
     pub model: MlModelName,
+    /// To determine output validity and the possibility to skip model application, the following strategies are available:
+    /// - Never: The onnx model is always called and output pixels are always valid. Even if all input bands are empty.
+    /// - IfAllInputsAreEmpty: If all inputs are empty (no-data), the output is also empty (no-data). This is usefull if the model can handle missing data.
+    /// - IfAnyInputIsEmpty: If any input model is empty (no-data), the output is also empty (no-data). This is usefull if the model can't handle missing data.
     #[serde(default)]
-    pub skip_empty_tiles: SkipEmptyTiles,
-    #[serde(default)]
-    pub validity_mask_merge: MergeMasks,
+    pub skip_mode: SkipOnNoData,
 }
 
 impl OnnxParams {
     pub fn new_with_defaults(model: MlModelName) -> Self {
         Self {
             model,
-            skip_empty_tiles: SkipEmptyTiles::default(),
-            validity_mask_merge: MergeMasks::default(),
+            skip_mode: SkipOnNoData::default(),
         }
     }
 }
@@ -112,8 +115,7 @@ impl RasterOperator for Onnx {
             source,
             model_metadata,
             tile_shape: context.tiling_specification().grid_shape(),
-            skip_on_empty_tiles: self.params.skip_empty_tiles,
-            validity_mask_merge: self.params.validity_mask_merge,
+            skip_mode: self.params.skip_mode,
         }))
     }
 
@@ -127,8 +129,7 @@ pub struct InitializedOnnx {
     source: Box<dyn InitializedRasterOperator>,
     model_metadata: MlModelMetadata,
     tile_shape: GridShape2D,
-    skip_on_empty_tiles: SkipEmptyTiles,
-    validity_mask_merge: MergeMasks,
+    skip_mode: SkipOnNoData,
 }
 
 impl InitializedRasterOperator for InitializedOnnx {
@@ -148,8 +149,7 @@ impl InitializedRasterOperator for InitializedOnnx {
                         self.result_descriptor.clone(),
                         self.model_metadata.clone(),
                         self.tile_shape,
-                        self.skip_on_empty_tiles,
-                        self.validity_mask_merge
+                        self.skip_mode,
                     )
                     .boxed()
                 )
@@ -176,8 +176,7 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
     model_metadata: MlModelMetadata,
     phantom: std::marker::PhantomData<TOut>,
     tile_shape: GridShape2D,
-    skip_on_empty_tiles: SkipEmptyTiles,
-    validity_mask_merge: MergeMasks,
+    skip_mode: SkipOnNoData,
 }
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
@@ -186,8 +185,7 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
         result_descriptor: RasterResultDescriptor,
         model_metadata: MlModelMetadata,
         tile_shape: GridShape2D,
-        skip_on_empty_tiles: SkipEmptyTiles,
-        validity_mask_merge: MergeMasks,
+        skip_mode: SkipOnNoData,
     ) -> Self {
         Self {
             source,
@@ -195,8 +193,7 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
             model_metadata,
             phantom: Default::default(),
             tile_shape,
-            skip_on_empty_tiles,
-            validity_mask_merge,
+            skip_mode,
         }
     }
 }
@@ -204,8 +201,8 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
 #[async_trait]
 impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
 where
-    TIn: Pixel + NoDataValue + IntoTensorElementType + PrimitiveTensorElementType,
-    TOut: Pixel + IntoTensorElementType + PrimitiveTensorElementType,
+    TIn: Pixel + NoDataValueInFallback + IntoTensorElementType + PrimitiveTensorElementType,
+    TOut: Pixel + NoDataValueOutFallback + IntoTensorElementType + PrimitiveTensorElementType,
 {
     type RasterType = TOut;
 
@@ -217,9 +214,10 @@ where
     ) -> Result<BoxStream<'a, Result<RasterTile2D<TOut>>>> {
         let num_bands = self.source.raster_result_descriptor().bands.count() as usize;
 
-        let out_mask_mode = self.validity_mask_merge; // MergeMasks::Any;
-        let in_no_data_value = TIn::NO_DATA;
-        let skip_empty_tiles = self.skip_on_empty_tiles; // SkipEmptyTiles::All;
+        let skip_mode = self.skip_mode;
+        let in_no_data_value = self.model_metadata.in_no_data_code.map(|v| TIn::from_(v)).unwrap_or(TIn::NO_DATA_IN_FALLBACK);
+        // TODO: discuss how we handle output nodata... For float a default of NaN works but using 0 for int is a problem!
+        let out_no_data_value = self.model_metadata.in_no_data_code.map(|v| TOut::from_(v)).or(TOut::NO_DATA_OUT_FALLBACK); // While float types fallback to NaN, the check (later) always tests for NaN...
 
         let mut source_query = query.clone();
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
@@ -227,7 +225,7 @@ where
         // TODO: re-use session accross queries?
         // TODO: use another method: https://github.com/pykeio/ort/issues/402#issuecomment-2949993914
         let mut session = load_onnx_model_from_metadata(&self.model_metadata)?;
-        let input_name = session.inputs[0].name.clone(); // clone input name to avoid mutabliity problems
+        let input_name = session.inputs[0].name.clone(); // clone input name to avoid mutability problems
 
         let stream = self
             .source
@@ -264,13 +262,45 @@ where
                 let width = tile_shape.axis_size_x();
                 let height = tile_shape.axis_size_y();
 
-                let skip_tile = match skip_empty_tiles {
-                    SkipEmptyTiles::Never => false,
-                    SkipEmptyTiles::All => tiles.iter().all(geoengine_datatypes::raster::BaseTile::is_empty),
-                    SkipEmptyTiles::Any => tiles.iter().any(geoengine_datatypes::raster::BaseTile::is_empty),
+                // This determines if the tile the operator currently processes can be skipped entirely.
+                // The Operator uses a "stack" of bands where each band is represented by a raster tile.
+                // Each of the bands might be an empty tile. To determine if the processing should be skipped (onnx model is not called and output is an empty tile) we use the following match block:
+                let skip_tile = match skip_mode {
+                    // The production of the output tile is never skipped --> the onnx model is called even if all inputs are empty.
+                    SkipOnNoData::Never => false,
+                    // The onnx model is not called if all inputs are empty. This is usefull if the onnx model can handle missing data.
+                    SkipOnNoData::IfAllInputsAreNoData => tiles.iter().all(geoengine_datatypes::raster::BaseTile::is_empty),
+                    // The onnx model is not called if any band is empty. This is usefull if the onnx model can't handle missing data.
+                    SkipOnNoData::IfAnyInputIsNoData => tiles.iter().any(geoengine_datatypes::raster::BaseTile::is_empty),
                 };
 
-                if skip_tile {
+                // If the model was applied, we need to handle single pixels based on the input pixel validity (mask).
+                // The validity mask is a positive mask (0 == no-data, 1 == valid data).
+                // To generate the output mask, we fold over the input masks starting with an appropriate accu value which is genernated as follows:
+                let output_mask_fill_value = match skip_mode {
+                    SkipOnNoData::IfAnyInputIsNoData => false, 
+                    SkipOnNoData::IfAllInputsAreNoData | SkipOnNoData::Never => true
+                };
+
+                let mut output_mask = Grid2D::new_filled(self.tile_shape, output_mask_fill_value);
+                if !(skip_tile || skip_mode == SkipOnNoData::Never) {
+                    tracing::trace!("Merging masks with {skip_mode:?}");
+                    for c in &tiles {
+                        if let Some(mg) = c.grid_array.as_masked_grid() {
+                            output_mask.update_indexed_elements(|idx: GridIdx2D, value| {
+                                let mask_value = mg.mask_ref().get_at_grid_index_unchecked(idx);
+                                match skip_mode {
+                                    SkipOnNoData::IfAnyInputIsNoData => mask_value || value, // if any pixel is valid this sticks to true
+                                    SkipOnNoData::IfAllInputsAreNoData => mask_value && value, // if any pixel is invalid, this sticks to false
+                                    SkipOnNoData::Never => true,
+                                }
+                            });
+                        }
+                    }
+                }
+
+                // if the tile is skipable or the output mask has no valid pixels:
+                if skip_tile || output_mask.data.iter().all(|&v| v == false) {
                     tracing::trace!("Skipping Tile {tile_position:?}");
                     return Ok(RasterTile2D::new(
                         time,
@@ -280,28 +310,6 @@ where
                         EmptyGrid2D::new(tile_shape).into(),
                         cache_hint,
                     ))
-                }
-
-                // merge masks
-                let output_mask_fill_value = match out_mask_mode {
-                    MergeMasks::All => false,
-                    MergeMasks::Any | MergeMasks::Never => true
-                };
-                let mut output_mask = Grid::new_filled(self.tile_shape, output_mask_fill_value);
-                if out_mask_mode != MergeMasks::Never {
-                    tracing::trace!("Merging masks with {out_mask_mode:?}");
-                    for c in &tiles {
-                        if let Some(mg) = c.grid_array.as_masked_grid() {
-                            output_mask.update_indexed_elements(|idx: GridIdx2D, value| {
-                                let mask_value = mg.mask_ref().get_at_grid_index_unchecked(idx);
-                                match out_mask_mode {
-                                    MergeMasks::All => mask_value || value,
-                                    MergeMasks::Any => mask_value && value,
-                                    MergeMasks::Never => value,
-                                }
-                            });
-                        }
-                    }
                 }
 
                 // TODO: use flat array instead of nested Vecs
@@ -353,13 +361,30 @@ where
                 let (shape, out_tensor_data) = predictions.to_owned();
                 debug_assert!(shape.num_elements() == width*height); // TODO: use shape directly to check
 
-                // TODO: create no data mask from input no data masks
+                // transform the output intp a grid
+                let out_grid = Grid2D::new([width, height].into(), Vec::from(out_tensor_data))?;
+
+                // update the mask based on out no data value
+                if let Some(out_no_data) = out_no_data_value { // The fallback for float types will cause this to always be Some!
+                    output_mask.update_indexed_elements(|idx: GridIdx2D, mask_value| {
+                        let out_value = out_grid.get_at_grid_index_unchecked(idx);
+                        mask_value && !out_no_data.is_no_data(out_value) // Impl for F32 and F64 will always set NaN as masked
+                    });
+                }
+                
+                // if the mask has no valid pixels --> return an empty grid
+                let final_grid = if output_mask.data.iter().all(|&v| v == false) {
+                    EmptyGrid2D::new(out_grid.shape).into()
+                } else {
+                    MaskedGrid::new(out_grid, output_mask)?.into()
+                };
+                
                 Ok(RasterTile2D::new(
                     time,
                     tile_position,
                     0,
                     global_geo_transform,
-                    MaskedGrid::new(Grid::new([width, height].into(), Vec::from(out_tensor_data))?, output_mask)?.into(),
+                    final_grid,
                     cache_hint,
                 ))
             });
@@ -374,24 +399,24 @@ where
 
 // workaround trait to handle missing values for all datatypes.
 // TODO: this should be handled differently, like skipping the pixel entirely or using a different value for missing values
-trait NoDataValue {
-    const NO_DATA: Self;
+trait NoDataValueInFallback {
+    const NO_DATA_IN_FALLBACK: Self;
 }
 
-impl NoDataValue for f32 {
-    const NO_DATA: Self = f32::NAN;
+impl NoDataValueInFallback for f32 {
+    const NO_DATA_IN_FALLBACK: Self = f32::NAN;
 }
 
-impl NoDataValue for f64 {
-    const NO_DATA: Self = f64::NAN;
+impl NoDataValueInFallback for f64 {
+    const NO_DATA_IN_FALLBACK: Self = f64::NAN;
 }
 
 // Define a macro to implement NoDataValue for various types with NO_DATA as 0
 macro_rules! impl_no_data_value_zero {
     ($($t:ty),*) => {
         $(
-            impl NoDataValue for $t {
-                const NO_DATA: Self = 0;
+            impl NoDataValueInFallback for $t {
+                const NO_DATA_IN_FALLBACK: Self = 0;
             }
         )*
     };
@@ -399,6 +424,46 @@ macro_rules! impl_no_data_value_zero {
 
 // Use the macro to implement NoDataValue for i8, u8, i16, u16, etc.
 impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
+
+// workaround trait to handle missing values for all datatypes.
+// TODO: this should be handled differently, like skipping the pixel entirely or using a different value for missing values
+trait NoDataValueOutFallback where Self: Sized + PartialEq {
+    const NO_DATA_OUT_FALLBACK: Option<Self>;
+
+    fn is_no_data(&self, value: Self) -> bool {
+        value == *self
+    }
+}
+
+impl NoDataValueOutFallback for f32 {
+    const NO_DATA_OUT_FALLBACK: Option<Self> = Some(f32::NAN);
+
+    fn is_no_data(&self, value: Self) -> bool {
+        value == *self || value != value
+    }
+}
+
+impl NoDataValueOutFallback for f64 {
+    const NO_DATA_OUT_FALLBACK: Option<Self> = Some(f64::NAN);
+
+    fn is_no_data(&self, value: Self) -> bool {
+        value == *self || value != value
+    }
+}
+
+// Define a macro to implement NoDataValue for various types with NO_DATA as 0
+macro_rules! impl_no_data_value_none {
+    ($($t:ty),*) => {
+        $(
+            impl NoDataValueOutFallback for $t {
+                const NO_DATA_OUT_FALLBACK: Option<Self> = None;
+            }
+        )*
+    };
+}
+
+// Use the macro to implement NoDataValue for i8, u8, i16, u16, etc.
+impl_no_data_value_none!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
@@ -415,7 +480,7 @@ mod tests {
         machine_learning::MlTensorShape3D,
         primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
-            GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
+            Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint
         },
         spatial_reference::SpatialReference,
         test_data,
@@ -634,6 +699,8 @@ mod tests {
             input_shape: MlTensorShape3D::new_single_pixel_bands(2),
             output_shape: MlTensorShape3D::new_single_pixel_single_band(),
             output_type: RasterDataType::I64,
+            in_no_data_code: None,
+            out_no_data_code: None
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -845,6 +912,8 @@ mod tests {
             input_shape: MlTensorShape3D::new_single_pixel_bands(3),
             output_shape: MlTensorShape3D::new_single_pixel_single_band(),
             output_type: RasterDataType::F32,
+            in_no_data_code: None,
+            out_no_data_code: None
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -1005,6 +1074,8 @@ mod tests {
             input_shape: MlTensorShape3D::new_y_x_bands(512, 512, 2),
             output_shape: MlTensorShape3D::new_y_x_bands(512, 512, 1),
             output_type: RasterDataType::F32,
+            in_no_data_code: None,
+            out_no_data_code: None
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
