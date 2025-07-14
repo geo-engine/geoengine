@@ -185,7 +185,7 @@ tonic = { version = "0.11", features = [
     "tls",
     "tls-roots",
 ] } # must be compatible with `aruna-rust-api`
-tracing = {version="0.1", features = ["max_level_debug", "release_max_level_info"]}
+tracing = {version="0.1", features = ["release_max_level_debug"]}
 tracing-actix-web = "0.7"
 tracing-opentelemetry = "0.31" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
 tracing-subscriber = { version = "0.3", features = [

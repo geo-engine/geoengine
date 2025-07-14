@@ -338,7 +338,7 @@ where
         let grid_shape = rasters.0.grid_shape();
         let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
 
-        let out_2 = match out {
+        let out_or_empty = match out {
             GridOrEmpty::Empty(t) => GridOrEmpty::Empty(t),
             GridOrEmpty::Grid(t) => {
                 if t.validity_mask.data.iter().all(|&t| !t) {
@@ -350,7 +350,7 @@ where
             }
         };
 
-        Result::Ok(out_2)
+        Result::Ok(out_or_empty)
     }
 
     fn num_bands() -> u32 {
