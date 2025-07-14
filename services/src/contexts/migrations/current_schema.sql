@@ -410,6 +410,9 @@ CREATE TYPE "GdalMetaDataList" AS (
     result_descriptor "RasterResultDescriptor",
     params "GdalLoadingInfoTemporalSlice" []
 );
+CREATE TYPE "GdalMultiBand" AS (
+    result_descriptor "RasterResultDescriptor",
+);
 CREATE TYPE "MetaDataDefinition" AS (
     -- oneOf
     mock_meta_data "MockMetaData",
@@ -418,6 +421,7 @@ CREATE TYPE "MetaDataDefinition" AS (
     gdal_static "GdalMetaDataStatic",
     gdal_metadata_net_cdf_cf "GdalMetadataNetCdfCf",
     gdal_meta_data_list "GdalMetaDataList"
+    gdal_multi_band "GdalMultiBand"
 );
 -- seperate table for projects used in foreign key constraints
 CREATE TABLE projects (id uuid PRIMARY KEY);
@@ -992,3 +996,29 @@ CREATE TABLE quota_log (
     data text
 );
 CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
+
+CREATE TABLE dataset_tiles (
+    dataset_id uuid NOT NULL,
+    bbox "SpatialPartition2D" NOT NULL,
+    time "TimeInterval" NOT NULL,
+    band OID NOT NULL,
+    z_index OID NOT NULL,
+    gdal_params "GdalDatasetParameters" NOT NULL
+    -- TODO: PRIMARY key, indexes
+);
+
+-- Returns true if the `other` partition has any space in common with the partition  
+CREATE FUNCTION spatial_partition2d_intersects(a "SpatialPartition2D", b "SpatialPartition2D") RETURNS boolean AS $$
+SELECT NOT (
+    (a.lower_right_coordinate.x <= b.upper_left_coordinate.x) OR
+    (a.upper_left_coordinate.x >= b.lower_right_coordinate.x) OR
+    (a.lower_right_coordinate.y >= b.upper_left_coordinate.y) OR
+    (a.upper_left_coordinate.y <= b.lower_right_coordinate.y)
+);
+$$ LANGUAGE SQL IMMUTABLE;
+
+-- Returns true if two TimeIntervals overlap
+CREATE FUNCTION time_interval_intersects(a "TimeInterval", b "TimeInterval") RETURNS boolean AS $$
+SELECT NOT (a."end" <= b.start OR b."end" <= a.start);
+$$ LANGUAGE SQL IMMUTABLE;
+

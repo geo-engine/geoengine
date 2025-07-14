@@ -97,6 +97,13 @@ pub trait DatasetProvider: Send
         limit: u32,
         offset: u32,
     ) -> Result<Vec<String>>;
+
+    async fn dataset_tiles(
+        &self,
+        dataset: &DatasetId,
+    ) -> Result<Vec<geoengine_datatypes::raster::TileInformation>> {
+        todo!();
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]

@@ -524,6 +524,7 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
                 }
             }
         }
+        MetaDataDefinition::GdalMultiBand(gdal_multi_band) => todo!(),
     }
     Ok(())
 }
