@@ -172,8 +172,8 @@ impl MlTensorShape3D {
 
 /// Strategies to handle no-data in model inputs.
 /// - Never: The onnx model is always called and output pixels are always valid. Even if all input bands are empty.
-/// - IfAllInputsAreEmpty: If all inputs are empty (no-data), the output is also empty (no-data). This is usefull if the model can handle missing data.
-/// - IfAnyInputIsEmpty: If any input model is empty (no-data), the output is also empty (no-data). This is usefull if the model can't handle missing data.
+/// - `IfAllInputsAreEmpty`: If all inputs are empty (no-data), the output is also empty (no-data). This is usefull if the model can handle missing data.
+/// - `IfAnyInputIsEmpty`: If any input model is empty (no-data), the output is also empty (no-data). This is usefull if the model can't handle missing data.
 #[derive(PartialEq, Debug, Eq, Serialize, Deserialize, Copy, Clone, Default)]
 pub enum SkipOnNoData {
     Never,

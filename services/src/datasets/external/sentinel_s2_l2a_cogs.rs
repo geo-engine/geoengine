@@ -37,7 +37,6 @@ use geoengine_operators::source::{
     OgrSourceDataset,
 };
 use geoengine_operators::util::retry::retry;
-use tracing::debug;
 use postgres_types::{FromSql, ToSql};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -46,6 +45,7 @@ use std::collections::HashMap;
 use std::convert::TryInto;
 use std::fmt::Debug;
 use std::path::PathBuf;
+use tracing::debug;
 
 static STAC_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
 

@@ -4,10 +4,10 @@ use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{BoundingBox2D, Coordinate2D},
 };
-use tracing::debug;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::collections::{BTreeMap, HashMap};
+use tracing::debug;
 use url::Url;
 
 const PAGE_SIZE: usize = 10_000; // TODO: pagination

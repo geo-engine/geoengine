@@ -9,14 +9,14 @@ use crate::machine_learning::error::{InputTypeMismatch, Ort};
 use crate::machine_learning::onnx_util::{check_model_input_features, check_model_shape};
 use crate::util::Result;
 use async_trait::async_trait;
+use float_cmp::approx_eq;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::machine_learning::{
-    MlModelMetadata, MlModelName,  SkipOnNoData,
-};
+use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName, SkipOnNoData};
 use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize, MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements
+    EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
+    MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
 };
 use ndarray::{Array2, Array4};
 use ort::{
@@ -37,8 +37,8 @@ pub struct OnnxParams {
     pub model: MlModelName,
     /// To determine output validity and the possibility to skip model application, the following strategies are available:
     /// - Never: The onnx model is always called and output pixels are always valid. Even if all input bands are empty.
-    /// - IfAllInputsAreEmpty: If all inputs are empty (no-data), the output is also empty (no-data). This is usefull if the model can handle missing data.
-    /// - IfAnyInputIsEmpty: If any input model is empty (no-data), the output is also empty (no-data). This is usefull if the model can't handle missing data.
+    /// - `IfAllInputsAreEmpty`: If all inputs are empty (no-data), the output is also empty (no-data). This is usefull if the model can handle missing data.
+    /// - `IfAnyInputIsEmpty`: If any input model is empty (no-data), the output is also empty (no-data). This is usefull if the model can't handle missing data.
     #[serde(default)]
     pub skip_mode: SkipOnNoData,
 }
@@ -215,9 +215,16 @@ where
         let num_bands = self.source.raster_result_descriptor().bands.count() as usize;
 
         let skip_mode = self.skip_mode;
-        let in_no_data_value = self.model_metadata.in_no_data_code.map(|v| TIn::from_(v)).unwrap_or(TIn::NO_DATA_IN_FALLBACK);
+        let in_no_data_value = self
+            .model_metadata
+            .in_no_data_code
+            .map_or(TIn::NO_DATA_IN_FALLBACK, |v| TIn::from_(v));
         // TODO: discuss how we handle output nodata... For float a default of NaN works but using 0 for int is a problem!
-        let out_no_data_value = self.model_metadata.in_no_data_code.map(|v| TOut::from_(v)).or(TOut::NO_DATA_OUT_FALLBACK); // While float types fallback to NaN, the check (later) always tests for NaN...
+        let out_no_data_value = self
+            .model_metadata
+            .in_no_data_code
+            .map(|v| TOut::from_(v))
+            .or(TOut::NO_DATA_OUT_FALLBACK); // While float types fallback to NaN, the check (later) always tests for NaN...
 
         let mut source_query = query.clone();
         source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
@@ -278,7 +285,7 @@ where
                 // The validity mask is a positive mask (0 == no-data, 1 == valid data).
                 // To generate the output mask, we fold over the input masks starting with an appropriate accu value which is genernated as follows:
                 let output_mask_fill_value = match skip_mode {
-                    SkipOnNoData::IfAnyInputIsNoData => false, 
+                    SkipOnNoData::IfAnyInputIsNoData => false,
                     SkipOnNoData::IfAllInputsAreNoData | SkipOnNoData::Never => true
                 };
 
@@ -300,7 +307,7 @@ where
                 }
 
                 // if the tile is skipable or the output mask has no valid pixels:
-                if skip_tile || output_mask.data.iter().all(|&v| v == false) {
+                if skip_tile || output_mask.data.iter().all(|&v| !v) {
                     tracing::trace!("Skipping Tile {tile_position:?}");
                     return Ok(RasterTile2D::new(
                         time,
@@ -366,19 +373,19 @@ where
 
                 // update the mask based on out no data value
                 if let Some(out_no_data) = out_no_data_value { // The fallback for float types will cause this to always be Some!
-                    output_mask.update_indexed_elements(|idx: GridIdx2D, mask_value| {
+                    output_mask.update_indexed_elements(|idx: GridIdx2D, validity_mask| {
                         let out_value = out_grid.get_at_grid_index_unchecked(idx);
-                        mask_value && !out_no_data.is_no_data(out_value) // Impl for F32 and F64 will always set NaN as masked
+                        validity_mask && !out_no_data.is_no_data(out_value) // Impl for f32 and f64 will always set NaN as invalid
                     });
                 }
-                
-                // if the mask has no valid pixels --> return an empty grid
-                let final_grid = if output_mask.data.iter().all(|&v| v == false) {
-                    EmptyGrid2D::new(out_grid.shape).into()
-                } else {
+
+                // if the validity mask has valid pixels --> return the model output + mask. Otherwise return empty tile.
+                let final_grid = if output_mask.data.iter().any(|&v| v) {
                     MaskedGrid::new(out_grid, output_mask)?.into()
+                } else {
+                    EmptyGrid2D::new(out_grid.shape).into()
                 };
-                
+
                 Ok(RasterTile2D::new(
                     time,
                     tile_position,
@@ -397,8 +404,7 @@ where
     }
 }
 
-// workaround trait to handle missing values for all datatypes.
-// TODO: this should be handled differently, like skipping the pixel entirely or using a different value for missing values
+// Trait to handle mapping masked pixels to model inputs for all datatypes.
 trait NoDataValueInFallback {
     const NO_DATA_IN_FALLBACK: Self;
 }
@@ -425,13 +431,15 @@ macro_rules! impl_no_data_value_zero {
 // Use the macro to implement NoDataValue for i8, u8, i16, u16, etc.
 impl_no_data_value_zero!(i8, u8, i16, u16, i32, u32, i64, u64);
 
-// workaround trait to handle missing values for all datatypes.
-// TODO: this should be handled differently, like skipping the pixel entirely or using a different value for missing values
-trait NoDataValueOutFallback where Self: Sized + PartialEq {
+// Trait to handle mapping model outputs to masked pixels for all datatypes.
+trait NoDataValueOutFallback
+where
+    Self: Sized + PartialEq,
+{
     const NO_DATA_OUT_FALLBACK: Option<Self>;
 
     fn is_no_data(&self, value: Self) -> bool {
-        value == *self
+        *self == value
     }
 }
 
@@ -439,7 +447,7 @@ impl NoDataValueOutFallback for f32 {
     const NO_DATA_OUT_FALLBACK: Option<Self> = Some(f32::NAN);
 
     fn is_no_data(&self, value: Self) -> bool {
-        value == *self || value != value
+        f32::is_nan(value) || approx_eq!(f32, *self, value)
     }
 }
 
@@ -447,7 +455,7 @@ impl NoDataValueOutFallback for f64 {
     const NO_DATA_OUT_FALLBACK: Option<Self> = Some(f64::NAN);
 
     fn is_no_data(&self, value: Self) -> bool {
-        value == *self || value != value
+        f64::is_nan(value) || approx_eq!(f64, *self, value)
     }
 }
 
@@ -480,7 +488,7 @@ mod tests {
         machine_learning::MlTensorShape3D,
         primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
-            Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint
+            Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
         test_data,
@@ -700,7 +708,7 @@ mod tests {
             output_shape: MlTensorShape3D::new_single_pixel_single_band(),
             output_type: RasterDataType::I64,
             in_no_data_code: None,
-            out_no_data_code: None
+            out_no_data_code: None,
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -913,7 +921,7 @@ mod tests {
             output_shape: MlTensorShape3D::new_single_pixel_single_band(),
             output_type: RasterDataType::F32,
             in_no_data_code: None,
-            out_no_data_code: None
+            out_no_data_code: None,
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -1075,7 +1083,7 @@ mod tests {
             output_shape: MlTensorShape3D::new_y_x_bands(512, 512, 1),
             output_type: RasterDataType::F32,
             in_no_data_code: None,
-            out_no_data_code: None
+            out_no_data_code: None,
         };
 
         let mut exe_ctx = MockExecutionContext::test_default();

@@ -1,7 +1,6 @@
 use geoengine_datatypes::util::ByteSize;
 use snafu::ensure;
 
-
 use super::error::CacheError;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]

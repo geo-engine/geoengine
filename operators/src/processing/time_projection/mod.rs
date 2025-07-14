@@ -15,11 +15,11 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::primitives::{ColumnSelection, Geometry, TimeInterval};
 use geoengine_datatypes::primitives::{TimeInstance, TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
-use tracing::debug;
 use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, IntoParallelRefIterator, ParallelIterator};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, Snafu, ensure};
+use tracing::debug;
 
 /// Projection of time information in queries and data
 ///

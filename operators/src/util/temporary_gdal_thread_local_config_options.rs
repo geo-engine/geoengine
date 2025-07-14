@@ -1,4 +1,3 @@
-
 use super::Result;
 
 /// Set thread local gdal options and revert them on drop

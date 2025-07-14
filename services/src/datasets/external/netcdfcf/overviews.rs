@@ -28,7 +28,6 @@ use geoengine_operators::{
     source::GdalMetaDataList,
     util::gdal::{gdal_parameters_from_dataset, raster_descriptor_from_dataset_and_sref},
 };
-use tracing::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{
@@ -37,6 +36,7 @@ use std::{
     sync::Arc,
 };
 use tokio::fs;
+use tracing::debug;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
