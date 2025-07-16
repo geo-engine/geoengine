@@ -1,4 +1,4 @@
-use super::{GdalDatasetParameters, GdalSourceTimePlaceholder};
+use super::GdalDatasetParameters;
 use crate::{
     engine::{MetaData, RasterResultDescriptor},
     error::Error,

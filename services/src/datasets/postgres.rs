@@ -1,3 +1,4 @@
+use crate::api::handlers::datasets::DatasetTile;
 use crate::api::model::services::UpdateDataset;
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
@@ -716,15 +717,15 @@ where
         .query(
             "
             SELECT DISTINCT
-                time
+                time, (time).start
             FROM
                 dataset_tiles
             WHERE
-                id = $1 AND
-                time_interval_intersects(time, $2) AND
+                dataset_id = $1 AND
+                time_interval_intersects(time, $2)
             ORDER BY
-               time.start",
-            &[&dataset_id],
+               (time).start",
+            &[&dataset_id, &query_time],
         )
         .await
         .map_err(|e| geoengine_operators::error::Error::MetaData {
@@ -767,14 +768,14 @@ where
             .query(
                 "
             SELECT DISTINCT
-                time.end
+                (time).end
             FROM
                 dataset_tiles
             WHERE
-                id = $1 AND
-                time.end < $2
+                dataset_id = $1 AND
+                (time).end < $2
             ORDER BY
-               time.end DESC
+               (time).end DESC
             LIMIT 1",
                 &[&dataset_id, &time_start],
             )
@@ -802,14 +803,14 @@ where
             .query(
                 "
             SELECT DISTINCT
-                time.start
+                (time).start
             FROM
                 dataset_tiles
             WHERE
-                id = $1 AND
-                time.start > $2
+                dataset_id = $1 AND
+                (time).start > $2
             ORDER BY
-               time.end ASC
+               (time).end ASC
             LIMIT 1",
                 &[
                     &dataset_id,
@@ -870,12 +871,12 @@ where
             FROM
                 dataset_tiles
             WHERE
-                d.id = $1 AND 
+                dataset_id = $1 AND 
                 spatial_partition2d_intersects(bbox, $2) AND
                 time_interval_intersects(time, $3) AND
-                band IN $4
+                band = ANY($4)
             ORDER BY
-                time.start, band, z_index",
+                (time).start, band, z_index",
                 &[
                     &self.dataset_id,
                     &query.spatial_query.spatial_bounds,
@@ -1148,6 +1149,35 @@ where
         let stmt = tx.prepare("DELETE FROM datasets WHERE id = $1;").await?;
 
         tx.execute(&stmt, &[&dataset_id]).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn add_dataset_tiles(&self, dataset: DatasetId, tiles: Vec<DatasetTile>) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        for tile in tiles {
+            tx.execute(
+                "INSERT INTO dataset_tiles (dataset_id, time, bbox, band, z_index, gdal_params)
+                VALUES ($1, $2, $3, $4, $5, $6)",
+                &[
+                    &dataset,
+                    &tile.time,
+                    &tile.spatial_partition,
+                    &tile.band,
+                    &tile.z_index,
+                    &geoengine_operators::source::GdalDatasetParameters::from(tile.params),
+                ],
+            )
+            .await?;
+        }
 
         tx.commit().await?;
 

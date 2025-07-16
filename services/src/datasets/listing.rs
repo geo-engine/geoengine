@@ -1,5 +1,6 @@
 use super::DatasetName;
 use super::storage::MetaDataDefinition;
+use crate::api::handlers::datasets::DatasetTile;
 use crate::api::model::operators::TypedResultDescriptor;
 use crate::config::{DatasetService, get_config_element};
 use crate::datasets::storage::{Dataset, validate_tags};
@@ -98,12 +99,9 @@ pub trait DatasetProvider: Send
         offset: u32,
     ) -> Result<Vec<String>>;
 
-    async fn dataset_tiles(
-        &self,
-        dataset: &DatasetId,
-    ) -> Result<Vec<geoengine_datatypes::raster::TileInformation>> {
-        todo!();
-    }
+    // async fn dataset_tiles(&self, dataset: &DatasetId) -> Result<Vec<DatasetTile>> {
+    //     todo!();
+    // }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Eq, Hash, ToSchema)]

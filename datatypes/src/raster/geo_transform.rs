@@ -281,13 +281,17 @@ impl GeoTransform {
         // TODO: maybe use fraction of pixel size as M?
         approx_eq!(
             Coordinate2D,
-            self.distance_to_nearest_pixel_edge(coordinate),
-            Coordinate2D::new(0., 0.)
+            dbg!(self.distance_to_nearest_pixel_edge(coordinate)),
+            Coordinate2D::new(0., 0.),
+            float_cmp::F64Margin {
+                epsilon: 0.000_001, // TODO: check
+                ulps: 2
+            }
         )
     }
 
     pub fn is_compatible_grid(&self, other: GeoTransform) -> bool {
-        self.is_valid_pixel_edge(other.origin_coordinate)
+        dbg!(self.is_valid_pixel_edge(other.origin_coordinate))
             && approx_eq!(f64, self.x_pixel_size(), other.x_pixel_size())
             && approx_eq!(f64, self.y_pixel_size(), other.y_pixel_size())
     }

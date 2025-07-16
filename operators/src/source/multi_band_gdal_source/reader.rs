@@ -91,15 +91,20 @@ impl ReaderState {
         // Now we can work with a matching dataset. However, we need to reverse the read window later!
 
         // let's only look at data in the geo engine dataset definition! The intersection is relative to the first elements origin coordinate.
-        let dataset_gdal_data_intersection =
-            actual_gdal_dataset_spatial_grid_definition.intersection(&self.dataset_spatial_grid)?;
+        let dataset_gdal_data_intersection = dbg!(actual_gdal_dataset_spatial_grid_definition)
+            .intersection(&dbg!(self.dataset_spatial_grid))?;
 
         // Now, we need the tile in the gdal dataset bounds to identify readable areas
-        let tile_in_gdal_dataset_bounds = tile.with_moved_origin_exact_grid(
+        let tile_in_gdal_dataset_bounds = dbg!(tile).with_moved_origin_exact_grid(dbg!(
             actual_gdal_dataset_spatial_grid_definition
                 .geo_transform()
-                .origin_coordinate,
-        )?; // TODO: raise error if this fails!
+                .origin_coordinate
+        )); // TODO: raise error if this fails!
+
+        let Some(tile_in_gdal_dataset_bounds) = tile_in_gdal_dataset_bounds else {
+            dbg!("BUG: Tile is not in the dataset bounds, skipping read advise generation");
+            return None;
+        };
 
         // Then, calculate the intersection between the datataset and the tile. Again, the intersection is relative to the first elements orrigin coordinate.
         let tile_gdal_dataset_intersection =

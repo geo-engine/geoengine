@@ -64,9 +64,15 @@ impl SpatialGridDefinition {
     pub fn with_moved_origin_exact_grid(&self, new_origin: Coordinate2D) -> Option<Self> {
         if approx_eq!(
             Coordinate2D,
-            self.geo_transform
-                .distance_to_nearest_pixel_edge(new_origin),
-            Coordinate2D::new(0., 0.)
+            dbg!(
+                self.geo_transform
+                    .distance_to_nearest_pixel_edge(new_origin)
+            ),
+            Coordinate2D::new(0., 0.),
+            float_cmp::F64Margin {
+                epsilon: 0.000_001, // TODO: check
+                ulps: 2
+            }
         ) {
             Some(self.with_moved_origin_to_nearest_grid_edge(new_origin))
         } else {
@@ -140,6 +146,7 @@ impl SpatialGridDefinition {
         let (other_shift, dist) = other.with_moved_origin_to_nearest_grid_edge_with_distance(
             self.geo_transform.origin_coordinate,
         );
+
         if dist.x.abs() > self.geo_transform().x_pixel_size().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
             || dist.y.abs() > self.geo_transform().y_pixel_size().abs() * 0.00001
         {
@@ -496,6 +503,61 @@ mod tests {
         assert_eq!(
             fliped.grid_bounds,
             GridBoundingBox2D::new_min_max(-26, -11, 1, 2).unwrap()
+        );
+    }
+
+    #[test]
+    fn bla() {
+        let a = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1779]).unwrap(),
+        };
+
+        let b = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((-45.0, 22.39999999999999).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [561, 1124]).unwrap(),
+        };
+
+        assert_eq!(
+            a.intersection(&b),
+            Some(SpatialGridDefinition {
+                geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+                grid_bounds: GridBoundingBox2D::new([338, 675], [899, 1779]).unwrap(),
+            })
+        );
+
+        // let a = SpatialGridDefinition {
+        //     geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+        //     grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1779]).unwrap(),
+        // };
+
+        // let b = SpatialGridDefinition {
+        //     geo_transform: GeoTransform::new((-45.0, 90.0).into(), 0.2, -0.2),
+        //     grid_bounds: GridBoundingBox2D::new([0, 0], [561, 1124]).unwrap(),
+        // };
+
+        // assert_eq!(
+        //     a.intersection(&b),
+        //     Some(SpatialGridDefinition {
+        //         geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+        //         grid_bounds: GridBoundingBox2D::new([0, 675], [561, 1779]).unwrap(),
+        //     })
+        // );
+    }
+
+    #[test]
+    fn blub() {
+        let tile = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((0.0, 0.0).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 512], [511, 1023]).unwrap(),
+        };
+
+        assert_eq!(
+            tile.with_moved_origin_exact_grid((-45.0, 22.39999999999999).into()),
+            Some(SpatialGridDefinition {
+                geo_transform: GeoTransform::new((-45.0, 22.4).into(), 0.2, -0.2), // TODO: 22.3999..9 vs 22.4 vs. 22.40000..01
+                grid_bounds: GridBoundingBox2D::new([112, 737], [623, 1248]).unwrap(),
+            })
         );
     }
 }

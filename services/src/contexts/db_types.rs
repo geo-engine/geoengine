@@ -1337,13 +1337,20 @@ delegate_from_to_sql!(PolygonSymbology, PolygonSymbologyDbType);
 
 #[cfg(test)]
 mod tests {
+    use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
     use geoengine_datatypes::{
-        dataset::DataProviderId, primitives::CacheTtlSeconds, util::Identifier,
+        dataset::DataProviderId,
+        primitives::{CacheTtlSeconds, Coordinate2D, SpatialPartition2D, TimeInterval},
+        util::Identifier,
     };
+    use tokio_postgres::NoTls;
 
     use super::*;
     use crate::{
+        config::get_config_element,
+        contexts::PostgresContext,
         datasets::external::{SentinelS2L2ACogsProviderDefinition, StacQueryBuffer},
+        ge_context,
         layers::external::TypedDataProviderDefinition,
         util::{postgres::assert_sql_type, tests::with_temp_context},
     };
@@ -1461,5 +1468,88 @@ mod tests {
             .await;
         })
         .await;
+    }
+
+    #[ge_context::test]
+    async fn it_checks_spatial_partition_overlaps(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> crate::error::Result<()> {
+        let conn = app_ctx.pool.get().await?;
+
+        assert_eq!(
+            conn.query_one(
+                "SELECT spatial_partition2d_intersects($1, $2)",
+                &[
+                    &SpatialPartition2D::new(Coordinate2D::new(0., 1.), Coordinate2D::new(1., 0.))?,
+                    &SpatialPartition2D::new(
+                        Coordinate2D::new(0.5, 1.5),
+                        Coordinate2D::new(1.5, 0.5),
+                    )?,
+                ],
+            )
+            .await?
+            .get::<_, bool>(0),
+            true
+        );
+
+        assert_eq!(
+            conn.query_one(
+                "SELECT spatial_partition2d_intersects($1, $2)",
+                &[
+                    &SpatialPartition2D::new(Coordinate2D::new(0., 1.), Coordinate2D::new(1., 0.))?,
+                    &SpatialPartition2D::new(
+                        Coordinate2D::new(1.0, 2.0),
+                        Coordinate2D::new(2.0, 1.0),
+                    )?,
+                ],
+            )
+            .await?
+            .get::<_, bool>(0),
+            false
+        );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_checks_time_interval_overlaps(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> crate::error::Result<()> {
+        let conn = app_ctx.pool.get().await?;
+
+        assert_eq!(
+            conn.query_one(
+                "SELECT time_interval_intersects($1, $2)",
+                &[&TimeInterval::new(0, 10)?, &TimeInterval::new(5, 15)?,],
+            )
+            .await?
+            .get::<_, bool>(0),
+            true
+        );
+
+        assert_eq!(
+            conn.query_one(
+                "SELECT time_interval_intersects($1, $2)",
+                &[&TimeInterval::new(0, 10)?, &TimeInterval::new(10, 20)?,],
+            )
+            .await?
+            .get::<_, bool>(0),
+            false
+        );
+
+        assert_eq!(
+            conn.query_one(
+                "SELECT time_interval_intersects($1, $2)",
+                &[
+                    &TimeInterval::new(1388534400000, 1388534400000)?,
+                    &TimeInterval::new(1388534400000, 1391212800000)?,
+                ],
+            )
+            .await?
+            .get::<_, bool>(0),
+            true
+        );
+
+        Ok(())
     }
 }

@@ -1431,7 +1431,7 @@ impl From<GdalLoadingInfoTemporalSlice>
 #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMultiBand {
-    pub result_descriptor: RasterResultDescriptor, // TODO: omit, already part of dataset
+    pub result_descriptor: RasterResultDescriptor,
 }
 
 impl From<geoengine_operators::source::GdalMultiBand> for GdalMultiBand {

@@ -14,8 +14,9 @@ pub use self::gdal_source::{
     GdalSourceProcessor, GdalSourceTimePlaceholder, TimeReference,
 };
 pub use self::multi_band_gdal_source::{
-    GdalSourceError as MultiBandGdalSourceError, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoQueryRectangle, TileFile,
+    GdalSourceError as MultiBandGdalSourceError,
+    GdalSourceParameters as MultiBandGdalSourceParameters, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource, TileFile,
 };
 pub use self::ogr_source::{
     AttributeFilter, CsvHeader, FormatSpecifics, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,

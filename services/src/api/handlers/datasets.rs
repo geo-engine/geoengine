@@ -1,6 +1,7 @@
 use crate::{
     api::model::{
-        operators::{GdalLoadingInfoTemporalSlice, GdalMetaDataList},
+        datatypes::SpatialPartition2D,
+        operators::{GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList},
         responses::{
             ErrorResponse,
             datasets::{DatasetNameResponse, errors::*},
@@ -26,7 +27,10 @@ use crate::{
         path_with_base_path,
     },
 };
-use actix_web::{FromRequest, HttpResponse, HttpResponseBuilder, Responder, web};
+use actix_web::{
+    FromRequest, HttpResponse, HttpResponseBuilder, Responder,
+    web::{self, Json},
+};
 use gdal::{
     DatasetOptions,
     vector::{Layer, LayerAccess, OGRFieldType},
@@ -87,6 +91,10 @@ where
             .service(
                 web::resource("/{dataset}/provenance")
                     .route(web::put().to(update_dataset_provenance_handler::<C>)),
+            )
+            .service(
+                web::resource("/{dataset}/tiles")
+                    .route(web::post().to(add_dataset_tiles_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -176,6 +184,64 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
         .list_datasets(options)
         .await?;
     Ok(web::Json(list))
+}
+
+/// Add a tile to a gdal dataset.
+#[utoipa::path(
+    tag = "Datasets",
+    post,
+    path = "/dataset/{dataset}/tiles",
+    request_body = AutoCreateDataset,
+    responses(
+        (status = 200),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    dataset: web::Path<DatasetName>,
+    tiles: Json<Vec<DatasetTile>>,
+) -> Result<HttpResponse, AddDatasetTilesError> {
+    let db = app_ctx.session_context(session).db();
+
+    let dataset = dataset.into_inner();
+    let dataset_id = db
+        .resolve_dataset_name_to_id(&dataset)
+        .await
+        .context(CannotLoadDatasetForAddingTiles)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForAddingTiles)?;
+
+    // TODO: validate that
+    //  - the dataset is a MultiBandGdal dataset
+    //  - the gdal params reference a valid file path (relative to data volume)
+    //  - the gdal dataset (in the files) are compatible with the dataset (type, spatial reference, etc.)
+    //  - the bands exist in the dataset
+    //  - the time is compatible (does not *overlap* with existing tiles, but is either same as existing or a distinct time interval)
+    //  (- on spatial overlap, the z-index is different than existing tiles for the same time step and band)
+
+    db.add_dataset_tiles(dataset_id, tiles.into_inner())
+        .await
+        .context(CannotAddTilesToDataset)?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+pub struct DatasetTile {
+    pub time: crate::api::model::datatypes::TimeInterval,
+    pub spatial_partition: SpatialPartition2D,
+    pub band: u32,
+    pub z_index: u32,
+    pub params: GdalDatasetParameters,
 }
 
 /// Retrieves details about a dataset using the internal name.
@@ -524,7 +590,7 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
                 }
             }
         }
-        MetaDataDefinition::GdalMultiBand(gdal_multi_band) => todo!(),
+        MetaDataDefinition::GdalMultiBand(gdal_multi_band) => {}
     }
     Ok(())
 }
@@ -1373,10 +1439,18 @@ async fn create_system_dataset<C: ApplicationContext>(
 #[cfg(test)]
 mod tests {
 
+    use std::str::FromStr;
+
     use super::*;
     use crate::{
         api::model::{
-            datatypes::NamedData,
+            datatypes::{
+                Colorizer, NamedData, RasterDataType, SingleBandRasterColorizer, TimeInstance,
+            },
+            operators::{
+                FileNotFoundHandling, GdalDatasetGeoTransform, GdalMultiBand,
+                RasterResultDescriptor, TypedOperator,
+            },
             responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
         },
@@ -1395,6 +1469,7 @@ mod tests {
             MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
             admin_login, read_body_json, read_body_string, send_test_request,
         },
+        workflows::{registry::WorkflowRegistry, workflow::Workflow},
     };
     use actix_web;
     use actix_web::http::header;
@@ -1403,19 +1478,29 @@ mod tests {
     use geoengine_datatypes::{
         collections::{GeometryCollection, MultiPointCollection, VectorDataType},
         operations::image::{RasterColorizer, RgbaColor},
-        primitives::{BoundingBox2D, ColumnSelection, SpatialQueryRectangle},
-        raster::{GridShape2D, TilingSpecification},
+        primitives::{
+            BandSelection, BoundingBox2D, ColumnSelection, DateTimeParseFormat, Duration,
+            RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned, SpatialQueryRectangle,
+        },
+        raster::{
+            GeoTransform, GridBoundingBox2D, GridIndexAccess, GridShape2D, TilingSpecification,
+        },
         spatial_reference::SpatialReferenceOption,
     };
     use geoengine_operators::{
         engine::{
-            ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
+            ExecutionContext, InitializedVectorOperator, QueryProcessor, RasterBandDescriptor,
+            RasterBandDescriptors, RasterOperator, SpatialGridDescriptor, StaticMetaData,
             VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
         },
-        source::{OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters},
-        util::gdal::create_ndvi_meta_data,
+        source::{
+            GdalSource, MultiBandGdalSource, MultiBandGdalSourceParameters, OgrSource,
+            OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
+        },
+        util::gdal::{create_ndvi_meta_data, create_ndvi_result_descriptor},
     };
     use serde_json::{Value, json};
+    use std::collections::HashSet;
     use tokio_postgres::NoTls;
     use uuid::Uuid;
 
@@ -3203,5 +3288,461 @@ mod tests {
         assert!(db.load_dataset(&dataset_id).await.is_err());
 
         Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_adds_tiles_to_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let volume = VolumeName("test_data".to_string());
+
+        // add data
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi (tiled)".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: create_ndvi_result_descriptor().into(),
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        // add tiles
+
+        let tiles = create_ndvi_tiles();
+
+        std::fs::write("ndvi_tiles.json", serde_json::to_string(&tiles).unwrap()).unwrap();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        // create workflow
+        let workflow = Workflow {
+            operator: geoengine_operators::engine::TypedOperator::Raster(
+                MultiBandGdalSource {
+                    params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+                }
+                .boxed(),
+            ),
+        };
+
+        let id = ctx.db().register_workflow(workflow.clone()).await.unwrap();
+
+        let colorizer = geoengine_datatypes::operations::image::Colorizer::linear_gradient(
+            vec![
+                (0.0, RgbaColor::white()).try_into().unwrap(),
+                (255.0, RgbaColor::black()).try_into().unwrap(),
+            ],
+            RgbaColor::transparent(),
+            RgbaColor::white(),
+            RgbaColor::black(),
+        )
+        .unwrap();
+
+        let raster_colorizer =
+            crate::api::model::datatypes::RasterColorizer::SingleBand(SingleBandRasterColorizer {
+                r#type: Default::default(),
+                band: 0,
+                band_colorizer: colorizer.into(),
+            });
+
+        let params = &[
+            ("request", "GetMap"),
+            ("service", "WMS"),
+            ("version", "1.3.0"),
+            ("layers", &id.to_string()),
+            ("bbox", "-90,-180,90,180"),
+            ("width", "3600"),
+            ("height", "1800"),
+            ("crs", "EPSG:4326"),
+            (
+                "styles",
+                &format!(
+                    "custom:{}",
+                    serde_json::to_string(&raster_colorizer).unwrap()
+                ),
+            ),
+            ("format", "image/png"),
+            ("time", "2014-01-01T00:00:00.0Z"),
+        ];
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!(
+                "/wms/{}?{}",
+                id,
+                serde_urlencoded::to_string(params).unwrap()
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+        let res = send_test_request(req, app_ctx).await;
+
+        assert_eq!(res.status(), 200);
+
+        // dbg!(read_body_string(res).await);
+
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
+
+        // assert_image_equals(test_data!("wms/get_map_colorizer.png"), &image_bytes);
+
+        // // make path relative to volume
+        // meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
+
+        // let create = CreateDataset {
+        //     data_path: DataPath::Volume(volume.clone()),
+        //     definition: DatasetDefinition {
+        //         properties: AddDataset {
+        //             name: None,
+        //             display_name: "ndvi".to_string(),
+        //             description: "ndvi".to_string(),
+        //             source_operator: "GdalSource".to_string(),
+        //             symbology: None,
+        //             provenance: None,
+        //             tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+        //         },
+        //         meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
+        //     },
+        // };
+
+        // // create via admin session
+        // let admin_session = admin_login(&app_ctx).await;
+        // let req = actix_web::test::TestRequest::post()
+        //     .uri("/dataset")
+        //     .append_header((header::CONTENT_LENGTH, 0))
+        //     .append_header((
+        //         header::AUTHORIZATION,
+        //         Bearer::new(admin_session.id().to_string()),
+        //     ))
+        //     .append_header((header::CONTENT_TYPE, "application/json"))
+        //     .set_json(create);
+        // let res = send_test_request(req, app_ctx.clone()).await;
+        // assert_eq!(res.status(), 200);
+
+        // let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+
+        // let req = actix_web::test::TestRequest::get()
+        //     .uri(&format!("/dataset/{dataset_name}"))
+        //     .append_header((header::CONTENT_LENGTH, 0))
+        //     .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+
+        // let res = send_test_request(req, app_ctx.clone()).await;
+        // assert_eq!(res.status(), 200);
+
+        // Ok(())
+
+        // dbg!(create_ndvi_tiles());
+
+        todo!()
+    }
+
+    pub fn create_ndvi_tiles() -> Vec<DatasetTile> {
+        let no_data_value = Some(0.); // TODO: is it really 0?
+
+        let starts: Vec<TimeInstance> = vec![
+            TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-02-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-03-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-04-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-05-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-06-01T00:00:00Z").unwrap(),
+        ];
+
+        let ends: Vec<TimeInstance> = vec![
+            TimeInstance::from_str("2014-02-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-03-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-04-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-05-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-06-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-07-01T00:00:00Z").unwrap(),
+        ];
+
+        let mut tiles = vec![];
+
+        for (start, end) in starts.iter().zip(ends.iter()) {
+            let start_time: geoengine_datatypes::primitives::TimeInstance = (*start).into();
+            let time_str = start_time
+                .as_date_time()
+                .unwrap()
+                .format(&DateTimeParseFormat::custom("%Y-%m-%d".to_string()));
+
+            // left
+            tiles.push(DatasetTile {
+                time: TimeInterval::new_unchecked(*start, *end).into(),
+                spatial_partition:
+                    geoengine_datatypes::primitives::SpatialPartition2D::new_unchecked(
+                        (-180., 90.).into(),
+                        (0.0, -90.).into(),
+                    )
+                    .into(),
+                band: 0,
+                z_index: 0,
+                params: GdalDatasetParameters {
+                    file_path: test_data!(format!(
+                        "raster/modis_ndvi/tiled/MOD13A2_M_NDVI_{time_str}_1_1.tif"
+                    ))
+                    .into(),
+                    rasterband_channel: 1,
+                    geo_transform: geoengine_operators::source::GdalDatasetGeoTransform {
+                        origin_coordinate: (-180., 90.).into(),
+                        x_pixel_size: 0.1,
+                        y_pixel_size: -0.1,
+                    }
+                    .into(),
+                    width: 1800,
+                    height: 1800,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value,
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
+                },
+            });
+
+            // right
+            tiles.push(DatasetTile {
+                time: TimeInterval::new_unchecked(*start, *end).into(),
+                spatial_partition:
+                    geoengine_datatypes::primitives::SpatialPartition2D::new_unchecked(
+                        (0., 90.).into(),
+                        (180.0, -90.).into(),
+                    )
+                    .into(),
+                band: 0,
+                z_index: 0,
+                params: GdalDatasetParameters {
+                    file_path: test_data!(format!(
+                        "raster/modis_ndvi/tiled/MOD13A2_M_NDVI_{time_str}_1_2.tif"
+                    ))
+                    .into(),
+                    rasterband_channel: 1,
+                    geo_transform: geoengine_operators::source::GdalDatasetGeoTransform {
+                        origin_coordinate: (0., 90.).into(),
+                        x_pixel_size: 0.1,
+                        y_pixel_size: -0.1,
+                    }
+                    .into(),
+                    width: 1800,
+                    height: 1800,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value,
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: None,
+                    allow_alphaband_as_mask: true,
+                },
+            });
+        }
+
+        tiles
+    }
+
+    // TODO: where to actually put this test? Can't be in the multi dim gdalsource because then we can't test the database access of the tiles is correct
+    #[ge_context::test]
+    async fn it_loads_multi_band_multi_file_mosaics(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+
+        let volume = VolumeName("test_data".to_string());
+
+        // add data
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "multi tile multi band".to_string(),
+                    description: "".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U16,
+                        spatial_reference: SpatialReferenceOption::from(
+                            SpatialReference::epsg_4326(),
+                        )
+                        .into(),
+                        time: None,
+                        spatial_grid: SpatialGridDescriptor::source_from_parts(
+                            GeoTransform::new(
+                                (-180., 90.).into(),
+                                0.2,  // x pixel size
+                                -0.2, // y pixel size
+                            ),
+                            GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
+                        )
+                        .into(),
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
+                            "band".into(),
+                            Measurement::Unitless,
+                        )])
+                        .unwrap()
+                        .into(),
+                    },
+                }),
+            },
+        };
+
+        print!("{}", serde_json::to_string_pretty(&create).unwrap());
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        // add tiles
+        let mut tiles: Vec<DatasetTile> = serde_json::from_str(&std::fs::read_to_string(
+            test_data!("raster/multi_tile/loading_info.json"),
+        )?)?;
+
+        for tile in &mut tiles {
+            tile.params.file_path = dbg!(
+                test_data!(
+                    tile.params
+                        .file_path
+                        .to_string_lossy()
+                        .replace("test_data/", "")
+                )
+                .to_path_buf()
+            );
+        }
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_json(tiles);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        // create workflow
+        let operator = MultiBandGdalSource {
+            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+        }
+        .boxed();
+
+        // TODO: create query processor, query, and check result
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?;
+
+        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let tiling_spec = execution_context.tiling_specification();
+
+        let query_tiling_pixel_grid = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec)
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180.0, -90.).into(),
+            ));
+
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            query_tiling_pixel_grid.grid_bounds(),
+            TimeInterval::new_instant(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                    .unwrap(),
+            )
+            .unwrap(),
+            BandSelection::first(), // TODO: load both bands
+        );
+
+        let tiles = processor
+            .get_u16()
+            .unwrap()
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        for tile in tiles {
+            let p = tile.spatial_partition();
+            let values: HashSet<_> = tile
+                .grid_array
+                .into_materialized_masked_grid()
+                .inner_grid
+                .inner_ref()
+                .iter()
+                .copied()
+                .collect();
+            println!(
+                "Tile: spatial partition: {:?}, data values = {:?}",
+                p, values
+            );
+        }
+
+        todo!()
     }
 }
