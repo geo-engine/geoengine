@@ -1,18 +1,12 @@
-use crate::adapters::{
-    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
-};
-use crate::cache;
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
 };
-use crate::error::TokioJoin;
 use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
 };
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::util::gdal::gdal_open_dataset_ex;
-use crate::util::input::float_option_with_nan;
 use crate::util::retry::retry;
 use crate::{
     engine::{
@@ -25,12 +19,8 @@ use crate::{
 use async_trait::async_trait;
 pub use error::GdalSourceError;
 use float_cmp::{ApproxEq, approx_eq};
-use futures::future::BoxFuture;
-use futures::{Future, TryStreamExt};
-use futures::{
-    Stream,
-    stream::{self, BoxStream, StreamExt},
-};
+use futures::TryStreamExt;
+use futures::stream::{self, BoxStream, StreamExt};
 use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
@@ -57,7 +47,7 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use itertools::Itertools;
-pub use loading_info::{MultiBandGdalLoadingInfo, TileFile};
+pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
 use log::{debug, info};
 use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
 use postgres_types::{FromSql, ToSql};
@@ -67,14 +57,10 @@ use reader::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
-use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::ffi::CString;
 use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::path::Path;
 
-mod db_types;
 mod error;
 mod loading_info;
 mod reader;
@@ -147,196 +133,6 @@ fn raster_query_rectangle_to_loading_info_query_rectangle(
         attributes: raster_query_rectangle.attributes,
     }
 }
-
-// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
-// #[serde(rename_all = "camelCase")]
-// pub struct GdalSourceTimePlaceholder {
-//     pub format: DateTimeParseFormat,
-//     pub reference: TimeReference,
-// }
-
-// #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
-// #[serde(rename_all = "camelCase")]
-// pub enum TimeReference {
-//     Start,
-//     End,
-// }
-
-// /// Parameters for loading data using Gdal
-// #[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
-// #[serde(rename_all = "camelCase")]
-// pub struct GdalDatasetParameters {
-//     pub file_path: PathBuf,
-//     pub rasterband_channel: usize,
-//     pub geo_transform: GdalDatasetGeoTransform, // TODO: discuss if we need this at all
-//     pub width: usize,
-//     pub height: usize,
-//     pub file_not_found_handling: FileNotFoundHandling,
-//     #[serde(default)]
-//     #[serde(with = "float_option_with_nan")]
-//     pub no_data_value: Option<f64>,
-//     pub properties_mapping: Option<Vec<GdalMetadataMapping>>,
-//     // Dataset open option as strings, e.g. `vec!["UserPwd=geoengine:pwd".to_owned(), "HttpAuth=BASIC".to_owned()]`
-//     pub gdal_open_options: Option<Vec<String>>,
-//     // Configs as key, value pairs that will be set as thread local config options, e.g.
-//     // `vec!["AWS_REGION".to_owned(), "eu-central-1".to_owned()]` and unset afterwards
-//     // TODO: validate the config options: only allow specific keys and specific values
-//     pub gdal_config_options: Option<Vec<(String, String)>>,
-//     #[serde(default)]
-//     pub allow_alphaband_as_mask: bool,
-//     pub retry: Option<GdalRetryOptions>,
-// }
-
-// impl GdalDatasetParameters {
-//     pub fn dataset_bounds(&self) -> GridBoundingBox2D {
-//         GridBoundingBox2D::new_unchecked(
-//             [0, 0],
-//             [self.height as isize - 1, self.width as isize - 1],
-//         )
-//     }
-
-//     pub fn gdal_geo_transform(&self) -> GdalDatasetGeoTransform {
-//         self.geo_transform
-//     }
-
-//     /// Returns the `SpatialGridDefinition` of the Gdal dataset.
-//     ///
-//     /// Note: This allows upside down datasets (where `GeoTransform` `y_pixel_size` is positive)!
-//     ///
-//     /// # Panics
-//     /// Panics if the `GdalDatasetParameters` are faulty.
-//     pub fn spatial_grid_definition(&self) -> SpatialGridDefinition {
-//         let gdal_geo_transform = GeoTransform::new(
-//             self.gdal_geo_transform().origin_coordinate,
-//             self.gdal_geo_transform().x_pixel_size,
-//             self.gdal_geo_transform().y_pixel_size,
-//         );
-
-//         SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
-//     }
-// }
-
-// #[derive(PartialEq, Serialize, Deserialize, Debug, Clone, Copy)]
-// #[serde(rename_all = "camelCase")]
-// pub struct GdalRetryOptions {
-//     pub max_retries: usize,
-// }
-
-// /// A user friendly representation of Gdal's geo transform. In contrast to [`GeoTransform`] this
-// /// geo transform allows arbitrary pixel sizes and can thus also represent rasters where the origin is not located
-// /// in the upper left corner. It should only be used for loading rasters with Gdal and not internally.
-// /// The GDAL pixel space is usually anchored at the "top-left" corner of the data spatial bounds. Therefore the raster data is stored with spatial coordinate y-values decreasing with the rasters rows. This is represented by a negative pixel size.
-// /// However, there are datasets where the data is stored "upside-down". If this is the case, the pixel size is positive.
-// #[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, FromSql, ToSql)]
-// #[serde(rename_all = "camelCase")]
-// pub struct GdalDatasetGeoTransform {
-//     pub origin_coordinate: Coordinate2D,
-//     pub x_pixel_size: f64,
-//     pub y_pixel_size: f64,
-// }
-
-// /// Default implementation for testing purposes where geo transform doesn't matter
-// impl TestDefault for GdalDatasetGeoTransform {
-//     fn test_default() -> Self {
-//         Self {
-//             origin_coordinate: (0.0, 0.0).into(),
-//             x_pixel_size: 1.0,
-//             y_pixel_size: -1.0,
-//         }
-//     }
-// }
-
-// impl ApproxEq for GdalDatasetGeoTransform {
-//     type Margin = float_cmp::F64Margin;
-
-//     fn approx_eq<M>(self, other: Self, margin: M) -> bool
-//     where
-//         M: Into<Self::Margin>,
-//     {
-//         let m = margin.into();
-//         self.origin_coordinate.approx_eq(other.origin_coordinate, m)
-//             && self.x_pixel_size.approx_eq(other.x_pixel_size, m)
-//             && self.y_pixel_size.approx_eq(other.y_pixel_size, m)
-//     }
-// }
-
-// /// Direct conversion from `GdalDatasetGeoTransform` to [`GeoTransform`] only works if origin is located in the upper left corner.
-// impl TryFrom<GdalDatasetGeoTransform> for GeoTransform {
-//     type Error = Error;
-
-//     fn try_from(dataset_geo_transform: GdalDatasetGeoTransform) -> Result<Self> {
-//         ensure!(
-//             dataset_geo_transform.x_pixel_size != 0.0 && dataset_geo_transform.y_pixel_size != 0.0,
-//             crate::error::GeoTransformOrigin // TODO new name?
-//         );
-
-//         Ok(GeoTransform::new(
-//             dataset_geo_transform.origin_coordinate,
-//             dataset_geo_transform.x_pixel_size,
-//             dataset_geo_transform.y_pixel_size,
-//         ))
-//     }
-// }
-
-// impl From<gdal::GeoTransform> for GdalDatasetGeoTransform {
-//     fn from(gdal_geo_transform: gdal::GeoTransform) -> Self {
-//         Self {
-//             origin_coordinate: (gdal_geo_transform[0], gdal_geo_transform[3]).into(),
-//             x_pixel_size: gdal_geo_transform[1],
-//             y_pixel_size: gdal_geo_transform[5],
-//         }
-//     }
-// }
-
-// impl GridShapeAccess for GdalDatasetParameters {
-//     type ShapeArray = [usize; 2];
-
-//     fn grid_shape_array(&self) -> Self::ShapeArray {
-//         [self.height, self.width]
-//     }
-// }
-
-// /// How to handle file not found errors
-// #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, FromSql, ToSql)]
-// pub enum FileNotFoundHandling {
-//     NoData, // output tiles filled with nodata
-//     Error,  // return error tile
-// }
-
-// impl GdalDatasetParameters {
-//     /// Placeholders are replaced by formatted time value.
-//     /// E.g. `%my_placeholder%` could be replaced by `2014-04-01` depending on the format and time input.
-//     pub fn replace_time_placeholders(
-//         &self,
-//         placeholders: &HashMap<String, GdalSourceTimePlaceholder>,
-//         time: TimeInterval,
-//     ) -> Result<Self> {
-//         let mut file_path: String = self.file_path.to_string_lossy().into();
-
-//         for (placeholder, time_placeholder) in placeholders {
-//             let time = match time_placeholder.reference {
-//                 TimeReference::Start => time.start(),
-//                 TimeReference::End => time.end(),
-//             };
-//             let time_string = time
-//                 .as_date_time()
-//                 .ok_or(Error::TimeInstanceNotDisplayable)?
-//                 .format(&time_placeholder.format);
-
-//             // TODO: use more efficient algorithm for replacing multiple placeholders, e.g. aho-corasick
-//             file_path = file_path.replace(placeholder, &time_string);
-//         }
-
-//         Ok(Self {
-//             file_not_found_handling: self.file_not_found_handling,
-//             file_path: file_path.into(),
-//             properties_mapping: self.properties_mapping.clone(),
-//             gdal_open_options: self.gdal_open_options.clone(),
-//             gdal_config_options: self.gdal_config_options.clone(),
-//             ..*self
-//         })
-//     }
-// }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 pub struct TilingInformation {

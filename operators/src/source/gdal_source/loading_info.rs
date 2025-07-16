@@ -323,12 +323,6 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
     }
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone, FromSql, ToSql, PartialEq)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalMultiBand {
-    pub result_descriptor: RasterResultDescriptor,
-}
-
 #[derive(Debug, Clone)]
 /// An iterator for gdal loading infos based on time placeholders that generates
 /// a new loading info for each time step within `data_time` and an empty loading info

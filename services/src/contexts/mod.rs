@@ -200,23 +200,6 @@ impl QueryContext for QueryContextImpl {
     fn cache(&self) -> Option<Arc<geoengine_operators::cache::shared_cache::SharedCache>> {
         self.cache.clone()
     }
-
-    // TODO: implement on metadataprovider instead
-    async fn dataset_timesteps(
-        &self,
-        data: &DataId,
-        query_time_interval: TimeInterval,
-    ) -> Result<Vec<TimeInterval>, geoengine_operators::error::Error> {
-        todo!()
-    }
-
-    async fn dataset_tiles(
-        &self,
-        data: &DataId,
-        query: RasterQueryRectangle,
-    ) -> Result<Vec<GdalDatasetParameters>, geoengine_operators::error::Error> {
-        todo!()
-    }
 }
 
 pub struct ExecutionContextImpl<D>

@@ -3424,53 +3424,6 @@ mod tests {
 
         // assert_image_equals(test_data!("wms/get_map_colorizer.png"), &image_bytes);
 
-        // // make path relative to volume
-        // meta_data.params.file_path = "raster/modis_ndvi/MOD13A2_M_NDVI_%_START_TIME_%.TIFF".into();
-
-        // let create = CreateDataset {
-        //     data_path: DataPath::Volume(volume.clone()),
-        //     definition: DatasetDefinition {
-        //         properties: AddDataset {
-        //             name: None,
-        //             display_name: "ndvi".to_string(),
-        //             description: "ndvi".to_string(),
-        //             source_operator: "GdalSource".to_string(),
-        //             symbology: None,
-        //             provenance: None,
-        //             tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
-        //         },
-        //         meta_data: MetaDataDefinition::GdalMetaDataRegular(meta_data.into()),
-        //     },
-        // };
-
-        // // create via admin session
-        // let admin_session = admin_login(&app_ctx).await;
-        // let req = actix_web::test::TestRequest::post()
-        //     .uri("/dataset")
-        //     .append_header((header::CONTENT_LENGTH, 0))
-        //     .append_header((
-        //         header::AUTHORIZATION,
-        //         Bearer::new(admin_session.id().to_string()),
-        //     ))
-        //     .append_header((header::CONTENT_TYPE, "application/json"))
-        //     .set_json(create);
-        // let res = send_test_request(req, app_ctx.clone()).await;
-        // assert_eq!(res.status(), 200);
-
-        // let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
-
-        // let req = actix_web::test::TestRequest::get()
-        //     .uri(&format!("/dataset/{dataset_name}"))
-        //     .append_header((header::CONTENT_LENGTH, 0))
-        //     .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
-
-        // let res = send_test_request(req, app_ctx.clone()).await;
-        // assert_eq!(res.status(), 200);
-
-        // Ok(())
-
-        // dbg!(create_ndvi_tiles());
-
         todo!()
     }
 
@@ -3579,8 +3532,6 @@ mod tests {
     // TODO: where to actually put this test? Can't be in the multi dim gdalsource because then we can't test the database access of the tiles is correct
     #[ge_context::test]
     async fn it_loads_multi_band_multi_file_mosaics(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let session = app_ctx.create_anonymous_session().await.unwrap();
-
         let volume = VolumeName("test_data".to_string());
 
         // add data

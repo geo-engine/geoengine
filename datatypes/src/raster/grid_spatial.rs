@@ -526,23 +526,23 @@ mod tests {
             })
         );
 
-        // let a = SpatialGridDefinition {
-        //     geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
-        //     grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1779]).unwrap(),
-        // };
+        let a = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1779]).unwrap(),
+        };
 
-        // let b = SpatialGridDefinition {
-        //     geo_transform: GeoTransform::new((-45.0, 90.0).into(), 0.2, -0.2),
-        //     grid_bounds: GridBoundingBox2D::new([0, 0], [561, 1124]).unwrap(),
-        // };
+        let b = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((-45.0, 90.0).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [561, 1124]).unwrap(),
+        };
 
-        // assert_eq!(
-        //     a.intersection(&b),
-        //     Some(SpatialGridDefinition {
-        //         geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
-        //         grid_bounds: GridBoundingBox2D::new([0, 675], [561, 1779]).unwrap(),
-        //     })
-        // );
+        assert_eq!(
+            a.intersection(&b),
+            Some(SpatialGridDefinition {
+                geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+                grid_bounds: GridBoundingBox2D::new([0, 675], [561, 1779]).unwrap(),
+            })
+        );
     }
 
     #[test]

@@ -1,20 +1,20 @@
 use super::GdalDatasetParameters;
 use crate::{
     engine::{MetaData, RasterResultDescriptor},
-    error::Error,
     util::Result,
 };
-use async_trait::async_trait;
 use geoengine_datatypes::{
-    primitives::{
-        CacheHint, CacheTtlSeconds, QueryRectangle, RasterQueryRectangle, SpatialPartition2D,
-        SpatialPartitioned, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
-    },
+    primitives::{CacheHint, SpatialPartition2D, SpatialPartitioned, TimeInterval},
     raster::TileInformation,
 };
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
-use std::collections::{BTreeSet, HashMap};
+
+#[derive(Serialize, Deserialize, Debug, Clone, FromSql, ToSql, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMultiBand {
+    pub result_descriptor: RasterResultDescriptor,
+}
 
 #[derive(Debug, Clone)]
 pub struct MultiBandGdalLoadingInfo {
