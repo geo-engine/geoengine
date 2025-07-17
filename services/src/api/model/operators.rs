@@ -1,7 +1,7 @@
 use crate::api::model::datatypes::{
     BoundingBox2D, CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, FeatureDataType,
-    GdalConfigOption, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
-    RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, SpatialPartition2D,
+    GdalConfigOption, Measurement, MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon,
+    NoGeometry, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, SpatialPartition2D,
     SpatialReferenceOption, SpatialResolution, TimeInstance, TimeInterval, TimeStep,
     VectorDataType,
 };
@@ -1432,6 +1432,126 @@ impl From<FormatSpecifics> for geoengine_operators::source::FormatSpecifics {
             FormatSpecifics::Csv { header } => Self::Csv {
                 header: header.into(),
             },
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, Default, ToSchema)]
+#[serde(rename_all = "camelCase", untagged)]
+pub enum MlModelInputNoDataHandling {
+    EncodedNoData {
+        no_data_value: f32,
+    },
+    #[default]
+    SkipIfNoData,
+}
+
+impl From<MlModelInputNoDataHandling>
+    for geoengine_operators::machine_learning::MlModelInputNoDataHandling
+{
+    fn from(value: MlModelInputNoDataHandling) -> Self {
+        match value {
+            MlModelInputNoDataHandling::EncodedNoData { no_data_value } => {
+                geoengine_operators::machine_learning::MlModelInputNoDataHandling::EncodedNoData {
+                    no_data_value,
+                }
+            }
+            MlModelInputNoDataHandling::SkipIfNoData => {
+                geoengine_operators::machine_learning::MlModelInputNoDataHandling::SkipIfNoData
+            }
+        }
+    }
+}
+
+impl From<geoengine_operators::machine_learning::MlModelInputNoDataHandling>
+    for MlModelInputNoDataHandling
+{
+    fn from(value: geoengine_operators::machine_learning::MlModelInputNoDataHandling) -> Self {
+        match value {
+            geoengine_operators::machine_learning::MlModelInputNoDataHandling::EncodedNoData {
+                no_data_value,
+            } => MlModelInputNoDataHandling::EncodedNoData { no_data_value },
+            geoengine_operators::machine_learning::MlModelInputNoDataHandling::SkipIfNoData => {
+                MlModelInputNoDataHandling::SkipIfNoData
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, Default, ToSchema)]
+#[serde(rename_all = "camelCase", untagged)]
+pub enum MlModelOutputNoDataHandling {
+    EncodedNoData {
+        no_data_value: f32,
+    },
+    #[default]
+    NanIsNoData,
+}
+
+impl From<MlModelOutputNoDataHandling>
+    for geoengine_operators::machine_learning::MlModelOutputNoDataHandling
+{
+    fn from(value: MlModelOutputNoDataHandling) -> Self {
+        match value {
+            MlModelOutputNoDataHandling::EncodedNoData { no_data_value } => {
+                geoengine_operators::machine_learning::MlModelOutputNoDataHandling::EncodedNoData {
+                    no_data_value,
+                }
+            }
+            MlModelOutputNoDataHandling::NanIsNoData => {
+                geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData
+            }
+        }
+    }
+}
+
+impl From<geoengine_operators::machine_learning::MlModelOutputNoDataHandling>
+    for MlModelOutputNoDataHandling
+{
+    fn from(value: geoengine_operators::machine_learning::MlModelOutputNoDataHandling) -> Self {
+        match value {
+            geoengine_operators::machine_learning::MlModelOutputNoDataHandling::EncodedNoData {
+                no_data_value,
+            } => MlModelOutputNoDataHandling::EncodedNoData { no_data_value },
+            geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData => {
+                MlModelOutputNoDataHandling::NanIsNoData
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+pub struct MlModelMetadata {
+    pub input_type: RasterDataType,
+    pub output_type: RasterDataType,
+    pub input_shape: MlTensorShape3D,
+    pub output_shape: MlTensorShape3D,
+    pub input_no_data_handling: MlModelInputNoDataHandling,
+    pub output_no_data_handling: MlModelOutputNoDataHandling,
+}
+
+impl From<MlModelMetadata> for geoengine_operators::machine_learning::MlModelMetadata {
+    fn from(value: MlModelMetadata) -> Self {
+        geoengine_operators::machine_learning::MlModelMetadata {
+            input_type: value.input_type.into(),
+            output_type: value.output_type.into(),
+            input_shape: value.input_shape.into(),
+            output_shape: value.output_shape.into(),
+            input_no_data_handling: value.input_no_data_handling.into(),
+            output_no_data_handling: value.output_no_data_handling.into(),
+        }
+    }
+}
+
+impl From<geoengine_operators::machine_learning::MlModelMetadata> for MlModelMetadata {
+    fn from(value: geoengine_operators::machine_learning::MlModelMetadata) -> Self {
+        MlModelMetadata {
+            input_type: value.input_type.into(),
+            output_type: value.output_type.into(),
+            input_shape: value.input_shape.into(),
+            output_shape: value.output_shape.into(),
+            input_no_data_handling: value.input_no_data_handling.into(),
+            output_no_data_handling: value.output_no_data_handling.into(),
         }
     }
 }

@@ -462,7 +462,6 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::{MlTensorShape3D, RasterDataType as ApiRasterDataType};
     use crate::config::QuotaTrackingMode;
     use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
     use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
@@ -484,7 +483,7 @@ mod tests {
         INTERNAL_PROVIDER_ID, LayerDb, LayerProviderDb, LayerProviderListing,
         LayerProviderListingOptions,
     };
-    use crate::machine_learning::{MlModel, MlModelDb, MlModelIdAndName, MlModelMetadata};
+    use crate::machine_learning::{MlModel, MlModelDb, MlModelIdAndName};
     use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
     use crate::projects::{
         CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
@@ -501,6 +500,7 @@ mod tests {
     use futures::join;
     use geoengine_datatypes::collections::VectorDataType;
     use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+    use geoengine_datatypes::machine_learning::MlTensorShape3D;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
         RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
@@ -516,6 +516,7 @@ mod tests {
         RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
         TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
+    use geoengine_operators::machine_learning::MlModelMetadata;
     use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
     use geoengine_operators::plot::{Statistics, StatisticsParams};
     use geoengine_operators::source::{
@@ -4953,14 +4954,16 @@ mod tests {
         let model = MlModel {
             description: "No real model here".to_owned(),
             display_name: "my unreal model".to_owned(),
+            file_name: "myUnrealmodel.onnx".to_owned(),
             metadata: MlModelMetadata {
-                file_name: "myUnrealmodel.onnx".to_owned(),
-                input_type: ApiRasterDataType::F32,
+                input_type: RasterDataType::F32,
                 input_shape: MlTensorShape3D::new_single_pixel_bands(17),
                 output_shape: MlTensorShape3D::new_single_pixel_single_band(),
-                output_type: ApiRasterDataType::F64,
-                in_no_data_code: None,
-                out_no_data_code: None,
+                output_type: RasterDataType::F64,
+                input_no_data_handling:
+                    geoengine_operators::machine_learning::MlModelInputNoDataHandling::SkipIfNoData,
+                output_no_data_handling:
+                    geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData,
             },
             name: MlModelName::new(None, "myUnrealModel"),
             upload: upload_id,

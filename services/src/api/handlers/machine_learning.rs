@@ -2,15 +2,18 @@ use actix_web::{FromRequest, HttpResponse, ResponseError, web};
 use geoengine_operators::{
     engine::ExecutionContext,
     machine_learning::onnx_util::{
-        check_model_shape, check_onnx_model_matches_metadata, load_onnx_model_from_metadata,
+        check_model_shape, check_onnx_model_matches_metadata, load_onnx_model_from_loading_info,
     },
 };
 
 use crate::{
-    api::model::responses::{ErrorResponse, ml_models::MlModelNameResponse},
+    api::model::{
+        responses::{ErrorResponse, ml_models::MlModelNameResponse},
+        services::MlModel,
+    },
     contexts::{ApplicationContext, SessionContext},
     machine_learning::{
-        MlModel, MlModelDb, MlModelListOptions, error::MachineLearningError, name::MlModelName,
+        MlModelDb, MlModelListOptions, error::MachineLearningError, name::MlModelName,
     },
 };
 
@@ -71,19 +74,20 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
         .execution_context()
         .expect("Execution Context must exist");
 
-    let model = model.into_inner();
+    // convert the payload from json to apy and then to backend type
+    let model: crate::machine_learning::MlModel = model.into_inner().into();
 
     // This call also checks that the file is available!
-    let ml_model_metadata = model.metadata_for_operator()?;
+    let ml_model_metadata = model.loading_info()?;
     // Check that the in/out shapes are ok
     check_model_shape(
-        &ml_model_metadata,
+        &ml_model_metadata.metadata,
         exe_context.tiling_specification().tile_size_in_pixels,
     )?;
     // initialize model
-    let session = load_onnx_model_from_metadata(&ml_model_metadata)?;
+    let session = load_onnx_model_from_loading_info(&ml_model_metadata)?;
     // Check that the model is initializable and that the types are vaild
-    check_onnx_model_matches_metadata(&session, &ml_model_metadata)?;
+    check_onnx_model_matches_metadata(&session, &ml_model_metadata.metadata)?;
 
     let id_and_name = session_context.db().add_model(model).await?;
     Ok(web::Json(id_and_name.name.into()))
@@ -113,7 +117,8 @@ pub(crate) async fn list_ml_models<C: ApplicationContext>(
         .db()
         .list_models(&options)
         .await?;
-    Ok(web::Json(models))
+    let models_api = models.into_iter().map(Into::into).collect::<Vec<_>>();
+    Ok(web::Json(models_api))
 }
 
 /// Get ml model by name.
@@ -144,27 +149,28 @@ pub(crate) async fn get_ml_model<C: ApplicationContext>(
         .db()
         .load_model(&model_name)
         .await?;
-    Ok(web::Json(models))
+    let models_api = models.into();
+    Ok(web::Json(models_api))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{
-        api::model::{
-            datatypes::MlTensorShape3D, datatypes::RasterDataType, responses::IdResponse,
-        },
-        contexts::PostgresContext,
-        contexts::Session,
+        api::model::responses::IdResponse,
+        contexts::{PostgresContext, Session},
         datasets::upload::UploadId,
         ge_context,
-        machine_learning::MlModelMetadata,
         users::UserAuth,
         util::tests::{SetMultipartBody, TestDataUploads, send_test_request},
     };
     use actix_http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
+    use geoengine_datatypes::{machine_learning::MlTensorShape3D, raster::RasterDataType};
+    use geoengine_operators::machine_learning::{
+        MlModelInputNoDataHandling, MlModelMetadata, MlModelOutputNoDataHandling,
+    };
     use tokio_postgres::NoTls;
 
     #[ge_context::test]
@@ -191,26 +197,27 @@ mod tests {
         let upload: IdResponse<UploadId> = test::read_body_json(res).await;
         test_data.uploads.push(upload.id);
 
-        let model = MlModel {
+        let model = crate::machine_learning::MlModel {
             name: MlModelName::new(Some(session.user.id.to_string()), "test_classification"),
             display_name: "Test Classification".to_string(),
             description: "Test Classification Model".to_string(),
             upload: upload.id,
+            file_name: "model.onnx".to_string(),
             metadata: MlModelMetadata {
-                file_name: "model.onnx".to_string(),
                 input_type: RasterDataType::F32,
                 output_type: RasterDataType::I64,
-                input_shape: MlTensorShape3D::new_y_x_attr(1, 1, 2),
-                output_shape: MlTensorShape3D::new_y_x_attr(1, 1, 1),
-                in_no_data_code: None,
-                out_no_data_code: None,
+                input_shape: MlTensorShape3D::new_y_x_bands(1, 1, 2),
+                output_shape: MlTensorShape3D::new_y_x_bands(1, 1, 1),
+                input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
+                output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
             },
         };
 
+        let api_model: MlModel = model.clone().into();
         let req = test::TestRequest::post()
             .uri("/ml/models")
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
-            .set_json(&model);
+            .set_json(&api_model);
 
         let res = send_test_request(req, app_ctx.clone()).await;
 
@@ -228,10 +235,10 @@ mod tests {
 
         assert_eq!(models.len(), 1);
 
-        assert_eq!(model, models[0]);
+        assert_eq!(model, models[0].clone().into());
 
         let req = test::TestRequest::get()
-            .uri(&format!("/ml/models/{}", model.name))
+            .uri(&format!("/ml/models/{}", api_model.name))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx).await;
@@ -240,6 +247,6 @@ mod tests {
 
         let res_model: MlModel = test::read_body_json(res).await;
 
-        assert_eq!(model, res_model);
+        assert_eq!(model, res_model.into());
     }
 }

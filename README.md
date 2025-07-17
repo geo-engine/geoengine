@@ -25,7 +25,7 @@ You can run the server using `cargo run --release`.
 
 There are some dependencies that need to be installed on the system:
 
-```
+```bash
 # Build essentials
 apt install build-essential
 # lld linker
@@ -61,7 +61,7 @@ You can install it with `pip install sqlfluff`.
 To lint all SQL files, run `sqlfluff lint`.
 This will also be checked in our CI.
 
-There is a VSCode extension available [here](https://marketplace.visualstudio.com/items?itemName=dorzey.vscode-sqlfluff).
+There is a [VSCode extension available](https://marketplace.visualstudio.com/items?itemName=dorzey.vscode-sqlfluff).
 This helps to format the files.
 
 ### Testing
@@ -77,7 +77,7 @@ Edit `Settings-test.toml` for environment-specific test parameters.
 For running the PostgreSQL tests, you need to have it installed.
 Furthermore, you need to create a default user `geoengine` with the password `geoengine`.
 
-```
+```bash
 sudo -u postgres psql << EOF
 \set AUTOCOMMIT on
 CREATE USER geoengine WITH PASSWORD 'geoengine' CREATEDB;
@@ -89,7 +89,7 @@ EOF
 
 During development, you can use the following setting in your `Settings.toml` to clean the database on server startup:
 
-```
+```toml
 [postgres]
 clear_database_on_start = true
 ```

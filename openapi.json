@@ -6924,13 +6924,17 @@
           "displayName",
           "description",
           "upload",
-          "metadata"
+          "metadata",
+          "fileName"
         ],
         "properties": {
           "description": {
             "type": "string"
           },
           "displayName": {
+            "type": "string"
+          },
+          "fileName": {
             "type": "string"
           },
           "metadata": {
@@ -6948,43 +6952,53 @@
         "type": "string",
         "format": "uuid"
       },
+      "MlModelInputNoDataHandling": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "no_data_value"
+            ],
+            "properties": {
+              "no_data_value": {
+                "type": "number",
+                "format": "float"
+              }
+            }
+          },
+          {
+            "type": "null",
+            "default": null
+          }
+        ]
+      },
       "MlModelMetadata": {
         "type": "object",
         "required": [
-          "fileName",
-          "inputType",
-          "outputType",
-          "inputShape",
-          "outputShape"
+          "input_type",
+          "output_type",
+          "input_shape",
+          "output_shape",
+          "input_no_data_handling",
+          "output_no_data_handling"
         ],
         "properties": {
-          "fileName": {
-            "type": "string"
+          "input_no_data_handling": {
+            "$ref": "#/components/schemas/MlModelInputNoDataHandling"
           },
-          "inNoDataCode": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "format": "float"
-          },
-          "inputShape": {
+          "input_shape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
           },
-          "inputType": {
+          "input_type": {
             "$ref": "#/components/schemas/RasterDataType"
           },
-          "outNoDataCode": {
-            "type": [
-              "number",
-              "null"
-            ],
-            "format": "float"
+          "output_no_data_handling": {
+            "$ref": "#/components/schemas/MlModelOutputNoDataHandling"
           },
-          "outputShape": {
+          "output_shape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
           },
-          "outputType": {
+          "output_type": {
             "$ref": "#/components/schemas/RasterDataType"
           }
         }
@@ -7002,6 +7016,26 @@
             "$ref": "#/components/schemas/MlModelName"
           }
         }
+      },
+      "MlModelOutputNoDataHandling": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "no_data_value"
+            ],
+            "properties": {
+              "no_data_value": {
+                "type": "number",
+                "format": "float"
+              }
+            }
+          },
+          {
+            "type": "null",
+            "default": null
+          }
+        ]
       },
       "MlModelResource": {
         "type": "object",

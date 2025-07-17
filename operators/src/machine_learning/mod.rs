@@ -2,10 +2,15 @@ use geoengine_datatypes::{
     machine_learning::MlTensorShape3D,
     raster::{GridShape2D, RasterDataType},
 };
+pub use metadata::{
+    MlModelInputNoDataHandling, MlModelLoadingInfo, MlModelMetadata, MlModelOutputNoDataHandling,
+};
 use ort::tensor::TensorElementType;
 use snafu::Snafu;
+mod metadata;
 pub mod onnx;
 pub mod onnx_util;
+pub mod db_types;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]

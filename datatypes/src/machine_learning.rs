@@ -1,10 +1,10 @@
 use crate::{
     dataset::{SYSTEM_NAMESPACE, is_invalid_name_char},
-    raster::{GridShape2D, GridSize, RasterDataType},
+    raster::{GridShape2D, GridSize},
 };
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize, de::Visitor};
 use snafu::Snafu;
-use std::path::PathBuf;
 use std::str::FromStr;
 use strum::IntoStaticStr;
 
@@ -136,7 +136,7 @@ impl Visitor<'_> for MlModelNameDeserializeVisitor {
 }
 
 /// A struct describing tensor shape for `MlModelMetadata`
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize, ToSql, FromSql)]
 pub struct MlTensorShape3D {
     pub y: u32,
     pub x: u32,
@@ -167,53 +167,6 @@ impl MlTensorShape3D {
     pub fn yx_matches_tile_shape(&self, tile_shape: &GridShape2D) -> bool {
         self.axis_size_x() as usize == tile_shape.axis_size_x()
             && self.axis_size_y() as usize == tile_shape.axis_size_y()
-    }
-}
-
-/// Strategies to handle no-data in model inputs.
-/// - Never: The onnx model is always called and output pixels are always valid. Even if all input bands are empty.
-/// - `IfAllInputsAreEmpty`: If all inputs are empty (no-data), the output is also empty (no-data). This is usefull if the model can handle missing data.
-/// - `IfAnyInputIsEmpty`: If any input model is empty (no-data), the output is also empty (no-data). This is usefull if the model can't handle missing data.
-#[derive(PartialEq, Debug, Eq, Serialize, Deserialize, Copy, Clone, Default)]
-pub enum SkipOnNoData {
-    Never,
-    IfAnyInputIsNoData,
-    #[default]
-    IfAllInputsAreNoData,
-}
-
-// For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
-// To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
-pub struct MlModelMetadata {
-    pub file_path: PathBuf,
-    pub input_type: RasterDataType,
-    pub output_type: RasterDataType,
-    pub input_shape: MlTensorShape3D,
-    pub output_shape: MlTensorShape3D, // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
-    pub in_no_data_code: Option<f32>,
-    pub out_no_data_code: Option<f32>,
-}
-
-impl MlModelMetadata {
-    pub fn num_input_bands(&self) -> u32 {
-        self.input_shape.bands
-    }
-
-    pub fn num_output_bands(&self) -> u32 {
-        self.output_shape.bands
-    }
-
-    pub fn input_is_single_pixel(&self) -> bool {
-        self.input_shape.x == 1 && self.input_shape.y == 1
-    }
-
-    pub fn output_is_single_pixel(&self) -> bool {
-        self.output_shape.x == 1 && self.output_shape.y == 1
-    }
-
-    pub fn output_is_single_attribute(&self) -> bool {
-        self.num_output_bands() == 1
     }
 }
 

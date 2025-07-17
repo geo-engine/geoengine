@@ -1,12 +1,13 @@
 use std::path::PathBuf;
 
 use crate::api::model::operators::{
-    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, MockMetaData,
-    OgrMetaData,
+    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
+    MlModelMetadata, MockMetaData, OgrMetaData,
 };
 use crate::datasets::DatasetName;
 use crate::datasets::storage::validate_tags;
 use crate::datasets::upload::{UploadId, VolumeName};
+use crate::machine_learning::name::MlModelName;
 use crate::projects::Symbology;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -218,6 +219,43 @@ impl From<&Volume> for crate::datasets::upload::Volume {
         Self {
             name: VolumeName(value.name.clone()),
             path: value.path.as_ref().map_or_else(PathBuf::new, PathBuf::from),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModel {
+    pub name: MlModelName,
+    pub display_name: String,
+    pub description: String,
+    pub upload: UploadId,
+    pub metadata: MlModelMetadata,
+    pub file_name: String,
+}
+
+impl From<MlModel> for crate::machine_learning::MlModel {
+    fn from(value: MlModel) -> Self {
+        crate::machine_learning::MlModel {
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            upload: value.upload,
+            metadata: value.metadata.into(),
+            file_name: value.file_name,
+        }
+    }
+}
+
+impl From<crate::machine_learning::MlModel> for MlModel {
+    fn from(value: crate::machine_learning::MlModel) -> Self {
+        MlModel {
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            upload: value.upload,
+            metadata: value.metadata.into(),
+            file_name: value.file_name,
         }
     }
 }

@@ -995,14 +995,34 @@ CREATE TYPE "MlTensorShape3D" AS (
     bands OID
 );
 
+
+CREATE TYPE "MlModelInputNoDataHandlingVariant" AS ENUM (
+    'EncodedNoData',
+    'SkipIfNoData'
+);
+
+CREATE TYPE "MlModelInputNoDataHandling" AS (
+  variant "MlModelInputNoDataHandlingVariant",
+  no_data_value real
+);
+
+CREATE TYPE "MlModelOutputNoDataHandlingVariant" AS ENUM (
+    'EncodedNoData',
+    'NanIsNoData'
+);
+
+CREATE TYPE "MlModelOutputNoDataHandling" AS (
+  variant "MlModelOutputNoDataHandlingVariant",
+  no_data_value real
+);
+
 CREATE TYPE "MlModelMetadata" AS (
-    file_name text,
     input_type "RasterDataType",
     output_type "RasterDataType",
     input_shape "MlTensorShape3D",
     output_shape "MlTensorShape3D",
-    in_no_data_code real,
-    out_no_data_code real
+    input_no_data_handling "MlModelInputNoDataHandling",
+    output_no_data_handling "MlModelOutputNoDataHandling"
 );
 
 CREATE TYPE "MlModelName" AS (namespace text, name text);
@@ -1013,7 +1033,8 @@ CREATE TABLE ml_models ( -- noqa:
     display_name text NOT NULL,
     description text NOT NULL,
     upload uuid REFERENCES uploads (id) ON DELETE CASCADE NOT NULL,
-    metadata "MlModelMetadata"
+    metadata "MlModelMetadata",
+    file_name text
 );
 
 -- TODO: distinguish between roles that are (correspond to) users
