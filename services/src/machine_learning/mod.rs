@@ -6,8 +6,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use error::{MachineLearningError, error::CouldNotFindMlModelFileMachineLearningError};
+use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_operators::machine_learning::{MlModelLoadingInfo, MlModelMetadata};
-use name::MlModelName;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -21,11 +21,17 @@ mod postgres;
 
 identifier!(MlModelId);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, FromSql, ToSql)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MlModelIdAndName {
     pub id: MlModelId,
     pub name: MlModelName,
+}
+
+impl MlModelIdAndName {
+    pub fn new(id: MlModelId, name: MlModelName) -> Self {
+        Self { id, name }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, FromSql, ToSql)]

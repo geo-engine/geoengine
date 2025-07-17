@@ -6,13 +6,12 @@ use crate::{
             MachineLearningError,
             error::{Bb8MachineLearningError, PostgresMachineLearningError},
         },
-        name::MlModelName,
     },
     permissions::Permission,
     util::postgres::PostgresErrorExt,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::util::Identifier;
+use geoengine_datatypes::{machine_learning::MlModelName, util::Identifier};
 use snafu::ResultExt;
 use tokio_postgres::{
     Socket,

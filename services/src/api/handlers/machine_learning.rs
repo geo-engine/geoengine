@@ -1,4 +1,5 @@
 use actix_web::{FromRequest, HttpResponse, ResponseError, web};
+use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_operators::{
     engine::ExecutionContext,
     machine_learning::onnx_util::{
@@ -8,13 +9,12 @@ use geoengine_operators::{
 
 use crate::{
     api::model::{
+        datatypes::MlModelName as ApiMlModelName,
         responses::{ErrorResponse, ml_models::MlModelNameResponse},
         services::MlModel,
     },
     contexts::{ApplicationContext, SessionContext},
-    machine_learning::{
-        MlModelDb, MlModelListOptions, error::MachineLearningError, name::MlModelName,
-    },
+    machine_learning::{MlModelDb, MlModelListOptions, error::MachineLearningError},
 };
 
 pub(crate) fn init_ml_routes<C>(cfg: &mut web::ServiceConfig)
@@ -90,7 +90,8 @@ pub(crate) async fn add_ml_model<C: ApplicationContext>(
     check_onnx_model_matches_metadata(&session, &ml_model_metadata.metadata)?;
 
     let id_and_name = session_context.db().add_model(model).await?;
-    Ok(web::Json(id_and_name.name.into()))
+    let api_name: crate::api::model::datatypes::MlModelName = id_and_name.name.into();
+    Ok(web::Json(api_name.into()))
 }
 
 /// List ml models.
@@ -130,7 +131,7 @@ pub(crate) async fn list_ml_models<C: ApplicationContext>(
         (status = 200, body = MlModel)
     ),
     params(
-        ("model_name" = MlModelName, description = "Ml Model Name")
+        ("model_name" = ApiMlModelName, description = "Ml Model Name")
     ),
     security(
         ("session_token" = [])
@@ -140,9 +141,10 @@ pub(crate) async fn list_ml_models<C: ApplicationContext>(
 pub(crate) async fn get_ml_model<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    model_name: web::Path<MlModelName>,
+    model_name: web::Path<ApiMlModelName>,
 ) -> Result<web::Json<MlModel>, MachineLearningError> {
-    let model_name = model_name.into_inner();
+    let model_name: ApiMlModelName = model_name.into_inner();
+    let model_name: MlModelName = model_name.into();
 
     let models = app_ctx
         .session_context(session)
@@ -198,7 +200,8 @@ mod tests {
         test_data.uploads.push(upload.id);
 
         let model = crate::machine_learning::MlModel {
-            name: MlModelName::new(Some(session.user.id.to_string()), "test_classification"),
+            name: MlModelName::try_new(Some(session.user.id.to_string()), "test_classification")
+                .unwrap(),
             display_name: "Test Classification".to_string(),
             description: "Test Classification Model".to_string(),
             upload: upload.id,

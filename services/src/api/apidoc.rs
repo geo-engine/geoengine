@@ -16,8 +16,8 @@ use crate::api::model::datatypes::{
     ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
     DataProviderId, DatasetId, DateTimeParseFormat, DateTimeString, ExternalDataId,
     FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-    MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette,
-    PlotOutputFormat, PlotQueryRectangle, RasterColorizer, RasterDataType,
+    MlModelName, MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry,
+    Palette, PlotOutputFormat, PlotQueryRectangle, RasterColorizer, RasterDataType,
     RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
     SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
     TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
@@ -58,7 +58,6 @@ use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
 use crate::machine_learning::MlModelId;
-use crate::machine_learning::name::MlModelName;
 use crate::permissions::{Permission, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,

@@ -5,12 +5,12 @@ use crate::{
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize, de::Visitor};
 use snafu::Snafu;
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 use strum::IntoStaticStr;
 
 const NAME_DELIMITER: char = ':';
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, ToSql, FromSql)]
 pub struct MlModelName {
     pub namespace: Option<String>,
     pub name: String,
@@ -41,11 +41,48 @@ impl MlModelName {
         }
     }
 
-    pub fn new<S: Into<String>>(namespace: Option<String>, name: S) -> Self {
+    pub fn new_unchecked<S: Into<String>>(namespace: Option<String>, name: S) -> Self {
         Self {
             namespace,
             name: name.into(),
         }
+    }
+
+    pub fn try_new<S: Into<String>, N: Into<String>>(
+        namespace: Option<N>,
+        name: S,
+    ) -> Result<Self, MlModelNameError> {
+        let name: String = name.into();
+        let namespace: Option<String> = namespace.map(Into::into);
+
+        if name.is_empty() {
+            return Err(MlModelNameError::IsEmpty);
+        }
+
+        if let Some(c) = name.matches(is_invalid_name_char).next() {
+            return Err(MlModelNameError::InvalidCharacter {
+                invalid_char: c.to_string(),
+            });
+        }
+
+        let ns = match namespace {
+            None => Ok(None),
+            Some(n) if n.is_empty() => Ok(None),
+            Some(n) => {
+                if let Some(c) = n.matches(is_invalid_name_char).next() {
+                    Err(MlModelNameError::InvalidCharacter {
+                        invalid_char: c.to_string(),
+                    })
+                } else {
+                    Ok(Self::canonicalize(n, SYSTEM_NAMESPACE))
+                }
+            }
+        }?;
+
+        Ok(Self {
+            namespace: ns,
+            name,
+        })
     }
 }
 
@@ -54,13 +91,7 @@ impl Serialize for MlModelName {
     where
         S: serde::Serializer,
     {
-        let d = NAME_DELIMITER;
-        let serialized = match (&self.namespace, &self.name) {
-            (None, name) => name.to_string(),
-            (Some(namespace), name) => {
-                format!("{namespace}{d}{name}")
-            }
-        };
+        let serialized = self.to_string();
 
         serializer.serialize_str(&serialized)
     }
@@ -79,37 +110,13 @@ impl FromStr for MlModelName {
     type Err = MlModelNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut strings = [None, None];
-        let mut split = s.split(NAME_DELIMITER);
+        let split: Vec<_> = s.split(NAME_DELIMITER).collect();
 
-        for (buffer, part) in strings.iter_mut().zip(&mut split) {
-            if part.is_empty() {
-                return Err(MlModelNameError::IsEmpty);
-            }
-
-            if let Some(c) = part.matches(is_invalid_name_char).next() {
-                return Err(MlModelNameError::InvalidCharacter {
-                    invalid_char: c.to_string(),
-                });
-            }
-
-            *buffer = Some(part.to_string());
-        }
-
-        if split.next().is_some() {
-            return Err(MlModelNameError::TooManyParts);
-        }
-
-        match strings {
-            [Some(namespace), Some(name)] => Ok(MlModelName {
-                namespace: MlModelName::canonicalize(namespace, SYSTEM_NAMESPACE),
-                name,
-            }),
-            [Some(name), None] => Ok(MlModelName {
-                namespace: None,
-                name,
-            }),
-            _ => Err(MlModelNameError::IsEmpty),
+        match split.len() {
+            0 => Err(MlModelNameError::IsEmpty),
+            1 => Self::try_new(None::<&str>, split[0]),
+            2 => Self::try_new(Some(split[0]), split[1]),
+            _ => Err(MlModelNameError::TooManyParts),
         }
     }
 }
@@ -132,6 +139,20 @@ impl Visitor<'_> for MlModelNameDeserializeVisitor {
         E: serde::de::Error,
     {
         MlModelName::from_str(s).map_err(|e| E::custom(e.to_string()))
+    }
+}
+
+impl Display for MlModelName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let d = NAME_DELIMITER;
+        let s = match (&self.namespace, &self.name) {
+            (None, name) => name.to_string(),
+            (Some(namespace), name) => {
+                format!("{namespace}{d}{name}")
+            }
+        };
+
+        f.write_str(&s)
     }
 }
 

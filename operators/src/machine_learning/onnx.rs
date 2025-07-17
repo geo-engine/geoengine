@@ -7,9 +7,11 @@ use crate::{
     },
     error,
     machine_learning::{
-        error::{InputTypeMismatch, Ort}, onnx_util::{
+        MachineLearningError, MlModelInputNoDataHandling, MlModelLoadingInfo,
+        error::{InputTypeMismatch, Ort},
+        onnx_util::{
             check_model_input_features, check_model_shape, load_onnx_model_from_loading_info,
-        }, MachineLearningError, MlModelInputNoDataHandling, MlModelLoadingInfo
+        },
     },
     util::Result,
 };
@@ -475,11 +477,14 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-        }, machine_learning::{MlModelMetadata, MlModelOutputNoDataHandling}, mock::{MockRasterSource, MockRasterSourceParams}, processing::{RasterStacker, RasterStackerParams}
+        },
+        machine_learning::{MlModelMetadata, MlModelOutputNoDataHandling},
+        mock::{MockRasterSource, MockRasterSourceParams},
+        processing::{RasterStacker, RasterStackerParams},
     };
     use approx::assert_abs_diff_eq;
     use geoengine_datatypes::{
-        machine_learning::{ MlTensorShape3D},
+        machine_learning::MlTensorShape3D,
         primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::{
             Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
@@ -695,14 +700,17 @@ mod tests {
         }
         .boxed();
 
-        let ml_model_loading_info = MlModelLoadingInfo {storage_path:test_data!("ml/onnx/test_classification.onnx").to_owned(), metadata: MlModelMetadata {
-            input_type: RasterDataType::F32,
-            input_shape: MlTensorShape3D::new_single_pixel_bands(2),
-            output_shape: MlTensorShape3D::new_single_pixel_single_band(),
-            output_type: RasterDataType::I64,
-            input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
-            output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
-        }};
+        let ml_model_loading_info = MlModelLoadingInfo {
+            storage_path: test_data!("ml/onnx/test_classification.onnx").to_owned(),
+            metadata: MlModelMetadata {
+                input_type: RasterDataType::F32,
+                input_shape: MlTensorShape3D::new_single_pixel_bands(2),
+                output_shape: MlTensorShape3D::new_single_pixel_single_band(),
+                output_type: RasterDataType::I64,
+                input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
+                output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
+            },
+        };
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -909,15 +917,15 @@ mod tests {
 
         let ml_model_loading_info = MlModelLoadingInfo {
             storage_path: test_data!("ml/onnx/test_regression.onnx").to_owned(),
-            metadata:
-            MlModelMetadata {
-            input_type: RasterDataType::F32,
-            input_shape: MlTensorShape3D::new_single_pixel_bands(3),
-            output_shape: MlTensorShape3D::new_single_pixel_single_band(),
-            output_type: RasterDataType::F32,
-            input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
-            output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
-        }};
+            metadata: MlModelMetadata {
+                input_type: RasterDataType::F32,
+                input_shape: MlTensorShape3D::new_single_pixel_bands(3),
+                output_shape: MlTensorShape3D::new_single_pixel_single_band(),
+                output_type: RasterDataType::F32,
+                input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
+                output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
+            },
+        };
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
@@ -1071,15 +1079,17 @@ mod tests {
         }
         .boxed();
 
-        let ml_model_loading_info = MlModelLoadingInfo {storage_path: test_data!("ml/onnx/test_a_plus_b.onnx").to_owned(), metadata: MlModelMetadata {
-
-            input_type: RasterDataType::F32,
-            input_shape: MlTensorShape3D::new_y_x_bands(512, 512, 2),
-            output_shape: MlTensorShape3D::new_y_x_bands(512, 512, 1),
-            output_type: RasterDataType::F32,
-            input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
-            output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
-        }};
+        let ml_model_loading_info = MlModelLoadingInfo {
+            storage_path: test_data!("ml/onnx/test_a_plus_b.onnx").to_owned(),
+            metadata: MlModelMetadata {
+                input_type: RasterDataType::F32,
+                input_shape: MlTensorShape3D::new_y_x_bands(512, 512, 2),
+                output_shape: MlTensorShape3D::new_y_x_bands(512, 512, 1),
+                output_type: RasterDataType::F32,
+                input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
+                output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
+            },
+        };
 
         let mut exe_ctx = MockExecutionContext::test_default();
         exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {

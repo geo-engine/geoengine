@@ -1,7 +1,6 @@
+use geoengine_datatypes::machine_learning::MlModelName;
 use snafu::Snafu;
 use strum::IntoStaticStr;
-
-use super::MlModelName;
 
 #[derive(Debug, Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]

@@ -1,5 +1,6 @@
 use std::path::PathBuf;
 
+use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
     MlModelMetadata, MockMetaData, OgrMetaData,
@@ -7,7 +8,6 @@ use crate::api::model::operators::{
 use crate::datasets::DatasetName;
 use crate::datasets::storage::validate_tags;
 use crate::datasets::upload::{UploadId, VolumeName};
-use crate::machine_learning::name::MlModelName;
 use crate::projects::Symbology;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -237,7 +237,7 @@ pub struct MlModel {
 impl From<MlModel> for crate::machine_learning::MlModel {
     fn from(value: MlModel) -> Self {
         crate::machine_learning::MlModel {
-            name: value.name,
+            name: value.name.into(),
             display_name: value.display_name,
             description: value.description,
             upload: value.upload,
@@ -250,7 +250,7 @@ impl From<MlModel> for crate::machine_learning::MlModel {
 impl From<crate::machine_learning::MlModel> for MlModel {
     fn from(value: crate::machine_learning::MlModel) -> Self {
         MlModel {
-            name: value.name,
+            name: value.name.into(),
             display_name: value.display_name,
             description: value.description,
             upload: value.upload,

@@ -13,7 +13,7 @@ use crate::users::{OidcManager, RoleDb, UserAuth, UserDb};
 use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
-use geoengine_datatypes::machine_learning::{ MlModelName};
+use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
@@ -319,28 +319,26 @@ where
         Ok(dataset_id.into())
     }
 
+    async fn ml_model_loading_info(
+        &self,
+        name: &MlModelName,
+    ) -> Result<MlModelLoadingInfo, geoengine_operators::error::Error> {
+        let ml_model = self.db.load_model(&name.clone()).await.map_err(|source| {
+            geoengine_operators::error::Error::CannotResolveMlModelName {
+                name: name.clone(),
+                source: Box::new(source),
+            }
+        })?;
 
-    async fn ml_model_loading_info(&self, name: &MlModelName) -> Result<MlModelLoadingInfo, geoengine_operators::error::Error> {
-        let ml_model = self.db
-            .load_model(&(name.clone().into()))
-            .await
-            .map_err(
-                |source| geoengine_operators::error::Error::CannotResolveMlModelName {
-                    name: name.clone(),
-                    source: Box::new(source),
-                },
-            )?;
-
-        let storage_path = ml_model.model_path().map_err(|e| 
+        let storage_path = ml_model.model_path().map_err(|e| {
             geoengine_operators::error::Error::LoadingMlMetadataFailed {
                 source: Box::new(e),
-            },
-        )?;
+            }
+        })?;
         Ok(MlModelLoadingInfo {
             storage_path,
             metadata: ml_model.metadata,
         })
-
     }
 }
 

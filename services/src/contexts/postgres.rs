@@ -15,7 +15,6 @@ use crate::layers::add_from_directory::{
     add_providers_from_directory,
 };
 use crate::machine_learning::error::MachineLearningError;
-use crate::machine_learning::name::MlModelName;
 use crate::quota::{QuotaTrackingFactory, initialize_quota_tracking};
 use crate::tasks::SimpleTaskManagerContext;
 use crate::tasks::{TypedTaskManagerBackend, UserTaskManager};
@@ -28,6 +27,7 @@ use bb8_postgres::{
     bb8::PooledConnection,
     tokio_postgres::{Config, Socket, tls::MakeTlsConnect, tls::TlsConnect},
 };
+use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::shared_cache::SharedCache;
@@ -4965,7 +4965,7 @@ mod tests {
                 output_no_data_handling:
                     geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData,
             },
-            name: MlModelName::new(None, "myUnrealModel"),
+            name: MlModelName::try_new(None::<&str>, "myUnrealModel").unwrap(),
             upload: upload_id,
         };
 

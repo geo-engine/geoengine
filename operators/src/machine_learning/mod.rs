@@ -7,10 +7,10 @@ pub use metadata::{
 };
 use ort::tensor::TensorElementType;
 use snafu::Snafu;
+pub mod db_types;
 mod metadata;
 pub mod onnx;
 pub mod onnx_util;
-pub mod db_types;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
