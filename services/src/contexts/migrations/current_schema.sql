@@ -1002,8 +1002,8 @@ CREATE TYPE "MlModelInputNoDataHandlingVariant" AS ENUM (
 );
 
 CREATE TYPE "MlModelInputNoDataHandling" AS (
-  variant "MlModelInputNoDataHandlingVariant",
-  no_data_value real
+    variant "MlModelInputNoDataHandlingVariant",
+    no_data_value real
 );
 
 CREATE TYPE "MlModelOutputNoDataHandlingVariant" AS ENUM (
@@ -1012,8 +1012,8 @@ CREATE TYPE "MlModelOutputNoDataHandlingVariant" AS ENUM (
 );
 
 CREATE TYPE "MlModelOutputNoDataHandling" AS (
-  variant "MlModelOutputNoDataHandlingVariant",
-  no_data_value real
+    variant "MlModelOutputNoDataHandlingVariant",
+    no_data_value real
 );
 
 CREATE TYPE "MlModelMetadata" AS (
