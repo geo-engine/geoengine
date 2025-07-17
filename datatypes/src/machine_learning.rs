@@ -112,10 +112,10 @@ impl FromStr for MlModelName {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let split: Vec<_> = s.split(NAME_DELIMITER).collect();
 
-        match split.len() {
-            0 => Err(MlModelNameError::IsEmpty),
-            1 => Self::try_new(None::<&str>, split[0]),
-            2 => Self::try_new(Some(split[0]), split[1]),
+        match split[..] {
+            [] => Err(MlModelNameError::IsEmpty),
+            [name] => Self::try_new(None::<&str>, name),
+            [ns, name] => Self::try_new(Some(ns), name),
             _ => Err(MlModelNameError::TooManyParts),
         }
     }

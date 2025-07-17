@@ -2232,26 +2232,10 @@ impl From<MlTensorShape3D> for geoengine_datatypes::machine_learning::MlTensorSh
     }
 }
 
-const ML_MODEL_NAME_DELIMITER: &str = ":";
-
 #[derive(Debug, Clone, Hash, Eq, PartialEq)]
 pub struct MlModelName {
     pub namespace: Option<String>,
     pub name: String,
-}
-
-impl MlModelName {
-    /// Canonicalize a name that reflects the system namespace and model.
-    fn canonicalize<S: Into<String> + PartialEq<&'static str>>(
-        name: S,
-        system_name: &'static str,
-    ) -> Option<String> {
-        if name == system_name {
-            None
-        } else {
-            Some(name.into())
-        }
-    }
 }
 
 impl From<MlModelName> for geoengine_datatypes::machine_learning::MlModelName {
@@ -2274,13 +2258,8 @@ impl From<geoengine_datatypes::machine_learning::MlModelName> for MlModelName {
 
 impl std::fmt::Display for MlModelName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let d = ML_MODEL_NAME_DELIMITER;
-        match (&self.namespace, &self.name) {
-            (None, name) => write!(f, "{name}"),
-            (Some(namespace), name) => {
-                write!(f, "{namespace}{d}{name}")
-            }
-        }
+        let dt_mmn: geoengine_datatypes::machine_learning::MlModelName = self.clone().into();
+        std::fmt::Display::fmt(&dt_mmn, f)
     }
 }
 
@@ -2289,15 +2268,10 @@ impl Serialize for MlModelName {
     where
         S: serde::Serializer,
     {
-        let d = ML_MODEL_NAME_DELIMITER;
-        let serialized = match (&self.namespace, &self.name) {
-            (None, name) => name.to_string(),
-            (Some(namespace), name) => {
-                format!("{namespace}{d}{name}")
-            }
-        };
-
-        serializer.serialize_str(&serialized)
+        geoengine_datatypes::machine_learning::MlModelName::serialize(
+            &self.clone().into(),
+            serializer,
+        )
     }
 }
 
@@ -2306,63 +2280,8 @@ impl<'de> Deserialize<'de> for MlModelName {
     where
         D: serde::Deserializer<'de>,
     {
-        deserializer.deserialize_str(MlModelNameDeserializeVisitor)
-    }
-}
-
-struct MlModelNameDeserializeVisitor;
-
-impl Visitor<'_> for MlModelNameDeserializeVisitor {
-    type Value = MlModelName;
-
-    /// always keep in sync with [`is_allowed_name_char`]
-    fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-        write!(
-            formatter,
-            "a string consisting of a namespace and name name, separated by a colon, only using alphanumeric characters, underscores & dashes"
-        )
-    }
-
-    fn visit_str<E>(self, s: &str) -> Result<Self::Value, E>
-    where
-        E: serde::de::Error,
-    {
-        let mut strings = [None, None];
-        let mut split = s.split(ML_MODEL_NAME_DELIMITER);
-
-        for (buffer, part) in strings.iter_mut().zip(&mut split) {
-            if part.is_empty() {
-                return Err(E::custom("empty part in named data"));
-            }
-
-            if let Some(c) = part
-                .matches(geoengine_datatypes::dataset::is_invalid_name_char)
-                .next()
-            {
-                return Err(E::custom(format!("invalid character '{c}' in named model")));
-            }
-
-            *buffer = Some(part.to_string());
-        }
-
-        if split.next().is_some() {
-            return Err(E::custom("named model must consist of at most two parts"));
-        }
-
-        match strings {
-            [Some(namespace), Some(name)] => Ok(MlModelName {
-                namespace: MlModelName::canonicalize(
-                    namespace,
-                    geoengine_datatypes::dataset::SYSTEM_NAMESPACE,
-                ),
-                name,
-            }),
-            [Some(name), None] => Ok(MlModelName {
-                namespace: None,
-                name,
-            }),
-            _ => Err(E::custom("empty named data")),
-        }
+        geoengine_datatypes::machine_learning::MlModelName::deserialize(deserializer)
+            .map(Into::into)
     }
 }
 
