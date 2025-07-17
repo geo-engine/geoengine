@@ -1436,27 +1436,31 @@ impl From<FormatSpecifics> for geoengine_operators::source::FormatSpecifics {
     }
 }
 
-#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, Default, ToSchema)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum MlModelInputNoDataHandling {
-    EncodedNoData {
-        no_data_value: f32,
-    },
-    #[default]
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MlModelInputNoDataHandlingVariant {
+    EncodedNoData,
     SkipIfNoData,
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModelInputNoDataHandling {
+    variant: MlModelInputNoDataHandlingVariant,
+    no_data_value: Option<f32>,
 }
 
 impl From<MlModelInputNoDataHandling>
     for geoengine_operators::machine_learning::MlModelInputNoDataHandling
 {
     fn from(value: MlModelInputNoDataHandling) -> Self {
-        match value {
-            MlModelInputNoDataHandling::EncodedNoData { no_data_value } => {
+        match value.variant {
+            MlModelInputNoDataHandlingVariant::EncodedNoData => {
                 geoengine_operators::machine_learning::MlModelInputNoDataHandling::EncodedNoData {
-                    no_data_value,
+                    no_data_value: value.no_data_value.expect("Value is required"),
                 }
             }
-            MlModelInputNoDataHandling::SkipIfNoData => {
+            MlModelInputNoDataHandlingVariant::SkipIfNoData => {
                 geoengine_operators::machine_learning::MlModelInputNoDataHandling::SkipIfNoData
             }
         }
@@ -1470,35 +1474,45 @@ impl From<geoengine_operators::machine_learning::MlModelInputNoDataHandling>
         match value {
             geoengine_operators::machine_learning::MlModelInputNoDataHandling::EncodedNoData {
                 no_data_value,
-            } => MlModelInputNoDataHandling::EncodedNoData { no_data_value },
+            } => MlModelInputNoDataHandling {
+                variant: MlModelInputNoDataHandlingVariant::EncodedNoData,
+                no_data_value: Some(no_data_value),
+            },
             geoengine_operators::machine_learning::MlModelInputNoDataHandling::SkipIfNoData => {
-                MlModelInputNoDataHandling::SkipIfNoData
+                MlModelInputNoDataHandling {
+                    variant: MlModelInputNoDataHandlingVariant::SkipIfNoData,
+                    no_data_value: None,
+                }
             }
         }
     }
 }
 
-#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, Default, ToSchema)]
-#[serde(rename_all = "camelCase", untagged)]
-pub enum MlModelOutputNoDataHandling {
-    EncodedNoData {
-        no_data_value: f32,
-    },
-    #[default]
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MlModelOutputNoDataHandlingVariant {
+    EncodedNoData,
     NanIsNoData,
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModelOutputNoDataHandling {
+    variant: MlModelOutputNoDataHandlingVariant,
+    no_data_value: Option<f32>,
 }
 
 impl From<MlModelOutputNoDataHandling>
     for geoengine_operators::machine_learning::MlModelOutputNoDataHandling
 {
     fn from(value: MlModelOutputNoDataHandling) -> Self {
-        match value {
-            MlModelOutputNoDataHandling::EncodedNoData { no_data_value } => {
+        match value.variant {
+            MlModelOutputNoDataHandlingVariant::EncodedNoData => {
                 geoengine_operators::machine_learning::MlModelOutputNoDataHandling::EncodedNoData {
-                    no_data_value,
+                    no_data_value: value.no_data_value.expect("Value must be set"),
                 }
             }
-            MlModelOutputNoDataHandling::NanIsNoData => {
+            MlModelOutputNoDataHandlingVariant::NanIsNoData => {
                 geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData
             }
         }
@@ -1512,9 +1526,15 @@ impl From<geoengine_operators::machine_learning::MlModelOutputNoDataHandling>
         match value {
             geoengine_operators::machine_learning::MlModelOutputNoDataHandling::EncodedNoData {
                 no_data_value,
-            } => MlModelOutputNoDataHandling::EncodedNoData { no_data_value },
+            } => MlModelOutputNoDataHandling {
+                variant: MlModelOutputNoDataHandlingVariant::EncodedNoData,
+                no_data_value: Some(no_data_value),
+            },
             geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData => {
-                MlModelOutputNoDataHandling::NanIsNoData
+                MlModelOutputNoDataHandling {
+                    variant: MlModelOutputNoDataHandlingVariant::NanIsNoData,
+                    no_data_value: None,
+                }
             }
         }
     }

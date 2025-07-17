@@ -6953,23 +6953,28 @@
         "format": "uuid"
       },
       "MlModelInputNoDataHandling": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "no_data_value"
+        "type": "object",
+        "required": [
+          "variant"
+        ],
+        "properties": {
+          "noDataValue": {
+            "type": [
+              "number",
+              "null"
             ],
-            "properties": {
-              "no_data_value": {
-                "type": "number",
-                "format": "float"
-              }
-            }
+            "format": "float"
           },
-          {
-            "type": "null",
-            "default": null
+          "variant": {
+            "$ref": "#/components/schemas/MlModelInputNoDataHandlingVariant"
           }
+        }
+      },
+      "MlModelInputNoDataHandlingVariant": {
+        "type": "string",
+        "enum": [
+          "encodedNoData",
+          "skipIfNoData"
         ]
       },
       "MlModelMetadata": {
@@ -7018,23 +7023,28 @@
         }
       },
       "MlModelOutputNoDataHandling": {
-        "oneOf": [
-          {
-            "type": "object",
-            "required": [
-              "no_data_value"
+        "type": "object",
+        "required": [
+          "variant"
+        ],
+        "properties": {
+          "noDataValue": {
+            "type": [
+              "number",
+              "null"
             ],
-            "properties": {
-              "no_data_value": {
-                "type": "number",
-                "format": "float"
-              }
-            }
+            "format": "float"
           },
-          {
-            "type": "null",
-            "default": null
+          "variant": {
+            "$ref": "#/components/schemas/MlModelOutputNoDataHandlingVariant"
           }
+        }
+      },
+      "MlModelOutputNoDataHandlingVariant": {
+        "type": "string",
+        "enum": [
+          "encodedNoData",
+          "nanIsNoData"
         ]
       },
       "MlModelResource": {
