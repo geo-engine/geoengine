@@ -1541,6 +1541,7 @@ impl From<geoengine_operators::machine_learning::MlModelOutputNoDataHandling>
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
 pub struct MlModelMetadata {
     pub input_type: RasterDataType,
     pub output_type: RasterDataType,

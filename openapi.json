@@ -6980,30 +6980,30 @@
       "MlModelMetadata": {
         "type": "object",
         "required": [
-          "input_type",
-          "output_type",
-          "input_shape",
-          "output_shape",
-          "input_no_data_handling",
-          "output_no_data_handling"
+          "inputType",
+          "outputType",
+          "inputShape",
+          "outputShape",
+          "inputNoDataHandling",
+          "outputNoDataHandling"
         ],
         "properties": {
-          "input_no_data_handling": {
+          "inputNoDataHandling": {
             "$ref": "#/components/schemas/MlModelInputNoDataHandling"
           },
-          "input_shape": {
+          "inputShape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
           },
-          "input_type": {
+          "inputType": {
             "$ref": "#/components/schemas/RasterDataType"
           },
-          "output_no_data_handling": {
+          "outputNoDataHandling": {
             "$ref": "#/components/schemas/MlModelOutputNoDataHandling"
           },
-          "output_shape": {
+          "outputShape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
           },
-          "output_type": {
+          "outputType": {
             "$ref": "#/components/schemas/RasterDataType"
           }
         }

@@ -34,8 +34,7 @@ impl MlModelIdAndName {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
+#[derive(Debug, Clone, PartialEq, FromSql, ToSql)]
 pub struct MlModel {
     pub name: MlModelName,
     pub display_name: String,
