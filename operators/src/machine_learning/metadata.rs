@@ -2,17 +2,13 @@ use std::path::PathBuf;
 
 use geoengine_datatypes::{machine_learning::MlTensorShape3D, raster::RasterDataType};
 use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
 
 /// Strategies to handle no-data in model inputs.
 /// - `EncodedNoData`: If inputs have empty (no-data) pixels, pixels are mapped to a `no_data_value`. This is usefull if the model can handle missing data.
 /// - `SkipIfNoData`: If any input pixel is empty (no-data), the output is also empty (no-data). This is usefull if the model can't handle missing data.
-#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, Default)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub enum MlModelInputNoDataHandling {
-    EncodedNoData {
-        no_data_value: f32,
-    },
-    #[default]
+    EncodedNoData { no_data_value: f32 },
     SkipIfNoData,
 }
 
@@ -28,12 +24,9 @@ impl MlModelInputNoDataHandling {
 /// Strategies to handle no-data in model outputs.
 /// - `EncodedNoData`: If the model outputs a `no_data_value` pixel with the `no_data_value` are masked and are ignored by other operators.
 /// - `NanIsNoData`: If the model produces NaN values, they are masked as as no data.
-#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, Default)]
+#[derive(PartialEq, Debug, Copy, Clone)]
 pub enum MlModelOutputNoDataHandling {
-    EncodedNoData {
-        no_data_value: f32,
-    },
-    #[default]
+    EncodedNoData { no_data_value: f32 },
     NanIsNoData,
 }
 
@@ -46,7 +39,7 @@ impl MlModelOutputNoDataHandling {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct MlModelLoadingInfo {
     pub storage_path: PathBuf,
     pub metadata: MlModelMetadata,
@@ -60,7 +53,7 @@ impl MlModelLoadingInfo {
 
 // For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
 // To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.
-#[derive(Debug, Clone, PartialEq, Deserialize, Serialize, ToSql, FromSql)]
+#[derive(Debug, Clone, PartialEq, ToSql, FromSql)]
 pub struct MlModelMetadata {
     pub input_type: RasterDataType,
     pub output_type: RasterDataType,
