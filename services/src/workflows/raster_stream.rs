@@ -122,7 +122,7 @@ impl RasterWebsocketStreamHandler {
                             match &tile {
                                 Some(Ok(_)) => tracing::trace!("Got next tile."),
                                 Some(Err(e)) => tracing::warn!("Got error! {e}"),
-                                None => tracing::debug!("Got None --> Closing."),
+                                None => tracing::trace!("Got None --> Closing."),
                             }
 
                             (tile, stream)
