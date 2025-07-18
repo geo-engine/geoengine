@@ -18,8 +18,12 @@ CREATE TYPE "MlModelOutputNoDataHandling" AS (
     no_data_value real
 );
 
-ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE input_no_data_handling "MlModelInputNoDataHandling";
-ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE output_no_data_handling "MlModelOutputNoDataHandling";
+ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE
+input_no_data_handling "MlModelInputNoDataHandling";
+
+ALTER TYPE "MlModelMetadata" ADD ATTRIBUTE
+output_no_data_handling "MlModelOutputNoDataHandling";
+
 ALTER TABLE ml_models ADD file_name text;
 
 WITH qqqq AS (
