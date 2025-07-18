@@ -17,7 +17,7 @@ use geoengine_datatypes::{
 use lru::LruCache;
 use std::{collections::HashMap, hash::Hash, sync::Arc};
 use tokio::sync::RwLock;
-use tracing::{debug, level_filters::LevelFilter};
+use tracing::{debug, event_enabled};
 
 /// The tile cache caches all tiles of a query and is able to answer queries that are fully contained in the cache.
 /// New tiles are inserted into the cache on-the-fly as they are produced by query processors.
@@ -978,8 +978,7 @@ where
         landing_zone_element: C,
     ) -> Result<(), CacheError> {
         const LOG_LEVEL_THRESHOLD: tracing::Level = tracing::Level::TRACE;
-        let current_level_filter = LevelFilter::current();
-        let element_size = if current_level_filter >= LOG_LEVEL_THRESHOLD {
+        let element_size = if event_enabled!(LOG_LEVEL_THRESHOLD) {
             landing_zone_element.byte_size()
         } else {
             0
@@ -990,7 +989,7 @@ where
                 .await
                 .map_err(|_| CacheError::BlockingElementConversion)?;
 
-        if current_level_filter >= LOG_LEVEL_THRESHOLD {
+        if event_enabled!(LOG_LEVEL_THRESHOLD) {
             let storeable_element_size = storeable_element.byte_size();
             tracing::trace!(
                 "Inserting element into landing zone for query {:?} on operator {}. Element size: {} bytes, storable element size: {} bytes, ratio: {}",
