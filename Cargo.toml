@@ -112,7 +112,7 @@ httptest = "0.16"
 image = "0.25"
 itertools = "0.14"
 libloading = "0.8"
-lru = "0.16.0"
+lru = "0.16"
 lz4_flex = "0.11"
 mime = "0.3"
 ndarray = { version = "0.16", features = ["approx"] }                      # has to match with `ort`
