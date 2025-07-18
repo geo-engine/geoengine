@@ -96,7 +96,6 @@ impl<U: UserDb + 'static> QuotaManager<U> {
             while let Some(message) = self.quota_receiver.recv().await {
                 let flush_buffer = match message {
                     QuotaMessage::ComputationUnit(computation) => {
-                        // TODO: issue a tracing event instead?
                         tracing::trace!(
                             "Quota received. User: {}, Workflow: {}, Computation: {}",
                             computation.user,
