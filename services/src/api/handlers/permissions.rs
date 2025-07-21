@@ -148,7 +148,7 @@ impl Resource {
                     .map(ResourceId::DatasetId)
             }
             Resource::MlModel(model_name) => {
-                let actual_name = model_name.id.clone().into();
+                let actual_name = model_name.id.clone();
                 let model_id_option =
                     db.resolve_model_name_to_id(&actual_name)
                         .await
@@ -339,12 +339,11 @@ mod tests {
 
     use super::*;
     use crate::{
-        api::model::datatypes::{MlTensorShape3D, RasterDataType as ApiRasterDataType},
         contexts::PostgresContext,
         datasets::upload::{Upload, UploadDb, UploadId},
         ge_context,
         layers::{layer::AddLayer, listing::LayerCollectionProvider, storage::LayerDb},
-        machine_learning::{MlModel, MlModelIdAndName, MlModelMetadata},
+        machine_learning::{MlModel, MlModelIdAndName},
         users::{UserAuth, UserCredentials, UserRegistration},
         util::tests::{
             add_ndvi_to_datasets2, add_ports_to_datasets, admin_login, read_body_string,
@@ -354,9 +353,15 @@ mod tests {
     };
     use actix_http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::{primitives::Coordinate2D, util::Identifier};
+    use geoengine_datatypes::{
+        machine_learning::MlTensorShape3D, primitives::Coordinate2D, raster::RasterDataType,
+        util::Identifier,
+    };
     use geoengine_operators::{
         engine::{RasterOperator, TypedOperator, VectorOperator, WorkflowOperatorPath},
+        machine_learning::{
+            MlModelInputNoDataHandling, MlModelMetadata, MlModelOutputNoDataHandling,
+        },
         mock::{MockPointSource, MockPointSourceParams},
         source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     };
@@ -539,14 +544,16 @@ mod tests {
         let model = MlModel {
             description: "No real model here".to_owned(),
             display_name: "my unreal model".to_owned(),
+            file_name: "myUnrealmodel.onnx".to_owned(),
             metadata: MlModelMetadata {
-                file_name: "myUnrealmodel.onnx".to_owned(),
-                input_type: ApiRasterDataType::F32,
+                input_type: RasterDataType::F32,
                 input_shape: MlTensorShape3D::new_single_pixel_bands(17),
                 output_shape: MlTensorShape3D::new_single_pixel_single_band(),
-                output_type: ApiRasterDataType::F64,
+                output_type: RasterDataType::F64,
+                input_no_data_handling: MlModelInputNoDataHandling::SkipIfNoData,
+                output_no_data_handling: MlModelOutputNoDataHandling::NanIsNoData,
             },
-            name: MlModelName::new(None, "myUnrealModel").into(),
+            name: MlModelName::new_unchecked(None, "myUnrealModel"),
             upload: upload_id,
         };
 
@@ -757,7 +764,7 @@ mod tests {
             ml_model_res,
             Resource::MlModel(MlModelResource {
                 r#type: Default::default(),
-                id: MlModelName::new(None, "cats".to_owned())
+                id: MlModelName::new_unchecked(None, "cats".to_owned())
             })
         );
     }

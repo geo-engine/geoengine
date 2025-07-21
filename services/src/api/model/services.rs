@@ -1,7 +1,8 @@
 use super::datatypes::{CacheTtlSeconds, DataId, DataProviderId, GdalConfigOption, RasterDataType};
+use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
-    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf, MockMetaData,
-    OgrMetaData,
+    GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
+    MlModelMetadata, MockMetaData, OgrMetaData,
 };
 use crate::datasets::DatasetName;
 use crate::datasets::external::GdalRetries;
@@ -1102,6 +1103,43 @@ impl From<&Volume> for crate::datasets::upload::Volume {
         Self {
             name: VolumeName(value.name.clone()),
             path: value.path.as_ref().map_or_else(PathBuf::new, PathBuf::from),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModel {
+    pub name: MlModelName,
+    pub display_name: String,
+    pub description: String,
+    pub upload: UploadId,
+    pub metadata: MlModelMetadata,
+    pub file_name: String,
+}
+
+impl From<MlModel> for crate::machine_learning::MlModel {
+    fn from(value: MlModel) -> Self {
+        crate::machine_learning::MlModel {
+            name: value.name.into(),
+            display_name: value.display_name,
+            description: value.description,
+            upload: value.upload,
+            metadata: value.metadata.into(),
+            file_name: value.file_name,
+        }
+    }
+}
+
+impl From<crate::machine_learning::MlModel> for MlModel {
+    fn from(value: crate::machine_learning::MlModel) -> Self {
+        MlModel {
+            name: value.name.into(),
+            display_name: value.display_name,
+            description: value.description,
+            upload: value.upload,
+            metadata: value.metadata.into(),
+            file_name: value.file_name,
         }
     }
 }

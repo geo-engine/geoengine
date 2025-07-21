@@ -775,7 +775,7 @@ where
         let clamp_prio = prio.clamp(-1000, 1000);
 
         if prio != clamp_prio {
-            log::warn!(
+            tracing::warn!(
                 "The priority of the provider {} is out of range! --> clamped {} to {}",
                 DataProviderDefinition::<Self>::name(provider),
                 prio,

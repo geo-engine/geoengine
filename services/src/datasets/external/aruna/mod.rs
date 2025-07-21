@@ -950,8 +950,8 @@ impl ExpiringDownloadLink for OgrSourceDataset {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(
-                    "Could not parse original path as string {:?}",
-                    &self.file_name
+                    "Could not parse original path as string {}",
+                    self.file_name.display()
                 ),
             )
         })?;

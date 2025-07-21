@@ -205,7 +205,6 @@ where
         Ok(row.get::<usize, i64>(0) > 0)
     }
 
-    #[must_use]
     async fn ensure_permission_in_tx(
         &self,
         resource: ResourceId,
@@ -449,7 +448,6 @@ where
         Ok(result)
     }
 
-    #[must_use]
     async fn ensure_permission<R: Into<ResourceId> + Send + Sync>(
         &self,
         resource: R,

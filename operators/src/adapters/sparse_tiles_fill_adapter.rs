@@ -276,7 +276,7 @@ impl<T: Pixel> StateContainer<T> {
         );
 
         if requested_start < first_tile_time.start() {
-            log::debug!(
+            tracing::debug!(
                 "The initial tile starts ({}) after the requested start bound ({}), setting the current time to the data start bound ({}) --> filling",
                 first_tile_time.start(),
                 requested_start,
@@ -289,7 +289,7 @@ impl<T: Pixel> StateContainer<T> {
             return;
         }
         if start_data_bound > first_tile_time.start() {
-            log::debug!(
+            tracing::debug!(
                 "The initial tile time start ({}) is before the exprected time bounds ({}). This means the data overflows the filler start bound.",
                 first_tile_time.start(),
                 start_data_bound
@@ -350,7 +350,7 @@ impl<T: Pixel> StateContainer<T> {
             return false;
         }
         if current_time.end() > time_bounds_end {
-            log::debug!(
+            tracing::debug!(
                 "The current time end ({}) is after the exprected time bounds ({}). This means the data overflows the filler end bound.",
                 current_time.end(),
                 time_bounds_end
@@ -529,7 +529,7 @@ where
                         )));
                         }
                         if tile.time.start() >= this.sc.requested_time_bounds.end() {
-                            log::warn!(
+                            tracing::warn!(
                                 "The tile time start ({}) is outside of the requested time bounds ({})!",
                                 tile.time.start(),
                                 this.sc.requested_time_bounds.end()

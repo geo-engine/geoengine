@@ -1,9 +1,10 @@
+use crate::contexts::migrations::migration_0019_ml_model_no_data::Migration0019MlModelNoData;
 pub use crate::contexts::migrations::{
     current_schema::CurrentSchemaMigration, migration_0015_log_quota::Migration0015LogQuota,
     migration_0016_merge_providers::Migration0016MergeProviders,
     migration_0017_ml_model_tensor_shape::Migration0017MlModelTensorShape,
     migration_0018_wildlive_connector::Migration0018WildliveConnector,
-    migration_0019_provider_permissions::Migration0019ProviderPermissions,
+    migration_0020_provider_permissions::Migration0020ProviderPermissions,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -15,7 +16,8 @@ mod migration_0015_log_quota;
 mod migration_0016_merge_providers;
 mod migration_0017_ml_model_tensor_shape;
 mod migration_0018_wildlive_connector;
-mod migration_0019_provider_permissions;
+mod migration_0019_ml_model_no_data;
+mod migration_0020_provider_permissions;
 
 #[cfg(test)]
 mod schema_info;
@@ -33,7 +35,8 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0016MergeProviders),
         Box::new(Migration0017MlModelTensorShape),
         Box::new(Migration0018WildliveConnector),
-        Box::new(Migration0019ProviderPermissions),
+        Box::new(Migration0019MlModelNoData),
+        Box::new(Migration0020ProviderPermissions),
     ]
 }
 

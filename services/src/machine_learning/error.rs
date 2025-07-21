@@ -1,14 +1,13 @@
+use geoengine_datatypes::machine_learning::MlModelName;
 use snafu::Snafu;
 use strum::IntoStaticStr;
-
-use super::MlModelName;
 
 #[derive(Debug, Snafu, IntoStaticStr)]
 #[snafu(visibility(pub(crate)))]
 #[snafu(context(suffix(MachineLearningError)), module(error))] // disables default `Snafu` suffix
 pub enum MachineLearningError {
     CouldNotFindMlModelFile {
-        source: crate::error::Error,
+        source: Box<crate::error::Error>,
     },
     ModelNotFound {
         name: MlModelName,
@@ -29,7 +28,7 @@ pub enum MachineLearningError {
     },
     #[snafu(display("An underlying MachineLearningError occured: {source}"))]
     MachineLearning {
-        source: geoengine_operators::machine_learning::MachineLearningError,
+        source: Box<geoengine_operators::machine_learning::MachineLearningError>,
     },
 }
 
@@ -41,6 +40,8 @@ impl From<bb8_postgres::tokio_postgres::error::Error> for MachineLearningError {
 
 impl From<geoengine_operators::machine_learning::MachineLearningError> for MachineLearningError {
     fn from(e: geoengine_operators::machine_learning::MachineLearningError) -> Self {
-        Self::MachineLearning { source: e }
+        Self::MachineLearning {
+            source: Box::new(e),
+        }
     }
 }

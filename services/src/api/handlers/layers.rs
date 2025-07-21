@@ -221,7 +221,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         let provider = match external.load_layer_provider(provider_listing.id).await {
             Ok(provider) => provider,
             Err(err) => {
-                log::error!("Error loading provider: {err:?}");
+                tracing::error!("Error loading provider: {err:?}");
                 continue;
             }
         };
@@ -233,7 +233,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         let collection_id = match provider.get_root_layer_collection_id().await {
             Ok(root) => root,
             Err(err) => {
-                log::error!(
+                tracing::error!(
                     "Error loading provider {}, could not get root collection id: {err:?}",
                     provider_listing.id,
                 );
@@ -2604,7 +2604,7 @@ mod tests {
             .await
             .unwrap();
 
-        let response = if let TaskStatus::Completed { info, .. } = status {
+        if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
                 .downcast::<RasterDatasetFromWorkflowResult>()
                 .unwrap()
@@ -2612,9 +2612,7 @@ mod tests {
                 .clone()
         } else {
             panic!("Task must be completed");
-        };
-
-        response
+        }
     }
 
     async fn raster_operator_to_geotiff_bytes<C: SessionContext>(

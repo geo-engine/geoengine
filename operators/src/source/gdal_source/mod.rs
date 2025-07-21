@@ -51,7 +51,6 @@ pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use log::debug;
 use num::FromPrimitive;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -62,6 +61,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use tracing::debug;
 
 mod db_types;
 mod error;
@@ -470,8 +470,10 @@ impl GdalRasterLoader {
                     .intersects(&ds.spatial_partition()) =>
             {
                 debug!(
-                    "Loading tile {:?}, from {:?}, band: {}",
-                    &tile_information, ds.file_path, ds.rasterband_channel
+                    "Loading tile {:?}, from {}, band: {}",
+                    &tile_information,
+                    ds.file_path.display(),
+                    ds.rasterband_channel
                 );
                 Self::load_tile_data_async(ds, tile_information, tile_time, cache_hint).await
             }
@@ -542,11 +544,11 @@ impl GdalRasterLoader {
             };
             let elapsed = start.elapsed();
             debug!(
-                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {:?}",
+                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {}",
                 error,
                 err_result.is_err(),
                 elapsed,
-                dataset_params.file_path
+                dataset_params.file_path.display()
             );
             return err_result;
         }
@@ -675,7 +677,7 @@ where
         debug_assert!(pixel_size_x.is_sign_positive());
         // and the y-axis should only be positive if the y-axis of the spatial reference system also "points down".
         // NOTE: at the moment we do not allow "down pointing" y-axis.
-        let pixel_size_y = spatial_resolution.y * -1.0;
+        let pixel_size_y = -spatial_resolution.y;
         debug_assert!(pixel_size_y.is_sign_negative());
 
         let tiling_strategy = self
@@ -724,19 +726,19 @@ where
         ) {
             (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
             (None, None) => {
-                log::warn!(
+                tracing::debug!(
                     "The provider did not provide a time range that covers the query. Falling back to query time range. "
                 );
                 FillerTimeBounds::new(query.time_interval.start(), query.time_interval.end())
             }
             (Some(start), None) => {
-                log::warn!(
+                tracing::debug!(
                     "The provider did only provide a time range start that covers the query. Falling back to query time end. "
                 );
                 FillerTimeBounds::new(start, query.time_interval.end())
             }
             (None, Some(end)) => {
-                log::warn!(
+                tracing::debug!(
                     "The provider did only provide a time range end that covers the query. Falling back to query time start. "
                 );
                 FillerTimeBounds::new(query.time_interval.start(), end)
@@ -1047,7 +1049,7 @@ where
         gdal_dataset_geotransform,
         dataset_params.geo_transform
     ) {
-        log::warn!(
+        tracing::debug!(
             "GdalDatasetParameters geo transform is different to the one retrieved from GDAL dataset: {:?} != {:?}",
             dataset_params.geo_transform,
             gdal_dataset_geotransform,

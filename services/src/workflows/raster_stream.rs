@@ -109,6 +109,7 @@ impl RasterWebsocketStreamHandler {
 
         self.state = match state {
             RasterWebsocketStreamHandlerState::Closed => {
+                tracing::debug!("Closing websocket handler!");
                 self.finished(ctx);
                 return;
             }
@@ -117,6 +118,12 @@ impl RasterWebsocketStreamHandler {
                     _fut: ctx.spawn(
                         wrap_future(async move {
                             let tile = stream.next().await;
+
+                            match &tile {
+                                Some(Ok(_)) => tracing::trace!("Got next tile."),
+                                Some(Err(e)) => tracing::warn!("Got error! {e}"),
+                                None => tracing::trace!("Got None --> Closing."),
+                            }
 
                             (tile, stream)
                         })

@@ -1,18 +1,17 @@
 use crate::{
     contexts::PostgresDb,
     machine_learning::{
-        MlModel, MlModelDb, MlModelId, MlModelIdAndName, MlModelListOptions, MlModelMetadata,
+        MlModel, MlModelDb, MlModelId, MlModelIdAndName, MlModelListOptions,
         error::{
             MachineLearningError,
             error::{Bb8MachineLearningError, PostgresMachineLearningError},
         },
-        name::MlModelName,
     },
     permissions::Permission,
     util::postgres::PostgresErrorExt,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::util::Identifier;
+use geoengine_datatypes::{machine_learning::MlModelName, util::Identifier};
 use snafu::ResultExt;
 use tokio_postgres::{
     Socket,
@@ -46,7 +45,8 @@ where
                     m.display_name,
                     m.description,
                     m.upload,
-                    m.metadata
+                    m.metadata,
+                    m.file_name
                 FROM 
                     user_permitted_ml_models u JOIN ml_models m ON (u.ml_model_id = m.id)
                 WHERE 
@@ -74,6 +74,7 @@ where
                 description: row.get(3),
                 upload: row.get(4),
                 metadata: row.get(5),
+                file_name: row.get(6),
             })
             .collect();
 
@@ -95,7 +96,8 @@ where
                     m.display_name,
                     m.description,
                     m.upload,
-                    m.metadata
+                    m.metadata,
+                    m.file_name
                 FROM 
                     user_permitted_ml_models u JOIN ml_models m ON (u.ml_model_id = m.id)
                 WHERE 
@@ -114,36 +116,8 @@ where
             description: row.get(3),
             upload: row.get(4),
             metadata: row.get(5),
+            file_name: row.get(6),
         })
-    }
-
-    async fn load_model_metadata(
-        &self,
-        name: &MlModelName,
-    ) -> Result<MlModelMetadata, MachineLearningError> {
-        let conn = self
-            .conn_pool
-            .get()
-            .await
-            .context(Bb8MachineLearningError)?;
-
-        let Some(row) = conn
-            .query_opt(
-                "SELECT
-                    m.metadata
-                FROM 
-                    user_permitted_ml_models u JOIN ml_models m ON (u.ml_model_id = m.id)
-                WHERE 
-                    u.user_id = $1 AND m.name = $2",
-                &[&self.session.user.id, name],
-            )
-            .await
-            .context(PostgresMachineLearningError)?
-        else {
-            return Err(MachineLearningError::ModelNotFound { name: name.clone() });
-        };
-
-        Ok(row.get(1))
     }
 
     async fn add_model(&self, model: MlModel) -> Result<MlModelIdAndName, MachineLearningError> {
@@ -170,8 +144,9 @@ where
                     display_name, 
                     description,
                     upload,
-                    metadata
-                ) VALUES ($1, $2, $3, $4, $5, $6) RETURNING id;",
+                    metadata,
+                    file_name
+                ) VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING id;",
             &[
                 &id,
                 &model.name,
@@ -179,6 +154,7 @@ where
                 &model.description,
                 &model.upload,
                 &model.metadata,
+                &model.file_name,
             ],
         )
         .await

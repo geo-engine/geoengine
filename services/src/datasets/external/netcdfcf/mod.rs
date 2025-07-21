@@ -44,13 +44,13 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use tracing::debug;
 use walkdir::{DirEntry, WalkDir};
 
 pub use self::database::NetCdfCfProviderDb;

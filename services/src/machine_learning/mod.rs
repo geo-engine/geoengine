@@ -1,5 +1,4 @@
 use crate::{
-    api::model::datatypes::{MlTensorShape3D, RasterDataType},
     config::{MachineLearning, get_config_element},
     datasets::upload::{UploadId, UploadRootPath},
     identifier,
@@ -7,12 +6,13 @@ use crate::{
 };
 use async_trait::async_trait;
 use error::{MachineLearningError, error::CouldNotFindMlModelFileMachineLearningError};
-use name::MlModelName;
+use geoengine_datatypes::machine_learning::MlModelName;
+use geoengine_operators::machine_learning::{MlModelLoadingInfo, MlModelMetadata};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
-use std::borrow::Cow;
-use utoipa::{IntoParams, ToSchema};
+use std::{borrow::Cow, path::PathBuf};
+use utoipa::IntoParams;
 use validator::{Validate, ValidationError};
 
 pub mod error;
@@ -21,54 +21,48 @@ mod postgres;
 
 identifier!(MlModelId);
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, FromSql, ToSql)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct MlModelIdAndName {
     pub id: MlModelId,
     pub name: MlModelName,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
+impl MlModelIdAndName {
+    pub fn new(id: MlModelId, name: MlModelName) -> Self {
+        Self { id, name }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, FromSql, ToSql)]
 pub struct MlModel {
     pub name: MlModelName,
     pub display_name: String,
     pub description: String,
     pub upload: UploadId,
     pub metadata: MlModelMetadata,
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema, FromSql, ToSql)]
-#[serde(rename_all = "camelCase")]
-pub struct MlModelMetadata {
     pub file_name: String,
-    pub input_type: RasterDataType,
-    pub output_type: RasterDataType,
-    pub input_shape: MlTensorShape3D,
-    pub output_shape: MlTensorShape3D,
-    // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
 }
 
 impl MlModel {
-    pub fn metadata_for_operator(
-        &self,
-    ) -> Result<geoengine_datatypes::machine_learning::MlModelMetadata, MachineLearningError> {
-        let meta = geoengine_datatypes::machine_learning::MlModelMetadata {
-            file_path: path_with_base_path(
-                &self
-                    .upload
-                    .root_path()
-                    .context(CouldNotFindMlModelFileMachineLearningError)?,
-                self.metadata.file_name.as_ref(),
-            )
-            .context(CouldNotFindMlModelFileMachineLearningError)?,
-            input_type: self.metadata.input_type.into(),
-            output_type: self.metadata.output_type.into(),
-            input_shape: self.metadata.input_shape.into(),
-            output_shape: self.metadata.output_shape.into(),
-        };
+    pub fn model_path(&self) -> Result<PathBuf, MachineLearningError> {
+        path_with_base_path(
+            &self
+                .upload
+                .root_path()
+                .map_err(Box::new)
+                .context(CouldNotFindMlModelFileMachineLearningError)?,
+            self.file_name.as_ref(),
+        )
+        .map_err(Box::new)
+        .context(CouldNotFindMlModelFileMachineLearningError)
+    }
 
-        Ok(meta)
+    pub fn loading_info(&self) -> Result<MlModelLoadingInfo, MachineLearningError> {
+        Ok(MlModelLoadingInfo {
+            storage_path: self.model_path()?,
+            metadata: self.metadata.clone(),
+        })
     }
 }
 
@@ -103,11 +97,6 @@ pub trait MlModelDb {
     ) -> Result<Vec<MlModel>, MachineLearningError>;
 
     async fn load_model(&self, name: &MlModelName) -> Result<MlModel, MachineLearningError>;
-
-    async fn load_model_metadata(
-        &self,
-        name: &MlModelName,
-    ) -> Result<MlModelMetadata, MachineLearningError>;
 
     async fn add_model(&self, model: MlModel) -> Result<MlModelIdAndName, MachineLearningError>;
 
