@@ -6924,13 +6924,17 @@
           "displayName",
           "description",
           "upload",
-          "metadata"
+          "metadata",
+          "fileName"
         ],
         "properties": {
           "description": {
             "type": "string"
           },
           "displayName": {
+            "type": "string"
+          },
+          "fileName": {
             "type": "string"
           },
           "metadata": {
@@ -6948,24 +6952,53 @@
         "type": "string",
         "format": "uuid"
       },
+      "MlModelInputNoDataHandling": {
+        "type": "object",
+        "required": [
+          "variant"
+        ],
+        "properties": {
+          "noDataValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "variant": {
+            "$ref": "#/components/schemas/MlModelInputNoDataHandlingVariant"
+          }
+        }
+      },
+      "MlModelInputNoDataHandlingVariant": {
+        "type": "string",
+        "enum": [
+          "encodedNoData",
+          "skipIfNoData"
+        ]
+      },
       "MlModelMetadata": {
         "type": "object",
         "required": [
-          "fileName",
           "inputType",
           "outputType",
           "inputShape",
-          "outputShape"
+          "outputShape",
+          "inputNoDataHandling",
+          "outputNoDataHandling"
         ],
         "properties": {
-          "fileName": {
-            "type": "string"
+          "inputNoDataHandling": {
+            "$ref": "#/components/schemas/MlModelInputNoDataHandling"
           },
           "inputShape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
           },
           "inputType": {
             "$ref": "#/components/schemas/RasterDataType"
+          },
+          "outputNoDataHandling": {
+            "$ref": "#/components/schemas/MlModelOutputNoDataHandling"
           },
           "outputShape": {
             "$ref": "#/components/schemas/MlTensorShape3D"
@@ -6988,6 +7021,31 @@
             "$ref": "#/components/schemas/MlModelName"
           }
         }
+      },
+      "MlModelOutputNoDataHandling": {
+        "type": "object",
+        "required": [
+          "variant"
+        ],
+        "properties": {
+          "noDataValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "float"
+          },
+          "variant": {
+            "$ref": "#/components/schemas/MlModelOutputNoDataHandlingVariant"
+          }
+        }
+      },
+      "MlModelOutputNoDataHandlingVariant": {
+        "type": "string",
+        "enum": [
+          "encodedNoData",
+          "nanIsNoData"
+        ]
       },
       "MlModelResource": {
         "type": "object",

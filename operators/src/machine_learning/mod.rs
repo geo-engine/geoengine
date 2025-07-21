@@ -2,8 +2,13 @@ use geoengine_datatypes::{
     machine_learning::MlTensorShape3D,
     raster::{GridShape2D, RasterDataType},
 };
+pub use metadata::{
+    MlModelInputNoDataHandling, MlModelLoadingInfo, MlModelMetadata, MlModelOutputNoDataHandling,
+};
 use ort::tensor::TensorElementType;
 use snafu::Snafu;
+pub mod db_types;
+mod metadata;
 pub mod onnx;
 pub mod onnx_util;
 
@@ -63,7 +68,7 @@ pub enum MachineLearningError {
         "The input shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
     MetadataModelInputShapeMismatch {
-        model_dimensions: Vec<i64>,
+        model_dimensions: ort::tensor::Shape,
         model_shape: MlTensorShape3D,
         metadata_shape: MlTensorShape3D,
     },
@@ -71,7 +76,7 @@ pub enum MachineLearningError {
         "The output shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
     MetadataModelOutputShapeMismatch {
-        model_dimensions: Vec<i64>,
+        model_dimensions: ort::tensor::Shape,
         model_shape: MlTensorShape3D,
         metadata_shape: MlTensorShape3D,
     },

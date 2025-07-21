@@ -49,7 +49,7 @@ where
         if let Some(rewritten_query) = rewritten_query {
             self.source.raster_query(rewritten_query, ctx).await
         } else {
-            log::debug!("Query was rewritten to empty query. Returning empty / filled stream.");
+            tracing::debug!("Query was rewritten to empty query. Returning empty / filled stream.");
             let s = futures::stream::empty();
 
             // TODO: The input of the `SparseTilesFillAdapter` is empty here, so we can't derive the expiration, as there are no tiles to derive them from.
@@ -88,7 +88,7 @@ where
         if let Some(rewritten_query) = rewritten_query {
             self.source.vector_query(rewritten_query, ctx).await
         } else {
-            log::debug!("Query was rewritten to empty query. Returning empty stream.");
+            tracing::debug!("Query was rewritten to empty query. Returning empty stream.");
             Ok(Box::pin(futures::stream::empty())) // TODO: should be empty collection?
         }
     }

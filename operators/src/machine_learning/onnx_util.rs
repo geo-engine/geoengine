@@ -1,30 +1,31 @@
+use super::{MachineLearningError, error::Ort};
+use crate::machine_learning::{
+    MlModelLoadingInfo, MlModelMetadata,
+    error::{
+        InvalidInputPixelShape, InvalidInputTensorShape, InvalidOutputPixelShape,
+        InvalidOutputType, MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
+        MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, UnsupportedInOutMapping,
+        UnsupportedNumberOfOutputAttributes,
+    },
+};
 use geoengine_datatypes::{
-    machine_learning::{MlModelMetadata, MlTensorShape3D},
+    machine_learning::MlTensorShape3D,
     raster::{GridShape2D, GridSize, RasterDataType},
 };
 use ort::session::Session;
 use snafu::{ResultExt, ensure};
 
-use crate::machine_learning::error::{
-    InvalidInputPixelShape, InvalidInputTensorShape, InvalidOutputPixelShape, InvalidOutputType,
-    MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
-    MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, UnsupportedInOutMapping,
-    UnsupportedNumberOfOutputAttributes,
-};
-
-use super::{MachineLearningError, error::Ort};
-
-pub fn load_onnx_model_from_metadata(
-    ml_model_metadata: &MlModelMetadata,
+pub fn load_onnx_model_from_loading_info(
+    ml_model_loading_info: &MlModelLoadingInfo,
 ) -> Result<Session, MachineLearningError> {
     ort::session::Session::builder()
         .context(Ort)?
-        .commit_from_file(&ml_model_metadata.file_path)
+        .commit_from_file(&ml_model_loading_info.storage_path)
         .context(Ort)
         .inspect_err(|e| {
             tracing::debug!(
                 "Could not create ONNX session for {:?}. Error: {}",
-                ml_model_metadata.file_path.file_name(),
+                ml_model_loading_info.storage_path.file_name(),
                 e
             );
         })
@@ -101,8 +102,9 @@ pub fn check_input_output_mapping_supported(
 }
 
 pub fn try_onnx_tensor_to_ml_tensorshape_3d(
-    tensor_dimensions: &[i64],
+    tensor_dimensions: &ort::tensor::Shape,
 ) -> Result<MlTensorShape3D, MachineLearningError> {
+    let tensor_dimensions: &[i64] = tensor_dimensions.as_ref();
     match *tensor_dimensions {
         [-1..=1] => Ok(MlTensorShape3D {
             x: 1,

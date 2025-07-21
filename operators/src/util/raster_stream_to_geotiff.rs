@@ -23,12 +23,12 @@ use geoengine_datatypes::raster::{
     TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
+use tracing::debug;
 
 use super::{abortable_query_execution, spawn_blocking};
 

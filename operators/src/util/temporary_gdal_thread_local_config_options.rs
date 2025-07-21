@@ -16,7 +16,7 @@ impl TemporaryGdalThreadLocalConfigOptions {
 
             // TODO: check if overriding existing config (local & global) is ok for the given key
             gdal::config::set_thread_local_config_option(key, value)?;
-            log::trace!("set {key}={value}");
+            tracing::trace!("set {key}={value}");
 
             original_configs.push((key.clone(), old));
         }

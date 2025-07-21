@@ -12,7 +12,6 @@ use crate::{
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::helpers::ge_report;
-use log::{error, info, warn};
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -20,6 +19,7 @@ use std::{
     io::BufReader,
     path::PathBuf,
 };
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use super::storage::LayerProviderDb;

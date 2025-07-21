@@ -99,7 +99,7 @@ where
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         if collection.is_empty() {
-            log::debug!(
+            tracing::debug!(
                 "input collection is empty, returning empty collection, skipping raster query"
             );
 
@@ -121,7 +121,7 @@ where
         // TODO: also intersect with raster spatial / time bounds
 
         let (Some(_spatial_bounds), Some(_time_interval)) = (bbox, time) else {
-            log::debug!(
+            tracing::debug!(
                 "spatial or temporal intersection is empty, returning the same collection, skipping raster query"
             );
 
@@ -397,7 +397,7 @@ where
 
         // TODO: adjust raster bands to the vector attribute selection in the query once we support it
         for raster_input in &self.raster_inputs {
-            log::debug!(
+            tracing::debug!(
                 "processing raster for new columns {:?}",
                 raster_input.column_names
             );
