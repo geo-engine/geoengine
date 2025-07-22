@@ -1,9 +1,19 @@
+use std::path::Path;
+
 use super::Result;
-use crate::engine::{ExecutionContext, QueryContext, RasterOperator, WorkflowOperatorPath};
+use crate::{
+    engine::{ExecutionContext, QueryContext, RasterOperator, WorkflowOperatorPath},
+    util::gdal::gdal_open_dataset,
+};
 use futures::StreamExt;
+use gdal::raster::GdalType;
 use geoengine_datatypes::{
-    primitives::RasterQueryRectangle, raster::RasterTile2D,
-    util::test::assert_eq_two_list_of_tiles_u8,
+    primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
+    raster::{
+        GeoTransform, Grid, GridOrEmpty, GridShape2D, GridSize, MapElements, MaskedGrid, Pixel,
+        RasterTile2D, SpatialGridDefinition, TilingSpatialGridDefinition,
+    },
+    util::{gdal::gdal_open_dataset_ex, test::assert_eq_two_list_of_tiles_u8},
 };
 
 pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryContext>(
@@ -86,4 +96,59 @@ pub async fn assert_eq_two_raster_operator_res_u8<E: ExecutionContext, Q: QueryC
         &res_a,
     )
     .await;
+}
+
+/// Reads a single raster tile from a single file and returns it as a `RasterTile2D<u8>`.
+/// This assumes that the file actually contains exactly one geoengine tile according to the spatial grid definition.
+pub fn raster_tile_from_file<T: Pixel + GdalType>(
+    file_path: &Path,
+    tiling_spatial_grid: TilingSpatialGridDefinition,
+    time: TimeInterval,
+    band: u32,
+) -> Result<RasterTile2D<T>> {
+    let ds = gdal_open_dataset(file_path)?;
+
+    let gf: GeoTransform = ds.geo_transform()?.into();
+
+    let tiling_strategy = tiling_spatial_grid.generate_data_tiling_strategy();
+
+    let tiling_geo_transform = tiling_spatial_grid.tiling_geo_transform();
+    let tile_origin_pixel_idx =
+        tiling_geo_transform.coordinate_to_grid_idx_2d(gf.origin_coordinate);
+    let tile_position = tiling_strategy.pixel_idx_to_tile_idx(tile_origin_pixel_idx);
+
+    let rasterband = ds.rasterband(1)?;
+
+    let out_shape: GridShape2D = GridShape2D::new([ds.raster_size().0, ds.raster_size().1]);
+
+    let buffer = rasterband.read_as::<T>(
+        (0, 0),
+        ds.raster_size(),
+        ds.raster_size(), // or: tile_size_in_pixels
+        None,
+    )?;
+
+    let (_, buffer_data) = buffer.into_shape_and_vec();
+    let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
+
+    let mask_band = rasterband.open_mask_band()?;
+    let mask_buffer = mask_band.read_as::<u8>(
+        (0, 0),
+        ds.raster_size(),
+        ds.raster_size(), // or: tile_size_in_pixels
+        None,
+    )?;
+    let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
+    let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);
+
+    let masked_grid = MaskedGrid::new(data_grid, mask_grid)?;
+
+    Ok(RasterTile2D::<T>::new(
+        time,
+        tile_position,
+        band,
+        tiling_geo_transform,
+        GridOrEmpty::from(masked_grid),
+        CacheHint::default(),
+    ))
 }

@@ -1454,7 +1454,7 @@ mod tests {
             responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
         },
-        contexts::{PostgresContext, Session, SessionId},
+        contexts::{PostgresContext, PostgresSessionContext, Session, SessionId},
         datasets::{
             DatasetIdAndName,
             storage::DatasetStore,
@@ -1486,6 +1486,7 @@ mod tests {
             GeoTransform, GridBoundingBox2D, GridIndexAccess, GridShape2D, TilingSpecification,
         },
         spatial_reference::SpatialReferenceOption,
+        util::test::{assert_eq_two_list_of_tiles, assert_eq_two_list_of_tiles_u8},
     };
     use geoengine_operators::{
         engine::{
@@ -1497,7 +1498,10 @@ mod tests {
             GdalSource, MultiBandGdalSource, MultiBandGdalSourceParameters, OgrSource,
             OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
         },
-        util::gdal::{create_ndvi_meta_data, create_ndvi_result_descriptor},
+        util::{
+            gdal::{create_ndvi_meta_data, create_ndvi_result_descriptor},
+            test::raster_tile_from_file,
+        },
     };
     use serde_json::{Value, json};
     use std::collections::HashSet;
@@ -3529,56 +3533,15 @@ mod tests {
         tiles
     }
 
-    // TODO: where to actually put this test? Can't be in the multi dim gdalsource because then we can't test the database access of the tiles is correct
-    #[ge_context::test]
-    async fn it_loads_multi_band_multi_file_mosaics(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let volume = VolumeName("test_data".to_string());
-
+    async fn add_multi_tile_dataset(
+        app_ctx: &PostgresContext<NoTls>,
+    ) -> Result<(PostgresSessionContext<NoTls>, DatasetName)> {
         // add data
-        let create = CreateDataset {
-            data_path: DataPath::Volume(volume.clone()),
-            definition: DatasetDefinition {
-                properties: AddDataset {
-                    name: None,
-                    display_name: "multi tile multi band".to_string(),
-                    description: "".to_string(),
-                    source_operator: "MultiBandGdalSource".to_string(),
-                    symbology: None,
-                    provenance: None,
-                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
-                },
-                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
-                    r#type: Default::default(),
-                    result_descriptor: RasterResultDescriptor {
-                        data_type: RasterDataType::U16,
-                        spatial_reference: SpatialReferenceOption::from(
-                            SpatialReference::epsg_4326(),
-                        )
-                        .into(),
-                        time: None,
-                        spatial_grid: SpatialGridDescriptor::source_from_parts(
-                            GeoTransform::new(
-                                (-180., 90.).into(),
-                                0.2,  // x pixel size
-                                -0.2, // y pixel size
-                            ),
-                            GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
-                        )
-                        .into(),
-                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                            "band".into(),
-                            Measurement::Unitless,
-                        )])
-                        .unwrap()
-                        .into(),
-                    },
-                }),
-            },
-        };
+        let create: CreateDataset = serde_json::from_str(&std::fs::read_to_string(test_data!(
+            "raster/multi_tile/metadata/dataset.json"
+        ))?)?;
 
-        print!("{}", serde_json::to_string_pretty(&create).unwrap());
-
-        let session = admin_login(&app_ctx).await;
+        let session = admin_login(app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
         let db = ctx.db();
@@ -3602,19 +3565,18 @@ mod tests {
 
         // add tiles
         let mut tiles: Vec<DatasetTile> = serde_json::from_str(&std::fs::read_to_string(
-            test_data!("raster/multi_tile/loading_info.json"),
+            test_data!("raster/multi_tile/metadata/loading_info.json"),
         )?)?;
 
+        // fix the file path because the test runs with a different working directory than the server
         for tile in &mut tiles {
-            tile.params.file_path = dbg!(
-                test_data!(
-                    tile.params
-                        .file_path
-                        .to_string_lossy()
-                        .replace("test_data/", "")
-                )
-                .to_path_buf()
-            );
+            tile.params.file_path = test_data!(
+                tile.params
+                    .file_path
+                    .to_string_lossy()
+                    .replace("test_data/", "")
+            )
+            .to_path_buf();
         }
 
         let req = actix_web::test::TestRequest::post()
@@ -3627,13 +3589,19 @@ mod tests {
 
         assert_eq!(res.status(), 200, "response: {res:?}");
 
-        // create workflow
+        Ok((ctx, dataset_name))
+    }
+
+    // TODO: where to actually put this test? Can't be in the multi dim gdalsource because then we can't test the database access of the tiles is correct
+    #[ge_context::test]
+    async fn it_loads_multi_band_multi_file_mosaics(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx).await?;
+
         let operator = MultiBandGdalSource {
             params: MultiBandGdalSourceParameters::new(dataset_name.into()),
         }
         .boxed();
 
-        // TODO: create query processor, query, and check result
         let execution_context = ctx.execution_context()?;
 
         let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
@@ -3649,10 +3617,12 @@ mod tests {
 
         let tiling_spec = execution_context.tiling_specification();
 
-        let query_tiling_pixel_grid = processor
+        let tiling_spatial_grid_definition = processor
             .result_descriptor()
             .spatial_grid_descriptor()
-            .tiling_grid_definition(tiling_spec)
+            .tiling_grid_definition(tiling_spec);
+
+        let query_tiling_pixel_grid = tiling_spatial_grid_definition
             .tiling_spatial_grid_definition()
             .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
                 (-180., 90.).into(),
@@ -3666,7 +3636,7 @@ mod tests {
                     .unwrap(),
             )
             .unwrap(),
-            BandSelection::first(), // TODO: load both bands
+            BandSelection::first(),
         );
 
         let tiles = processor
@@ -3678,22 +3648,496 @@ mod tests {
             .try_collect::<Vec<_>>()
             .await?;
 
-        for tile in tiles {
-            let p = tile.spatial_partition();
-            let values: HashSet<_> = tile
-                .grid_array
-                .into_materialized_masked_grid()
-                .inner_grid
-                .inner_ref()
-                .iter()
-                .copied()
-                .collect();
-            println!(
-                "Tile: spatial partition: {:?}, data values = {:?}",
-                p, values
+        let expected_tiles = [
+            "2025-01-01_global_b0_tile_0.tif",
+            "2025-01-01_global_b0_tile_1.tif",
+            "2025-01-01_global_b0_tile_2.tif",
+            "2025-01-01_global_b0_tile_3.tif",
+            "2025-01-01_global_b0_tile_4.tif",
+            "2025-01-01_global_b0_tile_5.tif",
+            "2025-01-01_global_b0_tile_6.tif",
+            "2025-01-01_global_b0_tile_7.tif",
+        ];
+
+        let expected_time = TimeInterval::new(
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                .unwrap(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let expected_tiles: Vec<_> = expected_tiles
+            .iter()
+            .map(|f| {
+                raster_tile_from_file::<u16>(
+                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    tiling_spatial_grid_definition,
+                    expected_time,
+                    0,
+                )
+                .unwrap()
+            })
+            .collect();
+
+        assert_eq_two_list_of_tiles(&tiles, &expected_tiles, false);
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_loads_multi_band_multi_file_mosaics_2_bands(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx).await?;
+
+        let operator = MultiBandGdalSource {
+            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+        }
+        .boxed();
+
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?;
+
+        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let tiling_spec = execution_context.tiling_specification();
+
+        let tiling_spatial_grid_definition = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec);
+
+        let query_tiling_pixel_grid = tiling_spatial_grid_definition
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180.0, -90.).into(),
+            ));
+
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            query_tiling_pixel_grid.grid_bounds(),
+            TimeInterval::new_instant(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                    .unwrap(),
+            )
+            .unwrap(),
+            BandSelection::first_n(2),
+        );
+
+        let tiles = processor
+            .get_u16()
+            .unwrap()
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        let expected_tiles = [
+            ("2025-01-01_global_b0_tile_0.tif", 0u32),
+            ("2025-01-01_global_b1_tile_0.tif", 1),
+            ("2025-01-01_global_b0_tile_1.tif", 0),
+            ("2025-01-01_global_b1_tile_1.tif", 1),
+            ("2025-01-01_global_b0_tile_2.tif", 0),
+            ("2025-01-01_global_b1_tile_2.tif", 1),
+            ("2025-01-01_global_b0_tile_3.tif", 0),
+            ("2025-01-01_global_b1_tile_3.tif", 1),
+            ("2025-01-01_global_b0_tile_4.tif", 0),
+            ("2025-01-01_global_b1_tile_4.tif", 1),
+            ("2025-01-01_global_b0_tile_5.tif", 0),
+            ("2025-01-01_global_b1_tile_5.tif", 1),
+            ("2025-01-01_global_b0_tile_6.tif", 0),
+            ("2025-01-01_global_b1_tile_6.tif", 1),
+            ("2025-01-01_global_b0_tile_7.tif", 0),
+            ("2025-01-01_global_b1_tile_7.tif", 1),
+        ];
+
+        let expected_time = TimeInterval::new(
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                .unwrap(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let expected_tiles: Vec<_> = expected_tiles
+            .iter()
+            .map(|(f, b)| {
+                raster_tile_from_file::<u16>(
+                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    tiling_spatial_grid_definition,
+                    expected_time,
+                    *b,
+                )
+                .unwrap()
+            })
+            .collect();
+
+        assert_eq_two_list_of_tiles(&tiles, &expected_tiles, false);
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_loads_multi_band_multi_file_mosaics_2_bands_2_timesteps(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx).await?;
+
+        let operator = MultiBandGdalSource {
+            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+        }
+        .boxed();
+
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?;
+
+        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let tiling_spec = execution_context.tiling_specification();
+
+        let tiling_spatial_grid_definition = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec);
+
+        let query_tiling_pixel_grid = tiling_spatial_grid_definition
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180.0, -90.).into(),
+            ));
+
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            query_tiling_pixel_grid.grid_bounds(),
+            TimeInterval::new(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                    .unwrap(),
+                geoengine_datatypes::primitives::TimeInstance::from_str("2025-03-01T00:00:00Z")
+                    .unwrap(),
+            )
+            .unwrap(),
+            BandSelection::first_n(2),
+        );
+
+        let tiles = processor
+            .get_u16()
+            .unwrap()
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        let expected_time1 = TimeInterval::new(
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                .unwrap(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let expected_time2 = TimeInterval::new(
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                .unwrap(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-03-01T00:00:00Z")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let expected_tiles = [
+            ("2025-01-01_global_b0_tile_0.tif", 0u32, expected_time1),
+            ("2025-01-01_global_b1_tile_0.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_1.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_1.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_2.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_2.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_3.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_3.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_4.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_4.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_5.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_5.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_6.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_6.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_7.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_7.tif", 1, expected_time1),
+            ("2025-02-01_global_b0_tile_0.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_0.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_1.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_1.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_2.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_2.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_3.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_3.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_4.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_4.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_5.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_5.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_6.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_6.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_7.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_7.tif", 1, expected_time2),
+        ];
+
+        let expected_tiles: Vec<_> = expected_tiles
+            .iter()
+            .map(|(f, b, t)| {
+                raster_tile_from_file::<u16>(
+                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    tiling_spatial_grid_definition,
+                    *t,
+                    *b,
+                )
+                .unwrap()
+            })
+            .collect();
+
+        assert_eq_two_list_of_tiles(&tiles, &expected_tiles, false);
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_loads_multi_band_multi_file_mosaics_with_time_gaps(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx).await?;
+
+        let operator = MultiBandGdalSource {
+            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+        }
+        .boxed();
+
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?;
+
+        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let tiling_spec = execution_context.tiling_specification();
+
+        let tiling_spatial_grid_definition = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec);
+
+        let query_tiling_pixel_grid = tiling_spatial_grid_definition
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180.0, -90.).into(),
+            ));
+
+        // query a time interval that is greater than the time interval of the tiles and covers a region with a temporal gap
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            query_tiling_pixel_grid.grid_bounds(),
+            TimeInterval::new(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2024-12-01T00:00:00Z")
+                    .unwrap(),
+                geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-15T00:00:00Z")
+                    .unwrap(),
+            )
+            .unwrap(),
+            BandSelection::first_n(2),
+        );
+
+        let mut tiles = processor
+            .get_u16()
+            .unwrap()
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        // first 8 (spatial) x 2 (bands) tiles must be no data
+        for tile in tiles.drain(..16) {
+            assert_eq!(
+                tile.time,
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::MIN,
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap()
             );
+            assert!(tile.is_empty());
         }
 
-        todo!()
+        // next comes data
+        let expected_time1 = TimeInterval::new(
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                .unwrap(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let expected_time2 = TimeInterval::new(
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                .unwrap(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-03-01T00:00:00Z")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let expected_tiles = [
+            ("2025-01-01_global_b0_tile_0.tif", 0u32, expected_time1),
+            ("2025-01-01_global_b1_tile_0.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_1.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_1.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_2.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_2.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_3.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_3.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_4.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_4.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_5.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_5.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_6.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_6.tif", 1, expected_time1),
+            ("2025-01-01_global_b0_tile_7.tif", 0, expected_time1),
+            ("2025-01-01_global_b1_tile_7.tif", 1, expected_time1),
+            ("2025-02-01_global_b0_tile_0.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_0.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_1.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_1.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_2.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_2.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_3.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_3.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_4.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_4.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_5.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_5.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_6.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_6.tif", 1, expected_time2),
+            ("2025-02-01_global_b0_tile_7.tif", 0, expected_time2),
+            ("2025-02-01_global_b1_tile_7.tif", 1, expected_time2),
+        ];
+
+        let expected_tiles: Vec<_> = expected_tiles
+            .iter()
+            .map(|(f, b, t)| {
+                raster_tile_from_file::<u16>(
+                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    tiling_spatial_grid_definition,
+                    *t,
+                    *b,
+                )
+                .unwrap()
+            })
+            .collect();
+
+        assert_eq_two_list_of_tiles(
+            &tiles.drain(..expected_tiles.len()).collect::<Vec<_>>(),
+            &expected_tiles,
+            false,
+        );
+
+        // next comes a gap of no data
+        for tile in tiles.drain(..16) {
+            assert_eq!(
+                tile.time,
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-03-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-04-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap()
+            );
+            assert!(tile.is_empty());
+        }
+
+        // next comes data again
+        let expected_time = TimeInterval::new(
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-04-01T00:00:00Z")
+                .unwrap(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-01T00:00:00Z")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let expected_tiles = [
+            ("2025-04-01_global_b0_tile_0.tif", 0u32, expected_time),
+            ("2025-04-01_global_b1_tile_0.tif", 1, expected_time),
+            ("2025-04-01_global_b0_tile_1.tif", 0, expected_time),
+            ("2025-04-01_global_b1_tile_1.tif", 1, expected_time),
+            ("2025-04-01_global_b0_tile_2.tif", 0, expected_time),
+            ("2025-04-01_global_b1_tile_2.tif", 1, expected_time),
+            ("2025-04-01_global_b0_tile_3.tif", 0, expected_time),
+            ("2025-04-01_global_b1_tile_3.tif", 1, expected_time),
+            ("2025-04-01_global_b0_tile_4.tif", 0, expected_time),
+            ("2025-04-01_global_b1_tile_4.tif", 1, expected_time),
+            ("2025-04-01_global_b0_tile_5.tif", 0, expected_time),
+            ("2025-04-01_global_b1_tile_5.tif", 1, expected_time),
+            ("2025-04-01_global_b0_tile_6.tif", 0, expected_time),
+            ("2025-04-01_global_b1_tile_6.tif", 1, expected_time),
+            ("2025-04-01_global_b0_tile_7.tif", 0, expected_time),
+            ("2025-04-01_global_b1_tile_7.tif", 1, expected_time),
+        ];
+
+        let expected_tiles: Vec<_> = expected_tiles
+            .iter()
+            .map(|(f, b, t)| {
+                raster_tile_from_file::<u16>(
+                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    tiling_spatial_grid_definition,
+                    *t,
+                    *b,
+                )
+                .unwrap()
+            })
+            .collect();
+
+        assert_eq_two_list_of_tiles(
+            &tiles.drain(..expected_tiles.len()).collect::<Vec<_>>(),
+            &expected_tiles,
+            false,
+        );
+
+        // last 8 (spatial) x 2 (bands) tiles must be no data
+        for tile in &tiles[..16] {
+            assert_eq!(
+                tile.time,
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::MAX
+                )
+                .unwrap()
+            );
+            assert!(tile.is_empty());
+        }
+
+        Ok(())
     }
+
+    // TODO: add test with different z order
 }

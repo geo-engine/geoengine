@@ -1,8 +1,8 @@
 [
   {
     "time": {
-      "start": 1735686000000,
-      "end": 1738364400000
+      "start": 1735689600000,
+      "end": 1738368000000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -17,7 +17,7 @@
     "band": 0,
     "z_index": 0,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-01-01_tile_x0_y0_b0.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x0_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -39,8 +39,8 @@
   },
   {
     "time": {
-      "start": 1735686000000,
-      "end": 1738364400000
+      "start": 1735689600000,
+      "end": 1738368000000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -55,7 +55,7 @@
     "band": 0,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-01-01_tile_x0_y1_b0.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x0_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -77,8 +77,8 @@
   },
   {
     "time": {
-      "start": 1735686000000,
-      "end": 1738364400000
+      "start": 1735689600000,
+      "end": 1738368000000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -93,7 +93,7 @@
     "band": 0,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-01-01_tile_x1_y0_b0.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x1_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -115,8 +115,8 @@
   },
   {
     "time": {
-      "start": 1735686000000,
-      "end": 1738364400000
+      "start": 1735689600000,
+      "end": 1738368000000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -131,7 +131,7 @@
     "band": 0,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-01-01_tile_x1_y1_b0.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x1_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -153,8 +153,8 @@
   },
   {
     "time": {
-      "start": 1735686000000,
-      "end": 1738364400000
+      "start": 1735689600000,
+      "end": 1738368000000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -169,7 +169,7 @@
     "band": 1,
     "z_index": 0,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-01-01_tile_x0_y0_b1.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x0_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -191,8 +191,8 @@
   },
   {
     "time": {
-      "start": 1735686000000,
-      "end": 1738364400000
+      "start": 1735689600000,
+      "end": 1738368000000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -207,7 +207,7 @@
     "band": 1,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-01-01_tile_x0_y1_b1.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x0_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -229,8 +229,8 @@
   },
   {
     "time": {
-      "start": 1735686000000,
-      "end": 1738364400000
+      "start": 1735689600000,
+      "end": 1738368000000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -245,7 +245,7 @@
     "band": 1,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-01-01_tile_x1_y0_b1.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x1_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -267,8 +267,8 @@
   },
   {
     "time": {
-      "start": 1735686000000,
-      "end": 1738364400000
+      "start": 1735689600000,
+      "end": 1738368000000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -283,7 +283,7 @@
     "band": 1,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-01-01_tile_x1_y1_b1.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x1_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -305,8 +305,8 @@
   },
   {
     "time": {
-      "start": 1738364400000,
-      "end": 1740783600000
+      "start": 1738368000000,
+      "end": 1740787200000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -321,7 +321,7 @@
     "band": 0,
     "z_index": 0,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-02-01_tile_x0_y0_b0.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x0_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -343,8 +343,8 @@
   },
   {
     "time": {
-      "start": 1738364400000,
-      "end": 1740783600000
+      "start": 1738368000000,
+      "end": 1740787200000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -359,7 +359,7 @@
     "band": 0,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-02-01_tile_x0_y1_b0.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x0_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -381,8 +381,8 @@
   },
   {
     "time": {
-      "start": 1738364400000,
-      "end": 1740783600000
+      "start": 1738368000000,
+      "end": 1740787200000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -397,7 +397,7 @@
     "band": 0,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-02-01_tile_x1_y0_b0.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x1_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -419,8 +419,8 @@
   },
   {
     "time": {
-      "start": 1738364400000,
-      "end": 1740783600000
+      "start": 1738368000000,
+      "end": 1740787200000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -435,7 +435,7 @@
     "band": 0,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-02-01_tile_x1_y1_b0.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x1_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -457,8 +457,8 @@
   },
   {
     "time": {
-      "start": 1738364400000,
-      "end": 1740783600000
+      "start": 1738368000000,
+      "end": 1740787200000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -473,7 +473,7 @@
     "band": 1,
     "z_index": 0,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-02-01_tile_x0_y0_b1.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x0_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -495,8 +495,8 @@
   },
   {
     "time": {
-      "start": 1738364400000,
-      "end": 1740783600000
+      "start": 1738368000000,
+      "end": 1740787200000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -511,7 +511,7 @@
     "band": 1,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-02-01_tile_x0_y1_b1.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x0_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -533,8 +533,8 @@
   },
   {
     "time": {
-      "start": 1738364400000,
-      "end": 1740783600000
+      "start": 1738368000000,
+      "end": 1740787200000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -549,7 +549,7 @@
     "band": 1,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-02-01_tile_x1_y0_b1.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x1_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -571,8 +571,8 @@
   },
   {
     "time": {
-      "start": 1738364400000,
-      "end": 1740783600000
+      "start": 1738368000000,
+      "end": 1740787200000
     },
     "spatial_partition": {
       "upperLeftCoordinate": {
@@ -587,7 +587,311 @@
     "band": 1,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/2025-02-01_tile_x1_y1_b1.tif",
+      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x1_y1_b1.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -45.0,
+          "y": 22.39999999999999
+        },
+        "xPixelSize": 0.2,
+        "yPixelSize": -0.2
+      },
+      "width": 1125,
+      "height": 562,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0,
+      "propertiesMapping": null,
+      "gdalOpenOptions": null,
+      "gdalConfigOptions": null,
+      "allowAlphabandAsMask": true
+    }
+  },
+  {
+    "time": {
+      "start": 1743465600000,
+      "end": 1746057600000
+    },
+    "spatial_partition": {
+      "upperLeftCoordinate": {
+        "x": -180.0,
+        "y": 90.0
+      },
+      "lowerRightCoordinate": {
+        "x": 45.0,
+        "y": -22.400000000000006
+      }
+    },
+    "band": 0,
+    "z_index": 0,
+    "params": {
+      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x0_y0_b0.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -180.0,
+          "y": 90.0
+        },
+        "xPixelSize": 0.2,
+        "yPixelSize": -0.2
+      },
+      "width": 1125,
+      "height": 562,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0,
+      "propertiesMapping": null,
+      "gdalOpenOptions": null,
+      "gdalConfigOptions": null,
+      "allowAlphabandAsMask": true
+    }
+  },
+  {
+    "time": {
+      "start": 1743465600000,
+      "end": 1746057600000
+    },
+    "spatial_partition": {
+      "upperLeftCoordinate": {
+        "x": -180.0,
+        "y": 22.39999999999999
+      },
+      "lowerRightCoordinate": {
+        "x": 45.0,
+        "y": -90.00000000000001
+      }
+    },
+    "band": 0,
+    "z_index": 1,
+    "params": {
+      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x0_y1_b0.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -180.0,
+          "y": 22.39999999999999
+        },
+        "xPixelSize": 0.2,
+        "yPixelSize": -0.2
+      },
+      "width": 1125,
+      "height": 562,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0,
+      "propertiesMapping": null,
+      "gdalOpenOptions": null,
+      "gdalConfigOptions": null,
+      "allowAlphabandAsMask": true
+    }
+  },
+  {
+    "time": {
+      "start": 1743465600000,
+      "end": 1746057600000
+    },
+    "spatial_partition": {
+      "upperLeftCoordinate": {
+        "x": -45.0,
+        "y": 90.0
+      },
+      "lowerRightCoordinate": {
+        "x": 180.0,
+        "y": -22.400000000000006
+      }
+    },
+    "band": 0,
+    "z_index": 1,
+    "params": {
+      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x1_y0_b0.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -45.0,
+          "y": 90.0
+        },
+        "xPixelSize": 0.2,
+        "yPixelSize": -0.2
+      },
+      "width": 1125,
+      "height": 562,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0,
+      "propertiesMapping": null,
+      "gdalOpenOptions": null,
+      "gdalConfigOptions": null,
+      "allowAlphabandAsMask": true
+    }
+  },
+  {
+    "time": {
+      "start": 1743465600000,
+      "end": 1746057600000
+    },
+    "spatial_partition": {
+      "upperLeftCoordinate": {
+        "x": -45.0,
+        "y": 22.39999999999999
+      },
+      "lowerRightCoordinate": {
+        "x": 180.0,
+        "y": -90.00000000000001
+      }
+    },
+    "band": 0,
+    "z_index": 2,
+    "params": {
+      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x1_y1_b0.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -45.0,
+          "y": 22.39999999999999
+        },
+        "xPixelSize": 0.2,
+        "yPixelSize": -0.2
+      },
+      "width": 1125,
+      "height": 562,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0,
+      "propertiesMapping": null,
+      "gdalOpenOptions": null,
+      "gdalConfigOptions": null,
+      "allowAlphabandAsMask": true
+    }
+  },
+  {
+    "time": {
+      "start": 1743465600000,
+      "end": 1746057600000
+    },
+    "spatial_partition": {
+      "upperLeftCoordinate": {
+        "x": -180.0,
+        "y": 90.0
+      },
+      "lowerRightCoordinate": {
+        "x": 45.0,
+        "y": -22.400000000000006
+      }
+    },
+    "band": 1,
+    "z_index": 0,
+    "params": {
+      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x0_y0_b1.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -180.0,
+          "y": 90.0
+        },
+        "xPixelSize": 0.2,
+        "yPixelSize": -0.2
+      },
+      "width": 1125,
+      "height": 562,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0,
+      "propertiesMapping": null,
+      "gdalOpenOptions": null,
+      "gdalConfigOptions": null,
+      "allowAlphabandAsMask": true
+    }
+  },
+  {
+    "time": {
+      "start": 1743465600000,
+      "end": 1746057600000
+    },
+    "spatial_partition": {
+      "upperLeftCoordinate": {
+        "x": -180.0,
+        "y": 22.39999999999999
+      },
+      "lowerRightCoordinate": {
+        "x": 45.0,
+        "y": -90.00000000000001
+      }
+    },
+    "band": 1,
+    "z_index": 1,
+    "params": {
+      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x0_y1_b1.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -180.0,
+          "y": 22.39999999999999
+        },
+        "xPixelSize": 0.2,
+        "yPixelSize": -0.2
+      },
+      "width": 1125,
+      "height": 562,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0,
+      "propertiesMapping": null,
+      "gdalOpenOptions": null,
+      "gdalConfigOptions": null,
+      "allowAlphabandAsMask": true
+    }
+  },
+  {
+    "time": {
+      "start": 1743465600000,
+      "end": 1746057600000
+    },
+    "spatial_partition": {
+      "upperLeftCoordinate": {
+        "x": -45.0,
+        "y": 90.0
+      },
+      "lowerRightCoordinate": {
+        "x": 180.0,
+        "y": -22.400000000000006
+      }
+    },
+    "band": 1,
+    "z_index": 1,
+    "params": {
+      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x1_y0_b1.tif",
+      "rasterbandChannel": 1,
+      "geoTransform": {
+        "originCoordinate": {
+          "x": -45.0,
+          "y": 90.0
+        },
+        "xPixelSize": 0.2,
+        "yPixelSize": -0.2
+      },
+      "width": 1125,
+      "height": 562,
+      "fileNotFoundHandling": "Error",
+      "noDataValue": 0.0,
+      "propertiesMapping": null,
+      "gdalOpenOptions": null,
+      "gdalConfigOptions": null,
+      "allowAlphabandAsMask": true
+    }
+  },
+  {
+    "time": {
+      "start": 1743465600000,
+      "end": 1746057600000
+    },
+    "spatial_partition": {
+      "upperLeftCoordinate": {
+        "x": -45.0,
+        "y": 22.39999999999999
+      },
+      "lowerRightCoordinate": {
+        "x": 180.0,
+        "y": -90.00000000000001
+      }
+    },
+    "band": 1,
+    "z_index": 2,
+    "params": {
+      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x1_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {

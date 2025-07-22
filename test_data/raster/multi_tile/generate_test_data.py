@@ -24,12 +24,12 @@ overlap_frac = 0.25
 tile_width = int(base_tile_width * (1 + overlap_frac))
 tile_height = int(base_tile_height * (1 + overlap_frac))
 
-print(tile_height, tile_width)
+geo_engine_tile_size_px = 512
 
 # Bands
 bands = 2
 
-dates = ["2025-01-01", "2025-02-01"]
+dates = ["2025-01-01", "2025-02-01", "2025-04-01"]
 
 def create_tile(filename, width, height, data_array, geotransform, projection):
     driver = gdal.GetDriverByName('GTiff')
@@ -42,6 +42,7 @@ def create_tile(filename, width, height, data_array, geotransform, projection):
     ds.GetRasterBand(1).WriteArray(data_array)
     ds.FlushCache()
     ds = None
+
 
 # WGS84 projection
 srs = osr.SpatialReference()
@@ -62,7 +63,7 @@ pixel_values = set()
 for date_idx, date in enumerate(dates):
     for band in range(bands):
         # create global raster for each date and band
-        global_filename = f"{date}_global_b{band}.tif"
+        global_filename = f"results/global/{date}_global_b{band}.tif"
         global_width = base_tile_width * tiles_x
         global_height = base_tile_height * tiles_y
         global_gt = (minx, px_size_x, 0, maxy, 0, px_size_y)
@@ -92,7 +93,7 @@ for date_idx, date in enumerate(dates):
                 pixel_values.add(value)
                 data = np.full((tile_height, tile_width), value, dtype=np.float32)
 
-                filename = f"{date}_tile_x{i}_y{j}_b{band}.tif"                
+                filename = f"data/{date}_tile_x{i}_y{j}_b{band}.tif"                
                 create_tile(filename, tile_width, tile_height, data, gt, proj)
 
                 # Calculate spatial partition
@@ -104,15 +105,18 @@ for date_idx, date in enumerate(dates):
                 # Calculate time in ms since epoch
                 def date_to_ms(date_str):
                     dt = datetime.datetime.strptime(date_str, "%Y-%m-%d")
+                    dt = dt.replace(tzinfo=datetime.timezone.utc)  # Treat as UTC
                     return int(dt.timestamp() * 1000)
 
                 time_start = date_to_ms(date)
-                if date_idx + 1 < len(dates):
-                    time_end = date_to_ms(dates[date_idx + 1])
-                else:
-                    # Add 1 month for the last date
-                    next_month = (datetime.datetime.strptime(date, "%Y-%m-%d") + datetime.timedelta(days=31)).replace(day=1)
-                    time_end = int(next_month.timestamp() * 1000)
+                # if date_idx + 1 < len(dates):
+                #     time_end = date_to_ms(dates[date_idx + 1])
+                # else:
+                #     # Add 1 month for the last date
+
+                next_month = (datetime.datetime.strptime(date, "%Y-%m-%d") + datetime.timedelta(days=31)).replace(day=1)
+                next_month = next_month.replace(tzinfo=datetime.timezone.utc)  # Treat as UTC
+                time_end = int(next_month.timestamp() * 1000)
 
                 meta = {
                     "time": {"start": time_start, "end": time_end},
@@ -153,7 +157,10 @@ for date_idx, date in enumerate(dates):
         ds.FlushCache()
         ds = None
 
-    with open("loading_info.json", "w") as f:
+    # create expected geo engine tiles
+
+
+    with open("metadata/loading_info.json", "w") as f:
         json.dump(loading_info, f, indent=2)
 
     cmap = plt.get_cmap('tab20')
@@ -182,5 +189,5 @@ for date_idx, date in enumerate(dates):
     colorizer_json = json.dumps(colorizer, separators=(',', ':'))
     colorizer_urlencoded = urllib.parse.quote(colorizer_json)
 
-    with open("colorizer_urlencoded.txt", "w") as f:
+    with open("metadata/colorizer_urlencoded.txt", "w") as f:
         f.write(colorizer_urlencoded)

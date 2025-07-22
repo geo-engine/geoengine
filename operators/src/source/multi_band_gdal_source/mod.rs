@@ -276,15 +276,13 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
     ) -> Result<Option<GridAndProperties<T>>> {
         println!(
-            "Loading raster tile from file: {:?}, reader_mode: {:?}, tile_information: {:?}",
-            dataset_params.file_path, reader_mode, tile_information
+            "Loading raster tile from file: {:?}",
+            dataset_params.file_path
         );
         let gdal_read_advise: Option<GdalReadAdvise> = reader_mode.tiling_to_dataset_read_advise(
             &dataset_params.spatial_grid_definition(),
             &tile_information.spatial_grid_definition(),
         );
-
-        dbg!(&gdal_read_advise);
 
         let Some(gdal_read_advise) = gdal_read_advise else {
             return Ok(None);

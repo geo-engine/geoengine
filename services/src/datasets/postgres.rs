@@ -810,7 +810,7 @@ where
                 dataset_id = $1 AND
                 (time).start > $2
             ORDER BY
-               (time).end ASC
+               (time).start ASC
             LIMIT 1",
                 &[
                     &dataset_id,

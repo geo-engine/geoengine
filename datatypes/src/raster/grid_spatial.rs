@@ -64,10 +64,8 @@ impl SpatialGridDefinition {
     pub fn with_moved_origin_exact_grid(&self, new_origin: Coordinate2D) -> Option<Self> {
         if approx_eq!(
             Coordinate2D,
-            dbg!(
-                self.geo_transform
-                    .distance_to_nearest_pixel_edge(new_origin)
-            ),
+            self.geo_transform
+                .distance_to_nearest_pixel_edge(new_origin),
             Coordinate2D::new(0., 0.),
             float_cmp::F64Margin {
                 epsilon: 0.000_001, // TODO: check
@@ -510,7 +508,7 @@ mod tests {
     fn bla() {
         let a = SpatialGridDefinition {
             geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
-            grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1779]).unwrap(),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
         };
 
         let b = SpatialGridDefinition {
@@ -522,13 +520,13 @@ mod tests {
             a.intersection(&b),
             Some(SpatialGridDefinition {
                 geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
-                grid_bounds: GridBoundingBox2D::new([338, 675], [899, 1779]).unwrap(),
+                grid_bounds: GridBoundingBox2D::new([338, 675], [899, 1799]).unwrap(),
             })
         );
 
         let a = SpatialGridDefinition {
             geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
-            grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1779]).unwrap(),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
         };
 
         let b = SpatialGridDefinition {
@@ -540,7 +538,7 @@ mod tests {
             a.intersection(&b),
             Some(SpatialGridDefinition {
                 geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
-                grid_bounds: GridBoundingBox2D::new([0, 675], [561, 1779]).unwrap(),
+                grid_bounds: GridBoundingBox2D::new([0, 675], [561, 1799]).unwrap(),
             })
         );
     }

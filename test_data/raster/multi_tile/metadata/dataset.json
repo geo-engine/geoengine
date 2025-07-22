@@ -43,7 +43,13 @@
         },
         "bands": [
           {
-            "name": "band",
+            "name": "band 0",
+            "measurement": {
+              "type": "unitless"
+            }
+          },
+          {
+            "name": "band 1",
             "measurement": {
               "type": "unitless"
             }
