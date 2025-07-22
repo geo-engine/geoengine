@@ -39,7 +39,7 @@ UPDATE ml_models
 SET
     metadata.input_no_data_handling = ('SkipIfNoData', NULL),
     metadata.output_no_data_handling = ('NanIsNoData', NULL),
-    file_name = qqqq.metadata.file_name
+    file_name = (qqqq.metadata).file_name
 FROM qqqq
 WHERE ml_models.id = qqqq.id;
 
