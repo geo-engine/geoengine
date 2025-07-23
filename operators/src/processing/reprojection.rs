@@ -671,7 +671,7 @@ where
             )
             .filter_and_fill(FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles))
         } else {
-            log::debug!("No intersection between source data / srs and target srs");
+            tracing::debug!("No intersection between source data / srs and target srs");
 
             let tiling_strat = self
                 .tiling_spec

@@ -607,7 +607,7 @@ where
             name: id.to_string(),
         });
 
-        log::info!(
+        tracing::info!(
             "Adding dataset with name: {:?}, tags: {:?}",
             name,
             dataset.tags

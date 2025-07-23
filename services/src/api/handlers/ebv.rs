@@ -21,10 +21,10 @@ use actix_web::{
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use log::debug;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tracing::debug;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{IntoParams, Modify, OpenApi, ToSchema};
 

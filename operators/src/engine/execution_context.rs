@@ -7,13 +7,14 @@ use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
 use crate::error::Error;
+use crate::machine_learning::MlModelLoadingInfo;
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
 use crate::source::{GdalLoadingInfo, OgrSourceDataset};
 use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
-use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
+use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
@@ -56,7 +57,7 @@ pub trait ExecutionContext: Send
 
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
 
-    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata>;
+    async fn ml_model_loading_info(&self, name: &MlModelName) -> Result<MlModelLoadingInfo>;
 }
 
 #[async_trait]
@@ -91,7 +92,7 @@ pub struct MockExecutionContext {
     pub thread_pool: Arc<ThreadPool>,
     pub meta_data: HashMap<DataId, Box<dyn Any + Send + Sync>>,
     pub named_data: HashMap<NamedData, DataId>,
-    pub ml_models: HashMap<MlModelName, MlModelMetadata>,
+    pub ml_models: HashMap<MlModelName, MlModelLoadingInfo>,
     pub tiling_specification: TilingSpecification,
 }
 
@@ -211,7 +212,7 @@ impl ExecutionContext for MockExecutionContext {
             .ok_or_else(|| Error::UnknownDatasetName { name: data.clone() })
     }
 
-    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata> {
+    async fn ml_model_loading_info(&self, name: &MlModelName) -> Result<MlModelLoadingInfo> {
         self.ml_models
             .get(name)
             .cloned()
@@ -400,8 +401,8 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
         self.inner.resolve_named_data(data).await
     }
 
-    async fn ml_model_metadata(&self, name: &MlModelName) -> Result<MlModelMetadata> {
-        self.inner.ml_model_metadata(name).await
+    async fn ml_model_loading_info(&self, name: &MlModelName) -> Result<MlModelLoadingInfo> {
+        self.inner.ml_model_loading_info(name).await
     }
 }
 
