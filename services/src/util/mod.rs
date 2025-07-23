@@ -21,6 +21,8 @@ pub mod postgres;
 pub mod server;
 // TODO: refactor to be gated by `#[cfg(test)]`
 pub mod tests;
+#[cfg(test)]
+pub mod websocket_tests;
 pub mod workflows;
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>
