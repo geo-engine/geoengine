@@ -94,7 +94,12 @@ def create_geoengine_tiles_from_raster(filename, out_dir=".", tile_size_px=512, 
     ds = None
 
 if __name__ == "__main__":
-    input_dir = "results/global"
+    input_dir = "results/z_index/global"
     for filepath in glob.glob(os.path.join(input_dir, "*.tif")):
         if os.path.isfile(filepath):
-            create_geoengine_tiles_from_raster(filepath, "results/tiles", tile_size_px=512, origin=(0, 0))
+            create_geoengine_tiles_from_raster(filepath, "results/z_index/tiles", tile_size_px=512, origin=(0, 0))
+
+    input_dir = "results/z_index_reversed/global"
+    for filepath in glob.glob(os.path.join(input_dir, "*.tif")):
+        if os.path.isfile(filepath):
+            create_geoengine_tiles_from_raster(filepath, "results/z_index_reversed/tiles", tile_size_px=512, origin=(0, 0))

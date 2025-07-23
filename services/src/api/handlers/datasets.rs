@@ -1486,7 +1486,10 @@ mod tests {
             GeoTransform, GridBoundingBox2D, GridIndexAccess, GridShape2D, TilingSpecification,
         },
         spatial_reference::SpatialReferenceOption,
-        util::test::{assert_eq_two_list_of_tiles, assert_eq_two_list_of_tiles_u8},
+        util::{
+            assert_image_equals,
+            test::{assert_eq_two_list_of_tiles, assert_eq_two_list_of_tiles_u8},
+        },
     };
     use geoengine_operators::{
         engine::{
@@ -3420,15 +3423,13 @@ mod tests {
 
         assert_eq!(res.status(), 200);
 
-        // dbg!(read_body_string(res).await);
-
         let image_bytes = actix_web::test::read_body(res).await;
 
-        geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "get_map_colorizer.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "wms.png");
 
-        // assert_image_equals(test_data!("wms/get_map_colorizer.png"), &image_bytes);
+        assert_image_equals(test_data!("raster/multi_tile/wms.png"), &image_bytes);
 
-        todo!()
+        Ok(())
     }
 
     pub fn create_ndvi_tiles() -> Vec<DatasetTile> {
@@ -3535,6 +3536,7 @@ mod tests {
 
     async fn add_multi_tile_dataset(
         app_ctx: &PostgresContext<NoTls>,
+        reverse_z_order: bool,
     ) -> Result<(PostgresSessionContext<NoTls>, DatasetName)> {
         // add data
         let create: CreateDataset = serde_json::from_str(&std::fs::read_to_string(test_data!(
@@ -3564,9 +3566,15 @@ mod tests {
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         // add tiles
-        let mut tiles: Vec<DatasetTile> = serde_json::from_str(&std::fs::read_to_string(
-            test_data!("raster/multi_tile/metadata/loading_info.json"),
-        )?)?;
+        let mut tiles: Vec<DatasetTile> = if reverse_z_order {
+            serde_json::from_str(&std::fs::read_to_string(test_data!(
+                "raster/multi_tile/metadata/loading_info_rev.json"
+            ))?)?
+        } else {
+            serde_json::from_str(&std::fs::read_to_string(test_data!(
+                "raster/multi_tile/metadata/loading_info.json"
+            ))?)?
+        };
 
         // fix the file path because the test runs with a different working directory than the server
         for tile in &mut tiles {
@@ -3595,7 +3603,7 @@ mod tests {
     // TODO: where to actually put this test? Can't be in the multi dim gdalsource because then we can't test the database access of the tiles is correct
     #[ge_context::test]
     async fn it_loads_multi_band_multi_file_mosaics(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx).await?;
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false).await?;
 
         let operator = MultiBandGdalSource {
             params: MultiBandGdalSourceParameters::new(dataset_name.into()),
@@ -3671,7 +3679,7 @@ mod tests {
             .iter()
             .map(|f| {
                 raster_tile_from_file::<u16>(
-                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
                     tiling_spatial_grid_definition,
                     expected_time,
                     0,
@@ -3689,7 +3697,7 @@ mod tests {
     async fn it_loads_multi_band_multi_file_mosaics_2_bands(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
-        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx).await?;
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false).await?;
 
         let operator = MultiBandGdalSource {
             params: MultiBandGdalSourceParameters::new(dataset_name.into()),
@@ -3773,7 +3781,7 @@ mod tests {
             .iter()
             .map(|(f, b)| {
                 raster_tile_from_file::<u16>(
-                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
                     tiling_spatial_grid_definition,
                     expected_time,
                     *b,
@@ -3791,7 +3799,7 @@ mod tests {
     async fn it_loads_multi_band_multi_file_mosaics_2_bands_2_timesteps(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
-        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx).await?;
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false).await?;
 
         let operator = MultiBandGdalSource {
             params: MultiBandGdalSourceParameters::new(dataset_name.into()),
@@ -3901,7 +3909,7 @@ mod tests {
             .iter()
             .map(|(f, b, t)| {
                 raster_tile_from_file::<u16>(
-                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
                     tiling_spatial_grid_definition,
                     *t,
                     *b,
@@ -3919,7 +3927,7 @@ mod tests {
     async fn it_loads_multi_band_multi_file_mosaics_with_time_gaps(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
-        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx).await?;
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false).await?;
 
         let operator = MultiBandGdalSource {
             params: MultiBandGdalSourceParameters::new(dataset_name.into()),
@@ -4045,7 +4053,7 @@ mod tests {
             .iter()
             .map(|(f, b, t)| {
                 raster_tile_from_file::<u16>(
-                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
                     tiling_spatial_grid_definition,
                     *t,
                     *b,
@@ -4107,7 +4115,7 @@ mod tests {
             .iter()
             .map(|(f, b, t)| {
                 raster_tile_from_file::<u16>(
-                    test_data!(format!("raster/multi_tile/results/tiles/{f}")),
+                    test_data!(format!("raster/multi_tile/results/z_index/tiles/{f}")),
                     tiling_spatial_grid_definition,
                     *t,
                     *b,
@@ -4139,5 +4147,99 @@ mod tests {
         Ok(())
     }
 
-    // TODO: add test with different z order
+    #[ge_context::test]
+    async fn it_loads_multi_band_multi_file_mosaics_reverse_z_index(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, true).await?;
+
+        let operator = MultiBandGdalSource {
+            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+        }
+        .boxed();
+
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?;
+
+        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let tiling_spec = execution_context.tiling_specification();
+
+        let tiling_spatial_grid_definition = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec);
+
+        let query_tiling_pixel_grid = tiling_spatial_grid_definition
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180.0, -90.).into(),
+            ));
+
+        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+            query_tiling_pixel_grid.grid_bounds(),
+            TimeInterval::new_instant(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                    .unwrap(),
+            )
+            .unwrap(),
+            BandSelection::first(),
+        );
+
+        let tiles = processor
+            .get_u16()
+            .unwrap()
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        let expected_tiles = [
+            "2025-01-01_global_b0_tile_0.tif",
+            "2025-01-01_global_b0_tile_1.tif",
+            "2025-01-01_global_b0_tile_2.tif",
+            "2025-01-01_global_b0_tile_3.tif",
+            "2025-01-01_global_b0_tile_4.tif",
+            "2025-01-01_global_b0_tile_5.tif",
+            "2025-01-01_global_b0_tile_6.tif",
+            "2025-01-01_global_b0_tile_7.tif",
+        ];
+
+        let expected_time = TimeInterval::new(
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                .unwrap(),
+            geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                .unwrap(),
+        )
+        .unwrap();
+
+        let expected_tiles: Vec<_> = expected_tiles
+            .iter()
+            .map(|f| {
+                raster_tile_from_file::<u16>(
+                    test_data!(format!(
+                        "raster/multi_tile/results/z_index_reversed/tiles/{f}"
+                    )),
+                    tiling_spatial_grid_definition,
+                    expected_time,
+                    0,
+                )
+                .unwrap()
+            })
+            .collect();
+
+        assert_eq_two_list_of_tiles(&tiles, &expected_tiles, false);
+
+        Ok(())
+    }
 }

@@ -31,7 +31,7 @@ bands = 2
 
 dates = ["2025-01-01", "2025-02-01", "2025-04-01"]
 
-def create_tile(filename, width, height, data_array, geotransform, projection):
+def create_tile_tiff(filename, width, height, data_array, geotransform, projection):
     driver = gdal.GetDriverByName('GTiff')
     ds = driver.Create(
         filename, width, height, 1, gdal.GDT_UInt16,
@@ -58,23 +58,35 @@ overlap_px_x = int(base_tile_width * overlap_frac)
 overlap_px_y = int(base_tile_height * overlap_frac)
 
 loading_info = []
+loading_info_rev = []
 pixel_values = set()
 
 for date_idx, date in enumerate(dates):
     for band in range(bands):
         # create global raster for each date and band
-        global_filename = f"results/global/{date}_global_b{band}.tif"
+        global_filename = f"results/z_index/global/{date}_global_b{band}.tif"
         global_width = base_tile_width * tiles_x
         global_height = base_tile_height * tiles_y
         global_gt = (minx, px_size_x, 0, maxy, 0, px_size_y)
         driver = gdal.GetDriverByName('GTiff')
+
         print(f"Creating global raster: {global_filename} with dimensions {global_width}x{global_height}")
-        ds = driver.Create(
+        global_ds = driver.Create(
             global_filename, global_width, global_height, 1, gdal.GDT_UInt16,
             options=["COMPRESS=DEFLATE"]
         )
-        ds.SetGeoTransform(global_gt)
-        ds.SetProjection(proj)
+        global_ds.SetGeoTransform(global_gt)
+        global_ds.SetProjection(proj)
+
+        global_rev_filename = f"results/z_index_reversed/global/{date}_global_b{band}.tif"
+        global_ds_rev = driver.Create(
+            global_rev_filename, global_width, global_height, 1, gdal.GDT_UInt16,
+            options=["COMPRESS=DEFLATE"]
+        )
+        global_ds_rev.SetGeoTransform(global_gt)
+        global_ds_rev.SetProjection(proj)
+
+        global_tiles = []
 
         for i in range(tiles_x):
             for j in range(tiles_y):
@@ -94,7 +106,7 @@ for date_idx, date in enumerate(dates):
                 data = np.full((tile_height, tile_width), value, dtype=np.float32)
 
                 filename = f"data/{date}_tile_x{i}_y{j}_b{band}.tif"                
-                create_tile(filename, tile_width, tile_height, data, gt, proj)
+                create_tile_tiff(filename, tile_width, tile_height, data, gt, proj)
 
                 # Calculate spatial partition
                 upper_left_x = xmin
@@ -109,10 +121,6 @@ for date_idx, date in enumerate(dates):
                     return int(dt.timestamp() * 1000)
 
                 time_start = date_to_ms(date)
-                # if date_idx + 1 < len(dates):
-                #     time_end = date_to_ms(dates[date_idx + 1])
-                # else:
-                #     # Add 1 month for the last date
 
                 next_month = (datetime.datetime.strptime(date, "%Y-%m-%d") + datetime.timedelta(days=31)).replace(day=1)
                 next_month = next_month.replace(tzinfo=datetime.timezone.utc)  # Treat as UTC
@@ -147,47 +155,64 @@ for date_idx, date in enumerate(dates):
 
                 loading_info.append(meta)
 
-                # Write data into the global raster
-                ds.GetRasterBand(1).WriteArray(
-                    data.astype(np.uint16),
-                    xoff=start_px_x,
-                    yoff=start_px_y
-                )
+                # copy meta and reverse r_index
+                meta_rev = meta.copy()
+                meta_rev["z_index"] = 3- meta_rev["z_index"]
+                loading_info_rev.append(meta_rev)
 
-        ds.FlushCache()
-        ds = None
+                global_tiles.append({"data":  data.astype(np.uint16), "xoff": start_px_x, "yoff": start_px_y})
 
-    # create expected geo engine tiles
+        for tile in global_tiles:
+            global_ds.GetRasterBand(1).WriteArray(
+                tile["data"],
+                xoff=tile["xoff"],
+                yoff=tile["yoff"]
+            )
+            
+        for tile in reversed(global_tiles):
+            global_ds_rev.GetRasterBand(1).WriteArray(
+                tile["data"],
+                xoff=tile["xoff"],
+                yoff=tile["yoff"]
+            )
 
 
-    with open("metadata/loading_info.json", "w") as f:
-        json.dump(loading_info, f, indent=2)
+        global_ds.FlushCache()
+        global_ds = None
+        global_ds_rev.FlushCache()
+        global_ds_rev = None
 
-    cmap = plt.get_cmap('tab20')
-    values = sorted(pixel_values)
-    n = len(values)
+with open("metadata/loading_info.json", "w") as f:
+    json.dump(loading_info, f, indent=2)
 
-    def colormap_color(idx):
-        rgba = cmap(idx / max(n - 1, 1))
-        return [int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255), int(rgba[3] * 255)]
+with open("metadata/loading_info_rev.json", "w") as f:
+    json.dump(loading_info_rev, f, indent=2)
 
-    import urllib.parse
+cmap = plt.get_cmap('tab20')
+values = sorted(pixel_values)
+n = len(values)
 
-    colorizer = {
-        "type": "singleBand",
-        "band": 0,
-        "bandColorizer": {
-            "type": "palette",
-            "colors": {
-                str(v): colormap_color(i) for i, v in enumerate(values)
-            },
-            "noDataColor": [0, 0, 0, 0],
-            "defaultColor": [0, 0, 0, 0]
-        }
+def colormap_color(idx):
+    rgba = cmap(idx / max(n - 1, 1))
+    return [int(rgba[0] * 255), int(rgba[1] * 255), int(rgba[2] * 255), int(rgba[3] * 255)]
+
+import urllib.parse
+
+colorizer = {
+    "type": "singleBand",
+    "band": 0,
+    "bandColorizer": {
+        "type": "palette",
+        "colors": {
+            str(v): colormap_color(i) for i, v in enumerate(values)
+        },
+        "noDataColor": [0, 0, 0, 0],
+        "defaultColor": [0, 0, 0, 0]
     }
+}
 
-    colorizer_json = json.dumps(colorizer, separators=(',', ':'))
-    colorizer_urlencoded = urllib.parse.quote(colorizer_json)
+colorizer_json = json.dumps(colorizer, separators=(',', ':'))
+colorizer_urlencoded = urllib.parse.quote(colorizer_json)
 
-    with open("metadata/colorizer_urlencoded.txt", "w") as f:
-        f.write(colorizer_urlencoded)
+with open("metadata/colorizer_urlencoded.txt", "w") as f:
+    f.write(colorizer_urlencoded)
