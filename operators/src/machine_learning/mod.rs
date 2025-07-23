@@ -23,8 +23,8 @@ pub enum MachineLearningError {
     #[snafu(display("Onnx model must have Tensor input. Found {:?}.", input_type))]
     InvalidInputType { input_type: ort::value::ValueType },
     #[snafu(display(
-        "Onnx model must have two dimensional input ([-1, b], b > 0). Found [{}].",
-        dimensions.iter().map(std::string::ToString::to_string).collect::<Vec<_>>().join(", ")
+        "Onnx model must have two dimensional ([-1, b], b > 0) OR a three/four dimensional ([-1, y, x, b], b > 0) input . Found {:?}.",
+        dimensions
     ))]
     InvalidDimensions { dimensions: Vec<i64> },
     #[snafu(display(
