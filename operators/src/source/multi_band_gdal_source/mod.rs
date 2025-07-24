@@ -18,45 +18,39 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-use float_cmp::{ApproxEq, approx_eq};
-use futures::TryStreamExt;
+use float_cmp::approx_eq;
 use futures::stream::{self, BoxStream, StreamExt};
 use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
-use geoengine_datatypes::dataset::{self, DataId};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, QueryRectangle, SpatialGridQueryRectangle, SpatialPartition2D,
-    SpatialPartitioned, SpatialQueryRectangle,
+    AxisAlignedRectangle, QueryRectangle, SpatialPartition2D, SpatialPartitioned,
+    SpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::TilingSpatialGridDefinition;
 use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
-        BandSelection, CacheHint, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-        RasterSpatialQueryRectangle, TimeInstance, TimeInterval,
+        BandSelection, Coordinate2D, RasterQueryRectangle, RasterSpatialQueryRectangle,
+        TimeInterval,
     },
     raster::{
-        ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D,
-        GridIntersection, GridOrEmpty, GridOrEmpty2D, GridShapeAccess, GridSize, MapElements,
-        MaskedGrid, NoDataValueGrid, Pixel, RasterDataType, RasterProperties,
-        RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
-        SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
+        ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D, GridOrEmpty,
+        GridSize, MapElements, MaskedGrid, NoDataValueGrid, Pixel, RasterDataType,
+        RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterTile2D,
+        SpatialGridDefinition, TileInformation, TilingSpecification,
     },
-    util::test::TestDefault,
 };
-use itertools::Itertools;
 pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
-use log::{debug, info};
+use log::debug;
 use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
-use postgres_types::{FromSql, ToSql};
 use reader::{
     GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties, OverviewReaderState,
     ReaderState,
 };
 use serde::{Deserialize, Serialize};
-use snafu::{ResultExt, ensure};
+use snafu::ResultExt;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::Path;
@@ -436,28 +430,7 @@ where
         let produced_tiling_grid =
             grid_produced_by_source_desc.tiling_grid_definition(self.tiling_specification);
 
-        let tiling_based_pixel_bounds = produced_tiling_grid.tiling_grid_bounds();
-
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
-
-        let query_pixel_bounds = query.spatial_query().grid_bounds();
-
-        let mut empty = false;
-
-        if !tiling_based_pixel_bounds.intersects(&query_pixel_bounds) {
-            debug!("query does not intersect spatial data bounds");
-            empty = true;
-        }
-
-        // TODO: use the time bounds to early return.
-        /*
-        if let Some(data_time_bounds) = result_descriptor.time {
-            if !data_time_bounds.intersects(&query.time_interval) {
-                debug!("query does not intersect temporal data bounds");
-                empty = true;
-            }
-        }
-        */
 
         let reader_mode = match self.original_resolution_spatial_grid {
             None => GdalReaderMode::OriginalResolution(ReaderState {
@@ -880,43 +853,6 @@ where
     Ok(GridOrEmpty::from(masked_grid))
 }
 
-/// This method reads the data for a single tile with a specified size from the GDAL dataset.
-/// It handles conversion to grid coordinates.
-/// If the tile is inside the dataset it uses the `read_grid_from_raster` method.
-/// If the tile overlaps the borders of the dataset it uses the `read_partial_grid_from_raster` method.  
-fn read_grid_and_handle_edges<T>(
-    _dataset: &GdalDataset,
-    rasterband: &GdalRasterBand,
-    dataset_params: &GdalDatasetParameters,
-    gdal_read_advice: GdalReadAdvise,
-) -> Result<GridOrEmpty2D<T>>
-where
-    T: Pixel + GdalType + Default + FromPrimitive,
-{
-    let result_grid = if gdal_read_advice.direct_read() {
-        read_grid_from_raster(
-            rasterband,
-            &gdal_read_advice.gdal_read_widow,
-            gdal_read_advice.read_window_bounds.grid_shape(),
-            dataset_params,
-            gdal_read_advice.flip_y,
-        )?
-    } else {
-        let r: GridOrEmpty<GridBoundingBox2D, T> = read_grid_from_raster(
-            rasterband,
-            &gdal_read_advice.gdal_read_widow,
-            gdal_read_advice.read_window_bounds,
-            dataset_params,
-            gdal_read_advice.flip_y,
-        )?;
-        let mut tile_raster = GridOrEmpty::from(EmptyGrid::new(gdal_read_advice.bounds_of_target));
-        tile_raster.grid_blit_from(&r);
-        tile_raster.unbounded()
-    };
-
-    Ok(result_grid)
-}
-
 /// This method reads the data for a single tile with a specified size from the GDAL dataset and adds the requested metadata as properties to the tile.
 fn read_raster_properties(
     dataset: &GdalDataset,
@@ -936,42 +872,6 @@ fn read_raster_properties(
 
     properties
 }
-
-fn create_no_data_tile<T: Pixel>(
-    tile_info: TileInformation,
-    tile_time: TimeInterval,
-    cache_hint: CacheHint,
-) -> RasterTile2D<T> {
-    // TODO: add cache_hint
-    RasterTile2D::new_with_tile_info_and_properties(
-        tile_time,
-        tile_info,
-        0,
-        EmptyGrid::new(tile_info.tile_size_in_pixels).into(),
-        RasterProperties::default(),
-        cache_hint,
-    )
-}
-
-// #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq, FromSql, ToSql)]
-// pub struct GdalMetadataMapping {
-//     pub source_key: RasterPropertiesKey,
-//     pub target_key: RasterPropertiesKey,
-//     pub target_type: RasterPropertiesEntryType,
-// }
-
-// impl GdalMetadataMapping {
-//     pub fn identity(
-//         key: RasterPropertiesKey,
-//         target_type: RasterPropertiesEntryType,
-//     ) -> GdalMetadataMapping {
-//         GdalMetadataMapping {
-//             source_key: key.clone(),
-//             target_key: key,
-//             target_type,
-//         }
-//     }
-// }
 
 fn properties_from_gdal_metadata<'a, I, M>(
     properties: &mut RasterProperties,

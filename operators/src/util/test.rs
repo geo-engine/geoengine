@@ -10,10 +10,10 @@ use gdal::raster::GdalType;
 use geoengine_datatypes::{
     primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
-        GeoTransform, Grid, GridOrEmpty, GridShape2D, GridSize, MapElements, MaskedGrid, Pixel,
-        RasterTile2D, SpatialGridDefinition, TilingSpatialGridDefinition,
+        GeoTransform, Grid, GridOrEmpty, GridShape2D, MapElements, MaskedGrid, Pixel, RasterTile2D,
+        TilingSpatialGridDefinition,
     },
-    util::{gdal::gdal_open_dataset_ex, test::assert_eq_two_list_of_tiles_u8},
+    util::test::assert_eq_two_list_of_tiles_u8,
 };
 
 pub async fn raster_operator_to_list_of_tiles_u8<E: ExecutionContext, Q: QueryContext>(

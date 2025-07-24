@@ -1,6 +1,6 @@
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty, GridOrEmpty2D,
-    GridShape2D, GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
+    GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty, GridShape2D,
+    GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
 };
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.

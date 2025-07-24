@@ -1,8 +1,5 @@
 use super::GdalDatasetParameters;
-use crate::{
-    engine::{MetaData, RasterResultDescriptor},
-    util::Result,
-};
+use crate::{engine::RasterResultDescriptor, util::Result};
 use geoengine_datatypes::{
     primitives::{CacheHint, SpatialPartition2D, SpatialPartitioned, TimeInterval},
     raster::TileInformation,
@@ -35,7 +32,10 @@ pub struct TileFile {
 
 impl MultiBandGdalLoadingInfo {
     pub fn new(time_steps: Vec<TimeInterval>, files: Vec<TileFile>, cache_hint: CacheHint) -> Self {
-        // TODO: ensure order of files, sorted by time, band and z_index
+        debug_assert!(
+            time_steps.windows(2).all(|w| w[0] <= w[1]),
+            "time_steps must be sorted"
+        );
 
         Self {
             files,
@@ -64,6 +64,10 @@ impl MultiBandGdalLoadingInfo {
                 && file.spatial_partition.intersects(&tile_partition)
                 && file.band == band
             {
+                debug_assert!(
+                    self.files.iter().all(|f| file.z_index >= f.z_index),
+                    "file's must be sorted by z_index"
+                );
                 files.push(file.params.clone());
             }
         }

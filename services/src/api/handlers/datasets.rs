@@ -590,7 +590,9 @@ pub fn adjust_meta_data_path<A: AdjustFilePath>(
                 }
             }
         }
-        MetaDataDefinition::GdalMultiBand(gdal_multi_band) => {}
+        MetaDataDefinition::GdalMultiBand(_gdal_multi_band) => {
+            // do nothing, the file paths are not inside the meta data defintion but inside the dataset's tiles
+        }
     }
     Ok(())
 }
@@ -1444,13 +1446,8 @@ mod tests {
     use super::*;
     use crate::{
         api::model::{
-            datatypes::{
-                Colorizer, NamedData, RasterDataType, SingleBandRasterColorizer, TimeInstance,
-            },
-            operators::{
-                FileNotFoundHandling, GdalDatasetGeoTransform, GdalMultiBand,
-                RasterResultDescriptor, TypedOperator,
-            },
+            datatypes::{NamedData, SingleBandRasterColorizer, TimeInstance},
+            operators::{FileNotFoundHandling, GdalMultiBand},
             responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
         },
@@ -1479,27 +1476,21 @@ mod tests {
         collections::{GeometryCollection, MultiPointCollection, VectorDataType},
         operations::image::{RasterColorizer, RgbaColor},
         primitives::{
-            BandSelection, BoundingBox2D, ColumnSelection, DateTimeParseFormat, Duration,
-            RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned, SpatialQueryRectangle,
+            BandSelection, BoundingBox2D, ColumnSelection, DateTimeParseFormat,
+            RasterQueryRectangle, SpatialPartition2D, SpatialQueryRectangle,
         },
-        raster::{
-            GeoTransform, GridBoundingBox2D, GridIndexAccess, GridShape2D, TilingSpecification,
-        },
+        raster::{GridShape2D, TilingSpecification},
         spatial_reference::SpatialReferenceOption,
-        util::{
-            assert_image_equals,
-            test::{assert_eq_two_list_of_tiles, assert_eq_two_list_of_tiles_u8},
-        },
+        util::{assert_image_equals, test::assert_eq_two_list_of_tiles},
     };
     use geoengine_operators::{
         engine::{
-            ExecutionContext, InitializedVectorOperator, QueryProcessor, RasterBandDescriptor,
-            RasterBandDescriptors, RasterOperator, SpatialGridDescriptor, StaticMetaData,
-            VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
+            ExecutionContext, InitializedVectorOperator, QueryProcessor, RasterOperator,
+            StaticMetaData, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
         },
         source::{
-            GdalSource, MultiBandGdalSource, MultiBandGdalSourceParameters, OgrSource,
-            OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
+            MultiBandGdalSource, MultiBandGdalSourceParameters, OgrSource, OgrSourceDataset,
+            OgrSourceErrorSpec, OgrSourceParameters,
         },
         util::{
             gdal::{create_ndvi_meta_data, create_ndvi_result_descriptor},
@@ -1507,7 +1498,6 @@ mod tests {
         },
     };
     use serde_json::{Value, json};
-    use std::collections::HashSet;
     use tokio_postgres::NoTls;
     use uuid::Uuid;
 
@@ -3299,8 +3289,6 @@ mod tests {
 
     #[ge_context::test]
     async fn it_adds_tiles_to_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
-        let session = app_ctx.create_anonymous_session().await.unwrap();
-
         let volume = VolumeName("test_data".to_string());
 
         // add data

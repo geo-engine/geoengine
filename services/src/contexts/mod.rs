@@ -13,7 +13,7 @@ use crate::{projects::ProjectDb, workflows::registry::WorkflowRegistry};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
 use geoengine_datatypes::machine_learning::{MlModelMetadata, MlModelName};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval, VectorQueryRectangle};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
 use geoengine_operators::cache::shared_cache::SharedCache;
@@ -26,8 +26,8 @@ use geoengine_operators::meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking};
 use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
-    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
+    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+    OgrSourceDataset,
 };
 use rayon::ThreadPool;
 use std::str::FromStr;
@@ -518,8 +518,8 @@ where
                     }
                 })
             }
-            DataId::External(external) => {
-                todo!()
+            DataId::External(_external) => {
+                Err(geoengine_operators::error::Error::NotYetImplemented)
             }
         }
     }

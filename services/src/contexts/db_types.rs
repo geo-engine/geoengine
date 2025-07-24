@@ -1337,7 +1337,6 @@ delegate_from_to_sql!(PolygonSymbology, PolygonSymbologyDbType);
 
 #[cfg(test)]
 mod tests {
-    use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
     use geoengine_datatypes::{
         dataset::DataProviderId,
         primitives::{CacheTtlSeconds, Coordinate2D, SpatialPartition2D, TimeInterval},
@@ -1347,7 +1346,6 @@ mod tests {
 
     use super::*;
     use crate::{
-        config::get_config_element,
         contexts::PostgresContext,
         datasets::external::{SentinelS2L2ACogsProviderDefinition, StacQueryBuffer},
         ge_context,
