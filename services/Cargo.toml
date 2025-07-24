@@ -17,8 +17,8 @@ actix-http = { workspace = true }
 actix-multipart = { workspace = true }
 actix-rt = { workspace = true }
 actix-web = { workspace = true }
-actix-web-actors = { workspace = true }
 actix-web-httpauth = { workspace = true }
+actix-ws = { workspace = true }
 aes-gcm = { workspace = true }
 anyhow.workspace = true
 aruna-rust-api = { workspace = true }
