@@ -909,7 +909,7 @@ where
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
             files,
-            CacheHint::default(), // TODO: implement cache hint, should it be one value for the whole dataset? If so, load it once(!) from the database and add it to the loading info
+            CacheHint::default(), // TODO: implement cache hint, should it be one value for the whole dataset? If so, load it once(!) from the database and add it to the loading info. Otherwise add the cache hint as a new attribute to the tiles.
         ))
     }
 

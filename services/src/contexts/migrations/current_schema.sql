@@ -941,12 +941,12 @@ CREATE TABLE dataset_tiles (
     bbox "SpatialPartition2D" NOT NULL,
     band OID NOT NULL,
     z_index OID NOT NULL,
-    gdal_params "GdalDatasetParameters" NOT NULL   
-    -- TODO: PRIMARY key, indexes
+    gdal_params "GdalDatasetParameters" NOT NULL,
+    PRIMARY KEY (dataset_id, time, bbox, band, z_index)
 );
 
 -- Returns true if the `other` partition has any space in common with the partition  
-CREATE FUNCTION spatial_partition2d_intersects(a "SpatialPartition2D", b "SpatialPartition2D") RETURNS boolean AS $$
+CREATE OR REPLACE FUNCTION spatial_partition2d_intersects(a "SpatialPartition2D", b "SpatialPartition2D") RETURNS boolean AS $$
 SELECT NOT (
     ( (a).lower_right_coordinate.x <= (b).upper_left_coordinate.x ) OR
     ( (a).upper_left_coordinate.x >= (b).lower_right_coordinate.x ) OR

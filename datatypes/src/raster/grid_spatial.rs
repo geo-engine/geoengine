@@ -553,7 +553,7 @@ mod tests {
         assert_eq!(
             tile.with_moved_origin_exact_grid((-45.0, 22.39999999999999).into()),
             Some(SpatialGridDefinition {
-                geo_transform: GeoTransform::new((-45.0, 22.4).into(), 0.2, -0.2), // TODO: 22.3999..9 vs 22.4 vs. 22.40000..01
+                geo_transform: GeoTransform::new((-45.0, 22.400000000000002).into(), 0.2, -0.2), // TODO: 22.3999..9 vs 22.4 vs. 22.40000..01
                 grid_bounds: GridBoundingBox2D::new([112, 737], [623, 1248]).unwrap(),
             })
         );

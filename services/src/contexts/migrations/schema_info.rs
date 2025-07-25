@@ -343,7 +343,8 @@ schema_info_table!(
     parameters,
     "specific_schema",
     "specific_name, ordinal_position ASC",
-    (specific_name, String),
+    // the specific name contains the object ID which is different when migrating vs. when creating from scratch
+    // (specific_name, String),
     (ordinal_position, i32),
     (parameter_mode, String),
     (parameter_name, String),

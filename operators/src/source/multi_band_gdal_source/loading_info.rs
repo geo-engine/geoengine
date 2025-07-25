@@ -15,7 +15,6 @@ pub struct GdalMultiBand {
 
 #[derive(Debug, Clone)]
 pub struct MultiBandGdalLoadingInfo {
-    // TODO: store as hashmap or tree, or add an index
     files: Vec<TileFile>,
     time_steps: Vec<TimeInterval>,
     cache_hint: CacheHint,
@@ -36,6 +35,25 @@ impl MultiBandGdalLoadingInfo {
             time_steps.windows(2).all(|w| w[0] <= w[1]),
             "time_steps must be sorted"
         );
+
+        #[cfg(debug_assertions)]
+        {
+            let mut groups: std::collections::HashMap<(TimeInterval, u32), Vec<&TileFile>> =
+                std::collections::HashMap::new();
+
+            for file in &files {
+                groups.entry((file.time, file.band)).or_default().push(file);
+            }
+
+            for ((time, band), group) in &groups {
+                debug_assert!(
+                    group.windows(2).all(|w| w[0].z_index <= w[1].z_index),
+                    "Files for time {:?} and band {} are not sorted by z_index",
+                    time,
+                    band,
+                );
+            }
+        }
 
         Self {
             files,
@@ -64,10 +82,8 @@ impl MultiBandGdalLoadingInfo {
                 && file.spatial_partition.intersects(&tile_partition)
                 && file.band == band
             {
-                debug_assert!(
-                    self.files.iter().all(|f| file.z_index >= f.z_index),
-                    "file's must be sorted by z_index"
-                );
+                debug_assert!(file.time == time, "file's time must match query time");
+
                 files.push(file.params.clone());
             }
         }
