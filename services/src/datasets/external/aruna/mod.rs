@@ -4,6 +4,19 @@ use std::marker::PhantomData;
 use std::path::PathBuf;
 use std::str::FromStr;
 
+use crate::api::model::services::SECRET_REPLACEMENT;
+use crate::contexts::GeoEngineDb;
+use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
+use crate::datasets::listing::ProvenanceOutput;
+use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
+use crate::layers::layer::{
+    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
+    ProviderLayerCollectionId, ProviderLayerId,
+};
+use crate::layers::listing::{
+    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
+};
+use crate::workflows::workflow::Workflow;
 use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationEnum;
 use aruna_rust_api::api::storage::models::v2::{
     Dataset, InternalRelationVariant, KeyValue, KeyValueVariant, Object, ResourceVariant,
@@ -18,15 +31,6 @@ use aruna_rust_api::api::storage::services::v2::{
     GetDatasetRequest, GetDatasetsRequest, GetDownloadUrlRequest, GetObjectsRequest,
     GetProjectRequest,
 };
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-use snafu::ensure;
-use tonic::codegen::InterceptedService;
-use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
-use tonic::service::Interceptor;
-use tonic::transport::{Channel, Endpoint};
-use tonic::{Request, Status};
-
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
@@ -46,19 +50,14 @@ use geoengine_operators::source::{
     OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
     OgrSourceErrorSpec, OgrSourceParameters, OgrSourceTimeFormat,
 };
-
-use crate::contexts::GeoEngineDb;
-use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
-use crate::datasets::listing::ProvenanceOutput;
-use crate::layers::external::{DataProvider, DataProviderDefinition};
-use crate::layers::layer::{
-    CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
-    ProviderLayerCollectionId, ProviderLayerId,
-};
-use crate::layers::listing::{
-    LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
-};
-use crate::workflows::workflow::Workflow;
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use tonic::codegen::InterceptedService;
+use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
+use tonic::service::Interceptor;
+use tonic::transport::{Channel, Endpoint};
+use tonic::{Request, Status};
 
 pub use self::error::ArunaProviderError;
 
@@ -107,6 +106,21 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for ArunaDataProviderDefinition {
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::ArunaDataProviderDefinition(mut new) => {
+                if new.api_token == SECRET_REPLACEMENT {
+                    new.api_token.clone_from(&self.api_token);
+                }
+                TypedDataProviderDefinition::ArunaDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 

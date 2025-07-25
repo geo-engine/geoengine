@@ -1363,6 +1363,190 @@
         ]
       }
     },
+    "/layerDb/providers": {
+      "get": {
+        "tags": [
+          "Layers"
+        ],
+        "summary": "List all providers",
+        "operationId": "list_providers",
+        "parameters": [
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/LayerProviderListing"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      },
+      "post": {
+        "tags": [
+          "Layers"
+        ],
+        "summary": "Add a new provider",
+        "operationId": "add_provider",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TypedDataProviderDefinition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/IdResponse"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/layerDb/providers/{provider}": {
+      "get": {
+        "tags": [
+          "Layers"
+        ],
+        "summary": "Get an existing provider's definition",
+        "operationId": "get_provider_definition",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "Layer provider id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TypedDataProviderDefinition"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      },
+      "put": {
+        "tags": [
+          "Layers"
+        ],
+        "summary": "Update an existing provider's definition",
+        "operationId": "update_provider_definition",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "Layer provider id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/TypedDataProviderDefinition"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Layers"
+        ],
+        "summary": "Delete an existing provider",
+        "operationId": "delete_provider",
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "description": "Layer provider id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "uuid"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/layers/collections": {
       "get": {
         "tags": [
@@ -3399,6 +3583,64 @@
         ]
       }
     },
+    "/session/project/{project}": {
+      "post": {
+        "tags": [
+          "Session"
+        ],
+        "summary": "Sets the active project of the session.",
+        "operationId": "session_project_handler",
+        "parameters": [
+          {
+            "name": "project",
+            "in": "path",
+            "description": "Project id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/ProjectId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The project of the session was updated."
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/session/view": {
+      "post": {
+        "tags": [
+          "Session"
+        ],
+        "operationId": "session_view_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/STRectangle"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "The view of the session was updated."
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/spatialReferenceSpecification/{srsString}": {
       "get": {
         "tags": [
@@ -5375,6 +5617,58 @@
           }
         }
       },
+      "ArunaDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "name",
+          "description",
+          "apiUrl",
+          "projectId",
+          "apiToken",
+          "filterLabel"
+        ],
+        "properties": {
+          "apiToken": {
+            "type": "string"
+          },
+          "apiUrl": {
+            "type": "string"
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "description": {
+            "type": "string"
+          },
+          "filterLabel": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "projectId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Aruna"
+            ]
+          }
+        }
+      },
       "AuthCodeRequestURL": {
         "type": "object",
         "required": [
@@ -5664,6 +5958,62 @@
           }
         }
       },
+      "CopernicusDataspaceDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "description",
+          "id",
+          "stacUrl",
+          "s3Url",
+          "s3AccessKey",
+          "s3SecretKey",
+          "gdalConfig"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "gdalConfig": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StringPair"
+            }
+          },
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "s3AccessKey": {
+            "type": "string"
+          },
+          "s3SecretKey": {
+            "type": "string"
+          },
+          "s3Url": {
+            "type": "string"
+          },
+          "stacUrl": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "CopernicusDataspace"
+            ]
+          }
+        }
+      },
       "CreateDataset": {
         "type": "object",
         "required": [
@@ -5789,6 +6139,24 @@
         "type": "string",
         "format": "uuid"
       },
+      "DataProviderResource": {
+        "type": "object",
+        "required": [
+          "type",
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "provider"
+            ]
+          }
+        }
+      },
       "DataUsage": {
         "type": "object",
         "required": [
@@ -5840,6 +6208,39 @@
           "timestamp": {
             "type": "string",
             "format": "date-time"
+          }
+        }
+      },
+      "DatabaseConnectionConfig": {
+        "type": "object",
+        "required": [
+          "host",
+          "port",
+          "database",
+          "schema",
+          "user",
+          "password"
+        ],
+        "properties": {
+          "database": {
+            "type": "string"
+          },
+          "host": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "port": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "schema": {
+            "type": "string"
+          },
+          "user": {
+            "type": "string"
           }
         }
       },
@@ -5920,6 +6321,68 @@
       "DatasetId": {
         "type": "string",
         "format": "uuid"
+      },
+      "DatasetLayerListingCollection": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "tags"
+        ],
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "tags": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "DatasetLayerListingProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "name",
+          "description",
+          "collections"
+        ],
+        "properties": {
+          "collections": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatasetLayerListingCollection"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "DatasetLayerListing"
+            ]
+          }
+        }
       },
       "DatasetListing": {
         "type": "object",
@@ -6067,6 +6530,141 @@
           "DescribeCoverage"
         ]
       },
+      "EbvPortalDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "description",
+          "baseUrl",
+          "data",
+          "overviews"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "data": {
+            "type": "string",
+            "description": "Path were the `NetCDF` data can be found"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "overviews": {
+            "type": "string",
+            "description": "Path were overview files are stored"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "EbvPortal"
+            ]
+          }
+        }
+      },
+      "EdrDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "description",
+          "id",
+          "baseUrl"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "description": {
+            "type": "string"
+          },
+          "discreteVrs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "List of vertical reference systems with a discrete scale"
+          },
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "provenance": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Provenance"
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Edr"
+            ]
+          },
+          "vectorSpec": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/EdrVectorSpec"
+              }
+            ]
+          }
+        }
+      },
+      "EdrVectorSpec": {
+        "type": "object",
+        "required": [
+          "x",
+          "time"
+        ],
+        "properties": {
+          "time": {
+            "type": "string"
+          },
+          "x": {
+            "type": "string"
+          },
+          "y": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
       "ErrorResponse": {
         "type": "object",
         "required": [
@@ -6144,6 +6742,54 @@
             }
           }
         ]
+      },
+      "GbifDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "description",
+          "dbConfig",
+          "autocompleteTimeout",
+          "columns"
+        ],
+        "properties": {
+          "autocompleteTimeout": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "columns": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "dbConfig": {
+            "$ref": "#/components/schemas/DatabaseConnectionConfig"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Gbif"
+            ]
+          }
+        }
       },
       "GdalDatasetGeoTransform": {
         "type": "object",
@@ -6516,6 +7162,92 @@
           "GetMap"
         ]
       },
+      "GfbioAbcdDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "description",
+          "dbConfig"
+        ],
+        "properties": {
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "dbConfig": {
+            "$ref": "#/components/schemas/DatabaseConnectionConfig"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "GfbioAbcd"
+            ]
+          }
+        }
+      },
+      "GfbioCollectionsDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "description",
+          "collectionApiUrl",
+          "collectionApiAuthToken",
+          "abcdDbConfig",
+          "pangaeaUrl"
+        ],
+        "properties": {
+          "abcdDbConfig": {
+            "$ref": "#/components/schemas/DatabaseConnectionConfig"
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "collectionApiAuthToken": {
+            "type": "string"
+          },
+          "collectionApiUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "pangaeaUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "GfbioCollections"
+            ]
+          }
+        }
+      },
       "InternalDataId": {
         "type": "object",
         "required": [
@@ -6710,6 +7442,26 @@
             "enum": [
               "layer"
             ]
+          }
+        }
+      },
+      "LayerProviderListing": {
+        "type": "object",
+        "required": [
+          "id",
+          "name",
+          "priority"
+        ],
+        "properties": {
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": "integer",
+            "format": "int32"
           }
         }
       },
@@ -7271,6 +8023,48 @@
       "NamedData": {
         "type": "string"
       },
+      "NetCdfCfDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "description",
+          "data",
+          "overviews"
+        ],
+        "properties": {
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "data": {
+            "type": "string",
+            "description": "Path were the `NetCDF` data can be found"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "overviews": {
+            "type": "string",
+            "description": "Path were overview files are stored"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "NetCdfCf"
+            ]
+          }
+        }
+      },
       "NoGeometry": {
         "default": null
       },
@@ -7788,6 +8582,44 @@
             "type": "string",
             "enum": [
               "palette"
+            ]
+          }
+        }
+      },
+      "PangaeaDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "description",
+          "baseUrl",
+          "cacheTtl"
+        ],
+        "properties": {
+          "baseUrl": {
+            "type": "string",
+            "format": "uri"
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Pangaea"
             ]
           }
         }
@@ -8571,6 +9403,9 @@
           },
           {
             "$ref": "#/components/schemas/MlModelResource"
+          },
+          {
+            "$ref": "#/components/schemas/DataProviderResource"
           }
         ],
         "description": "A resource that is affected by a permission.",
@@ -8581,7 +9416,8 @@
             "layer": "#/components/schemas/LayerResource",
             "layerCollection": "#/components/schemas/LayerCollectionResource",
             "mlModel": "#/components/schemas/MlModelResource",
-            "project": "#/components/schemas/ProjectResource"
+            "project": "#/components/schemas/ProjectResource",
+            "provider": "#/components/schemas/DataProviderResource"
           }
         }
       },
@@ -8689,6 +9525,70 @@
           },
           "prefix": {
             "type": "boolean"
+          }
+        }
+      },
+      "SentinelS2L2ACogsProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "id",
+          "description",
+          "apiUrl",
+          "bands",
+          "zones"
+        ],
+        "properties": {
+          "apiUrl": {
+            "type": "string"
+          },
+          "bands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StacBand"
+            }
+          },
+          "cacheTtl": {
+            "$ref": "#/components/schemas/CacheTtlSeconds"
+          },
+          "description": {
+            "type": "string"
+          },
+          "gdalRetries": {
+            "type": "integer",
+            "minimum": 0
+          },
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "queryBuffer": {
+            "$ref": "#/components/schemas/StacQueryBuffer"
+          },
+          "stacApiRetries": {
+            "$ref": "#/components/schemas/StacApiRetries"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "SentinelS2L2ACogs"
+            ]
+          },
+          "zones": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StacZone"
+            }
           }
         }
       },
@@ -8828,6 +9728,86 @@
           "y": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "StacApiRetries": {
+        "type": "object",
+        "required": [
+          "numberOfRetries",
+          "initialDelayMs",
+          "exponentialBackoffFactor"
+        ],
+        "properties": {
+          "exponentialBackoffFactor": {
+            "type": "number",
+            "format": "double"
+          },
+          "initialDelayMs": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "numberOfRetries": {
+            "type": "integer",
+            "minimum": 0
+          }
+        }
+      },
+      "StacBand": {
+        "type": "object",
+        "required": [
+          "name",
+          "dataType"
+        ],
+        "properties": {
+          "dataType": {
+            "$ref": "#/components/schemas/RasterDataType"
+          },
+          "name": {
+            "type": "string"
+          },
+          "noDataValue": {
+            "type": [
+              "number",
+              "null"
+            ],
+            "format": "double"
+          }
+        }
+      },
+      "StacQueryBuffer": {
+        "type": "object",
+        "description": "A struct that represents buffers to apply to stac requests",
+        "required": [
+          "startSeconds",
+          "endSeconds"
+        ],
+        "properties": {
+          "endSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "startSeconds": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "StacZone": {
+        "type": "object",
+        "required": [
+          "name",
+          "epsg"
+        ],
+        "properties": {
+          "epsg": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "name": {
+            "type": "string"
           }
         }
       },
@@ -9208,6 +10188,63 @@
       },
       "TypeNames": {
         "type": "string"
+      },
+      "TypedDataProviderDefinition": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/ArunaDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/CopernicusDataspaceDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/DatasetLayerListingProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/EbvPortalDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/EdrDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/GbifDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/GfbioAbcdDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/GfbioCollectionsDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/NetCdfCfDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/PangaeaDataProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/SentinelS2L2ACogsProviderDefinition"
+          },
+          {
+            "$ref": "#/components/schemas/WildliveDataConnectorDefinition"
+          }
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "Aruna": "#/components/schemas/ArunaDataProviderDefinition",
+            "CopernicusDataspace": "#/components/schemas/CopernicusDataspaceDataProviderDefinition",
+            "DatasetLayerListing": "#/components/schemas/DatasetLayerListingProviderDefinition",
+            "EbvPortal": "#/components/schemas/EbvPortalDataProviderDefinition",
+            "Edr": "#/components/schemas/EdrDataProviderDefinition",
+            "Gbif": "#/components/schemas/GbifDataProviderDefinition",
+            "GfbioAbcd": "#/components/schemas/GfbioAbcdDataProviderDefinition",
+            "GfbioCollections": "#/components/schemas/GfbioCollectionsDataProviderDefinition",
+            "NetCdfCf": "#/components/schemas/NetCdfCfDataProviderDefinition",
+            "Pangaea": "#/components/schemas/PangaeaDataProviderDefinition",
+            "SentinelS2L2ACogs": "#/components/schemas/SentinelS2L2ACogsProviderDefinition",
+            "WildLIVE!": "#/components/schemas/WildliveDataConnectorDefinition"
+          }
+        }
       },
       "TypedGeometry": {
         "oneOf": [
@@ -9989,6 +11026,45 @@
         "enum": [
           "2.0.0"
         ]
+      },
+      "WildliveDataConnectorDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "id",
+          "name",
+          "description"
+        ],
+        "properties": {
+          "apiKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "WildLIVE!"
+            ]
+          }
+        }
       },
       "WmsService": {
         "type": "string",
