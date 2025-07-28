@@ -58,7 +58,7 @@ impl WrapWithProjectionAndResample {
         let res = if target_sref == result_sref {
             self
         } else {
-            log::debug!(
+            tracing::debug!(
                 "Target srs: {target_sref}, workflow srs: {result_sref} --> injecting reprojection"
             );
 
@@ -136,7 +136,7 @@ impl WrapWithProjectionAndResample {
             && target_spatial_grid.spatial_resolution().y <= rd_resolution.y
         //TODO: we should allow to use the "interpolation" as long as the fraction is > 0.5. This would require to keep 4 tiles which seems to be fine. The edge case of resampling with same resolution should also use the interpolation since bilieaner woudl make sense here?
         {
-            log::debug!(
+            tracing::debug!(
                 "Target res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting interpolation"
             );
             /*
@@ -176,7 +176,7 @@ impl WrapWithProjectionAndResample {
             let rd = iip.result_descriptor().clone();
             Self::new(iop.boxed(), iip.boxed(), rd)
         } else {
-            log::debug!(
+            tracing::debug!(
                 "Query res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting downsampling"
             );
 
