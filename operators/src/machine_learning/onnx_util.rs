@@ -1,30 +1,31 @@
+use super::{MachineLearningError, error::Ort};
+use crate::machine_learning::{
+    MlModelLoadingInfo, MlModelMetadata,
+    error::{
+        InvalidInputPixelShape, InvalidInputTensorShape, InvalidOutputPixelShape,
+        InvalidOutputType, MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
+        MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, UnsupportedInOutMapping,
+        UnsupportedNumberOfOutputAttributes,
+    },
+};
 use geoengine_datatypes::{
-    machine_learning::{MlModelMetadata, MlTensorShape3D},
+    machine_learning::MlTensorShape3D,
     raster::{GridShape2D, GridSize, RasterDataType},
 };
 use ort::session::Session;
 use snafu::{ResultExt, ensure};
 
-use crate::machine_learning::error::{
-    InvalidInputPixelShape, InvalidInputTensorShape, InvalidInputType, InvalidOutputPixelShape,
-    InvalidOutputType, MetadataModelInputShapeMismatch, MetadataModelInputTypeMismatch,
-    MetadataModelOutputShapeMismatch, MultipleInputsNotSupported, UnsupportedInOutMapping,
-    UnsupportedNumberOfOutputAttributes,
-};
-
-use super::{MachineLearningError, error::Ort};
-
-pub fn load_onnx_model_from_metadata(
-    ml_model_metadata: &MlModelMetadata,
+pub fn load_onnx_model_from_loading_info(
+    ml_model_loading_info: &MlModelLoadingInfo,
 ) -> Result<Session, MachineLearningError> {
     ort::session::Session::builder()
         .context(Ort)?
-        .commit_from_file(&ml_model_metadata.file_path)
+        .commit_from_file(&ml_model_loading_info.storage_path)
         .context(Ort)
         .inspect_err(|e| {
             tracing::debug!(
                 "Could not create ONNX session for {:?}. Error: {}",
-                ml_model_metadata.file_path.file_name(),
+                ml_model_loading_info.storage_path.file_name(),
                 e
             );
         })
@@ -101,10 +102,12 @@ pub fn check_input_output_mapping_supported(
 }
 
 pub fn try_onnx_tensor_to_ml_tensorshape_3d(
-    tensor_dimensions: &[i64],
+    tensor_dimensions: &ort::tensor::Shape,
 ) -> Result<MlTensorShape3D, MachineLearningError> {
-    match *tensor_dimensions {
-        [-1..=1] => Ok(MlTensorShape3D {
+    let td: &[i64] = tensor_dimensions.as_ref();
+
+    match *td {
+        [] | [-1..=1] => Ok(MlTensorShape3D {
             x: 1,
             y: 1,
             bands: 1,
@@ -127,7 +130,7 @@ pub fn try_onnx_tensor_to_ml_tensorshape_3d(
             })
         }
         _ => Err(MachineLearningError::InvalidDimensions {
-            dimensions: tensor_dimensions.to_vec(),
+            dimensions: td.to_vec(),
         }),
     }
 }
@@ -153,32 +156,27 @@ pub fn check_onnx_model_input_matches_metadata(
     );
 
     let input = &inputs[0];
-    ensure!(
-        input.input_type.is_tensor(),
-        InvalidInputType {
-            input_type: input.input_type.clone()
-        }
-    );
-    let dimensions = input
-        .input_type
-        .tensor_dimensions()
-        .expect("input must be a tensor. checked before!");
 
-    let shape = try_onnx_tensor_to_ml_tensorshape_3d(dimensions)?;
+    let (Some(input_tensor_type), Some(tensor_shape)) = (
+        input.input_type.tensor_type(),
+        input.input_type.tensor_shape(),
+    ) else {
+        return Err(MachineLearningError::InvalidInputType {
+            input_type: input.input_type.clone(),
+        });
+    };
+
+    let shape = try_onnx_tensor_to_ml_tensorshape_3d(tensor_shape)?;
 
     ensure!(
         shape == metadata_input,
         MetadataModelInputShapeMismatch {
-            model_dimensions: dimensions.clone(),
+            model_dimensions: (*tensor_shape).to_vec(),
             model_shape: shape,
             metadata_shape: metadata_input
         }
     );
 
-    let input_tensor_type = input
-        .input_type
-        .tensor_type()
-        .expect("input must be a tensor. ckecked above!");
     let input_raster_type = try_raster_datatype_from_tensor_element_type(input_tensor_type)?;
 
     ensure!(
@@ -219,7 +217,7 @@ pub fn check_onnx_model_output_matches_metadata(
 
     let dimensions = output
         .output_type
-        .tensor_dimensions()
+        .tensor_shape()
         .expect("input must be a tensor. checked before!");
 
     let shape = try_onnx_tensor_to_ml_tensorshape_3d(dimensions)?;
@@ -227,7 +225,7 @@ pub fn check_onnx_model_output_matches_metadata(
     ensure!(
         shape == metadata_output,
         MetadataModelOutputShapeMismatch {
-            model_dimensions: dimensions.clone(),
+            model_dimensions: (*dimensions).to_vec(),
             model_shape: shape,
             metadata_shape: metadata_output
         }

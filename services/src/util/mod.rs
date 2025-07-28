@@ -22,6 +22,8 @@ pub mod server;
 pub mod sentinel_2_utm_zones;
 // TODO: refactor to be gated by `#[cfg(test)]`
 pub mod tests;
+#[cfg(test)]
+pub mod websocket_tests;
 pub mod workflows;
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>

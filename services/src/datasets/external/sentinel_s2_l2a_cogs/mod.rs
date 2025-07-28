@@ -37,7 +37,6 @@ use geoengine_operators::source::{
     OgrSourceDataset,
 };
 use geoengine_operators::util::retry::retry;
-use log::debug;
 use postgres_types::{FromSql, ToSql};
 use reqwest::Client;
 use sentinel_2_l2a_bands::{ImageProduct, ImageProductpec};
@@ -48,6 +47,7 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::ops::Neg;
 use std::path::PathBuf;
+use tracing::debug;
 
 mod sentinel_2_l2a_bands;
 
@@ -414,7 +414,7 @@ impl SentinelS2L2aCogsMetaData {
         let query_end_buffer = Duration::seconds(self.stac_query_buffer.end_seconds);
 
         if request_params.is_none() {
-            log::debug!("Request params are empty -> returning empty loading info");
+            tracing::debug!("Request params are empty -> returning empty loading info");
             return Ok(GdalLoadingInfo::new(
                 // we do not know anything about the data. Can only use query -/+ buffer to determine time bounds.
                 GdalLoadingInfoTemporalSliceIterator::Static {
@@ -583,7 +583,7 @@ impl SentinelS2L2aCogsMetaData {
                 if t_start == prev_start {
                     let prev_u_start = unique_start_times[i - 1];
                     let new_u_start = prev_u_start + 1;
-                    log::debug!(
+                    tracing::debug!(
                         "duplicate start time: {} insert as {} following {}",
                         t_start.as_datetime_string(),
                         new_u_start.as_datetime_string(),

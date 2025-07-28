@@ -9,12 +9,12 @@ use gdal::vector::sql::Dialect;
 use gdal::vector::{Feature, LayerAccess};
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
-use log::debug;
 use ouroboros::self_referencing;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter::FusedIterator;
+use tracing::debug;
 
 /// An iterator over features from a OGR dataset.
 /// This iterator contains the dataset and one of its layers.

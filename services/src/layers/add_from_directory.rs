@@ -12,7 +12,6 @@ use crate::{
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::helpers::ge_report;
-use log::{error, info, warn};
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -20,6 +19,7 @@ use std::{
     io::BufReader,
     path::PathBuf,
 };
+use tracing::{error, info, warn};
 use uuid::Uuid;
 
 use super::storage::LayerProviderDb;
@@ -211,7 +211,10 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
     }
 
     let Ok(dir) = fs::read_dir(&base_path) else {
-        error!("Skipped adding providers from directory `{base_path:?}` because it can't be read");
+        error!(
+            "Skipped adding providers from directory `{}` because it can't be read",
+            base_path.display()
+        );
         return;
     };
 
@@ -222,11 +225,11 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
                     && entry.path().extension().is_some_and(|ext| ext == "json") =>
             {
                 match add_provider_definition_from_dir_entry(db, &entry).await {
-                    Ok(()) => info!("Added provider from file `{:?}`", entry.path()),
+                    Ok(()) => info!("Added provider from file `{}`", entry.path().display()),
                     Err(e) => {
                         warn!(
-                            "Skipped adding provider from file `{:?}` error: `{:?}`",
-                            entry.path(),
+                            "Skipped adding provider from file `{}` error: `{:?}`",
+                            entry.path().display(),
                             e
                         );
                     }

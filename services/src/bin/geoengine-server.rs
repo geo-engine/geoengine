@@ -1,18 +1,24 @@
-use flexi_logger::writers::{FileLogWriter, FileLogWriterHandle};
-use flexi_logger::{Age, Cleanup, Criterion, FileSpec, Naming, WriteMode};
 pub use geoengine_operators::processing::initialize_expression_dependencies;
-use geoengine_services::config;
-use geoengine_services::config::get_config_element;
-use geoengine_services::error::Result;
+use geoengine_services::{
+    config::{self, get_config_element},
+    error::Result,
+};
 use tracing::Subscriber;
-use tracing_subscriber::EnvFilter;
-use tracing_subscriber::Layer;
-use tracing_subscriber::field::RecordFields;
-use tracing_subscriber::fmt::FormatFields;
-use tracing_subscriber::fmt::format::{DefaultFields, Writer};
-use tracing_subscriber::layer::Filter;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::registry::LookupSpan;
+use tracing_appender::{
+    non_blocking::WorkerGuard,
+    rolling::{RollingFileAppender, Rotation},
+};
+use tracing_subscriber::{
+    EnvFilter, Layer,
+    field::RecordFields,
+    fmt::{
+        FormatFields,
+        format::{DefaultFields, Writer},
+    },
+    layer::Filter,
+    prelude::*,
+    registry::LookupSpan,
+};
 
 /// Starts the server.
 ///
@@ -39,13 +45,13 @@ pub async fn start_server() -> Result<()> {
         EnvFilter::try_new(&logging_config.log_spec).expect("to have a valid log spec");
 
     // create a log layer for output to a file and add it to the registry
-    let (file_layer, _fw_drop_guard) = if logging_config.log_to_file {
-        let (file_layer, fw_drop_guard) = file_layer_with_filter(
+    let (file_layer, _writer_drop_guard) = if logging_config.log_to_file {
+        let (file_layer, writer_drop_guard) = file_layer_with_filter(
             &logging_config.filename_prefix,
             logging_config.log_directory.as_deref(),
             file_filter,
         );
-        (Some(file_layer), Some(fw_drop_guard))
+        (Some(file_layer), Some(writer_drop_guard))
     } else {
         (None, None)
     };
@@ -132,32 +138,20 @@ fn file_layer_with_filter<S, F: Filter<S> + 'static>(
     filename_prefix: &str,
     log_directory: Option<&str>,
     filter: F,
-) -> (impl Layer<S> + use<S, F>, FileLogWriterHandle)
+) -> (impl Layer<S> + use<S, F>, WorkerGuard)
 where
     S: Subscriber,
     for<'a> S: LookupSpan<'a>,
 {
-    let mut file_spec = FileSpec::default().basename(filename_prefix);
+    let file_appender = RollingFileAppender::builder()
+        .max_log_files(7)
+        .filename_prefix(filename_prefix)
+        .filename_suffix("log")
+        .rotation(Rotation::DAILY)
+        .build(log_directory.unwrap_or("./"))
+        .expect("failed to initialize rolling file appender");
 
-    if let Some(dir) = log_directory {
-        file_spec = file_spec.directory(dir);
-    }
-
-    // TODO: use local time instead of UTC
-    // On Unix, using local time implies using an unsound feature: https://docs.rs/flexi_logger/latest/flexi_logger/error_info/index.html#time
-    // Thus, we use UTC time instead.
-    flexi_logger::DeferredNow::force_utc();
-
-    let (file_writer, fw_handle) = FileLogWriter::builder(file_spec)
-        .write_mode(WriteMode::Async)
-        .append()
-        .rotate(
-            Criterion::Age(Age::Day),
-            Naming::Timestamps,
-            Cleanup::KeepLogFiles(7),
-        )
-        .try_build_with_handle()
-        .expect("file log writer has to be created successfully");
+    let (non_blocking_writer, guard) = tracing_appender::non_blocking(file_appender);
 
     let layer = tracing_subscriber::fmt::layer()
         .with_file(false)
@@ -165,31 +159,31 @@ where
         // we use a custom formatter because there are still format flags within spans even when `with_ansi` is false due to bug: https://github.com/tokio-rs/tracing/issues/1817
         .fmt_fields(FileFormatterWorkaround(DefaultFields::default()))
         .with_ansi(false)
-        .with_writer(move || file_writer.clone())
+        .with_writer(non_blocking_writer)
         .with_filter(filter);
-    (layer, fw_handle)
+    (layer, guard)
 }
 
 /// We install a GDAL error handler that logs all messages with our log macros.
 fn reroute_gdal_logging() {
     gdal::config::set_error_handler(|error_type, error_num, error_msg| {
-        let target = "GDAL";
+        const LOG_TARGET: &str = "GDAL";
         match error_type {
             gdal::errors::CplErrType::None => {
                 // should never log anything
-                log::info!(target: target, "GDAL None {error_num}: {error_msg}");
+                tracing::info!(target: LOG_TARGET, "GDAL None {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Debug => {
-                log::debug!(target: target, "GDAL Debug {error_num}: {error_msg}");
+                tracing::debug!(target: LOG_TARGET, "GDAL Debug {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Warning => {
-                log::warn!(target: target, "GDAL Warning {error_num}: {error_msg}");
+                tracing::warn!(target: LOG_TARGET, "GDAL Warning {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Failure => {
-                log::error!(target: target, "GDAL Failure {error_num}: {error_msg}");
+                tracing::error!(target: LOG_TARGET, "GDAL Failure {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Fatal => {
-                log::error!(target: target, "GDAL Fatal {error_num}: {error_msg}");
+                tracing::error!(target: LOG_TARGET, "GDAL Fatal {error_num}: {error_msg}");
             }
         }
     });

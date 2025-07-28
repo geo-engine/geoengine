@@ -24,7 +24,9 @@ use gdal::{
     },
 };
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::ColumnSelection;
+use geoengine_datatypes::util::arrow::ArrowTyped;
 use geoengine_datatypes::{
     collections::{
         BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
@@ -32,14 +34,11 @@ use geoengine_datatypes::{
         GeoFeatureCollectionRowBuilder, VectorDataType,
     },
     primitives::{
-        AxisAlignedRectangle, BoundingBox2D, CacheTtlSeconds, Coordinate2D, DateTime,
-        DateTimeParseFormat, FeatureDataType, FeatureDataValue, Geometry, MultiLineString,
-        MultiPoint, MultiPolygon, NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry,
-        VectorQueryRectangle,
+        AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
+        FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
+        NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
     },
-    util::arrow::ArrowTyped,
 };
-use log::debug;
 use pin_project::pin_project;
 use postgres_protocol::escape::{escape_identifier, escape_literal};
 use postgres_types::{FromSql, ToSql};
@@ -56,6 +55,7 @@ use std::{
     task::Poll,
 };
 use tokio::sync::Mutex;
+use tracing::debug;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -889,7 +889,7 @@ where
                 chunk_byte_size,
             );
 
-            let batch_result = if let Some(rename) = dataset_information
+            if let Some(rename) = dataset_information
                 .columns
                 .as_ref()
                 .and_then(|c| c.rename.as_ref())
@@ -898,9 +898,7 @@ where
                 batch_result.and_then(|c| c.rename_columns(names.as_slice()).map_err(Into::into))
             } else {
                 batch_result
-            };
-
-            batch_result
+            }
         })
         .await?
     }

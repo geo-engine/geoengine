@@ -3,9 +3,9 @@ use super::datatypes::{
     SpatialReferenceOption, TimeInterval, VectorDataType,
 };
 use crate::api::model::datatypes::{
-    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, MultiLineString,
-    MultiPoint, MultiPolygon, NoGeometry, RasterPropertiesEntryType, RasterPropertiesKey,
-    TimeInstance, TimeStep,
+    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, MlTensorShape3D,
+    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, RasterPropertiesEntryType,
+    RasterPropertiesKey, TimeInstance, TimeStep,
 };
 use crate::error::{
     RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
@@ -1477,6 +1477,147 @@ impl From<FormatSpecifics> for geoengine_operators::source::FormatSpecifics {
             FormatSpecifics::Csv { header } => Self::Csv {
                 header: header.into(),
             },
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MlModelInputNoDataHandlingVariant {
+    EncodedNoData,
+    SkipIfNoData,
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModelInputNoDataHandling {
+    variant: MlModelInputNoDataHandlingVariant,
+    no_data_value: Option<f32>,
+}
+
+impl From<MlModelInputNoDataHandling>
+    for geoengine_operators::machine_learning::MlModelInputNoDataHandling
+{
+    fn from(value: MlModelInputNoDataHandling) -> Self {
+        match value.variant {
+            MlModelInputNoDataHandlingVariant::EncodedNoData => {
+                geoengine_operators::machine_learning::MlModelInputNoDataHandling::EncodedNoData {
+                    no_data_value: value.no_data_value.expect("Value is required"),
+                }
+            }
+            MlModelInputNoDataHandlingVariant::SkipIfNoData => {
+                geoengine_operators::machine_learning::MlModelInputNoDataHandling::SkipIfNoData
+            }
+        }
+    }
+}
+
+impl From<geoengine_operators::machine_learning::MlModelInputNoDataHandling>
+    for MlModelInputNoDataHandling
+{
+    fn from(value: geoengine_operators::machine_learning::MlModelInputNoDataHandling) -> Self {
+        match value {
+            geoengine_operators::machine_learning::MlModelInputNoDataHandling::EncodedNoData {
+                no_data_value,
+            } => MlModelInputNoDataHandling {
+                variant: MlModelInputNoDataHandlingVariant::EncodedNoData,
+                no_data_value: Some(no_data_value),
+            },
+            geoengine_operators::machine_learning::MlModelInputNoDataHandling::SkipIfNoData => {
+                MlModelInputNoDataHandling {
+                    variant: MlModelInputNoDataHandlingVariant::SkipIfNoData,
+                    no_data_value: None,
+                }
+            }
+        }
+    }
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum MlModelOutputNoDataHandlingVariant {
+    EncodedNoData,
+    NanIsNoData,
+}
+
+#[derive(PartialEq, Debug, Serialize, Deserialize, Copy, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModelOutputNoDataHandling {
+    variant: MlModelOutputNoDataHandlingVariant,
+    no_data_value: Option<f32>,
+}
+
+impl From<MlModelOutputNoDataHandling>
+    for geoengine_operators::machine_learning::MlModelOutputNoDataHandling
+{
+    fn from(value: MlModelOutputNoDataHandling) -> Self {
+        match value.variant {
+            MlModelOutputNoDataHandlingVariant::EncodedNoData => {
+                geoengine_operators::machine_learning::MlModelOutputNoDataHandling::EncodedNoData {
+                    no_data_value: value.no_data_value.expect("Value must be set"),
+                }
+            }
+            MlModelOutputNoDataHandlingVariant::NanIsNoData => {
+                geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData
+            }
+        }
+    }
+}
+
+impl From<geoengine_operators::machine_learning::MlModelOutputNoDataHandling>
+    for MlModelOutputNoDataHandling
+{
+    fn from(value: geoengine_operators::machine_learning::MlModelOutputNoDataHandling) -> Self {
+        match value {
+            geoengine_operators::machine_learning::MlModelOutputNoDataHandling::EncodedNoData {
+                no_data_value,
+            } => MlModelOutputNoDataHandling {
+                variant: MlModelOutputNoDataHandlingVariant::EncodedNoData,
+                no_data_value: Some(no_data_value),
+            },
+            geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData => {
+                MlModelOutputNoDataHandling {
+                    variant: MlModelOutputNoDataHandlingVariant::NanIsNoData,
+                    no_data_value: None,
+                }
+            }
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MlModelMetadata {
+    pub input_type: RasterDataType,
+    pub output_type: RasterDataType,
+    pub input_shape: MlTensorShape3D,
+    pub output_shape: MlTensorShape3D,
+    pub input_no_data_handling: MlModelInputNoDataHandling,
+    pub output_no_data_handling: MlModelOutputNoDataHandling,
+}
+
+impl From<MlModelMetadata> for geoengine_operators::machine_learning::MlModelMetadata {
+    fn from(value: MlModelMetadata) -> Self {
+        geoengine_operators::machine_learning::MlModelMetadata {
+            input_type: value.input_type.into(),
+            output_type: value.output_type.into(),
+            input_shape: value.input_shape.into(),
+            output_shape: value.output_shape.into(),
+            input_no_data_handling: value.input_no_data_handling.into(),
+            output_no_data_handling: value.output_no_data_handling.into(),
+        }
+    }
+}
+
+impl From<geoengine_operators::machine_learning::MlModelMetadata> for MlModelMetadata {
+    fn from(value: geoengine_operators::machine_learning::MlModelMetadata) -> Self {
+        MlModelMetadata {
+            input_type: value.input_type.into(),
+            output_type: value.output_type.into(),
+            input_shape: value.input_shape.into(),
+            output_shape: value.output_shape.into(),
+            input_no_data_handling: value.input_no_data_handling.into(),
+            output_no_data_handling: value.output_no_data_handling.into(),
         }
     }
 }

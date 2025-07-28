@@ -22,10 +22,10 @@ use geoengine_operators::engine::{
 use geoengine_operators::util::raster_stream_to_geotiff::{
     GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
 };
-use log::info;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use tracing::info;
 use url::Url;
 use uuid::Uuid;
 

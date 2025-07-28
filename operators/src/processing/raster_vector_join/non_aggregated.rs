@@ -96,7 +96,7 @@ where
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         if collection.is_empty() {
-            log::debug!(
+            tracing::debug!(
                 "input collection is empty, returning empty collection, skipping raster query"
             );
 
@@ -118,7 +118,7 @@ where
         // TODO: also intersect with raster spatial / time bounds
 
         let (Some(spatial_bounds), Some(time_interval)) = (bbox, time) else {
-            log::debug!(
+            tracing::debug!(
                 "spatial or temporal intersection is empty, returning the same collection, skipping raster query"
             );
 
@@ -402,7 +402,7 @@ where
 
         // TODO: adjust raster bands to the vector attribute selection in the query once we support it
         for raster_input in &self.raster_inputs {
-            log::debug!(
+            tracing::debug!(
                 "processing raster for new columns {:?}",
                 raster_input.column_names
             );
@@ -1098,10 +1098,10 @@ mod tests {
                     &[(
                         "ndvi",
                         FeatureData::Float(vec![
-                            (6. + 60.) / 2.,
-                            (5. + 50.) / 2.,
-                            (1. + 10.) / 2.,
-                            (2. + 20.) / 2.
+                            f64::midpoint(6., 60.),
+                            f64::midpoint(5., 50.),
+                            f64::midpoint(1., 10.),
+                            f64::midpoint(2., 20.)
                         ])
                     )],
                 )

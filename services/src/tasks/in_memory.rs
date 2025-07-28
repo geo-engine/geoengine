@@ -9,7 +9,6 @@ use geoengine_datatypes::{
     error::ErrorSource,
     util::{Identifier, helpers::ge_report},
 };
-use log::warn;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
@@ -18,6 +17,7 @@ use tokio::{
     sync::{RwLock, RwLockWriteGuard},
     task::JoinHandle,
 };
+use tracing::warn;
 
 type SharedTask = Arc<Box<dyn Task<SimpleTaskManagerContext>>>;
 
@@ -301,7 +301,7 @@ fn run_task(
             Err(err) => {
                 let err = Arc::from(err);
 
-                log::error!(
+                tracing::error!(
                     "Task {} failed with: {}",
                     task_id,
                     ge_report(Arc::clone(&err))

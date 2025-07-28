@@ -2337,6 +2337,70 @@ impl From<MlTensorShape3D> for geoengine_datatypes::machine_learning::MlTensorSh
     }
 }
 
+#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+pub struct MlModelName {
+    pub namespace: Option<String>,
+    pub name: String,
+}
+
+impl From<MlModelName> for geoengine_datatypes::machine_learning::MlModelName {
+    fn from(name: MlModelName) -> Self {
+        Self {
+            namespace: name.namespace,
+            name: name.name,
+        }
+    }
+}
+
+impl From<geoengine_datatypes::machine_learning::MlModelName> for MlModelName {
+    fn from(name: geoengine_datatypes::machine_learning::MlModelName) -> Self {
+        Self {
+            namespace: name.namespace,
+            name: name.name,
+        }
+    }
+}
+
+impl std::fmt::Display for MlModelName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let dt_mmn: geoengine_datatypes::machine_learning::MlModelName = self.clone().into();
+        std::fmt::Display::fmt(&dt_mmn, f)
+    }
+}
+
+impl Serialize for MlModelName {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: serde::Serializer,
+    {
+        geoengine_datatypes::machine_learning::MlModelName::serialize(
+            &self.clone().into(),
+            serializer,
+        )
+    }
+}
+
+impl<'de> Deserialize<'de> for MlModelName {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        geoengine_datatypes::machine_learning::MlModelName::deserialize(deserializer)
+            .map(Into::into)
+    }
+}
+
+impl ToSchema for MlModelName {} // TODO: why is this needed?
+
+impl PartialSchema for MlModelName {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(Type::String))
+            .into()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::api::model::datatypes::ClassificationMeasurement;

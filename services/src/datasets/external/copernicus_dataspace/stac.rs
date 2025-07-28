@@ -107,7 +107,7 @@ pub async fn load_stac_items(
     let mut stac_items = Vec::new();
 
     loop {
-        log::debug!("Copernicus Dataspace Provider: Requesting page {page} of STAC API");
+        tracing::debug!("Copernicus Dataspace Provider: Requesting page {page} of STAC API");
 
         let response = client
             .get(url.clone())
@@ -141,7 +141,7 @@ pub async fn load_stac_items(
         // there may be more items available, so go to next page, if possible
 
         if page >= MAX_NUM_PAGES {
-            log::warn!(
+            tracing::warn!(
                 "Copernicus Data Provider reached maximum number of pages of the STAC API and there may be more items available. This may lead to incomplete results. Try shorter queries."
             );
             break;

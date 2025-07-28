@@ -50,8 +50,8 @@ pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use log::debug;
-use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
+use num::FromPrimitive;
+use num::integer::{div_ceil, div_floor};
 use postgres_types::{FromSql, ToSql};
 use reader::{
     GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties, OverviewReaderState,
@@ -64,6 +64,8 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use tracing::debug;
+
 mod db_types;
 mod error;
 mod loading_info;
@@ -387,8 +389,10 @@ impl GdalRasterLoader {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
             Some(ds) => {
                 debug!(
-                    "Loading tile {:?}, from {:?}, band: {}",
-                    &tile_information, ds.file_path, ds.rasterband_channel
+                    "Loading tile {:?}, from {}, band: {}",
+                    &tile_information,
+                    ds.file_path.display(),
+                    ds.rasterband_channel
                 );
                 let gdal_read_advise: Option<GdalReadAdvise> = reader_mode
                     .tiling_to_dataset_read_advise(
@@ -476,11 +480,11 @@ impl GdalRasterLoader {
             };
             let elapsed = start.elapsed();
             debug!(
-                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {:?}",
+                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {}",
                 error,
                 err_result.is_err(),
                 elapsed,
-                dataset_params.file_path
+                dataset_params.file_path.display()
             );
             return err_result;
         }
@@ -707,19 +711,19 @@ where
         ) {
             (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
             (None, None) => {
-                log::warn!(
+                tracing::debug!(
                     "The provider did not provide a time range that covers the query. Falling back to query time range. "
                 );
                 FillerTimeBounds::new(query.time_interval.start(), query.time_interval.end())
             }
             (Some(start), None) => {
-                log::warn!(
+                tracing::debug!(
                     "The provider did only provide a time range start that covers the query. Falling back to query time end. "
                 );
                 FillerTimeBounds::new(start, query.time_interval.end())
             }
             (None, Some(end)) => {
-                log::warn!(
+                tracing::debug!(
                     "The provider did only provide a time range end that covers the query. Falling back to query time start. "
                 );
                 FillerTimeBounds::new(query.time_interval.start(), end)

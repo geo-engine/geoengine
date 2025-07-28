@@ -28,11 +28,11 @@ use async_trait::async_trait;
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInstance};
 use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use tracing::debug;
 
 use typetag;
 

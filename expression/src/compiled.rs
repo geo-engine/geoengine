@@ -39,7 +39,7 @@ impl LinkedExpression {
                 .map_or_else(
                     |e| {
                         // fallback to unformatted code
-                        log::error!("Cannot parse expression: {e}");
+                        tracing::error!("Cannot parse expression: {e}");
                         code.to_string()
                     },
                     |file| prettyplease::unparse(&file),

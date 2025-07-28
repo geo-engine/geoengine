@@ -440,6 +440,6 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<Stri
         let mut drivers: Vec<String> = drivers.into_iter().collect();
         drivers.sort();
         let remaining_drivers = drivers.into_iter().join(", ");
-        log::warn!("Could not register drivers: {remaining_drivers}");
+        tracing::warn!("Could not register drivers: {remaining_drivers}");
     }
 }

@@ -326,7 +326,8 @@ mod tests {
             RenameBands, TileInformation, TilesEqualIgnoringCacheHint, TilingSpecification,
         },
         spatial_reference::SpatialReference,
-        util::test::TestDefault,
+        test_data,
+        util::{assert_image_equals, test::TestDefault},
     };
 
     #[test]
@@ -745,7 +746,6 @@ mod tests {
         );
     }
 
-    #[ignore] // TODO: remove
     #[tokio::test]
     async fn test_ndvi_partial_derivative() {
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -813,10 +813,7 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            bytes,
-            include_bytes!("../../../../test_data/wms/partial_derivative.png")
-        );
+        assert_image_equals(test_data!("wms/partial_derivative.png"), &bytes);
 
         // Use for getting the image to compare against
         // save_test_bytes(&bytes, "sobel_filter.png");

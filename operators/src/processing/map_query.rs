@@ -49,7 +49,7 @@ where
         if let Some(rewritten_query) = rewritten_query {
             self.source.raster_query(rewritten_query, ctx).await
         } else {
-            log::debug!("Query was rewritten to empty query. Returning empty / filled stream.");
+            tracing::debug!("Query was rewritten to empty query. Returning empty / filled stream.");
             let s = futures::stream::empty();
 
             let res_desc = self.raster_result_descriptor();
@@ -93,7 +93,7 @@ where
         if let Some(rewritten_query) = rewritten_query {
             self.source.vector_query(rewritten_query, ctx).await
         } else {
-            log::debug!("Query was rewritten to empty query. Returning empty stream.");
+            tracing::debug!("Query was rewritten to empty query. Returning empty stream.");
             Ok(Box::pin(futures::stream::empty())) // TODO: should be empty collection?
         }
     }

@@ -665,11 +665,7 @@ impl Accu for MovingAverageAccu {
 
         // compute bands required for the window
         let window_radius = self.window_size / 2;
-        let first_band = if self.output_band_idx < window_radius {
-            0
-        } else {
-            self.output_band_idx - window_radius
-        };
+        let first_band = self.output_band_idx.saturating_sub(window_radius);
 
         debug_assert!(
             self.input_band_tiles

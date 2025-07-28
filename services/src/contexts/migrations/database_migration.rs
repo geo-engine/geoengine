@@ -1,13 +1,13 @@
 use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
 use async_trait::async_trait;
 use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
-use log::info;
 use snafu::ensure;
 use tokio_postgres::{
     Socket, Transaction,
     error::SqlState,
     tls::{MakeTlsConnect, TlsConnect},
 };
+use tracing::info;
 
 pub type DatabaseVersion = String;
 

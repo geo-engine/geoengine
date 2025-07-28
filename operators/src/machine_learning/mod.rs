@@ -2,8 +2,13 @@ use geoengine_datatypes::{
     machine_learning::MlTensorShape3D,
     raster::{GridShape2D, RasterDataType},
 };
+pub use metadata::{
+    MlModelInputNoDataHandling, MlModelLoadingInfo, MlModelMetadata, MlModelOutputNoDataHandling,
+};
 use ort::tensor::TensorElementType;
 use snafu::Snafu;
+pub mod db_types;
+mod metadata;
 pub mod onnx;
 pub mod onnx_util;
 
@@ -18,8 +23,8 @@ pub enum MachineLearningError {
     #[snafu(display("Onnx model must have Tensor input. Found {:?}.", input_type))]
     InvalidInputType { input_type: ort::value::ValueType },
     #[snafu(display(
-        "Onnx model must have two dimensional input ([-1, b], b > 0). Found [{}].",
-        dimensions.iter().map(std::string::ToString::to_string).collect::<Vec<_>>().join(", ")
+        "Onnx model must have two dimensional ([-1, b], b > 0) OR a three/four dimensional ([-1, y, x, b], b > 0) input . Found {:?}.",
+        dimensions
     ))]
     InvalidDimensions { dimensions: Vec<i64> },
     #[snafu(display(
@@ -63,7 +68,7 @@ pub enum MachineLearningError {
         "The input shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
     MetadataModelInputShapeMismatch {
-        model_dimensions: Vec<i64>,
+        model_dimensions: ort::tensor::Shape,
         model_shape: MlTensorShape3D,
         metadata_shape: MlTensorShape3D,
     },
@@ -71,7 +76,7 @@ pub enum MachineLearningError {
         "The output shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
     MetadataModelOutputShapeMismatch {
-        model_dimensions: Vec<i64>,
+        model_dimensions: ort::tensor::Shape,
         model_shape: MlTensorShape3D,
         metadata_shape: MlTensorShape3D,
     },

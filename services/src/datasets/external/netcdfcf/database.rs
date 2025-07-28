@@ -348,7 +348,7 @@ pub(crate) async fn store_overview_metadata(
     loading_infos: Vec<LoadingInfoMetadata>,
 ) -> Result<()> {
     if remove_overviews(&transaction, provider_id, &metadata.file_name).await? {
-        log::debug!(
+        tracing::debug!(
             "Removed {file_name} from the database before re-inserting the metadata",
             file_name = metadata.file_name
         );
@@ -1164,7 +1164,7 @@ impl<D: NetCdfCfProviderDb + 'static + std::fmt::Debug> Drop for InProgressFlag<
             let result = db.unlock_overview(provider_id, &file_name).await;
 
             if let Err(e) = result {
-                log::error!("Cannot remove in-progress flag: {e}");
+                tracing::error!("Cannot remove in-progress flag: {e}");
             }
         });
     }

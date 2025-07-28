@@ -15,8 +15,9 @@ use crate::util::parsing::{parse_band_selection, parse_spatial_partition};
 use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
-use crate::workflows::{RasterWebsocketStreamHandler, VectorWebsocketStreamHandler};
+use crate::workflows::{WebsocketStreamTask, handle_websocket_message, send_websocket_message};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, Responder, web};
+use futures::StreamExt;
 use futures::future::join_all;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
 use geoengine_datatypes::primitives::{
@@ -567,17 +568,47 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let stream_handler = RasterWebsocketStreamHandler::new::<C::SessionContext>(
+    let query_ctx = ctx.query_context(workflow_id.0, Uuid::new_v4())?;
+
+    let mut stream_task = WebsocketStreamTask::new_raster_initialized::<_>(
         initialized_operator,
         query_rectangle,
-        ctx.query_context(workflow_id.0, Uuid::new_v4())?,
+        query_ctx,
     )
     .await?;
 
-    match actix_web_actors::ws::start(stream_handler, &request, stream) {
-        Ok(websocket) => Ok(websocket),
-        Err(e) => Ok(e.error_response()),
-    }
+    let (response, mut session, mut msg_stream) = match actix_ws::handle(&request, stream) {
+        Ok((response, session, msg_stream)) => (response, session, msg_stream),
+        Err(e) => return Ok(e.error_response()),
+    };
+
+    actix_web::rt::spawn(async move {
+        loop {
+            let indicator = tokio::select! {
+                Some(Ok(msg)) = msg_stream.next() => {
+                    handle_websocket_message(msg, &mut stream_task, &mut session).await
+                }
+
+                tile = stream_task.receive_tile() => {
+                    send_websocket_message(tile, session.clone()).await
+                }
+
+                else => {
+                    None
+                }
+            };
+
+            if indicator.is_none() {
+                // the stream ended or session was closed, stop processing
+                break;
+            }
+        }
+
+        stream_task.abort_processing();
+        let _ = session.close(None).await;
+    });
+
+    Ok(response)
 }
 
 /// The query parameters for `raster_stream_websocket`.
@@ -648,7 +679,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         RasterStreamWebsocketResultType::Arrow
     ));
 
-    let stream_handler = VectorWebsocketStreamHandler::new::<C::SessionContext>(
+    let mut stream_task = WebsocketStreamTask::new_vector::<C::SessionContext>(
         operator,
         query_rectangle,
         ctx.execution_context()?,
@@ -656,10 +687,38 @@ async fn vector_stream_websocket<C: ApplicationContext>(
     )
     .await?;
 
-    match actix_web_actors::ws::start(stream_handler, &request, stream) {
-        Ok(websocket) => Ok(websocket),
-        Err(e) => Ok(e.error_response()),
-    }
+    let (response, mut session, mut msg_stream) = match actix_ws::handle(&request, stream) {
+        Ok((response, session, msg_stream)) => (response, session, msg_stream),
+        Err(e) => return Ok(e.error_response()),
+    };
+
+    actix_web::rt::spawn(async move {
+        loop {
+            let indicator = tokio::select! {
+                Some(Ok(msg)) = msg_stream.next() => {
+                    handle_websocket_message(msg, &mut stream_task, &mut session).await
+                }
+
+                tile = stream_task.receive_tile() => {
+                    send_websocket_message(tile, session.clone()).await
+                }
+
+                else => {
+                    None
+                }
+            };
+
+            if indicator.is_none() {
+                // the stream ended or session was closed, stop processing
+                break;
+            }
+        }
+
+        stream_task.abort_processing();
+        let _ = session.close(None).await;
+    });
+
+    Ok(response)
 }
 
 #[derive(Debug, Snafu)]
@@ -692,18 +751,22 @@ mod tests {
     use crate::tasks::util::test::wait_for_task_to_finish;
     use crate::tasks::{TaskManager, TaskStatus};
     use crate::users::UserAuth;
+    use crate::util::tests::add_ports_to_datasets;
     use crate::util::tests::admin_login;
     use crate::util::tests::{
         TestDataUploads, add_ndvi_to_datasets, check_allowed_http_methods,
         check_allowed_http_methods2, read_body_string, register_ndvi_workflow_helper,
         send_test_request,
     };
+    use crate::util::websocket_tests;
     use crate::workflows::registry::WorkflowRegistry;
     use actix_web::dev::ServiceResponse;
     use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
+    use futures::StreamExt;
     use geoengine_datatypes::collections::MultiPointCollection;
     use geoengine_datatypes::primitives::CacheHint;
+    use geoengine_datatypes::primitives::DateTime;
     use geoengine_datatypes::primitives::{
         ContinuousMeasurement, FeatureData, Measurement, MultiPoint, RasterQueryRectangle,
         TimeInterval,
@@ -712,6 +775,7 @@ mod tests {
         GeoTransform, GridBoundingBox2D, GridShape, RasterDataType, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
+    use geoengine_datatypes::util::arrow::arrow_ipc_file_to_record_batches;
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
         MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
@@ -723,6 +787,8 @@ mod tests {
         MockRasterSourceParams,
     };
     use geoengine_operators::plot::{Statistics, StatisticsParams};
+    use geoengine_operators::source::OgrSource;
+    use geoengine_operators::source::OgrSourceParameters;
     use geoengine_operators::source::{GdalSource, GdalSourceParameters};
     use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use geoengine_operators::util::test::assert_eq_two_raster_operator_res_u8;
@@ -1495,5 +1561,163 @@ mod tests {
             false,
         )
         .await;
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_serves_raster_streams_via_websockets(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Raster(
+                GdalSource {
+                    params: GdalSourceParameters {
+                        data: dataset,
+                        overview_level: None,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+
+        let (req, payload, mut input_tx, send_next_msg_trigger) =
+            websocket_tests::test_client().await;
+
+        tokio::task::spawn(async move {
+            // Simulate sending messages to the websocket
+            for _ in 0..4 {
+                websocket_tests::send_text(&mut input_tx, "NEXT").await;
+            }
+            websocket_tests::send_close(&mut input_tx).await;
+        });
+
+        tokio::task::LocalSet::new()
+            .run_until(async move {
+                let response = raster_stream_websocket(
+                    web::Data::new(app_ctx.clone()),
+                    session.clone(),
+                    web::Path::from(workflow_id),
+                    web::Query(RasterStreamWebsocketQuery {
+                        spatial_bounds: SpatialPartition2D::new(
+                            (-180., 90.).into(),
+                            (180., -90.).into(),
+                        )
+                        .unwrap(),
+                        time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                            2014, 3, 1, 0, 0, 0,
+                        ))
+                        .unwrap()
+                        .into(),
+                        attributes: geoengine_datatypes::primitives::BandSelection::first().into(),
+                        result_type: RasterStreamWebsocketResultType::Arrow,
+                    }),
+                    req,
+                    payload,
+                )
+                .await
+                .unwrap();
+
+                let mut response_stream =
+                    websocket_tests::response_messages(response, send_next_msg_trigger)
+                        .boxed_local();
+
+                for _ in 0..4 {
+                    let tile_bytes = response_stream.next().await.unwrap();
+
+                    let record_batches = arrow_ipc_file_to_record_batches(&tile_bytes).unwrap();
+                    assert_eq!(record_batches.len(), 1);
+                    let record_batch = record_batches.first().unwrap();
+                    let schema = record_batch.schema();
+
+                    assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
+                }
+
+                assert!(response_stream.next().await.is_none()); // No more messages expected
+            })
+            .await;
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_serves_vector_streams_via_websockets(app_ctx: PostgresContext<NoTls>) {
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let ctx = app_ctx.session_context(session.clone());
+
+        let (_, dataset) = add_ports_to_datasets(&app_ctx, true, true).await;
+
+        let workflow = Workflow {
+            operator: TypedOperator::Vector(
+                OgrSource {
+                    params: OgrSourceParameters {
+                        data: dataset,
+                        attribute_projection: None,
+                        attribute_filters: None,
+                    },
+                }
+                .boxed(),
+            ),
+        };
+
+        let workflow_id = ctx.db().register_workflow(workflow).await.unwrap();
+
+        let (req, payload, mut input_tx, send_next_msg_trigger) =
+            websocket_tests::test_client().await;
+
+        tokio::task::spawn(async move {
+            // Simulate sending messages to the websocket
+            for _ in 0..1 {
+                websocket_tests::send_text(&mut input_tx, "NEXT").await;
+            }
+            websocket_tests::send_close(&mut input_tx).await;
+        });
+
+        tokio::task::LocalSet::new()
+            .run_until(async move {
+                let response = vector_stream_websocket(
+                    web::Data::new(app_ctx.clone()),
+                    session.clone(),
+                    web::Path::from(workflow_id),
+                    web::Query(VectorStreamWebsocketQuery {
+                        spatial_bounds: BoundingBox2D::new(
+                            (-180., -90.).into(),
+                            (180., 90.).into(),
+                        )
+                        .unwrap(),
+                        time_interval: TimeInterval::new_instant(DateTime::new_utc(
+                            2014, 3, 1, 0, 0, 0,
+                        ))
+                        .unwrap()
+                        .into(),
+                        result_type: RasterStreamWebsocketResultType::Arrow,
+                    }),
+                    req,
+                    payload,
+                )
+                .await
+                .unwrap();
+
+                let mut response_stream =
+                    websocket_tests::response_messages(response, send_next_msg_trigger)
+                        .boxed_local();
+
+                for _ in 0..1 {
+                    let tile_bytes = response_stream.next().await.unwrap();
+
+                    let record_batches = arrow_ipc_file_to_record_batches(&tile_bytes).unwrap();
+                    assert_eq!(record_batches.len(), 1);
+                    let record_batch = record_batches.first().unwrap();
+                    let schema = record_batch.schema();
+
+                    assert_eq!(schema.metadata()["spatialReference"], "EPSG:4326");
+                }
+
+                assert!(response_stream.next().await.is_none()); // No more messages expected
+            })
+            .await;
     }
 }
