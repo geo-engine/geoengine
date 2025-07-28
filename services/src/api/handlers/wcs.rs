@@ -412,7 +412,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
     let query_rect = RasterQueryRectangle::new_with_grid_bounds(
         query_tiling_pixel_grid.grid_bounds(),
         request_time,
-        BandSelection::first(),
+        BandSelection::first(), // TODO: support multi bands in API and set the selection here
     );
 
     let processor = wrapped.initialized_operator.query_processor()?;

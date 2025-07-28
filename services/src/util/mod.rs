@@ -19,8 +19,8 @@ pub mod operators;
 pub mod parsing;
 pub mod postgres;
 pub mod server;
-// TODO: refactor to be gated by `#[cfg(test)]`
 pub mod sentinel_2_utm_zones;
+// TODO: refactor to be gated by `#[cfg(test)]`
 pub mod tests;
 pub mod workflows;
 
