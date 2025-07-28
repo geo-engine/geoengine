@@ -403,6 +403,8 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
     spatial_grid: &SpatialGridDefinition,
     projector: &P,
 ) -> Result<Option<A>> {
+    const SAMPLE_POINT_STEPS: usize = 2;
+
     // First, try to reproject the bounds:
     let full_bounds: std::result::Result<BoundingBox2D, error::Error> = spatial_grid
         .spatial_partition()
@@ -418,7 +420,7 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
     }
 
     // Second, create a grid of coordinates project that and use the valid bounds.
-
+    // To do this, we generate a `SpatialGridDefinition` ...
     let sample_bounds = SpatialGridDefinition::new(
         spatial_grid.geo_transform,
         GridBoundingBox::new_unchecked(
@@ -426,24 +428,26 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
             spatial_grid.grid_bounds.max_index() + GridIdx2D::new_y_x(1, 1),
         ),
     );
+    // Then the the obvious way to generate sample points is to use all the pixels in the grid like this:
     // let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge();
-    // use a "Haus vom Nikolaus" strategy to find the bound.
-    let mut coord_grid_sample = sample_bounds.sample_outline(2);
-    coord_grid_sample.append(&mut sample_bounds.sample_diagonals(2));
-    coord_grid_sample.append(&mut sample_bounds.sample_cross(2));
-
+    // However, this creates a lot of redundant points == work.
+    // The better way, also employed by GDAL is to use a "Haus vom Nikolaus" strategy which is done below:
+    let mut coord_grid_sample = sample_bounds.sample_outline(SAMPLE_POINT_STEPS);
+    coord_grid_sample.append(&mut sample_bounds.sample_diagonals(SAMPLE_POINT_STEPS));
+    coord_grid_sample.append(&mut sample_bounds.sample_cross(SAMPLE_POINT_STEPS));
+    // Then, we try to reproject the sample coordinates and gather all the valid coordinates.
     let proj_outline_coordinates: Vec<Coordinate2D> =
         project_coordinates_fail_tolerant(&coord_grid_sample, projector)
             .into_iter()
             .flatten()
             .collect();
-
+    // TODO: we need a way to indicate that the operator might produce no data, e.g. if no points are valid after reprojection.
     if proj_outline_coordinates.is_empty() {
         return Ok(None);
     }
-
+    // Then, the maximum bounding box is generated from the valid coordinates.
     let out = MultiPoint::new(proj_outline_coordinates)?.spatial_bounds();
-
+    // Finally, the requested bound type is returned.
     Some(A::from_min_max(out.lower_left(), out.upper_right())).transpose()
 }
 
