@@ -16,12 +16,12 @@ mod migration_0016_merge_providers;
 mod migration_0017_ml_model_tensor_shape;
 mod migration_0018_wildlive_connector;
 mod migration_0019_ml_model_no_data;
-mod migration_0019_raster_result_desc;
+mod migration_0020_raster_result_desc;
 
 #[cfg(test)]
 mod schema_info;
 
-use migration_0019_raster_result_desc::Migration0019RasterResultDesc;
+use migration_0020_raster_result_desc::Migration0020RasterResultDesc;
 #[cfg(test)]
 pub(crate) use schema_info::{AssertSchemaEqPopulationConfig, assert_migration_schema_eq};
 
@@ -36,7 +36,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0017MlModelTensorShape),
         Box::new(Migration0018WildliveConnector),
         Box::new(Migration0019MlModelNoData),
-        Box::new(Migration0019RasterResultDesc),
+        Box::new(Migration0020RasterResultDesc),
     ]
 }
 

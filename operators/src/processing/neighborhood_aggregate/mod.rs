@@ -804,8 +804,8 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            360,
-            180,
+            3600,
+            1800,
             None,
             Some(colorizer),
             Box::pin(futures::future::pending()),
@@ -813,10 +813,10 @@ mod tests {
         .await
         .unwrap();
 
-        assert_image_equals(test_data!("wms/partial_derivative.png"), &bytes);
-
         // Use for getting the image to compare against
         // save_test_bytes(&bytes, "sobel_filter.png");
+
+        assert_image_equals(test_data!("wms/partial_derivative.png"), &bytes);
     }
 
     #[tokio::test]
