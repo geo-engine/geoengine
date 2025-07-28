@@ -77,7 +77,7 @@ arrow = { version = "55.2", features = ["ipc_compression"] }
 arrow-array = "55.2"
 arrow-ord = "55.2"
 arrow-schema = { version = "55.2", features = ["serde"] }
-aruna-rust-api = "2.0.0-beta.12"
+aruna-rust-api = "2.0.2"
 assert_cmd = "2.0"
 async-stream = "0.3"
 async-trait = "0.1"
@@ -105,7 +105,7 @@ gdal = "0.18"
 gdal-sys = "0.11"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.30.0"
-geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.30.0"} # TODO: revert back to "0.5" when it is released
+geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.30.0" } # TODO: revert back to "0.5" when it is released
 geo-types = "0.7.16"                                                       # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
@@ -185,7 +185,7 @@ tonic = { version = "0.11", features = [
     "tls",
     "tls-roots",
 ] } # must be compatible with `aruna-rust-api`
-tracing = {version="0.1", features = ["release_max_level_debug"]}
+tracing = { version = "0.1", features = ["release_max_level_debug"] }
 tracing-actix-web = "0.7"
 tracing-opentelemetry = "0.31" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
 tracing-subscriber = { version = "0.3", features = [
