@@ -474,8 +474,8 @@ impl HistogramVectorQueryProcessor {
         // TODO: compute only number of buckets if possible
 
         let query = VectorQueryRectangle::new(
-            query.spatial_bounds,
-            query.time_interval,
+            query.spatial_bounds(),
+            query.time_interval(),
             ColumnSelection::all(),
         );
 
@@ -500,8 +500,8 @@ impl HistogramVectorQueryProcessor {
         .map_err(Error::from)?;
 
         let query = VectorQueryRectangle::new(
-            query.spatial_bounds,
-            query.time_interval,
+            query.spatial_bounds(),
+            query.time_interval(),
             ColumnSelection::all(),
         );
 

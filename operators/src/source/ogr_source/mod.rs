@@ -1290,7 +1290,8 @@ where
         let time_interval = time_extractor(feature)?;
 
         // filter out data items not in the query time interval
-        if !was_time_filtered_by_ogr && !time_interval.intersects(&query_rectangle.time_interval) {
+        if !was_time_filtered_by_ogr && !time_interval.intersects(&query_rectangle.time_interval())
+        {
             return Ok(());
         }
 

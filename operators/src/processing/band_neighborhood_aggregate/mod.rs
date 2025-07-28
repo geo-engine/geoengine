@@ -220,11 +220,14 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
         // query the source with all bands, to compute the aggregate
         // then, select only the queried bands
         // TODO: avoid computing the aggregate for bands that are not queried
-        let mut source_query = query.clone();
         let source_result_descriptor = self.source.raster_result_descriptor();
-        source_query.attributes = (&source_result_descriptor.bands).into();
+        let source_query = RasterQueryRectangle::new(
+            query.spatial_bounds(),
+            query.time_interval(),
+            (&source_result_descriptor.bands).into(),
+        );
 
-        let must_extract_bands = query.attributes != source_query.attributes;
+        let must_extract_bands = query.attributes() != source_query.attributes();
 
         let aggregate = match &self.aggregate {
             NeighborhoodAggregate::FirstDerivative { band_distance } => {
@@ -256,7 +259,7 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
 
         if must_extract_bands {
             Ok(Box::pin(aggregate.extract_bands(
-                query.attributes.as_vec(),
+                query.attributes().as_vec(),
                 source_result_descriptor.bands.count(),
             )))
         } else {

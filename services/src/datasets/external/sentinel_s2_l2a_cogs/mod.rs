@@ -420,8 +420,8 @@ impl SentinelS2L2aCogsMetaData {
                 GdalLoadingInfoTemporalSliceIterator::Static {
                     parts: vec![].into_iter(),
                 },
-                query.time_interval.start() - query_start_buffer,
-                query.time_interval.end() + query_end_buffer,
+                query.time_interval().start() - query_start_buffer,
+                query.time_interval().end() + query_end_buffer,
             ));
         }
 
@@ -509,30 +509,30 @@ impl SentinelS2L2aCogsMetaData {
 
             let time_interval = TimeInterval::new(start, end)?;
 
-            if time_interval.contains(&query.time_interval) {
+            if time_interval.contains(&query.time_interval()) {
                 let t1 = time_interval.start();
                 let t2 = time_interval.end();
                 known_time_start = Some(t1);
                 known_time_end = Some(t2);
             } else {
-                if time_interval.end() <= query.time_interval.start() {
+                if time_interval.end() <= query.time_interval().start() {
                     let t1 = time_interval.end();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
-                } else if time_interval.start() <= query.time_interval.start() {
+                } else if time_interval.start() <= query.time_interval().start() {
                     let t1 = time_interval.start();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
                 }
 
-                if time_interval.start() >= query.time_interval.end() {
+                if time_interval.start() >= query.time_interval().end() {
                     let t2 = time_interval.start();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                } else if time_interval.end() >= query.time_interval.end() {
+                } else if time_interval.end() >= query.time_interval().end() {
                     let t2 = time_interval.end();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                 }
             }
 
-            if time_interval.intersects(&query.time_interval) {
+            if time_interval.intersects(&query.time_interval()) {
                 debug!(
                     "STAC asset time: {}, url: {}",
                     time_interval,
@@ -556,10 +556,10 @@ impl SentinelS2L2aCogsMetaData {
         debug!("number of generated loading infos: {}", parts.len());
 
         // if there is no information of time outside the query, we fallback to the only information we know: query -/+ buffer. We also use that information if we did not find a better time
-        let query_start = query.time_interval.start() - query_start_buffer;
+        let query_start = query.time_interval().start() - query_start_buffer;
         let known_time_before = known_time_start.unwrap_or(query_start).min(query_start);
 
-        let query_end = query.time_interval.end() + query_end_buffer;
+        let query_end = query.time_interval().end() + query_end_buffer;
         let known_time_after = known_time_end.unwrap_or(query_end).max(query_end);
 
         Ok(GdalLoadingInfo::new(
@@ -653,7 +653,7 @@ impl SentinelS2L2aCogsMetaData {
         &self,
         query: &RasterQueryRectangle,
     ) -> Result<Option<Vec<(String, String)>>> {
-        let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
+        let (t_start, t_end) = Self::time_range_request(&query.time_interval())?;
 
         let t_start = t_start - Duration::seconds(self.stac_query_buffer.start_seconds);
         let t_end = t_end + Duration::seconds(self.stac_query_buffer.end_seconds);

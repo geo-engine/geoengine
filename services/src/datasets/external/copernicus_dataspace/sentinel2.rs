@@ -261,7 +261,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
 
         let spatial_bounds_query = VectorQueryRectangle::with_bounds(
             spatial_bounds.as_bbox(),
-            query.time_interval,
+            query.time_interval(),
             ColumnSelection::all(),
         );
 

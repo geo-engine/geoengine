@@ -49,7 +49,7 @@ where
         let stream = stream::iter(
             self.collections
                 .iter()
-                .map(move |c| filter_time_intervals(c, query.time_interval)),
+                .map(move |c| filter_time_intervals(c, query.time_interval())),
         );
 
         Ok(stream.boxed())

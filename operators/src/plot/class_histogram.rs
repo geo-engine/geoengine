@@ -356,7 +356,7 @@ impl ClassHistogramVectorQueryProcessor {
 
         let query = VectorQueryRectangle::new(
             query.spatial_bounds(),
-            query.time_interval,
+            query.time_interval(),
             ColumnSelection::all(), // TODO: figure out why this is a vector query?
         );
 

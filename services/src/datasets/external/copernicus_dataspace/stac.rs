@@ -42,8 +42,8 @@ fn bbox_time_query(
     query_projection: SpatialReference,
 ) -> Result<[(&'static str, String); 2], CopernicusStacError> {
     // TODO: add query buffer like in Element84 provider?
-    let time_start = query.time_interval.start();
-    let time_end = query.time_interval.end();
+    let time_start = query.time_interval().start();
+    let time_end = query.time_interval().end();
 
     let projector =
         CoordinateProjector::from_known_srs(query_projection, SpatialReference::epsg_4326())

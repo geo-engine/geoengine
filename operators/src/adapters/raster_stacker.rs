@@ -70,19 +70,15 @@ pub struct PartialQueryRect {
 
 impl PartialQueryRect {
     fn raster_query_rectangle(&self, attributes: BandSelection) -> RasterQueryRectangle {
-        RasterQueryRectangle {
-            spatial_bounds: self.spatial_bounds,
-            time_interval: self.time_interval,
-            attributes,
-        }
+        RasterQueryRectangle::new(self.spatial_bounds, self.time_interval, attributes)
     }
 }
 
 impl From<RasterQueryRectangle> for PartialQueryRect {
     fn from(value: RasterQueryRectangle) -> Self {
         Self {
-            spatial_bounds: value.spatial_bounds,
-            time_interval: value.time_interval,
+            spatial_bounds: value.spatial_bounds(),
+            time_interval: value.time_interval(),
         }
     }
 }

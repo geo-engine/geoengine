@@ -144,8 +144,9 @@ async fn get_plot_handler<C: ApplicationContext>(
             workflow_spatial_ref,
             request_spatial_ref,
         )?;
-        repr_spatial_query
-            .map(|r| PlotQueryRectangle::new(r, query_rect.time_interval, query_rect.attributes))
+        repr_spatial_query.map(|r| {
+            PlotQueryRectangle::new(r, query_rect.time_interval(), *query_rect.attributes())
+        })
     };
 
     let Some(query_rect) = query_rect else {

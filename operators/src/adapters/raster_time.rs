@@ -305,21 +305,22 @@ where
                                     // advance current query rectangle
                                     let mut new_start = min(tile_a.time.end(), tile_b.time.end());
 
-                                    if new_start == query_rect.time_interval.start() {
+                                    if new_start == query_rect.time_interval().start() {
                                         // in the case that the time interval has no length, i.e. start=end,
                                         // we have to advance `new_start` to prevent infinite loops.
                                         // Otherwise, the new query rectangle would be equal to the previous one.
                                         new_start += 1;
                                     }
 
-                                    if new_start >= query_rect.time_interval.end() {
+                                    if new_start >= query_rect.time_interval().end() {
                                         // the query window is exhausted, end the stream
                                         state.set(State::Finished);
                                     } else {
-                                        query_rect.time_interval = TimeInterval::new_unchecked(
-                                            new_start,
-                                            query_rect.time_interval.end(),
-                                        );
+                                        *query_rect.time_interval_mut() =
+                                            TimeInterval::new_unchecked(
+                                                new_start,
+                                                query_rect.time_interval().end(),
+                                            );
 
                                         state.set(State::Initial);
                                     }
@@ -467,20 +468,20 @@ where
                                 .min()
                                 .expect("N > 0");
 
-                            if new_start == query_rect.time_interval.start() {
+                            if new_start == query_rect.time_interval().start() {
                                 // in the case that the time interval has no length, i.e. start=end,
                                 // we have to advance `new_start` to prevent infinite loops.
                                 // Otherwise, the new query rectangle would be equal to the previous one.
                                 new_start += 1;
                             }
 
-                            if new_start >= query_rect.time_interval.end() {
+                            if new_start >= query_rect.time_interval().end() {
                                 // the query window is exhausted, end the stream
                                 state.set(ArrayState::Finished);
                             } else {
-                                query_rect.time_interval = TimeInterval::new_unchecked(
+                                *query_rect.time_interval_mut() = TimeInterval::new_unchecked(
                                     new_start,
-                                    query_rect.time_interval.end(),
+                                    query_rect.time_interval().end(),
                                 );
 
                                 state.set(ArrayState::Initial);

@@ -298,7 +298,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_rect.time_interval,
+                    query_rect.time_interval(),
                     tile_info,
                     0,
                     data.into(),
@@ -372,7 +372,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_rect.time_interval,
+                    query_rect.time_interval(),
                     tile_info,
                     0,
                     data.into(),
@@ -473,7 +473,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_rect.time_interval,
+                    query_rect.time_interval(),
                     tile_info,
                     0,
                     data.into(),

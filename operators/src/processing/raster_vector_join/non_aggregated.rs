@@ -113,7 +113,7 @@ where
 
         let time = collection
             .time_bounds()
-            .and_then(|time| time.intersect(&query.time_interval));
+            .and_then(|time| time.intersect(&query.time_interval()));
 
         // TODO: also intersect with raster spatial / time bounds
 

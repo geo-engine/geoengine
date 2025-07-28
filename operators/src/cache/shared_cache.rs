@@ -857,7 +857,7 @@ impl CacheQueryMatch for RasterQueryRectangle {
         let query_spatial_query = query.grid_bounds();
 
         cache_spatial_query.contains(&query_spatial_query)
-            && self.time_interval.contains(&query.time_interval)
+            && self.time_interval().contains(&query.time_interval())
     }
 }
 
@@ -867,8 +867,8 @@ impl CacheQueryMatch for VectorQueryRectangle {
         let query_spatial_query = query.spatial_bounds();
 
         cache_spatial_query.contains_bbox(&query_spatial_query)
-            && self.time_interval.contains(&query.time_interval)
-            && self.attributes == query.attributes
+            && self.time_interval().contains(&query.time_interval())
+            && self.attributes() == query.attributes()
     }
 }
 

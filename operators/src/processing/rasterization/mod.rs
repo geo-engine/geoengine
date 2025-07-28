@@ -169,6 +169,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
         let tiling_strategy = spatial_grid_desc.generate_data_tiling_strategy();
         let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
+        let query_time = query.time_interval();
 
         if let MultiPoint(points_processor) = &self.input {
             let query_grid_bounds = query.grid_bounds();
@@ -185,7 +186,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
                 let vector_query = VectorQueryRectangle::with_bounds(
                     tile_spatial_bounds.as_bbox(),
-                    query.time_interval,
+                    query_time,
                     ColumnSelection::all(), // FIXME: should be configurable
                 );
 
@@ -222,7 +223,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                 let tile_grid = grid_data.unbounded();
 
                 Ok(RasterTile2D::new_with_tile_info(
-                    query.time_interval,
+                    query_time,
                     tile_info,
                     0,
                     GridOrEmpty::Grid(tile_grid.into()),
@@ -250,7 +251,7 @@ fn generate_zeroed_tiles<'a>(
     query: &RasterQueryRectangle,
 ) -> BoxStream<'a, util::Result<RasterTile2D<f64>>> {
     let tile_shape = tiling_specification.tile_size_in_pixels;
-    let time_interval = query.time_interval;
+    let time_interval = query.time_interval();
 
     let tiling_strategy = TilingStrategy::new(tile_shape, tiling_geo_transform);
 

@@ -347,7 +347,7 @@ impl ResultDescriptor for RasterResultDescriptor {
             Self::QueryRectangleAttributeSelection,
         >,
     ) -> Result<()> {
-        for band in query.attributes.as_slice() {
+        for band in query.attributes().as_slice() {
             if *band as usize >= self.bands.len() {
                 return Err(Error::BandDoesNotExist { band_idx: *band });
             }

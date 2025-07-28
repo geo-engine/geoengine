@@ -222,8 +222,11 @@ where
             .map(|v| TOut::from_(v))
             .or(TOut::NO_DATA_OUT_FALLBACK); // Int types return Some or None while float types fallback to Some(NaN)
 
-        let mut source_query = query.clone();
-        source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
+        let source_query = RasterQueryRectangle::new(
+            query.spatial_bounds(),
+            query.time_interval(),
+            (0..num_bands as u32).collect::<Vec<u32>>().try_into()?,
+        );
 
         // TODO: re-use session accross queries?
         // TODO: use another method: https://github.com/pykeio/ort/issues/402#issuecomment-2949993914

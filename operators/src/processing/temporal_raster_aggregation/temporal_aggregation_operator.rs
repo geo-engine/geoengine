@@ -298,10 +298,10 @@ where
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<P>>>> {
         ensure!(
-            query.attributes.count() == 1,
+            query.attributes().count() == 1,
             error::InvalidBandCount {
                 expected: 1u32,
-                found: query.attributes.count()
+                found: query.attributes().count()
             }
         );
 

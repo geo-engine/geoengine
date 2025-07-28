@@ -172,7 +172,7 @@ fn build_temporal_accu<T: Pixel>(
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> + use<T> {
-    let time_interval = query_rect.time_interval;
+    let time_interval = query_rect.time_interval();
     crate::util::spawn_blocking(move || TemporalRasterAggregationTileAccu {
         accu_tile: RasterTile2D::new_with_tile_info(
             time_interval,
@@ -247,7 +247,7 @@ fn build_temporal_no_data_accu<T: Pixel>(
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> + use<T> {
-    let time_interval = query_rect.time_interval;
+    let time_interval = query_rect.time_interval();
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
 

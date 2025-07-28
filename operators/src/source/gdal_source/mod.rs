@@ -618,7 +618,7 @@ where
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
         ensure!(
-            query.attributes.as_slice() == [0],
+            query.attributes().as_slice() == [0],
             crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
         );
         tracing::debug!(
@@ -714,23 +714,23 @@ where
                 tracing::debug!(
                     "The provider did not provide a time range that covers the query. Falling back to query time range. "
                 );
-                FillerTimeBounds::new(query.time_interval.start(), query.time_interval.end())
+                FillerTimeBounds::new(query.time_interval().start(), query.time_interval().end())
             }
             (Some(start), None) => {
                 tracing::debug!(
                     "The provider did only provide a time range start that covers the query. Falling back to query time end. "
                 );
-                FillerTimeBounds::new(start, query.time_interval.end())
+                FillerTimeBounds::new(start, query.time_interval().end())
             }
             (None, Some(end)) => {
                 tracing::debug!(
                     "The provider did only provide a time range end that covers the query. Falling back to query time start. "
                 );
-                FillerTimeBounds::new(query.time_interval.start(), end)
+                FillerTimeBounds::new(query.time_interval().start(), end)
             }
         };
 
-        let query_time = query.time_interval;
+        let query_time = query.time_interval();
         let skipping_loading_info = loading_info
             .info
             .filter_ok(move |s: &GdalLoadingInfoTemporalSlice| s.time.intersects(&query_time)); // Check that the time slice intersects the query time
@@ -746,11 +746,11 @@ where
         let filled_stream = SparseTilesFillAdapter::new(
             source_stream,
             tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(query_pixel_bounds),
-            query.attributes.count(),
+            query.attributes().count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-            query.time_interval,
+            query.time_interval(),
             time_bounds,
         );
         Ok(filled_stream.boxed())

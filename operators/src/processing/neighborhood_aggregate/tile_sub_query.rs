@@ -286,7 +286,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
 
     NeighborhoodAggregateAccu::new(
         grid,
-        query_rect.time_interval,
+        query_rect.time_interval(),
         CacheHint::max_duration(),
         0,
         tile_info,
@@ -393,7 +393,7 @@ mod tests {
         );
 
         let tile_query_rectangle = aggregator
-            .tile_query_rectangle(tile_info, qrect.clone(), qrect.time_interval.start(), 0)
+            .tile_query_rectangle(tile_info, qrect.clone(), qrect.time_interval().start(), 0)
             .unwrap()
             .unwrap();
 

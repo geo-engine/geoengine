@@ -146,7 +146,7 @@ fn build_accu<T: Pixel>(
     out_srs: SpatialReference,
     in_srs: SpatialReference,
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> + use<T> {
-    let time_interval = query_rect.time_interval;
+    let time_interval = query_rect.time_interval();
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels);
 

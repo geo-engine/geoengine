@@ -322,13 +322,11 @@ where
 
         for (idx, source) in self.sources.iter().enumerate() {
             let Some(bands) =
-                map_query_bands_to_source_bands(&query.attributes, &self.bands_per_source, idx)
+                map_query_bands_to_source_bands(query.attributes(), &self.bands_per_source, idx)
             else {
                 continue;
             };
 
-            let mut source_query = query.clone();
-            source_query.attributes = bands.clone();
             sources.push(RasterStackerSource {
                 queryable: QueryWrapper { p: source, ctx },
                 band_idxs: bands.as_vec(),

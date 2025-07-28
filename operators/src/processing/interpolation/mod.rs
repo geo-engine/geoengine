@@ -490,7 +490,7 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
     let query_rect = query_rect.clone();
 
     // create an accumulator as a single tile that fits all the input tiles
-    let time_interval = query_rect.time_interval;
+    let time_interval = query_rect.time_interval();
 
     crate::util::spawn_blocking(move || {
         let tile_pixel_bounds = tile_info.global_pixel_bounds();

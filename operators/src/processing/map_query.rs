@@ -65,7 +65,7 @@ where
                 &query,
                 strat,
                 FillerTileCacheExpirationStrategy::NoCache,
-                FillerTimeBounds::from(query.time_interval), // TODO: derive this from the query once the child query can provide this.
+                FillerTimeBounds::from(query.time_interval()), // TODO: derive this from the query once the child query can provide this.
             )
             .boxed())
         }

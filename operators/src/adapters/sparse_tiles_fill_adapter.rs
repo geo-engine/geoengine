@@ -449,11 +449,11 @@ where
         Self::new(
             stream,
             grid_bounds,
-            query_rect_to_answer.attributes.count(),
+            query_rect_to_answer.attributes().count(),
             tiling_strat.geo_transform,
             tiling_strat.tile_size_in_pixels,
             cache_expiration,
-            query_rect_to_answer.time_interval,
+            query_rect_to_answer.time_interval(),
             time_bounds,
         )
     }

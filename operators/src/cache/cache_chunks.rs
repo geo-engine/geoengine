@@ -179,7 +179,7 @@ where
         // If the chunk has no time bounds it must be empty so we can skip the temporal check and return true.
         let temporal_hit = self
             .time_interval
-            .is_none_or(|tb| tb.intersects(&query.time_interval));
+            .is_none_or(|tb| tb.intersects(&query.time_interval()));
 
         // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
         let spatial_hit = self
@@ -258,7 +258,7 @@ impl CacheElementSpatialBounds for FeatureCollection<NoGeometry> {
         let time_filter_bools = self
             .time_intervals()
             .iter()
-            .map(|t| t.intersects(&query_rect.time_interval))
+            .map(|t| t.intersects(&query_rect.time_interval()))
             .collect::<Vec<bool>>();
         self.filter(time_filter_bools)
             .map_err(|_err| CacheError::CouldNotFilterResults)
@@ -290,7 +290,7 @@ macro_rules! impl_cache_result_check {
                 let time_filter_bools = self
                     .time_intervals()
                     .iter()
-                    .map(|t| t.intersects(&query_rect.time_interval));
+                    .map(|t| t.intersects(&query_rect.time_interval()));
 
                 let filter_bools = geoms_filter_bools
                     .zip(time_filter_bools)

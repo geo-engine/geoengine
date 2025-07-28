@@ -159,8 +159,8 @@ impl PlotQueryProcessor for ScatterPlotQueryProcessor {
             CollectorKind::Values(Collector::new(self.column_x.clone(), self.column_y.clone()));
 
         let query = VectorQueryRectangle::new(
-            query.spatial_bounds,
-            query.time_interval,
+            query.spatial_bounds(),
+            query.time_interval(),
             ColumnSelection::all(),
         );
 

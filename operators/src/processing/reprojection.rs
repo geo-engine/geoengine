@@ -251,7 +251,7 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
                                 sqr.map(|x| {
                                     VectorQueryRectangle::new(
                                         x,
-                                        query.time_interval,
+                                        query.time_interval(),
                                         ColumnSelection::all(),
                                     )
                                 })
@@ -366,7 +366,7 @@ where
             reproject_spatial_query(query.spatial_bounds(), self.from, self.to)?;
 
         let rewritten_query = rewritten_spatial_query
-            .map(|rwq| VectorQueryRectangle::new(rwq, query.time_interval, query.attributes));
+            .map(|rwq| VectorQueryRectangle::new(rwq, query.time_interval(), *query.attributes()));
 
         if let Some(rewritten_query) = rewritten_query {
             Ok(self

@@ -306,7 +306,7 @@ where
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         let accu = TileAccumulator {
-            time: query_rect.time_interval,
+            time: query_rect.time_interval(),
             tile_position: tile_info.global_tile_position,
             global_geo_transform: tile_info.global_geo_transform,
             state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
@@ -365,7 +365,7 @@ where
     ) -> Self::TileAccuFuture {
         let accu = GlobalStateTileAccumulator {
             aggregator: self.aggregator.clone(),
-            time: query_rect.time_interval,
+            time: query_rect.time_interval(),
             tile_position: tile_info.global_tile_position,
             global_geo_transform: tile_info.global_geo_transform,
             state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),

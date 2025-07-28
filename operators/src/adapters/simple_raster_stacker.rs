@@ -140,13 +140,13 @@ where
     Fut: Future<Output = Result<BoxStream<'a, Result<RasterTile2D<P>>>>>,
     P: Pixel,
 {
-    if query.attributes.count() == 1 {
+    if query.attributes().count() == 1 {
         // special case of single band query requires no tile stacking
         return create_single_bands_stream_fn(query.clone(), ctx).await;
     }
 
     // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-    let band_streams = join_all(query.attributes.as_slice().iter().map(|band| {
+    let band_streams = join_all(query.attributes().as_slice().iter().map(|band| {
         let query = query.select_bands(BandSelection::new_single(*band));
 
         async {

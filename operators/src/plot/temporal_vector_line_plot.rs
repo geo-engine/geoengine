@@ -168,8 +168,8 @@ where
         let values = FeatureAttributeValues::<MAX_FEATURES>::default();
 
         let query = VectorQueryRectangle::new(
-            query.spatial_bounds,
-            query.time_interval,
+            query.spatial_bounds(),
+            query.time_interval(),
             ColumnSelection::all(),
         );
 

@@ -29,7 +29,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         let valid = self.time.unwrap_or_default();
 
-        let parts = if valid.intersects(&query.time_interval) {
+        let parts = if valid.intersects(&query.time_interval()) {
             vec![GdalLoadingInfoTemporalSlice {
                 time: valid,
                 params: Some(self.params.clone()),
@@ -39,17 +39,17 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             vec![]
         };
 
-        let known_time_before = if query.time_interval.start() < valid.start() {
+        let known_time_before = if query.time_interval().start() < valid.start() {
             TimeInstance::MIN
-        } else if query.time_interval.start() < valid.end() {
+        } else if query.time_interval().start() < valid.end() {
             valid.start()
         } else {
             valid.end()
         };
 
-        let known_time_after = if query.time_interval.end() <= valid.start() {
+        let known_time_after = if query.time_interval().end() <= valid.start() {
             valid.start()
-        } else if query.time_interval.end() <= valid.end() {
+        } else if query.time_interval().end() <= valid.end() {
             valid.end()
         } else {
             TimeInstance::MAX
@@ -106,7 +106,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         TimeStepIter::new_with_interval(data_time, step)?
             .into_intervals(step, data_time.end())
             .for_each(|time_interval| {
-                if time_interval.contains(&query.time_interval) {
+                if time_interval.contains(&query.time_interval()) {
                     let t1 = time_interval.start();
                     let t2 = time_interval.end();
                     known_time_start = Some(t1);
@@ -114,18 +114,18 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                     return;
                 }
 
-                if time_interval.end() <= query.time_interval.start() {
+                if time_interval.end() <= query.time_interval().start() {
                     let t1 = time_interval.end();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
-                } else if time_interval.start() <= query.time_interval.start() {
+                } else if time_interval.start() <= query.time_interval().start() {
                     let t1 = time_interval.start();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
                 }
 
-                if time_interval.start() >= query.time_interval.end() {
+                if time_interval.start() >= query.time_interval().end() {
                     let t2 = time_interval.start();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                } else if time_interval.end() >= query.time_interval.end() {
+                } else if time_interval.end() >= query.time_interval().end() {
                     let t2 = time_interval.end();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                 }
@@ -140,7 +140,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 self.params.clone(),
                 self.time_placeholders.clone(),
                 self.step,
-                query.time_interval,
+                query.time_interval(),
                 self.data_time,
                 self.cache_ttl,
             )?),
@@ -204,10 +204,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
         let snapped_start = self
             .step
-            .snap_relative(self.start, query.time_interval.start())?;
+            .snap_relative(self.start, query.time_interval().start())?;
 
         let snapped_interval =
-            TimeInterval::new_unchecked(snapped_start, query.time_interval.end()); // TODO: snap end?
+            TimeInterval::new_unchecked(snapped_start, query.time_interval().end()); // TODO: snap end?
 
         let time_iterator = TimeStepIter::new_with_interval(snapped_interval, self.step)?;
 
@@ -262,7 +262,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
                     "time_interval {time_interval} is an instant!"
                 );
 
-                if time_interval.contains(&query.time_interval) {
+                if time_interval.contains(&query.time_interval()) {
                     let t1 = time_interval.start();
                     let t2 = time_interval.end();
                     known_time_start = Some(t1);
@@ -270,32 +270,32 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
                     return;
                 }
 
-                if time_interval.end() <= query.time_interval.start() {
+                if time_interval.end() <= query.time_interval().start() {
                     let t1 = time_interval.end();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
-                } else if time_interval.start() <= query.time_interval.start() {
+                } else if time_interval.start() <= query.time_interval().start() {
                     let t1 = time_interval.start();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
                 }
 
-                if query.time_interval.is_instant() {
+                if query.time_interval().is_instant() {
                     // be carefull not to use instant ends...
-                    if time_interval.start() > query.time_interval.end() {
+                    if time_interval.start() > query.time_interval().end() {
                         let t2 = time_interval.start();
                         known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                    } else if time_interval.end() > query.time_interval.end() {
+                    } else if time_interval.end() > query.time_interval().end() {
                         let t2 = time_interval.end();
                         known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                     }
-                } else if time_interval.start() >= query.time_interval.end() {
+                } else if time_interval.start() >= query.time_interval().end() {
                     let t2 = time_interval.start();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                } else if time_interval.end() >= query.time_interval.end() {
+                } else if time_interval.end() >= query.time_interval().end() {
                     let t2 = time_interval.end();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                 }
             })
-            .filter(|m| m.time.intersects(&query.time_interval))
+            .filter(|m| m.time.intersects(&query.time_interval()))
             .cloned()
             .collect::<Vec<_>>();
 

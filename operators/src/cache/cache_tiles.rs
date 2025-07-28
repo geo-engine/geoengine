@@ -196,12 +196,12 @@ where
     }
 
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError> {
-        let stored_spatial_query_mut = query.spatial_query_mut();
+        let stored_spatial_query_mut = query.spatial_bounds_mut();
 
         stored_spatial_query_mut.extend(&self.tile_information().global_pixel_bounds());
 
-        query.time_interval = query
-            .time_interval
+        *query.time_interval_mut() = query
+            .time_interval()
             .union(&self.time)
             .map_err(|_| CacheError::ElementAndQueryDoNotIntersect)?;
         Ok(())
@@ -211,8 +211,8 @@ where
         self.tile_information()
             .global_pixel_bounds()
             .intersects(&query.grid_bounds())
-            && self.time.intersects(&query.time_interval)
-            && query.attributes.as_slice().contains(&self.band)
+            && self.time.intersects(&query.time_interval())
+            && query.attributes().as_slice().contains(&self.band)
     }
 }
 

@@ -11,25 +11,25 @@ use snafu::ensure;
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct QueryRectangle<SpatialBounds, AttributeSelection: QueryAttributeSelection> {
-    pub spatial_bounds: SpatialBounds,
-    pub time_interval: TimeInterval,
-    pub attributes: AttributeSelection,
+    spatial_bounds: SpatialBounds,
+    time_interval: TimeInterval,
+    attributes: AttributeSelection,
 }
 
 impl<SpatialBounds: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialBounds, A> {
-    pub fn spatial_query(&self) -> SpatialBounds {
-        self.spatial_bounds
-    }
-
-    pub fn temporal_query(&self) -> TimeInterval {
+    pub fn time_interval(&self) -> TimeInterval {
         self.time_interval
     }
 
-    pub fn spatial_query_mut(&mut self) -> &mut SpatialBounds {
+    pub fn spatial_bounds(&self) -> SpatialBounds {
+        self.spatial_bounds
+    }
+
+    pub fn spatial_bounds_mut(&mut self) -> &mut SpatialBounds {
         &mut self.spatial_bounds
     }
 
-    pub fn temporal_query_mut(&mut self) -> &mut TimeInterval {
+    pub fn time_interval_mut(&mut self) -> &mut TimeInterval {
         &mut self.time_interval
     }
 
@@ -86,10 +86,6 @@ where
             .expect("Bounds are already valid");
 
         QueryRectangle::with_bounds(bounding_box, raster_query.time_interval, attributes)
-    }
-
-    pub fn spatial_bounds(&self) -> BoundingBox2D {
-        self.spatial_bounds
     }
 }
 
