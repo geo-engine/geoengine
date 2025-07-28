@@ -18,8 +18,8 @@ pub mod openapi_visitors;
 pub mod operators;
 pub mod parsing;
 pub mod postgres;
-pub mod server;
 pub mod sentinel_2_utm_zones;
+pub mod server;
 // TODO: refactor to be gated by `#[cfg(test)]`
 pub mod tests;
 #[cfg(test)]
