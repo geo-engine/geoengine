@@ -448,7 +448,7 @@ mod tests {
         let left_processor = left.query_processor().unwrap().multi_point().unwrap();
         let right_processor = right.query_processor().unwrap().data().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

@@ -504,7 +504,7 @@ mod tests {
             .multi_line_string()
             .unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -622,11 +622,7 @@ mod tests {
         let query_context = MockQueryContext::test_default();
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &query_context,
             )
             .await

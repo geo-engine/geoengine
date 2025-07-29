@@ -132,7 +132,7 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     let output_cache_hint = CacheHint::max_duration();
 
     let output_grid =
-        GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(query_rect.grid_bounds());
+        GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(query_rect.spatial_bounds());
 
     let accu = Ok((output_grid, output_cache_hint));
 
@@ -167,7 +167,7 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     let rgb_channel_count = query_rect.attributes().count() as usize;
     let no_data_color = rgb_params.no_data_color;
     let tile_template: GridOrEmpty<GridBoundingBox2D, u32> =
-        GridOrEmpty::new_empty_shape(query_rect.grid_bounds());
+        GridOrEmpty::new_empty_shape(query_rect.spatial_bounds());
     let output_cache_hint = CacheHint::max_duration();
     let red_band_index = band_positions[0];
     let green_band_index = band_positions[1];
@@ -385,7 +385,7 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-800, -100], [-199, 499]).unwrap(),
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             BandSelection::first(),

@@ -136,7 +136,7 @@ where
             .tiling_geo_transform()
             .bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             pixel_bounds,
             time_interval,
             BandSelection::first_n(column_names.len() as u32),
@@ -525,7 +525,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_instant,
                     ColumnSelection::all(),
@@ -631,7 +631,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
@@ -749,7 +749,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(),
                     ColumnSelection::all(),
@@ -866,7 +866,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
@@ -1064,7 +1064,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),
@@ -1284,7 +1284,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),
@@ -1600,7 +1600,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),

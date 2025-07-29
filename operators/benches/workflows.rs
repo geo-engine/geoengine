@@ -286,8 +286,8 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
             tiling_spec.tile_size_in_pixels,
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
-        let tile_iter =
-            tileing_strategy.tile_information_iterator_from_grid_bounds(query_rect.grid_bounds());
+        let tile_iter = tileing_strategy
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
 
         let mock_data = tile_iter
             .enumerate()
@@ -316,7 +316,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     None,
                     SpatialGridDescriptor::source_from_parts(
                         tileing_strategy.geo_transform,
-                        query_rect.grid_bounds(),
+                        query_rect.spatial_bounds(),
                     ),
                     RasterBandDescriptors::new_single_band(),
                 ),
@@ -325,7 +325,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         .boxed()
     }
 
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-18000, -9000], [17999, 8999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
@@ -360,8 +360,8 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             tiling_spec.tile_size_in_pixels,
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
-        let tile_iter =
-            tileing_strategy.tile_information_iterator_from_grid_bounds(query_rect.grid_bounds());
+        let tile_iter = tileing_strategy
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
 
         let mock_data = tile_iter
             .enumerate()
@@ -390,7 +390,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     None,
                     SpatialGridDescriptor::source_from_parts(
                         tileing_strategy.geo_transform,
-                        query_rect.grid_bounds(),
+                        query_rect.spatial_bounds(),
                     ),
                     RasterBandDescriptors::new_single_band(),
                 ),
@@ -422,7 +422,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         .boxed()
     }
 
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-18000, -9000], [17999, 8999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
@@ -462,8 +462,8 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
             tiling_spec.tile_size_in_pixels,
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
-        let tile_iter =
-            tileing_strategy.tile_information_iterator_from_grid_bounds(query_rect.grid_bounds());
+        let tile_iter = tileing_strategy
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -491,7 +491,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     None,
                     SpatialGridDescriptor::source_from_parts(
                         tileing_strategy.geo_transform,
-                        query_rect.grid_bounds(),
+                        query_rect.spatial_bounds(),
                     ),
                     RasterBandDescriptors::new_single_band(),
                 ),
@@ -509,7 +509,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
         .boxed()
     }
 
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-18000, -9000], [17999, 8999]).unwrap(), // TODO: should be output bounds?
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),

@@ -374,7 +374,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -516,7 +516,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),

@@ -411,7 +411,7 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             [0, 1].try_into().unwrap(),

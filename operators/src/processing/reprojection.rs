@@ -365,8 +365,7 @@ where
         let rewritten_spatial_query =
             reproject_spatial_query(query.spatial_bounds(), self.from, self.to)?;
 
-        let rewritten_query = rewritten_spatial_query
-            .map(|rwq| VectorQueryRectangle::new(rwq, query.time_interval(), *query.attributes()));
+        let rewritten_query = rewritten_spatial_query.map(|rwq| query.select_spatial_bounds(rwq));
 
         if let Some(rewritten_query) = rewritten_query {
             Ok(self
@@ -767,7 +766,7 @@ mod tests {
 
         let query_processor = query_processor.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -843,7 +842,7 @@ mod tests {
 
         let query_processor = query_processor.multi_line_string().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -926,7 +925,7 @@ mod tests {
 
         let query_processor = query_processor.multi_polygon().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -1092,7 +1091,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
@@ -1180,11 +1179,7 @@ mod tests {
         let query_bounds =
             GridBoundingBox2D::new(query_tl_pixel, query_tl_pixel + [511, 511]).unwrap();
 
-        let qrect = RasterQueryRectangle::new_with_grid_bounds(
-            query_bounds,
-            time_interval,
-            BandSelection::first(),
-        );
+        let qrect = RasterQueryRectangle::new(query_bounds, time_interval, BandSelection::first());
 
         let qs = qp.raster_query(qrect.clone(), &query_ctx).await.unwrap();
 
@@ -1235,7 +1230,7 @@ mod tests {
 
     #[test]
     fn query_rewrite_4326_3857() {
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -1358,7 +1353,7 @@ mod tests {
 
         let qs = qp
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     qr.spatial_grid_descriptor()
                         .tiling_grid_definition(query_ctx.tiling_specification())
                         .tiling_grid_bounds(),
@@ -1462,7 +1457,7 @@ mod tests {
 
         let result = qp
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new_min_max(500, 1000, 500, 1000).unwrap(),
                     time_interval,
                     BandSelection::first(),
@@ -1533,7 +1528,7 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     spatial_bounds,
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -1613,7 +1608,7 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     spatial_bounds,
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -1694,7 +1689,7 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     spatial_bounds,
                     TimeInterval::default(),
                     ColumnSelection::all(),

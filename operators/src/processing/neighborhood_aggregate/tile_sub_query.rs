@@ -100,7 +100,7 @@ where
             pixel_bounds.x_max() + margin_x,
         )?;
 
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             larger_bounds,
             TimeInterval::new_instant(start_time)?,
             band_idx.into(),
@@ -380,7 +380,7 @@ mod tests {
             .next()
             .unwrap();
 
-        let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        let qrect = RasterQueryRectangle::new(
             tile_info.global_pixel_bounds(),
             TimeInstance::from_millis(0).unwrap().into(),
             BandSelection::first(),
@@ -403,7 +403,7 @@ mod tests {
         );
 
         assert_eq!(
-            tile_query_rectangle.grid_bounds(),
+            tile_query_rectangle.spatial_bounds(),
             GridBoundingBox2D::new([-514, -2], [1, 513]).unwrap()
         );
 

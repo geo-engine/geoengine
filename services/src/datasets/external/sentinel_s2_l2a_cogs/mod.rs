@@ -975,7 +975,7 @@ mod tests {
             .spatial_to_grid_bounds(&data_bounds);
 
         let loading_info = meta
-            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+            .loading_info(RasterQueryRectangle::new(
                 data_bounds_in_pixel_grid,
                 TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
                 BandSelection::first(),
@@ -1094,7 +1094,7 @@ mod tests {
             .tiling_geo_transform()
             .spatial_to_grid_bounds(&sp);
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             sp,
             TimeInterval::new_instant(DateTime::new_utc(2018, 10, 19, 13, 23, 25))?,
             BandSelection::first(),
@@ -1372,7 +1372,7 @@ mod tests {
         let sp: geoengine_datatypes::raster::GridBoundingBox<[isize; 2]> =
             tiling_geo_transform.spatial_to_grid_bounds(&data_bounds);
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             sp,
             TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44)).unwrap(),
             BandSelection::first(),
@@ -1474,7 +1474,7 @@ mod tests {
 
         let stream = gdal_source
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     sp,
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
                     BandSelection::first(),

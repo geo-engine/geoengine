@@ -2213,7 +2213,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -2408,7 +2408,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -2542,7 +2542,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -2645,7 +2645,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
@@ -3014,7 +3014,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
@@ -3133,7 +3133,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
@@ -3244,7 +3244,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::new_instant(1_517_011_200_000).unwrap(),
                 ColumnSelection::all(),
@@ -3287,7 +3287,7 @@ mod tests {
                 return Err(format!("{result:?} != {expected:?}"));
             }
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::new_instant(1_517_443_200_000).unwrap(),
                 ColumnSelection::all(),
@@ -3384,7 +3384,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::new(
                     TimeInstance::from_millis_unchecked(1_517_011_200_000),
@@ -3431,7 +3431,7 @@ mod tests {
                 return Err(format!("{result:?} != {expected:?}"));
             }
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::new(
                     TimeInstance::from_millis_unchecked(1_517_011_200_000),

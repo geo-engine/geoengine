@@ -180,7 +180,7 @@ mod tests {
             unreachable!();
         };
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             Default::default(),
             ColumnSelection::all(),
@@ -260,7 +260,7 @@ mod tests {
             unreachable!();
         };
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             Default::default(),
             ColumnSelection::all(),

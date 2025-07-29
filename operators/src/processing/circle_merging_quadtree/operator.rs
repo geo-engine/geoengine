@@ -557,7 +557,7 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -640,7 +640,7 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -724,7 +724,7 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -816,7 +816,7 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -923,7 +923,7 @@ mod tests {
 
         let query_context = MockQueryContext::test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

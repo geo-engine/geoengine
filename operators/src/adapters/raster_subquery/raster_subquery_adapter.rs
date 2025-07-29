@@ -562,7 +562,7 @@ where
         start_time: TimeInstance,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             tile_info.global_pixel_bounds(),
             TimeInterval::new_instant(start_time)?,
             band_idx.into(),

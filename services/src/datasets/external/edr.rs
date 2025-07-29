@@ -1663,7 +1663,7 @@ mod tests {
         .await
         .unwrap();
         let loading_info = meta
-            .loading_info(VectorQueryRectangle::with_bounds(
+            .loading_info(VectorQueryRectangle::new(
                 BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                 TimeInterval::default(),
                 ColumnSelection::all(),
@@ -1791,7 +1791,7 @@ mod tests {
             };
 
             let loading_info_parts = meta
-                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                .loading_info(RasterQueryRectangle::new(
                     GridBoundingBox2D::new([0, 0], [361, 720]).unwrap(),
                     TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000),
                     BandSelection::first(),

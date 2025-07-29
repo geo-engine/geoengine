@@ -532,7 +532,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -588,7 +588,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -655,7 +655,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -743,7 +743,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -828,7 +828,7 @@ mod tests {
         .await
         .unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

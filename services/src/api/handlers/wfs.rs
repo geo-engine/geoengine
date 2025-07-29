@@ -519,7 +519,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 
     let processor = initialized.query_processor()?;
 
-    let query_rect = VectorQueryRectangle::with_bounds(
+    let query_rect = VectorQueryRectangle::new(
         request.bbox.bounds_naive()?,
         request.time.unwrap_or_else(default_time_from_config).into(),
         ColumnSelection::all(),

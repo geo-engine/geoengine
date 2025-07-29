@@ -797,7 +797,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -885,7 +885,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -975,7 +975,7 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
                 TimeInterval::default(),
                 ColumnSelection::all(),
@@ -1057,7 +1057,7 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
                 TimeInterval::default(),
                 ColumnSelection::all(),
@@ -1153,7 +1153,7 @@ mod tests {
                     .boxed()
                     .into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (0., 0.).into(),
                     (NUMBER_OF_ROWS as f64, NUMBER_OF_ROWS as f64).into(),

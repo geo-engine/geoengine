@@ -2432,7 +2432,7 @@ mod tests {
 
         let ctx = MockQueryContext::test_default();
 
-        let qr = VectorQueryRectangle::with_bounds(
+        let qr = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

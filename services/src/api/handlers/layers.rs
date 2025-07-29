@@ -1953,7 +1953,7 @@ mod tests {
                 tile_size_in_pixels: GridShape::new([2, 2]),
             };
 
-            let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+            let query_rectangle = RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 1).unwrap(),
                 TimeInterval::new_unchecked(
                     1_671_868_800_000 - i64::from(time_shift_millis),

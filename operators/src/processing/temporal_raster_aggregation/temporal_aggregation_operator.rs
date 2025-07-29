@@ -562,7 +562,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
@@ -687,7 +687,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
@@ -812,7 +812,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
@@ -937,7 +937,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
@@ -1070,7 +1070,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
@@ -1152,7 +1152,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -1256,7 +1256,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -1361,7 +1361,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -1466,7 +1466,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -1571,7 +1571,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -1676,7 +1676,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -1782,7 +1782,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -1906,7 +1906,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -2011,7 +2011,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -2128,7 +2128,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -2265,7 +2265,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -2389,7 +2389,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -2494,7 +2494,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
@@ -2599,7 +2599,7 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(5, 5),
             BandSelection::first(),
@@ -2897,7 +2897,7 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             [0, 1].try_into().unwrap(),
@@ -3073,7 +3073,7 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),

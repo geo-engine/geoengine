@@ -388,7 +388,7 @@ where
         )
         .expect("max bounds must be larger then min bounds already");
 
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             enlarged_input_pixel_bounds,
             TimeInterval::new_instant(start_time)?,
             BandSelection::new_single(band_idx),
@@ -623,7 +623,7 @@ mod tests {
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-4, 0], [-1, 7]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
@@ -784,7 +784,7 @@ mod tests {
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
@@ -838,7 +838,7 @@ mod tests {
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-4, 0], [-1, 7]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             [0, 1].try_into().unwrap(),

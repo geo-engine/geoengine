@@ -461,7 +461,7 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
@@ -512,7 +512,7 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
@@ -701,7 +701,7 @@ mod tests {
         let result_descriptor = processor.result_descriptor();
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             result_descriptor
                 .tiling_grid_definition(query_ctx.tiling_specification())
                 .tiling_geo_transform()
@@ -775,7 +775,7 @@ mod tests {
 
         let query_ctx = MockQueryContext::test_default();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             result_descriptor
                 .tiling_grid_definition(query_ctx.tiling_specification())
                 .tiling_geo_transform()
@@ -850,7 +850,7 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::new(vec![0, 2]).unwrap(),

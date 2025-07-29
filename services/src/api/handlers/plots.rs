@@ -130,11 +130,8 @@ async fn get_plot_handler<C: ApplicationContext>(
     let request_spatial_ref: SpatialReference =
         params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
-    let query_rect = PlotQueryRectangle::with_bounds(
-        params.bbox,
-        params.time.into(),
-        PlotSeriesSelection::all(),
-    );
+    let query_rect =
+        PlotQueryRectangle::new(params.bbox, params.time.into(), PlotSeriesSelection::all());
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
         Some(query_rect)

@@ -81,7 +81,7 @@ async fn main() {
         .unwrap();
 
     // World in 36000x18000 pixels",
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),

@@ -1743,7 +1743,7 @@ mod tests {
 
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -3012,7 +3012,7 @@ mod tests {
 
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),

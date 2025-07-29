@@ -556,7 +556,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
         .tiling_grid_definition(execution_context.tiling_specification())
         .tiling_geo_transform()
         .spatial_to_grid_bounds(&query.spatial_bounds);
-    let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+    let query_rectangle = RasterQueryRectangle::new(
         query_bounds,
         query.time_interval.into(),
         query.attributes.clone().try_into()?,
@@ -667,7 +667,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
         .get_vector()
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
-    let query_rectangle = VectorQueryRectangle::with_bounds(
+    let query_rectangle = VectorQueryRectangle::new(
         query.spatial_bounds,
         query.time_interval.into(),
         ColumnSelection::all(),
@@ -1546,7 +1546,7 @@ mod tests {
         }
         .boxed();
 
-        let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rectangle = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-512, -1, 0, 511).unwrap(),
             TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_000 + 1000),
             geoengine_datatypes::primitives::BandSelection::first(),

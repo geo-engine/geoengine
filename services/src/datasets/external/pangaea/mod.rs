@@ -515,7 +515,7 @@ mod tests {
             panic!("Expected Data QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -579,7 +579,7 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -654,7 +654,7 @@ mod tests {
             panic!("Expected MultiPolygon QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -724,7 +724,7 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

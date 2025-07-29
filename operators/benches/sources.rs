@@ -200,7 +200,7 @@ fn bench_no_data_tiles() {
     let qrects = vec![
         (
             "1 tile",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-60, 0], [-1, 59]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -208,7 +208,7 @@ fn bench_no_data_tiles() {
         ),
         (
             "2 tiles",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-50, 0], [9, 59]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -216,7 +216,7 @@ fn bench_no_data_tiles() {
         ),
         (
             "4 tiles",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-55, -5], [9, 54]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -224,7 +224,7 @@ fn bench_no_data_tiles() {
         ),
         (
             "2 tiles, 2 no-data tiles",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-120, 130], [59, 189]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -232,7 +232,7 @@ fn bench_no_data_tiles() {
         ),
         (
             "empty tiles",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-50, -5], [-9, 54]).unwrap(),
                 TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -263,7 +263,7 @@ fn bench_no_data_tiles() {
 fn bench_tile_size() {
     let qrects = vec![(
         "World in 36000x18000 pixels",
-        RasterQueryRectangle::new_with_grid_bounds(
+        RasterQueryRectangle::new(
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             BandSelection::first(),

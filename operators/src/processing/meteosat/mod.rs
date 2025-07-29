@@ -124,7 +124,7 @@ mod test_util {
     }
 
     pub(crate) fn _create_gdal_query() -> RasterQueryRectangle {
-        RasterQueryRectangle::new_with_grid_bounds(
+        RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(0, 599, 0, 599).unwrap(),
             TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 0, 0)),
@@ -135,7 +135,7 @@ mod test_util {
     }
 
     pub(crate) fn create_mock_query() -> RasterQueryRectangle {
-        RasterQueryRectangle::new_with_grid_bounds(
+        RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
             Default::default(),
             BandSelection::first(),

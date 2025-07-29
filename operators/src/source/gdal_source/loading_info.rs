@@ -726,7 +726,7 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                .loading_info(RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(0, 30),
                     BandSelection::first()
@@ -765,7 +765,7 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                .loading_info(RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::first()
@@ -806,7 +806,7 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                .loading_info(RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(-10, -5),
                     BandSelection::first()
@@ -832,7 +832,7 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                .loading_info(RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(50, 55),
                     BandSelection::first()
@@ -858,7 +858,7 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                .loading_info(RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(0, 22),
                     BandSelection::first()
@@ -893,7 +893,7 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                .loading_info(RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     BandSelection::first()
@@ -1012,7 +1012,7 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+                .loading_info(RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
                     TimeInterval::new_unchecked(0, 3),
                     BandSelection::first()
@@ -1078,7 +1078,7 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
             TimeInterval::new(time_start, time_end).unwrap(),
             BandSelection::first(),
@@ -1147,7 +1147,7 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
             TimeInterval::new(time_start, time_end).unwrap(),
             BandSelection::first(),
@@ -1216,7 +1216,7 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
             TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2009, 7, 1, 0, 0, 0)),

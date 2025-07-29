@@ -100,7 +100,7 @@ where
             .out_spatial_grid
             .grid_bounds()
             .intersection(&tile_info.global_pixel_bounds())
-            .and_then(|b| b.intersection(&query_rect.grid_bounds()));
+            .and_then(|b| b.intersection(&query_rect.spatial_bounds()));
 
         let valid_spatial_bounds = valid_pixel_bounds.map(|pb| {
             self.state
@@ -114,7 +114,7 @@ where
             let projected_bounds = bounds.reproject(&proj);
 
             match projected_bounds {
-                Ok(pb) => Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+                Ok(pb) => Ok(Some(RasterQueryRectangle::new(
                     self.state
                         .in_spatial_grid
                         .geo_transform()
@@ -469,7 +469,7 @@ mod tests {
         }
         .boxed();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),

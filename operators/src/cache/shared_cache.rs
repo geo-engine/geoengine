@@ -853,8 +853,8 @@ pub trait CacheQueryMatch<RHS = Self> {
 
 impl CacheQueryMatch for RasterQueryRectangle {
     fn is_match(&self, query: &RasterQueryRectangle) -> bool {
-        let cache_spatial_query = self.grid_bounds();
-        let query_spatial_query = query.grid_bounds();
+        let cache_spatial_query = self.spatial_bounds();
+        let query_spatial_query = query.spatial_bounds();
 
         cache_spatial_query.contains(&query_spatial_query)
             && self.time_interval().contains(&query.time_interval())
@@ -1105,7 +1105,7 @@ mod tests {
     }
 
     fn query_rect() -> RasterQueryRectangle {
-        RasterQueryRectangle::new_with_grid_bounds(
+        RasterQueryRectangle::new(
             GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
             TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             BandSelection::first(),

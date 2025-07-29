@@ -172,19 +172,19 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
         let query_time = query.time_interval();
 
         if let MultiPoint(points_processor) = &self.input {
-            let query_grid_bounds = query.grid_bounds();
+            let query_grid_bounds = query.spatial_bounds();
             let query_spatial_partition =
                 tiling_geo_transform.grid_to_spatial_bounds(&query_grid_bounds);
 
             let tiles = stream::iter(
-                tiling_strategy.tile_information_iterator_from_grid_bounds(query.grid_bounds()),
+                tiling_strategy.tile_information_iterator_from_grid_bounds(query.spatial_bounds()),
             )
             .then(move |tile_info| async move {
                 let tile_spatial_bounds = tile_info.spatial_partition();
 
                 let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
 
-                let vector_query = VectorQueryRectangle::with_bounds(
+                let vector_query = VectorQueryRectangle::new(
                     tile_spatial_bounds.as_bbox(),
                     query_time,
                     ColumnSelection::all(), // FIXME: should be configurable
@@ -257,7 +257,7 @@ fn generate_zeroed_tiles<'a>(
 
     stream::iter(
         tiling_strategy
-            .tile_information_iterator_from_grid_bounds(query.grid_bounds())
+            .tile_information_iterator_from_grid_bounds(query.spatial_bounds())
             .map(move |tile_info| {
                 let tile_data = vec![0.; tile_shape.number_of_elements()];
                 let tile_grid = Grid2D::new(tile_shape, tile_data)
@@ -349,7 +349,7 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, -2], [1, 1]).unwrap(),
             Default::default(),
             BandSelection::first(),
@@ -408,7 +408,7 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, 1, -2, 1).unwrap(),
             Default::default(),
             BandSelection::first(),

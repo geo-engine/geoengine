@@ -655,7 +655,7 @@ where
 
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
 
-        let query_pixel_bounds = query.grid_bounds();
+        let query_pixel_bounds = query.spatial_bounds();
 
         let mut empty = false;
 
@@ -737,7 +737,7 @@ where
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             stream::iter(skipping_loading_info),
-            query.grid_bounds(),
+            query.spatial_bounds(),
             tiling_strategy,
             reader_mode,
         );

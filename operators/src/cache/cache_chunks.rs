@@ -561,7 +561,7 @@ mod tests {
     #[test]
     fn landing_zone_to_cache_entry() {
         let cols = create_test_collection();
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -583,7 +583,7 @@ mod tests {
         let cols = create_test_collection();
 
         // elemtes are all fully contained
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((0., 0.).into(), (12., 12.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -594,7 +594,7 @@ mod tests {
         }
 
         // first element is not contained
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -605,7 +605,7 @@ mod tests {
         }
 
         // all elements are not contained
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((13., 13.).into(), (26., 26.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -619,7 +619,7 @@ mod tests {
     fn cache_entry_matches() {
         let cols = create_test_collection();
 
-        let cache_entry_bounds = VectorQueryRectangle::with_bounds(
+        let cache_entry_bounds = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((1., 1.).into(), (11., 11.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -635,7 +635,7 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained
-        let query2 = VectorQueryRectangle::with_bounds(
+        let query2 = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -643,7 +643,7 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query2));
 
         // query is exceeds cached bounds
-        let query3 = VectorQueryRectangle::with_bounds(
+        let query3 = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((0., 0.).into(), (8., 8.).into()),
             Default::default(),
             ColumnSelection::all(),

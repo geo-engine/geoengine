@@ -66,7 +66,7 @@ async fn main() {
 
     let stream = processor
         .query(
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
                 TimeInterval::default(),
                 BandSelection::first(),
@@ -86,7 +86,7 @@ async fn main() {
 
     let stream_from_cache = processor
         .query(
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
                 TimeInterval::default(),
                 BandSelection::first(),

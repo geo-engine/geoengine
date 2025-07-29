@@ -210,7 +210,7 @@ where
     fn intersects_query(&self, query: &Self::Query) -> bool {
         self.tile_information()
             .global_pixel_bounds()
-            .intersects(&query.grid_bounds())
+            .intersects(&query.spatial_bounds())
             && self.time.intersects(&query.time_interval())
             && query.attributes().as_slice().contains(&self.band)
     }
@@ -668,7 +668,7 @@ mod tests {
     #[test]
     fn landing_zone_to_cache_entry() {
         let tile = create_test_tile();
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             Default::default(),
             BandSelection::first(),
@@ -687,7 +687,7 @@ mod tests {
         let tile = create_test_tile();
 
         // tile is fully contained
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             Default::default(),
             BandSelection::first(),
@@ -695,7 +695,7 @@ mod tests {
         assert!(tile.intersects_query(&query));
 
         // tile is partially contained
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-1, -1], [0, 0]).unwrap(),
             Default::default(),
             BandSelection::first(),
@@ -703,7 +703,7 @@ mod tests {
         assert!(tile.intersects_query(&query));
 
         // tile is not contained
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([10, 10], [11, 11]).unwrap(),
             Default::default(),
             BandSelection::first(),
@@ -713,7 +713,7 @@ mod tests {
 
     #[test]
     fn cache_entry_matches() {
-        let cache_entry_bounds = RasterQueryRectangle::new_with_grid_bounds(
+        let cache_entry_bounds = RasterQueryRectangle::new(
             GridBoundingBox2D::new([0, 0], [10, 10]).unwrap(),
             Default::default(),
             BandSelection::first(),
@@ -728,7 +728,7 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained
-        let query2 = RasterQueryRectangle::new_with_grid_bounds(
+        let query2 = RasterQueryRectangle::new(
             GridBoundingBox2D::new([1, 1], [9, 9]).unwrap(),
             Default::default(),
             BandSelection::first(),
@@ -736,7 +736,7 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query2));
 
         // query is exceeds cached bounds
-        let query3 = RasterQueryRectangle::new_with_grid_bounds(
+        let query3 = RasterQueryRectangle::new(
             GridBoundingBox2D::new([0, 0], [11, 11]).unwrap(),
             Default::default(),
             BandSelection::first(),

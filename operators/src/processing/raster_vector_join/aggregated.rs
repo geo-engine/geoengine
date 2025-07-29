@@ -102,7 +102,7 @@ where
                 .tiling_geo_transform()
                 .bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
 
-            let raster_query = RasterQueryRectangle::new_with_grid_bounds(
+            let raster_query = RasterQueryRectangle::new(
                 pixel_bounds,
                 time_span.time_interval,
                 BandSelection::first(), // FIXME: this should prop. use all bands?
@@ -386,7 +386,7 @@ mod tests {
             false,
             TemporalAggregationMethod::First,
             false,
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.).into()).unwrap(),
                 Default::default(),
                 ColumnSelection::all(),
@@ -484,7 +484,7 @@ mod tests {
             false,
             TemporalAggregationMethod::Mean,
             false,
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0.0, -3.0).into(), (2.0, 0.0).into()).unwrap(),
                 TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
@@ -609,7 +609,7 @@ mod tests {
             false,
             TemporalAggregationMethod::Mean,
             false,
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
@@ -770,7 +770,7 @@ mod tests {
             false,
             TemporalAggregationMethod::Mean,
             false,
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                 TimeInterval::new(0, 20).unwrap(),
                 ColumnSelection::all(),
@@ -1055,7 +1055,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),

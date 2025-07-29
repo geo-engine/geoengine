@@ -70,11 +70,7 @@ where
         ctx: &'b dyn QueryContext,
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
         // rewrite query to request all input bands from the source. They are all combined in the single output band by means of the expression.
-        let source_query = RasterQueryRectangle::new(
-            query.spatial_bounds(),
-            query.time_interval(),
-            BandSelection::first_n(Tuple::num_bands()),
-        );
+        let source_query = query.select_attributes(BandSelection::first_n(Tuple::num_bands()));
 
         let stream =
             self.sources

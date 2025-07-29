@@ -377,7 +377,7 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new(
             GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             TimeInterval::default(),
             BandSelection::first(),
@@ -491,7 +491,7 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new(
             GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             TimeInterval::default(),
             BandSelection::first(),

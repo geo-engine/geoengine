@@ -2198,7 +2198,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2253,7 +2253,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
                     Default::default(),
                     ColumnSelection::all(),
@@ -2302,7 +2302,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
                     Default::default(),
                     ColumnSelection::all(),
@@ -2356,7 +2356,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2441,7 +2441,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2540,7 +2540,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2642,7 +2642,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2795,7 +2795,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2969,7 +2969,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -4155,7 +4155,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -4277,7 +4277,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -4486,11 +4486,7 @@ mod tests {
         let context1 = exe_ctx.mock_query_context(ChunkByteSize::MIN);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context1,
             )
             .await
@@ -4520,11 +4516,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1_650).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -4637,11 +4629,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MIN);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -4726,11 +4714,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -4846,11 +4830,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -4973,11 +4953,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5098,11 +5074,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5223,11 +5195,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5344,11 +5312,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5478,11 +5442,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5598,11 +5558,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5712,7 +5668,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -5842,7 +5798,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -5961,7 +5917,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6080,7 +6036,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6203,7 +6159,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6325,7 +6281,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6462,7 +6418,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6581,7 +6537,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6692,7 +6648,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6789,7 +6745,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6883,7 +6839,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -6977,7 +6933,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -7071,7 +7027,7 @@ mod tests {
             MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),

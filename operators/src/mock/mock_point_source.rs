@@ -216,7 +216,7 @@ mod tests {
             panic!()
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

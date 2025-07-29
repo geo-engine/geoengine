@@ -347,7 +347,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             },
         );
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             request.time.unwrap_or_else(default_time_from_config).into(),
             attributes,
@@ -634,7 +634,7 @@ mod tests {
 
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
                 geoengine_datatypes::primitives::TimeInterval::new(
                     1_388_534_400_000,

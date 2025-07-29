@@ -474,7 +474,7 @@ mod tests {
 
         let stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::first(),
@@ -495,7 +495,7 @@ mod tests {
 
         let stream_from_cache = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::first(),
@@ -575,7 +575,7 @@ mod tests {
         // query the first two bands
         let stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::new(vec![0, 1]).unwrap(),
@@ -609,7 +609,7 @@ mod tests {
         // now query only the second band
         let stream_from_cache = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::new_single(1),

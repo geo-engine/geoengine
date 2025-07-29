@@ -42,7 +42,7 @@ async fn pip(points: MultiPointCollection, polygons: MultiPolygonCollection, num
 
     let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-    let query_rectangle = VectorQueryRectangle::with_bounds(
+    let query_rectangle = VectorQueryRectangle::new(
         BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
         TimeInterval::default(),
         ColumnSelection::all(),

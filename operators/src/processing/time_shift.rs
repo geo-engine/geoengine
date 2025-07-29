@@ -506,11 +506,7 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval())?;
-        let query = RasterQueryRectangle::new(
-            query.spatial_bounds(),
-            time_interval,
-            query.attributes().clone(),
-        );
+        let query = query.select_time_interval(time_interval);
         let stream = self.processor.raster_query(query, ctx).await?;
 
         let stream = stream.map(move |raster| {
@@ -711,7 +707,7 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2009, 1, 1, 0, 0, 0),
@@ -801,7 +797,7 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
@@ -983,7 +979,7 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
@@ -1156,7 +1152,7 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
@@ -1246,7 +1242,7 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(), // Note: this is not the actual bounding box of the NDVI dataset. The pixel size is 0.1!
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
                     BandSelection::first(),
@@ -1304,7 +1300,7 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(), // Note: this is not the actual bounding box of the NDVI dataset. The pixel size is 0.1!
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
                     BandSelection::first(),

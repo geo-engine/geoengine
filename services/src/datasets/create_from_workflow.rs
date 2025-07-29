@@ -69,12 +69,11 @@ impl RasterDatasetFromWorkflowParams {
             .tiling_geo_transform()
             .spatial_to_grid_bounds(&query.spatial_bounds.into()); // TODO: somehow clean up api and inner structs
 
-        let raster_query =
-            geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
-                grid_bounds,
-                query.time_interval.into(),
-                BandSelection::first_n(result_descriptor.bands.len() as u32),
-            );
+        let raster_query = geoengine_datatypes::primitives::RasterQueryRectangle::new(
+            grid_bounds,
+            query.time_interval.into(),
+            BandSelection::first_n(result_descriptor.bands.len() as u32),
+        );
 
         Self {
             name: request.name,
@@ -287,7 +286,7 @@ async fn create_dataset<C: SessionContext>(
     let source_tiling_spatial_grid =
         origin_result_descriptor.tiling_grid_definition(exe_ctx.tiling_specification());
     let query_tiling_spatial_grid =
-        source_tiling_spatial_grid.with_other_bounds(query_rectangle.grid_bounds());
+        source_tiling_spatial_grid.with_other_bounds(query_rectangle.spatial_bounds());
     let result_descriptor_bounds = origin_result_descriptor
         .spatial_grid_descriptor()
         .intersection_with_tiling_grid(&query_tiling_spatial_grid)

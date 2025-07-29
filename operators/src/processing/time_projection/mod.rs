@@ -476,7 +476,7 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
@@ -580,7 +580,7 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),

@@ -147,7 +147,7 @@ where
 
     // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
     let band_streams = join_all(query.attributes().as_slice().iter().map(|band| {
-        let query = query.select_bands(BandSelection::new_single(*band));
+        let query = query.select_attributes(BandSelection::new_single(*band));
 
         async {
             Ok(SimpleRasterStackerSource {

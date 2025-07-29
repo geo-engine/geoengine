@@ -1278,7 +1278,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -1454,7 +1454,7 @@ mod tests {
                     bbox: None,
             },meta, vec![]);
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::default(),
                 ColumnSelection::all(),

@@ -257,9 +257,9 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         let spatial_bounds = SpatialGridDescriptor::new_source(spatial_grid)
             .tiling_grid_definition(tiling_specification)
             .tiling_geo_transform()
-            .grid_to_spatial_bounds(&query.grid_bounds());
+            .grid_to_spatial_bounds(&query.spatial_bounds());
 
-        let spatial_bounds_query = VectorQueryRectangle::with_bounds(
+        let spatial_bounds_query = VectorQueryRectangle::new(
             spatial_bounds.as_bbox(),
             query.time_interval(),
             ColumnSelection::all(),
@@ -507,7 +507,7 @@ mod tests {
 
         // time=2020-07-01T12%3A00%3A00.000Z/2020-07-03T12%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=256&HEIGHT=256&CRS=EPSG%3A32632&BBOX=482500%2C5627500%2C483500%2C5628500
         let loading_info = metadata
-            .crate_loading_info(VectorQueryRectangle::with_bounds(
+            .crate_loading_info(VectorQueryRectangle::new(
                 SpatialPartition2D::new_unchecked(
                     (482_500., 5_627_500.).into(),
                     (483_500., 5_628_500.).into(),

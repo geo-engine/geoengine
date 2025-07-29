@@ -589,7 +589,7 @@ x,y
             },
         };
 
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked(Coordinate2D::new(0., 0.), Coordinate2D::new(3., 3.)),
             TimeInterval::new_unchecked(0, 1),
             ColumnSelection::all(),
