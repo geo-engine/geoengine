@@ -41,10 +41,6 @@ pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
     create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
 }
 
-pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds() -> GdalMetaDataRegular {
-    create_ndvi_meta_data_with_cache_ttl(CacheTtlSeconds::default())
-}
-
 #[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
@@ -191,11 +187,7 @@ pub fn add_ndvi_dataset_cropped_to_valid_webmercator_bounds(
 ) -> NamedData {
     let id: DataId = DatasetId::new().into();
     let name = NamedData::with_system_name("ndvi_crop_y_85");
-    ctx.add_meta_data(
-        id,
-        name.clone(),
-        Box::new(create_ndvi_meta_data_cropped_to_valid_webmercator_bounds()),
-    );
+    ctx.add_meta_data(id, name.clone(), Box::new(create_ndvi_meta_data()));
     name
 }
 

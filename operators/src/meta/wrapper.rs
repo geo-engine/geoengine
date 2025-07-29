@@ -239,7 +239,7 @@ where
 impl<Q, T, S, A, R> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
     Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = A, ResultDescription = R>,
-    S: std::fmt::Debug + Send + Sync + 'static + Clone + Copy,
+    S: std::fmt::Display + Send + Sync + 'static + Clone + Copy,
     A: QueryAttributeSelection + 'static,
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = A>
         + 'static,
@@ -292,7 +292,7 @@ where
         tracing::trace!(
             event = %"query_start",
             path = %self.path,
-            bbox = %format!("{:?}", spbox), // FIXME: better format then debug here
+            bbox = %format!("{}", spbox),
             time = %format!("[{},{}]",
                 time.start().inner(),
                 time.end().inner()

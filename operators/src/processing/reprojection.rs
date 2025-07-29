@@ -148,14 +148,14 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         let out_spatial_grid = match params.derive_out_spec {
             DeriveOutRasterSpecsSource::DataBounds => in_desc
                 .spatial_grid_descriptor()
-                .reproject_clipped(&proj_from_to)?,
+                .reproject_clipped(&proj_from_to)?, // TODO: we could skip the intersection (clipped) and try to project larger area
             DeriveOutRasterSpecsSource::ProjectionBounds => {
                 let in_srs_area: SpatialPartition2D = in_srs.area_of_use_projected()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
                 let target_proj_total_grid = in_desc
                     .spatial_grid_descriptor()
                     .spatial_bounds_to_compatible_spatial_grid(in_srs_area)
                     .reproject_clipped(&proj_from_to)?;
-                // jetzt grid mit origin (tl) auf grid vom dataset. dann umprojeziren. Dann intersection mit boundingbox in dataset
+                // TODO: we could skip the intersection and try to project larger area
                 let spatial_bounds_proj =
                     in_desc.spatial_bounds().reproject_clipped(&proj_from_to)?;
                 target_proj_total_grid.and_then(|x| {
