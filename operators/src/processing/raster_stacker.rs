@@ -360,8 +360,8 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
-            SingleRasterSource, SpatialGridDescriptor,
+            MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, SingleRasterSource,
+            SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams},
@@ -532,7 +532,7 @@ mod tests {
             [0, 1].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -786,7 +786,7 @@ mod tests {
             [0, 1, 2, 3].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -961,7 +961,7 @@ mod tests {
             1.into(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1035,7 +1035,7 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         // query both bands
         let query_rect = RasterQueryRectangle::new(

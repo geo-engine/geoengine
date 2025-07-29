@@ -516,8 +516,8 @@ mod tests {
     use geoengine_datatypes::{collections::DataCollection, primitives::MultiPoint};
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, RasterBandDescriptors,
-        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, VectorOperator,
+        ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterOperator,
+        RasterResultDescriptor, SpatialGridDescriptor, VectorOperator,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
 
@@ -1208,7 +1208,7 @@ mod tests {
                     TimeInterval::new_instant(DateTime::new_utc(2013, 12, 1, 12, 0, 0)).unwrap(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::test_default(),
+                &execution_context.mock_query_context_test_default(),
             )
             .await
             .unwrap();
@@ -1288,7 +1288,7 @@ mod tests {
                     TimeInterval::new_instant(DateTime::new_utc(2013, 12, 1, 12, 0, 0)).unwrap(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::test_default(),
+                &execution_context.mock_query_context_test_default(),
             )
             .await
             .unwrap();
@@ -1361,7 +1361,7 @@ mod tests {
                     TimeInterval::new_instant(DateTime::new_utc(2013, 12, 1, 12, 0, 0)).unwrap(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::test_default(),
+                &execution_context.mock_query_context_test_default(),
             )
             .await
             .unwrap();
@@ -1446,7 +1446,7 @@ mod tests {
                     TimeInterval::new_instant(DateTime::new_utc(2013, 12, 1, 12, 0, 0)).unwrap(),
                     PlotSeriesSelection::all(),
                 ),
-                &MockQueryContext::test_default(),
+                &execution_context.mock_query_context_test_default(),
             )
             .await
             .unwrap();

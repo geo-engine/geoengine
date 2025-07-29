@@ -305,8 +305,8 @@ mod tests {
     use super::*;
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor, SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -466,7 +466,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 
@@ -517,7 +517,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 
@@ -773,7 +773,7 @@ mod tests {
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
         let result_descriptor = processor.result_descriptor();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_rect = RasterQueryRectangle::new(
             result_descriptor
@@ -855,7 +855,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 20),
             BandSelection::new(vec![0, 2]).unwrap(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 

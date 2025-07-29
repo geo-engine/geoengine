@@ -412,8 +412,8 @@ mod tests {
     use crate::{
         adapters::QueryWrapper,
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
+            MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -561,7 +561,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let stacker = RasterStackerAdapter::new(
             vec![
@@ -680,7 +680,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let stacker = RasterStackerAdapter::new(
             vec![
@@ -949,7 +949,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let stacker = RasterStackerAdapter::new(
             vec![
@@ -1243,7 +1243,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let stacker = RasterStackerAdapter::new(
             vec![
@@ -1895,7 +1895,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let stacker = RasterStackerAdapter::new(
             vec![

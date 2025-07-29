@@ -278,9 +278,8 @@ mod tests {
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        InitializedVectorOperator, MetaData, MockExecutionContext, MockQueryContext,
-        QueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
-        WorkflowOperatorPath,
+        InitializedVectorOperator, MetaData, MockExecutionContext, QueryProcessor,
+        TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
     use httptest::{
@@ -520,7 +519,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::test_default();
+        let ctx = context.mock_query_context_test_default();
 
         let result = proc.query(query_rectangle, &ctx).await;
 
@@ -584,7 +583,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::test_default();
+        let ctx = context.mock_query_context_test_default();
 
         let result: Vec<MultiPointCollection> = proc
             .query(query_rectangle, &ctx)
@@ -659,7 +658,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::test_default();
+        let ctx = context.mock_query_context_test_default();
 
         let result: Vec<MultiPolygonCollection> = proc
             .query(query_rectangle, &ctx)
@@ -729,7 +728,7 @@ mod tests {
             TimeInterval::default(),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::test_default();
+        let ctx = context.mock_query_context_test_default();
 
         let result: Vec<MultiPointCollection> = proc
             .query(query_rectangle, &ctx)

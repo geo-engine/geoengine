@@ -9,8 +9,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
-        SingleRasterSource, WorkflowOperatorPath,
+        MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
+        WorkflowOperatorPath,
     },
     processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
     source::{GdalSource, GdalSourceParameters},
@@ -65,7 +65,7 @@ async fn main() {
     const RUNS: usize = 5;
 
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let ndvi_source = ndvi_source(&mut execution_context);
 

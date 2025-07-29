@@ -406,10 +406,9 @@ struct ParsedRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockQueryContext;
+    use crate::engine::MockExecutionContext;
     use geoengine_datatypes::{
         collections::{FeatureCollectionInfos, ToGeoJson},
-        raster::TilingSpecification,
         util::test::TestDefault,
     };
     use std::io::{Seek, SeekFrom, Write};
@@ -594,7 +593,8 @@ x,y
             TimeInterval::new_unchecked(0, 1),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new((10 * 8 * 2).into(), TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context((10 * 8 * 2).into());
 
         let r: Vec<Result<MultiPointCollection>> =
             p.query(query, &ctx).await.unwrap().collect().await;

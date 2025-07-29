@@ -158,6 +158,10 @@ impl MockExecutionContext {
         }
     }
 
+    pub fn mock_query_context_test_default(&self) -> MockQueryContext {
+        MockQueryContext::new(ChunkByteSize::test_default(), self.tiling_specification)
+    }
+
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
         MockQueryContext::new(chunk_byte_size, self.tiling_specification)
     }

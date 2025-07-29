@@ -337,8 +337,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptors,
-        SpatialGridDescriptor,
+        MockExecutionContext, QueryProcessor, RasterBandDescriptors, SpatialGridDescriptor,
     };
     use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval};
     use geoengine_datatypes::raster::{
@@ -558,7 +557,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
 
         // QUERY 1
 

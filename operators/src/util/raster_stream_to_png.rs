@@ -341,9 +341,8 @@ pub enum PngCreationError {
 mod tests {
     use std::marker::PhantomData;
 
-    use crate::{
-        engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
-    };
+    use crate::engine::MockExecutionContext;
+    use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
     use geoengine_datatypes::primitives::{DateTime, TimeInstance};
     use geoengine_datatypes::{
         primitives::BandSelection,
@@ -371,7 +370,8 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::test_default();
+        let ctx = exe_ctx.mock_query_context_test_default();
         let tiling_specification = TilingSpecification::new([600, 600].into());
 
         let meta_data = create_ndvi_meta_data();

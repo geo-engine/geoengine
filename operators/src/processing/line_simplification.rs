@@ -326,7 +326,7 @@ pub enum LineSimplificationError {
 mod tests {
     use super::*;
     use crate::{
-        engine::{MockExecutionContext, MockQueryContext, StaticMetaData},
+        engine::{MockExecutionContext, StaticMetaData},
         mock::MockFeatureCollectionSource,
         source::{
             OgrSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
@@ -510,7 +510,8 @@ mod tests {
             ColumnSelection::all(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let stream = processor.query(query_rectangle, &query_ctx).await.unwrap();
 
@@ -619,7 +620,7 @@ mod tests {
 
         let query_bbox = BoundingBox2D::new((-180.0, -90.0).into(), (180.00, 90.0).into()).unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = exe_ctx.mock_query_context_test_default();
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),

@@ -480,8 +480,8 @@ mod tests {
     use crate::machine_learning::onnx::OnnxParams;
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor,
             WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
@@ -738,7 +738,7 @@ mod tests {
             [0].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -958,7 +958,7 @@ mod tests {
             [0].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1118,7 +1118,7 @@ mod tests {
             [0].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

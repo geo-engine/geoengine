@@ -1544,6 +1544,7 @@ mod tests {
     use crate::layers::layer::Layer;
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
+    use crate::util::tests::MockQueryContext;
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
@@ -1552,9 +1553,8 @@ mod tests {
         BoundingBox2D, CacheHint, FeatureData, MultiPoint, TimeInterval,
     };
     use geoengine_datatypes::primitives::{ColumnSelection, TimeInstance};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
-    use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
+    use geoengine_operators::source::OgrSourceProcessor;
     use std::collections::HashMap;
     use std::{fs::File, io::Read, path::PathBuf};
 
@@ -2655,7 +2655,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3024,7 +3024,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3143,7 +3143,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3250,7 +3250,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3292,8 +3292,6 @@ mod tests {
                 TimeInterval::new_instant(1_517_443_200_000).unwrap(),
                 ColumnSelection::all(),
             );
-
-            let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3343,10 +3341,10 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn it_loads_for_lite_subset_selected_columns_with_time_range_filter(
         db_config: DatabaseConnectionConfig,
-        ctx: PostgresSessionContext<NoTls>,
+        ps_ctx: PostgresSessionContext<NoTls>,
     ) {
         async fn test(
-            ctx: PostgresSessionContext<NoTls>,
+            ps_ctx: PostgresSessionContext<NoTls>,
             db_config: DatabaseConnectionConfig,
         ) -> Result<(), String> {
             let provider = Box::new(GbifDataProviderDefinition {
@@ -3358,7 +3356,7 @@ mod tests {
                 autocomplete_timeout: 5,
                 columns: vec!["gbifid".to_string()],
             })
-            .initialize(ctx.db())
+            .initialize(ps_ctx.db())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -3394,7 +3392,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ps_ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3441,7 +3439,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ps_ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3496,7 +3494,7 @@ mod tests {
 
         add_test_data(&db_config).await;
 
-        let result = test(ctx, db_config).await;
+        let result = test(ps_ctx, db_config).await;
 
         assert!(result.is_ok());
     }

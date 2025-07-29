@@ -532,8 +532,8 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            SingleRasterSource, SpatialGridDescriptor,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, SingleRasterSource,
+            SpatialGridDescriptor,
         },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
@@ -655,7 +655,7 @@ mod tests {
     #[tokio::test]
     async fn test_absolute_vector_shift() {
         let execution_context = MockExecutionContext::test_default();
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -748,7 +748,7 @@ mod tests {
     #[tokio::test]
     async fn test_relative_vector_shift() {
         let execution_context = MockExecutionContext::test_default();
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -966,7 +966,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1139,7 +1139,7 @@ mod tests {
         };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1238,7 +1238,7 @@ mod tests {
             .get_f64()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let mut stream = query_processor
             .raster_query(
@@ -1296,7 +1296,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let mut stream = query_processor
             .raster_query(

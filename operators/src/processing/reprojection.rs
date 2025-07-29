@@ -672,9 +672,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterBandDescriptors, SpatialGridDescriptor,
-    };
+    use crate::engine::{MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor};
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -1480,7 +1478,7 @@ mod tests {
     #[tokio::test]
     async fn points_from_wgs84_to_utm36n() {
         let exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -1640,7 +1638,7 @@ mod tests {
         // This test checks that points that are outside the area of use of the target spatial reference are not projected and an empty collection is returned
 
         let exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
             vec![

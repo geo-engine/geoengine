@@ -571,8 +571,8 @@ where
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-        RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
+        MockExecutionContext, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        SpatialGridDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
@@ -740,7 +740,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -973,7 +973,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1184,7 +1184,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1379,7 +1379,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1548,7 +1548,7 @@ mod tests {
             TimeInterval::new_unchecked(2, 4),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1716,7 +1716,7 @@ mod tests {
             TimeInterval::new_unchecked(2, 4),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1897,7 +1897,7 @@ mod tests {
             TimeInterval::new_unchecked(2, 8),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2087,7 +2087,7 @@ mod tests {
             TimeInterval::new_unchecked(2, 8),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2254,7 +2254,7 @@ mod tests {
             TimeInterval::new_unchecked(1, 3),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor_a = raster_source_a
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

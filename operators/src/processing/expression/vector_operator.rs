@@ -705,7 +705,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor},
+        engine::{ChunkByteSize, MockExecutionContext, QueryProcessor},
         mock::MockFeatureCollectionSource,
     };
     use geoengine_datatypes::{
@@ -714,7 +714,6 @@ mod tests {
             MultiPolygonCollection,
         },
         primitives::{BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, TimeInterval},
-        raster::TilingSpecification,
         util::test::TestDefault,
     };
 
@@ -1199,7 +1198,8 @@ mod tests {
         let query_processor: Box<dyn VectorQueryProcessor<VectorType = C>> =
             operator.query_processor().unwrap().try_into().unwrap();
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 

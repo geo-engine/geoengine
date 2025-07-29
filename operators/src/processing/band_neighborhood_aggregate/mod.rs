@@ -752,9 +752,7 @@ mod tests {
     };
 
     use crate::{
-        engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors, SpatialGridDescriptor,
-        },
+        engine::{MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -1212,7 +1210,7 @@ mod tests {
             BandSelection::new_unchecked(vec![0, 1, 2]),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = band_neighborhood_aggregate
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1355,7 +1353,7 @@ mod tests {
             BandSelection::new_unchecked(vec![0]), // only get first band
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = band_neighborhood_aggregate
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

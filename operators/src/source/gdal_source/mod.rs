@@ -1728,7 +1728,7 @@ mod tests {
     #[tokio::test]
     async fn test_query_single_time_slice() {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
         let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
 
@@ -1768,7 +1768,7 @@ mod tests {
     #[tokio::test]
     async fn test_query_multi_time_slices() {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
@@ -1794,7 +1794,7 @@ mod tests {
     #[tokio::test]
     async fn test_query_before_data() {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
@@ -1814,7 +1814,7 @@ mod tests {
     #[tokio::test]
     async fn test_query_after_data() {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
@@ -1836,7 +1836,7 @@ mod tests {
         hide_gdal_errors();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
         let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();

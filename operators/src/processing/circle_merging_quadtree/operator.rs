@@ -508,10 +508,7 @@ mod tests {
     use geoengine_datatypes::primitives::TimeInterval;
     use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::{
-        engine::{MockExecutionContext, MockQueryContext},
-        mock::MockFeatureCollectionSource,
-    };
+    use crate::{engine::MockExecutionContext, mock::MockFeatureCollectionSource};
 
     use super::*;
 
@@ -555,7 +552,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
@@ -638,7 +635,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
@@ -722,7 +719,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
@@ -814,7 +811,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
@@ -921,7 +918,7 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),

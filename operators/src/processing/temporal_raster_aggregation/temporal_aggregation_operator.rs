@@ -498,7 +498,7 @@ mod tests {
     use super::*;
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
             SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
@@ -567,7 +567,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -692,7 +692,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -817,7 +817,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -942,7 +942,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1075,7 +1075,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1157,7 +1157,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1261,7 +1261,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1366,7 +1366,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1471,7 +1471,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1576,7 +1576,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1681,7 +1681,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1787,7 +1787,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1911,7 +1911,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2016,7 +2016,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2133,7 +2133,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2270,7 +2270,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2394,7 +2394,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2499,7 +2499,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2604,7 +2604,7 @@ mod tests {
             TimeInterval::new_unchecked(5, 5),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2902,7 +2902,7 @@ mod tests {
             TimeInterval::new_unchecked(0, 30),
             [0, 1].try_into().unwrap(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -3079,7 +3079,7 @@ mod tests {
             BandSelection::first(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

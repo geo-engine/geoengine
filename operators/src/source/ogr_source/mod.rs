@@ -1997,9 +1997,7 @@ mod db_types {
 mod tests {
     use super::*;
 
-    use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, StaticMetaData, VectorColumnInfo,
-    };
+    use crate::engine::{ChunkByteSize, MockExecutionContext, StaticMetaData, VectorColumnInfo};
     use crate::source::ogr_source::FormatSpecifics::Csv;
     use crate::test_data;
     use futures::{StreamExt, TryStreamExt};
@@ -2012,7 +2010,6 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, TimeGranularity,
     };
-    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::util::test::TestDefault;
@@ -2194,8 +2191,8 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -2203,7 +2200,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -2249,8 +2246,8 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -2258,7 +2255,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await;
 
@@ -2298,8 +2295,8 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -2307,7 +2304,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -2352,8 +2349,8 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -2361,7 +2358,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -4151,8 +4148,8 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -4160,7 +4157,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -4273,8 +4270,8 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -4282,7 +4279,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -5664,8 +5661,8 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -5673,7 +5670,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -5794,8 +5791,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -5803,7 +5800,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -5913,8 +5910,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -5922,7 +5919,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6032,8 +6029,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6041,7 +6038,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6155,8 +6152,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6164,7 +6161,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6277,8 +6274,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6286,7 +6283,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6414,8 +6411,8 @@ mod tests {
             ],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6423,7 +6420,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6533,8 +6530,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6542,7 +6539,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6644,8 +6641,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6653,7 +6650,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6741,8 +6738,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6750,7 +6747,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6835,8 +6832,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6844,7 +6841,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6929,8 +6926,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -6938,7 +6935,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -7023,8 +7020,8 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
                 VectorQueryRectangle::new(
@@ -7032,7 +7029,7 @@ mod tests {
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();

@@ -140,8 +140,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, WorkflowOperatorPath,
+        MockExecutionContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator,
+        WorkflowOperatorPath,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
@@ -152,7 +152,6 @@ mod tests {
         BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
-    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
@@ -185,10 +184,8 @@ mod tests {
             Default::default(),
             ColumnSelection::all(),
         );
-        let cx = MockQueryContext::new(
-            (std::mem::size_of::<Coordinate2D>() * 2).into(),
-            TilingSpecification::test_default(),
-        );
+        let ecx = MockExecutionContext::test_default();
+        let cx = ecx.mock_query_context((std::mem::size_of::<Coordinate2D>() * 2).into());
 
         let number_of_source_chunks = processor
             .query(qrect.clone(), &cx)
@@ -265,7 +262,8 @@ mod tests {
             Default::default(),
             ColumnSelection::all(),
         );
-        let cx = MockQueryContext::new((0).into(), TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let cx = ecx.mock_query_context((0).into());
 
         let collections =
             FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).await.unwrap().fuse(), 0)

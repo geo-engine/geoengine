@@ -8,8 +8,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
-        SingleRasterSource, WorkflowOperatorPath,
+        MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
+        WorkflowOperatorPath,
     },
     processing::{
         Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
@@ -56,7 +56,7 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
 
 async fn one_band_at_a_time(runs: usize, bands: u32) {
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let ndvi_source = ndvi_source(&mut execution_context);
 
@@ -113,7 +113,7 @@ async fn one_band_at_a_time(runs: usize, bands: u32) {
 
 async fn all_bands_at_once(runs: usize, bands: u32) {
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let stacker = RasterStacker {
         params: RasterStackerParams {

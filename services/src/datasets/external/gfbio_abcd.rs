@@ -647,6 +647,7 @@ mod tests {
     use crate::config;
     use crate::contexts::{PostgresContext, PostgresSessionContext, SessionContext};
     use crate::layers::layer::ProviderLayerCollectionId;
+    use crate::util::tests::MockQueryContext;
     use crate::{ge_context, test_data};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
@@ -654,9 +655,8 @@ mod tests {
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, MultiPoint, TimeInterval};
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
-    use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
+    use geoengine_operators::source::OgrSourceProcessor;
     use rand::RngCore;
     use std::{fs::File, io::Read, path::PathBuf};
     use tokio_postgres::Config;
@@ -1459,7 +1459,7 @@ mod tests {
                 TimeInterval::default(),
                 ColumnSelection::all(),
             );
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)

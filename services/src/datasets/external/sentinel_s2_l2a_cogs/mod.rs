@@ -921,8 +921,8 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            ChunkByteSize, ExecutionContext, MockExecutionContext, MockQueryContext,
-            RasterOperator, WorkflowOperatorPath,
+            ChunkByteSize, ExecutionContext, MockExecutionContext, RasterOperator,
+            WorkflowOperatorPath,
         },
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
@@ -1462,7 +1462,7 @@ mod tests {
         .get_u16()
         .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let data_bounds = SpatialPartition2D::new_unchecked(
             (499_980., 9_804_800.).into(),

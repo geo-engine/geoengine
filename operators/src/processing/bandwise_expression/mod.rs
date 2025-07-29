@@ -259,7 +259,7 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
             SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
@@ -417,7 +417,7 @@ mod tests {
             [0, 1].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = expression
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

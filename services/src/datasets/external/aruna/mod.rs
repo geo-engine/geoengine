@@ -1086,7 +1086,7 @@ mod tests {
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
+        MetaData, MetaDataProvider, MockExecutionContext, QueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
@@ -2430,7 +2430,7 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let ctx = MockQueryContext::test_default();
+        let ctx = context.mock_query_context_test_default();
 
         let qr = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),

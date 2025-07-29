@@ -12,9 +12,9 @@ use geoengine_datatypes::{
     },
     util::test::TestDefault,
 };
-use geoengine_operators::engine::RasterResultDescriptor;
+use geoengine_operators::engine::{MockExecutionContext, RasterResultDescriptor};
 use geoengine_operators::{
-    engine::{ChunkByteSize, MockQueryContext, RasterQueryProcessor},
+    engine::{ChunkByteSize, RasterQueryProcessor},
     mock::MockRasterSourceProcessor,
     source::{GdalMetaDataRegular, GdalSourceProcessor},
     util::gdal::create_ndvi_meta_data,
@@ -158,8 +158,8 @@ fn bench_raster_processor<
     run_time: &tokio::runtime::Runtime,
 ) {
     for tiling_spec in list_of_tiling_specs {
-        let ctx =
-            MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, *tiling_spec, 8);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(*tiling_spec, 8);
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let operator = (tile_producing_operator_builderr)(*tiling_spec);
 

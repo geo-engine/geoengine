@@ -285,10 +285,7 @@ fn expand_time_interval(
 mod tests {
     use super::*;
 
-    use crate::{
-        engine::{MockExecutionContext, MockQueryContext},
-        mock::MockFeatureCollectionSource,
-    };
+    use crate::{engine::MockExecutionContext, mock::MockFeatureCollectionSource};
     use geoengine_datatypes::{
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType},
         primitives::{
@@ -423,7 +420,7 @@ mod tests {
     #[tokio::test]
     async fn single_year() {
         let execution_context = MockExecutionContext::test_default();
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -527,7 +524,7 @@ mod tests {
     #[tokio::test]
     async fn over_a_year() {
         let execution_context = MockExecutionContext::test_default();
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
