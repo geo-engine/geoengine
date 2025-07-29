@@ -326,7 +326,7 @@ impl<P: CoordinateProjection> ReprojectClipped<P> for SpatialGridDefinition {
         }
         let target_bounds_in_source_srs = target_bounds_in_source_srs.expect("case checked above");
         let intersection_grid_bounds =
-            target_bounds_in_source_srs.intersection(&self.spatial_partition()); 
+            target_bounds_in_source_srs.intersection(&self.spatial_partition());
         if intersection_grid_bounds.is_none() {
             return Ok(None);
         }

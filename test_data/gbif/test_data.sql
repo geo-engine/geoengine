@@ -277,7 +277,7 @@ CREATE MATERIALIZED VIEW family_stats AS (
         family AS name, -- noqa: RF04
         count(*) AS count,
         tsrange('[' || min(eventdate) || ',' || max(eventdate) || ']')
-            AS time, -- noqa: RF04
+        AS time, -- noqa: RF04
         st_extent(geom) AS extent
     FROM occurrences
     GROUP BY family
@@ -288,7 +288,7 @@ CREATE MATERIALIZED VIEW genus_stats AS (
         genus AS name, -- noqa: RF04
         count(*) AS count,
         tsrange('[' || min(eventdate) || ',' || max(eventdate) || ']')
-            AS time, -- noqa: RF04
+        AS time, -- noqa: RF04
         st_extent(geom) AS extent
     FROM occurrences
     GROUP BY genus
@@ -299,7 +299,7 @@ CREATE MATERIALIZED VIEW species_stats AS (
         species AS name, -- noqa: RF04
         count(*) AS count,
         tsrange('[' || min(eventdate) || ',' || max(eventdate) || ']')
-            AS time, -- noqa: RF04
+        AS time, -- noqa: RF04
         st_extent(geom) AS extent
     FROM occurrences
     GROUP BY species
