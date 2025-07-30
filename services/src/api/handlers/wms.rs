@@ -873,8 +873,8 @@ mod tests {
             ("version", "1.3.0"),
             ("layers", &id.to_string()),
             ("bbox", "-90,-180,90,180"),
-            ("width", "3600"), // TODO: use smaller area
-            ("height", "1800"),
+            ("width", "600"),
+            ("height", "300"),
             ("crs", "EPSG:4326"),
             (
                 "styles",
@@ -939,8 +939,8 @@ mod tests {
             ("version", "1.3.0"),
             ("layers", &id.to_string()),
             ("bbox", "-90,-180,90,180"),
-            ("width", "3600"),
-            ("height", "1800"),
+            ("width", "600"),
+            ("height", "300"),
             ("crs", "EPSG:4326"),
             (
                 "styles",

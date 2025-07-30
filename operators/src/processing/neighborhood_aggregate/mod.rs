@@ -687,7 +687,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters::new(ndvi_id),
+                    params: GdalSourceParameters::new_with_overview_level(ndvi_id, 10),
                 }
                 .boxed(),
             },
@@ -706,7 +706,7 @@ mod tests {
                 .tiling_grid_definition(query_ctx.tiling_specification())
                 .tiling_geo_transform()
                 .spatial_to_grid_bounds(
-                    &SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
+                    &SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
                 ),
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             BandSelection::first(),
@@ -728,8 +728,8 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            600,
-            600,
+            360,
+            180,
             None,
             Some(colorizer),
             Box::pin(futures::future::pending()),
@@ -738,7 +738,7 @@ mod tests {
         .unwrap();
 
         // Use for getting the image to compare against
-        // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur_bla.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur.png");
 
         assert_eq!(
             bytes,
@@ -760,7 +760,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters::new(ndvi_id),
+                    params: GdalSourceParameters::new_with_overview_level(ndvi_id, 10),
                 }
                 .boxed(),
             },
@@ -804,8 +804,8 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            3600,
-            1800,
+            360,
+            180,
             None,
             Some(colorizer),
             Box::pin(futures::future::pending()),
