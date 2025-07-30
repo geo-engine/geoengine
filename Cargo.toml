@@ -8,7 +8,7 @@ exclude = [
 resolver = "2"
 
 [workspace.package]
-version = "0.8.0"
+version = "0.9.0"
 authors = [
     "Christian Beilschmidt <beilschmidt@mathematik.uni-marburg.de>",
     "Johannes Drönner <droenner@mathematik.uni-marburg.de>",
