@@ -1019,7 +1019,6 @@ mod tests {
         //    "../test_data/raster/geotiff_from_stream_compressed.tiff",
         // );
 
-        // FIXME: this will fail since we no longer use scaling sources which causes this to write a subset of the data not a scaled version of all data
         assert_eq!(
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],

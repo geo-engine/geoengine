@@ -271,15 +271,6 @@ async fn wms_map_handler<C: ApplicationContext>(
                 .map(Duration::from_secs),
         );
 
-        // TODO: use a default spatial reference if it is not set?
-        let request_spatial_ref: SpatialReference =
-            request.crs.ok_or(error::Error::MissingSpatialReference)?;
-
-        let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
-        let x_request_res = request_bounds.size_x() / f64::from(request.width);
-        let y_request_res = request_bounds.size_y() / f64::from(request.height);
-        let request_resolution = SpatialResolution::new(x_request_res.abs(), y_request_res.abs())?;
-
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 
         let ctx = app_ctx.session_context(session);
@@ -300,17 +291,20 @@ async fn wms_map_handler<C: ApplicationContext>(
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
-        /*
-        let request_geo_transform = GeoTransform::new(
-            request_bounds.upper_left(),
-            request_resolution.x,
-            -request_resolution.y,
-        );
+        // Use the datasets crs as default spatial reference if none is requested
+        let result_desc_crs_option = initialized
+            .result_descriptor()
+            .spatial_reference
+            .as_option();
+        let request_spatial_ref: SpatialReference = request
+            .crs
+            .or(result_desc_crs_option.map(Into::into))
+            .ok_or(error::Error::MissingSpatialReference)?;
 
-        let tiling_based_origin = request_geo_transform
-            .nearest_pixel_edge_coordinate(tiling_spec.tiling_origin_reference());
-
-        */
+        let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
+        let x_request_res = request_bounds.size_x() / f64::from(request.width);
+        let y_request_res = request_bounds.size_y() / f64::from(request.height);
+        let request_resolution = SpatialResolution::new(x_request_res.abs(), y_request_res.abs())?;
 
         let wrapped =
             geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
@@ -318,7 +312,7 @@ async fn wms_map_handler<C: ApplicationContext>(
                 initialized,
             )
             .wrap_with_projection_and_resample(
-                None, // Some(tiling_based_origin),
+                None, // this needs to be `None`` to avoid moving the data origin to a png pixel origin. Since the WMS requests are not consistent with their origins using them distortes the results more then it helps.
                 Some(request_resolution),
                 request_spatial_ref.into(),
                 tiling_spec,

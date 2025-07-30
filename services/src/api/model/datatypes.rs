@@ -1139,7 +1139,6 @@ pub struct RasterToDatasetQueryRectangle {
     pub time_interval: TimeInterval,
 }
 
-/*
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1148,6 +1147,7 @@ pub struct VectorQueryRectangle {
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
+
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1156,7 +1156,6 @@ pub struct PlotQueryRectangle {
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
-*/
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
 pub struct BandSelection(pub Vec<usize>);
