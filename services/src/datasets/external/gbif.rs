@@ -1,7 +1,8 @@
+use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::{Error, Result};
-use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
     LayerListing, ProviderLayerCollectionId, ProviderLayerId,
@@ -87,6 +88,21 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GbifDataProviderDefinition {
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::GbifDataProviderDefinition(mut new) => {
+                if new.db_config.password == SECRET_REPLACEMENT {
+                    new.db_config.password.clone_from(&self.db_config.password);
+                }
+                TypedDataProviderDefinition::GbifDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 

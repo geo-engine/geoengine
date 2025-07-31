@@ -35,6 +35,9 @@ use crate::api::model::responses::{
     UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
     ZipResponse,
 };
+use crate::api::model::services::DatabaseConnectionConfig;
+use crate::api::model::services::EdrVectorSpec;
+use crate::api::model::services::LayerProviderListing;
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, Dataset, DatasetDefinition, MetaDataDefinition,
     MetaDataSuggestion, MlModel, Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
@@ -51,6 +54,15 @@ use crate::api::{
         datatypes::{GeoTransform, GridBoundingBox2D, GridIdx2D, SpatialGridDefinition},
         operators::{SpatialGridDescriptor, SpatialGridDescriptorState},
     },
+};
+use crate::api::model::services::{
+    ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition,
+    DatasetLayerListingCollection, DatasetLayerListingProviderDefinition,
+    EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition,
+    GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition,
+    NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition,
+    SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacQueryBuffer,
+    TypedDataProviderDefinition,
 };
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
@@ -117,6 +129,13 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::remove_collection_from_collection,
         handlers::layers::remove_collection,
         handlers::layers::remove_layer_from_collection,
+        handlers::layers::add_provider,
+        handlers::layers::get_provider_definition,
+        handlers::layers::update_provider_definition,
+        handlers::layers::delete_provider,
+        handlers::layers::list_providers,
+        handlers::users::session_project_handler,
+        handlers::users::session_view_handler,
         handlers::layers::remove_layer,
         handlers::layers::search_handler,
         handlers::layers::update_collection,
@@ -419,6 +438,24 @@ use utoipa::{Modify, OpenApi};
             GridBoundingBox2D,
             GridIdx2D,
             GeoTransform,
+            TypedDataProviderDefinition,
+            ArunaDataProviderDefinition,
+            DatasetLayerListingProviderDefinition,
+            GbifDataProviderDefinition,
+            GfbioAbcdDataProviderDefinition,
+            GfbioCollectionsDataProviderDefinition,
+            EbvPortalDataProviderDefinition,
+            NetCdfCfDataProviderDefinition,
+            PangaeaDataProviderDefinition,
+            EdrDataProviderDefinition,
+            CopernicusDataspaceDataProviderDefinition,
+            SentinelS2L2ACogsProviderDefinition,
+            DatabaseConnectionConfig,
+            EdrVectorSpec,
+            StacApiRetries,
+            StacQueryBuffer,
+            DatasetLayerListingCollection,
+            LayerProviderListing,
 
             PermissionRequest,
             Resource,
