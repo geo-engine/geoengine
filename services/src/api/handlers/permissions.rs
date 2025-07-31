@@ -1,5 +1,5 @@
 use crate::{
-    api::model::datatypes::{LayerId,DataProviderId},
+    api::model::datatypes::{DataProviderId, LayerId},
     contexts::{ApplicationContext, GeoEngineDb, SessionContext},
     datasets::{DatasetName, storage::DatasetDb},
     error::{self, Error, Result},

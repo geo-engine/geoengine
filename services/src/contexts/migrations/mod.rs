@@ -1,11 +1,11 @@
-use crate::contexts::migrations::migration_0019_ml_model_no_data::Migration0019MlModelNoData;
 pub use crate::contexts::migrations::{
     current_schema::CurrentSchemaMigration, migration_0015_log_quota::Migration0015LogQuota,
     migration_0016_merge_providers::Migration0016MergeProviders,
     migration_0017_ml_model_tensor_shape::Migration0017MlModelTensorShape,
     migration_0018_wildlive_connector::Migration0018WildliveConnector,
+    migration_0019_ml_model_no_data::Migration0019MlModelNoData,
     migration_0020_provider_permissions::Migration0020ProviderPermissions,
-    migration_0030_raster_result_desc::Migration0030RasterResultDesc
+    migration_0030_raster_result_desc::Migration0030RasterResultDesc,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -18,12 +18,11 @@ mod migration_0016_merge_providers;
 mod migration_0017_ml_model_tensor_shape;
 mod migration_0018_wildlive_connector;
 mod migration_0019_ml_model_no_data;
-mod migration_0030_raster_result_desc;
 mod migration_0020_provider_permissions;
+mod migration_0030_raster_result_desc;
 
 #[cfg(test)]
 mod schema_info;
-
 
 #[cfg(test)]
 pub(crate) use schema_info::{AssertSchemaEqPopulationConfig, assert_migration_schema_eq};

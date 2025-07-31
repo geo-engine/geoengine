@@ -1,4 +1,5 @@
-use super::datatypes::{CacheTtlSeconds, DataId, DatasetId, DataProviderId, GdalConfigOption};
+use super::datatypes::{CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption};
+use super::operators::TypedResultDescriptor;
 use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
@@ -16,7 +17,6 @@ use std::path::PathBuf;
 use url::Url;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
-use super::operators::TypedResultDescriptor;
 pub const SECRET_REPLACEMENT: &str = "*****";
 
 #[allow(clippy::large_enum_variant)]

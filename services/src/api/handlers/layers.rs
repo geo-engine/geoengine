@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::tasks::TaskResponse;
 
-use crate::api::model::datatypes::{LayerId};
+use crate::api::model::datatypes::LayerId;
 use crate::api::model::responses::IdResponse;
 use crate::api::model::services::LayerProviderListing;
 use crate::api::model::services::TypedDataProviderDefinition;
@@ -1360,12 +1360,18 @@ mod tests {
     use crate::{
         api::model::responses::ErrorResponse,
         contexts::{PostgresContext, Session, SessionId},
-        datasets::{dataset_listing_provider::{DatasetLayerListingCollection, DatasetLayerListingProviderDefinition}, external::aruna::ArunaDataProviderDefinition, RasterDatasetFromWorkflowResult},
+        datasets::{
+            RasterDatasetFromWorkflowResult,
+            dataset_listing_provider::{
+                DatasetLayerListingCollection, DatasetLayerListingProviderDefinition,
+            },
+            external::aruna::ArunaDataProviderDefinition,
+        },
         ge_context,
         layers::{layer::Layer, storage::INTERNAL_PROVIDER_ID},
-        tasks::{util::test::wait_for_task_to_finish, TaskManager, TaskStatus},
+        tasks::{TaskManager, TaskStatus, util::test::wait_for_task_to_finish},
         users::{UserAuth, UserSession},
-        util::tests::{admin_login, read_body_string, send_test_request, TestDataUploads},
+        util::tests::{TestDataUploads, admin_login, read_body_string, send_test_request},
         workflows::workflow::Workflow,
     };
     use actix_web::{
@@ -1376,7 +1382,8 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::{
         primitives::{
-            CacheHint, CacheTtlSeconds, Coordinate2D, RasterQueryRectangle, TimeGranularity, TimeInterval
+            CacheHint, CacheTtlSeconds, Coordinate2D, RasterQueryRectangle, TimeGranularity,
+            TimeInterval,
         },
         raster::{
             GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType, RasterTile2D,

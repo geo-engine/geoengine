@@ -1,8 +1,5 @@
 use super::database_migration::{DatabaseVersion, Migration};
-use crate::{
-    contexts::migrations::{Migration0020ProviderPermissions},
-    error::Result,
-};
+use crate::{contexts::migrations::Migration0020ProviderPermissions, error::Result};
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
