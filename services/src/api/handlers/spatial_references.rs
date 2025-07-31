@@ -99,6 +99,15 @@ pub enum AxisOrder {
     EastNorth,
 }
 
+impl AxisOrder {
+    pub fn xy_to_native_order<T: Copy>(&self, input: [T; 2]) -> [T; 2] {
+        match &self {
+            AxisOrder::EastNorth => input,
+            AxisOrder::NorthEast => [input[1], input[0]],
+        }
+    }
+}
+
 /// Get the proj json information for the given `srs_string` if it is known.
 // TODO: expose method in proj crate instead
 fn proj_json(srs_string: &str) -> Option<ProjJson> {
