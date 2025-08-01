@@ -438,36 +438,18 @@ async fn dataset_from_workflow_handler<C: ApplicationContext>(
     let ctx = Arc::new(app_ctx.session_context(session));
 
     let id = id.into_inner();
-    let workflow = ctx.db().load_workflow(&id).await?;
+
     let compression_num_threads =
         get_config_element::<crate::config::Gdal>()?.compression_num_threads;
 
-    // FIXME: dont initialize the workflow here, but in the task
-    let operator = workflow
-        .clone()
-        .operator
-        .get_raster()
-        .expect("must be raster here")
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &ctx.execution_context()?,
-        )
-        .await?;
-
-    let result_descriptor = operator.result_descriptor();
-
-    let info = RasterDatasetFromWorkflowParams::from_request_and_result_descriptor(
-        info.into_inner(),
-        result_descriptor,
-        ctx.execution_context()?.tiling_specification(),
-    );
+    let info_inner =
+        RasterDatasetFromWorkflowParams::from_request_and_result_descriptor(info.into_inner());
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("workflow {id}"),
-        operator,
         id,
         ctx,
-        info,
+        info_inner,
         compression_num_threads,
     )
     .await?;

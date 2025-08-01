@@ -11,7 +11,7 @@ use crate::contexts::ApplicationContext;
 use crate::datasets::{
     RasterDatasetFromWorkflowParams, schedule_raster_dataset_from_workflow_task,
 };
-use crate::error::Error::{LayerResultDescriptorMissingFields, NotImplemented};
+use crate::error::Error::NotImplemented;
 use crate::error::Result;
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
@@ -28,8 +28,6 @@ use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
 use actix_web::{FromRequest, HttpResponse, Responder, web};
 use geoengine_datatypes::dataset::DataProviderId;
-use geoengine_datatypes::primitives::BandSelection;
-use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
 
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
@@ -803,42 +801,11 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let workflow_id = db.register_workflow(layer.workflow.clone()).await?;
 
-    let execution_context = ctx.execution_context()?;
-
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
-
-    let raster_operator = layer
-        .workflow
-        .operator
-        .clone()
-        .get_raster()?
-        .initialize(workflow_operator_path_root, &execution_context)
-        .await?;
-
-    let result_descriptor = raster_operator.result_descriptor();
-
-    let sqr = result_descriptor
-        .tiling_grid_definition(execution_context.tiling_specification())
-        .tiling_grid_bounds();
-
-    let qr_time = result_descriptor
-        .time
-        .ok_or(LayerResultDescriptorMissingFields {
-            field: "time".to_string(),
-            cause: "is None".to_string(),
-        })?;
-
-    let qr = geoengine_datatypes::primitives::RasterQueryRectangle::new(
-        sqr,
-        qr_time,
-        BandSelection::first_n(result_descriptor.bands.len() as u32),
-    );
-
     let from_workflow = RasterDatasetFromWorkflowParams {
         name: None,
         display_name: layer.name,
         description: Some(layer.description),
-        query: qr,
+        query: None,
         as_cog: true,
     };
 
@@ -847,7 +814,6 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("layer {item}"),
-        raster_operator,
         workflow_id,
         ctx,
         from_workflow,
@@ -1382,8 +1348,8 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::{
         primitives::{
-            CacheHint, CacheTtlSeconds, Coordinate2D, RasterQueryRectangle, TimeGranularity,
-            TimeInterval,
+            BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D, RasterQueryRectangle,
+            TimeGranularity, TimeInterval,
         },
         raster::{
             GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType, RasterTile2D,
@@ -2679,6 +2645,7 @@ mod tests {
         let mock_source = MockRasterWorkflowLayerDescription::new(false, 0);
 
         let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
@@ -2686,12 +2653,36 @@ mod tests {
 
         let res = send_dataset_creation_test_request(app_ctx, layer, session_id).await;
 
-        ErrorResponse::assert(
-            res,
-            400,
-            "LayerResultDescriptorMissingFields",
-            "Result Descriptor field 'time' is None",
-        )
-        .await;
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        let task_manager = Arc::new(ctx.tasks());
+        wait_for_task_to_finish(task_manager.clone(), task_response.task_id).await;
+
+        let status = task_manager
+            .get_task_status(task_response.task_id)
+            .await
+            .unwrap();
+
+        let error_res = if let TaskStatus::Failed { error, .. } = status {
+            error
+                .clone()
+                .into_any_arc()
+                .downcast::<crate::error::Error>()
+                .unwrap()
+        } else {
+            panic!("Task must fail");
+        };
+
+        let crate::error::Error::LayerResultDescriptorMissingFields { field: f, cause: c } =
+            error_res.as_ref()
+        else {
+            panic!("Error must be LayerResultDescriptorMissingFields")
+        };
+
+        assert_eq!(f, "time");
+        assert_eq!(c, "is None");
     }
 }
