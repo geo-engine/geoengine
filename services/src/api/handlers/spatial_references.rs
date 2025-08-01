@@ -99,6 +99,15 @@ pub enum AxisOrder {
     EastNorth,
 }
 
+impl AxisOrder {
+    pub fn xy_to_native_order<T: Copy>(&self, input: [T; 2]) -> [T; 2] {
+        match &self {
+            AxisOrder::EastNorth => input,
+            AxisOrder::NorthEast => [input[1], input[0]],
+        }
+    }
+}
+
 /// Get the proj json information for the given `srs_string` if it is known.
 // TODO: expose method in proj crate instead
 fn proj_json(srs_string: &str) -> Option<ProjJson> {
@@ -203,15 +212,16 @@ pub(crate) async fn get_spatial_reference_specification_handler<C: ApplicationCo
     srs_string: web::Path<String>,
     _session: C::Session,
 ) -> Result<impl Responder> {
-    spatial_reference_specification(&srs_string).map(web::Json)
+    let spatial_ref = SpatialReference::from_str(&srs_string)?;
+    spatial_reference_specification(spatial_ref).map(web::Json)
 }
 
 /// custom spatial references not known by proj or that shall be overriden
 fn custom_spatial_reference_specification(
-    srs_string: &str,
+    spatial_ref: SpatialReference,
 ) -> Option<SpatialReferenceSpecification> {
     // TODO: provide a generic storage for custom spatial reference specifications
-    match srs_string.to_uppercase().as_str() {
+    match spatial_ref.srs_string().to_uppercase().as_str() {
         "SR-ORG:81" => Some(SpatialReferenceSpecification {
             name: "GEOS - GEOstationary Satellite".to_owned(),
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81),
@@ -234,18 +244,22 @@ fn custom_spatial_reference_specification(
     }
 }
 
-pub fn spatial_reference_specification(srs_string: &str) -> Result<SpatialReferenceSpecification> {
-    if let Some(sref) = custom_spatial_reference_specification(srs_string) {
+pub fn spatial_reference_specification(
+    spatial_reference: SpatialReference,
+) -> Result<SpatialReferenceSpecification> {
+    if let Some(sref) = custom_spatial_reference_specification(spatial_reference) {
         return Ok(sref);
     }
 
-    let spatial_reference =
-        geoengine_datatypes::spatial_reference::SpatialReference::from_str(srs_string)?;
-    let json = proj_json(srs_string).ok_or_else(|| Error::UnknownSrsString {
-        srs_string: srs_string.to_owned(),
+    let spatial_reference: geoengine_datatypes::spatial_reference::SpatialReference =
+        spatial_reference.into();
+    let srs_string = spatial_reference.srs_string();
+
+    let json = proj_json(&srs_string).ok_or_else(|| Error::UnknownSrsString {
+        srs_string: srs_string.clone(),
     })?;
-    let proj_string = proj_proj_string(srs_string).ok_or_else(|| Error::UnknownSrsString {
-        srs_string: srs_string.to_owned(),
+    let proj_string = proj_proj_string(&srs_string).ok_or_else(|| Error::UnknownSrsString {
+        srs_string: srs_string.clone(),
     })?;
 
     let extent: geoengine_datatypes::primitives::BoundingBox2D =
@@ -323,7 +337,10 @@ mod tests {
 
     #[test]
     fn spec_webmercator() {
-        let spec = spatial_reference_specification("EPSG:3857").unwrap();
+        let spec = spatial_reference_specification(
+            SpatialReference::from_str("EPSG:3857").unwrap().into(),
+        )
+        .unwrap();
         assert_eq!(spec.name, "WGS 84 / Pseudo-Mercator");
         assert_eq!(
             spec.spatial_reference,
@@ -351,7 +368,10 @@ mod tests {
 
     #[test]
     fn spec_wgs84() {
-        let spec = spatial_reference_specification("EPSG:4326").unwrap();
+        let spec = spatial_reference_specification(
+            SpatialReference::from_str("EPSG:4326").unwrap().into(),
+        )
+        .unwrap();
         assert_eq!(
             SpatialReferenceSpecification {
                 name: "WGS 84".to_owned(),
@@ -374,7 +394,10 @@ mod tests {
 
     #[test]
     fn spec_utm32n() {
-        let spec = spatial_reference_specification("EPSG:32632").unwrap();
+        let spec = spatial_reference_specification(
+            SpatialReference::from_str("EPSG:32632").unwrap().into(),
+        )
+        .unwrap();
         assert_eq!(
             SpatialReferenceSpecification {
                 name: "WGS 84 / UTM zone 32N".to_owned(),
@@ -395,7 +418,10 @@ mod tests {
 
     #[test]
     fn spec_geos() {
-        let spec = spatial_reference_specification("SR-ORG:81").unwrap();
+        let spec = spatial_reference_specification(
+            SpatialReference::from_str("SR-ORG:81").unwrap().into(),
+        )
+        .unwrap();
         assert_eq!(
             SpatialReferenceSpecification {
                 name: "GEOS - GEOstationary Satellite".to_owned(),

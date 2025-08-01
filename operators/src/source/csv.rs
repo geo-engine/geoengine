@@ -1,25 +1,3 @@
-use std::path::PathBuf;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::{fs::File, sync::atomic::AtomicBool};
-
-use csv::{Position, Reader, StringRecord};
-use futures::stream::BoxStream;
-use futures::task::{Context, Poll};
-use futures::{Stream, StreamExt};
-use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{ColumnSelection, VectorQueryRectangle};
-use serde::{Deserialize, Serialize};
-use snafu::{OptionExt, ResultExt, ensure};
-
-use geoengine_datatypes::collections::{
-    BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
-};
-use geoengine_datatypes::{
-    primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
-    spatial_reference::SpatialReference,
-};
-
 use crate::engine::{
     CanonicOperatorName, InitializedVectorOperator, OperatorData, OperatorName, QueryContext,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
@@ -29,7 +7,27 @@ use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::util::{Result, safe_lock_mutex};
 use async_trait::async_trait;
+use csv::{Position, Reader, StringRecord};
+use futures::stream::BoxStream;
+use futures::task::{Context, Poll};
+use futures::{Stream, StreamExt};
+use geoengine_datatypes::collections::{
+    BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
+};
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::{
+    primitives::{
+        BoundingBox2D, ColumnSelection, Coordinate2D, TimeInterval, VectorQueryRectangle,
+    },
+    spatial_reference::SpatialReference,
+};
+use serde::{Deserialize, Serialize};
+use snafu::{OptionExt, ResultExt, ensure};
+use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
+use std::{fs::File, sync::atomic::AtomicBool};
 
 /// Parameters for the CSV Source Operator
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
@@ -384,7 +382,7 @@ impl QueryProcessor for CsvSourceProcessor {
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
-        Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds, 10)?.boxed())
+        Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds(), 10)?.boxed())
     }
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
@@ -407,13 +405,13 @@ struct ParsedRow {
 
 #[cfg(test)]
 mod tests {
-    use std::io::{Seek, SeekFrom, Write};
-
-    use geoengine_datatypes::primitives::SpatialResolution;
-
     use super::*;
-    use crate::engine::MockQueryContext;
-    use geoengine_datatypes::collections::{FeatureCollectionInfos, ToGeoJson};
+    use crate::engine::MockExecutionContext;
+    use geoengine_datatypes::{
+        collections::{FeatureCollectionInfos, ToGeoJson},
+        util::test::TestDefault,
+    };
+    use std::io::{Seek, SeekFrom, Write};
 
     #[test]
     fn it_deserializes() {
@@ -590,16 +588,13 @@ x,y
             },
         };
 
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked(
-                Coordinate2D::new(0., 0.),
-                Coordinate2D::new(3., 3.),
-            ),
-            time_interval: TimeInterval::new_unchecked(0, 1),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new((10 * 8 * 2).into());
+        let query = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked(Coordinate2D::new(0., 0.), Coordinate2D::new(3., 3.)),
+            TimeInterval::new_unchecked(0, 1),
+            ColumnSelection::all(),
+        );
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context((10 * 8 * 2).into());
 
         let r: Vec<Result<MultiPointCollection>> =
             p.query(query, &ctx).await.unwrap().collect().await;

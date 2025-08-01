@@ -6,7 +6,7 @@ use crate::{
             datasets::{DatasetNameResponse, errors::*},
         },
         services::{
-            AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
+            AddDataset, CreateDataset, DataPath, Dataset, DatasetDefinition, MetaDataDefinition,
             MetaDataSuggestion, Provenances, UpdateDataset, Volume,
         },
     },
@@ -15,7 +15,7 @@ use crate::{
     datasets::{
         DatasetName,
         listing::{DatasetListOptions, DatasetListing, DatasetProvider},
-        storage::{AutoCreateDataset, Dataset, DatasetStore, SuggestMetaData},
+        storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, VolumeName, Volumes},
     },
     error::{self, Error, Result},
@@ -241,6 +241,8 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
         .load_dataset(&dataset_id)
         .await
         .context(CannotLoadDataset)?;
+
+    let dataset: Dataset = dataset.into();
 
     Ok(web::Json(dataset))
 }
@@ -1369,47 +1371,52 @@ async fn create_system_dataset<C: ApplicationContext>(
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
-    use crate::api::model::datatypes::NamedData;
-    use crate::api::model::responses::IdResponse;
-    use crate::api::model::responses::datasets::DatasetNameResponse;
-    use crate::api::model::services::{DatasetDefinition, Provenance};
-    use crate::contexts::PostgresContext;
-    use crate::contexts::{Session, SessionId};
-    use crate::datasets::DatasetIdAndName;
-    use crate::datasets::storage::DatasetStore;
-    use crate::datasets::upload::{UploadId, VolumeName};
-    use crate::error::Result;
-    use crate::ge_context;
-    use crate::projects::{PointSymbology, RasterSymbology, Symbology};
-    use crate::test_data;
-    use crate::users::UserAuth;
-    use crate::util::tests::admin_login;
-    use crate::util::tests::{
-        MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
-        read_body_json, read_body_string, send_test_request,
+    use crate::{
+        api::model::{
+            datatypes::NamedData,
+            responses::{IdResponse, datasets::DatasetNameResponse},
+            services::{DatasetDefinition, Provenance},
+        },
+        contexts::{PostgresContext, Session, SessionId},
+        datasets::{
+            DatasetIdAndName,
+            storage::DatasetStore,
+            upload::{UploadId, VolumeName},
+        },
+        error::Result,
+        ge_context,
+        projects::{PointSymbology, RasterSymbology, Symbology},
+        test_data,
+        users::UserAuth,
+        util::tests::{
+            MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
+            admin_login, read_body_json, read_body_string, send_test_request,
+        },
     };
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
     use futures::TryStreamExt;
-    use geoengine_datatypes::collections::{
-        GeometryCollection, MultiPointCollection, VectorDataType,
+    use geoengine_datatypes::{
+        collections::{GeometryCollection, MultiPointCollection, VectorDataType},
+        operations::image::{RasterColorizer, RgbaColor},
+        primitives::{BoundingBox2D, ColumnSelection},
+        raster::{GridShape2D, TilingSpecification},
+        spatial_reference::SpatialReferenceOption,
     };
-    use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
-    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialResolution};
-    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
-    use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-    use geoengine_operators::engine::{
-        ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
-        VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
+    use geoengine_operators::{
+        engine::{
+            ExecutionContext, InitializedVectorOperator, QueryProcessor, StaticMetaData,
+            VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
+        },
+        source::{OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters},
+        util::gdal::create_ndvi_meta_data,
     };
-    use geoengine_operators::source::{
-        OgrSource, OgrSourceDataset, OgrSourceErrorSpec, OgrSourceParameters,
-    };
-    use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use serde_json::{Value, json};
     use tokio_postgres::NoTls;
+    use uuid::Uuid;
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
@@ -1698,6 +1705,74 @@ mod tests {
         .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
         .await
         .map_err(Into::into)
+    }
+
+    fn ctx_tiling_spec_600x600() -> TilingSpecification {
+        TilingSpecification {
+            tile_size_in_pixels: GridShape2D::new([600, 600]),
+        }
+    }
+
+    #[ge_context::test(tiling_spec = "ctx_tiling_spec_600x600")]
+    async fn create_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let session_id = session.id();
+        let session_context = app_ctx.session_context(session);
+
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
+
+        let dataset_name =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+        let exe_ctx = session_context.execution_context()?;
+
+        let source = make_ogr_source(
+            &exe_ctx,
+            NamedData {
+                namespace: dataset_name.namespace,
+                provider: None,
+                name: dataset_name.name,
+            },
+        )
+        .await?;
+
+        let query_processor = source.query_processor()?.multi_point().unwrap();
+        let query_ctx = session_context.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let query = query_processor
+            .query(
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
+                &query_ctx,
+            )
+            .await?;
+
+        let result: Vec<MultiPointCollection> = query.try_collect().await?;
+
+        let coords = result[0].coordinates();
+        assert_eq!(coords.len(), 10);
+        assert_eq!(
+            coords,
+            &[
+                [2.933_686_69, 51.23].into(),
+                [3.204_593_64_f64, 51.336_388_89].into(),
+                [4.651_413_428, 51.805_833_33].into(),
+                [4.11, 51.95].into(),
+                [4.386_160_188, 50.886_111_11].into(),
+                [3.767_373_38, 51.114_444_44].into(),
+                [4.293_757_362, 51.297_777_78].into(),
+                [1.850_176_678, 50.965_833_33].into(),
+                [2.170_906_949, 51.021_666_67].into(),
+                [4.292_873_969, 51.927_222_22].into(),
+            ]
+        );
+
+        Ok(())
     }
 
     #[ge_context::test]
@@ -2908,13 +2983,12 @@ mod tests {
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn create_dataset_tiling_specification() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         }
     }
 
     #[ge_context::test(tiling_spec = "create_dataset_tiling_specification")]
-    async fn create_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+    async fn create_datasets(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
 
         let session = app_ctx.create_anonymous_session().await.unwrap();
@@ -2938,12 +3012,11 @@ mod tests {
 
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::new(1., 1.)?,
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &query_ctx,
             )
             .await

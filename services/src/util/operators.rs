@@ -23,7 +23,7 @@ pub fn source_operator_from_dataset(
         ),
         GdalSource::TYPE_NAME => TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters { data: name.clone() },
+                params: GdalSourceParameters::new(name.clone()),
             }
             .boxed(),
         ),
