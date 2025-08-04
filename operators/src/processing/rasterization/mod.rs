@@ -401,7 +401,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                 let tile_spatial_bounds = tile_info.spatial_partition();
 
                 let vector_query = VectorQueryRectangle::new(
-                    tile_spatial_bounds.as_bbox(),
+                    extended_bounding_box_from_spatial_partition(tile_spatial_bounds, radius),
                     query_time,
                     ColumnSelection::all(), // FIXME: should be configurable
                 );
@@ -504,6 +504,22 @@ fn generate_zeroed_tiles<'a>(
             }),
     )
     .boxed()
+}
+
+fn extended_bounding_box_from_spatial_partition(
+    spatial_partition: SpatialPartition2D,
+    extent: f64,
+) -> BoundingBox2D {
+    BoundingBox2D::new_unchecked(
+        Coordinate2D::new(
+            spatial_partition.lower_left().x - extent,
+            spatial_partition.lower_left().y - extent,
+        ),
+        Coordinate2D::new(
+            spatial_partition.upper_right().x + extent,
+            spatial_partition.upper_right().y + extent,
+        ),
+    )
 }
 
 /// Calculates the gaussian density value for
