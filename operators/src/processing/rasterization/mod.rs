@@ -7,8 +7,8 @@ use crate::engine::{
     TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::util;
 use crate::util::spawn_blocking;
+use crate::util::{self, spawn_blocking_with_thread_pool};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, stream};
@@ -21,9 +21,12 @@ use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, Grid as GridWithFlexibleBoundType, Grid2D, GridIdx,
     GridOrEmpty, GridSize, RasterDataType, RasterTile2D, TilingSpecification, TilingStrategy,
+    UpdateIndexedElementsParallel,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use num_traits::FloatConst;
 use serde::{Deserialize, Serialize};
+use snafu::ensure;
 use typetag::serde;
 
 /// An operator that rasterizes vector data
@@ -31,6 +34,14 @@ pub type Rasterization = Operator<RasterizationParams, SingleVectorSource>;
 
 impl OperatorName for Rasterization {
     const TYPE_NAME: &'static str = "Rasterization";
+}
+#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
+pub struct DensityParams {
+    /// Defines the cutoff (as percentage of maximum density) down to which a point is taken
+    /// into account for an output pixel density value
+    cutoff: f64,
+    /// The standard deviation parameter for the gaussian function
+    stddev: f64,
 }
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
@@ -40,6 +51,8 @@ pub struct RasterizationParams {
     spatial_resolution: SpatialResolution,
     /// The origin coordinate which aligns the grid bounds
     origin_coordinate: Coordinate2D,
+    // Heatmap calculated from a gaussian density function
+    density_params: Option<DensityParams>,
 }
 
 #[typetag::serde]
@@ -90,6 +103,19 @@ impl RasterOperator for Rasterization {
             bands: RasterBandDescriptors::new_single_band(),
         };
 
+        if let Some(density_params) = self.params.density_params {
+            return InitializedDensityRasterization::new(
+                name,
+                path,
+                vector_source,
+                out_desc,
+                tiling_specification,
+                density_params.cutoff,
+                density_params.stddev,
+            )
+            .map(InitializedRasterOperator::boxed);
+        }
+
         Ok(InitializedGridRasterization {
             name,
             path,
@@ -122,6 +148,86 @@ impl InitializedRasterOperator for InitializedGridRasterization {
                 input: self.source.query_processor()?,
                 result_descriptor: self.result_descriptor.clone(),
                 tiling_specification: self.tiling_specification,
+            }
+            .boxed(),
+        ))
+    }
+
+    fn canonic_name(&self) -> CanonicOperatorName {
+        self.name.clone()
+    }
+
+    fn name(&self) -> &'static str {
+        Rasterization::TYPE_NAME
+    }
+
+    fn path(&self) -> WorkflowOperatorPath {
+        self.path.clone()
+    }
+}
+
+pub struct InitializedDensityRasterization {
+    name: CanonicOperatorName,
+    path: WorkflowOperatorPath,
+    source: Box<dyn InitializedVectorOperator>,
+    result_descriptor: RasterResultDescriptor,
+    tiling_specification: TilingSpecification,
+    radius: f64,
+    stddev: f64,
+}
+
+impl InitializedDensityRasterization {
+    fn new(
+        name: CanonicOperatorName,
+        path: WorkflowOperatorPath,
+        source: Box<dyn InitializedVectorOperator>,
+        result_descriptor: RasterResultDescriptor,
+        tiling_specification: TilingSpecification,
+        cutoff: f64,
+        stddev: f64,
+    ) -> Result<Self, error::Error> {
+        ensure!(
+            (0. ..1.).contains(&cutoff),
+            error::InvalidOperatorSpec {
+                reason: "The cutoff for density rasterization must be in [0, 1).".to_string()
+            }
+        );
+        ensure!(
+            stddev >= 0.,
+            error::InvalidOperatorSpec {
+                reason: "The standard deviation for density rasterization must be greater than or equal to zero."
+                    .to_string()
+            }
+        );
+
+        // Determine radius from cutoff percentage
+        let radius = gaussian_inverse(cutoff * gaussian(0., stddev), stddev);
+
+        Ok(InitializedDensityRasterization {
+            name,
+            path,
+            source,
+            result_descriptor,
+            tiling_specification,
+            radius,
+            stddev,
+        })
+    }
+}
+
+impl InitializedRasterOperator for InitializedDensityRasterization {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+
+    fn query_processor(&self) -> util::Result<TypedRasterQueryProcessor> {
+        Ok(TypedRasterQueryProcessor::F64(
+            DensityRasterizationQueryProcessor {
+                result_descriptor: self.result_descriptor.clone(),
+                input: self.source.query_processor()?,
+                tiling_specification: self.tiling_specification,
+                radius: self.radius,
+                stddev: self.stddev,
             }
             .boxed(),
         ))
@@ -245,6 +351,131 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     }
 }
 
+pub struct DensityRasterizationQueryProcessor {
+    input: TypedVectorQueryProcessor,
+    result_descriptor: RasterResultDescriptor,
+    tiling_specification: TilingSpecification,
+    radius: f64,
+    stddev: f64,
+}
+
+#[async_trait]
+impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
+    type RasterType = f64;
+
+    /// Performs a gaussian density rasterization.
+    /// For each tile, the spatial bounds are extended by `radius` in x and y direction.
+    /// All points within these extended bounds are then queried. For each point, the distance to
+    /// its surrounding tile pixels (up to `radius` distance) is measured and input into the
+    /// gaussian density function with the configured standard deviation. The density values
+    /// for each pixel are then summed to result in the tile pixel grid.
+    async fn raster_query<'a>(
+        &'a self,
+        query: RasterQueryRectangle,
+        ctx: &'a dyn QueryContext,
+    ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
+        let spatial_grid_desc = self
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification());
+
+        let tiling_strategy = spatial_grid_desc.generate_data_tiling_strategy();
+        let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
+        let query_time = query.time_interval();
+
+        if let MultiPoint(points_processor) = &self.input {
+            // Use rounding factor calculated from query resolution to extend in full pixel units
+            let rounding_factor = f64::max(
+                1. / tiling_geo_transform.x_pixel_size(),
+                1. / tiling_geo_transform.y_pixel_size(),
+            );
+            let radius = (self.radius * rounding_factor).ceil() / rounding_factor;
+
+            let query_grid_bounds = query.spatial_bounds();
+            let query_spatial_partition =
+                tiling_geo_transform.grid_to_spatial_bounds(&query_grid_bounds);
+
+            let tiles = stream::iter(
+                tiling_strategy.tile_information_iterator_from_grid_bounds(query.spatial_bounds()),
+            )
+            .then(move |tile_info| async move {
+                let tile_spatial_bounds = tile_info.spatial_partition();
+
+                let vector_query = VectorQueryRectangle::new(
+                    tile_spatial_bounds.as_bbox(),
+                    query_time,
+                    ColumnSelection::all(), // FIXME: should be configurable
+                );
+
+                let tile_geo_transform = tile_info.tile_geo_transform();
+
+                let mut chunks = points_processor.query(vector_query, ctx).await?;
+
+                let mut tile_data = Grid2D::new_filled(
+                    tiling_strategy.tile_size_in_pixels,
+                    Self::RasterType::from(0),
+                );
+
+                let mut cache_hint = CacheHint::max_duration();
+
+                while let Some(chunk) = chunks.next().await {
+                    let chunk = chunk?;
+
+                    cache_hint.merge_with(&chunk.cache_hint);
+
+                    let stddev = self.stddev;
+                    tile_data =
+                        spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
+                            tile_data.update_indexed_elements_parallel(|pixel_idx, pixel| {
+                                let pixel_coordinate = tile_geo_transform
+                                    .grid_idx_to_pixel_center_coordinate_2d(pixel_idx);
+
+                                if !query_spatial_partition.contains_coordinate(&pixel_coordinate) {
+                                    // TODO: this is propably wrong to do since it produces different tiles depending on the query bounds
+                                    return pixel;
+                                }
+
+                                let mut pixel_tmp = pixel;
+
+                                for coord in chunk.coordinates() {
+                                    let distance = coord.euclidean_distance(&pixel_coordinate);
+
+                                    if distance <= radius {
+                                        pixel_tmp += gaussian(distance, stddev);
+                                    }
+                                }
+
+                                pixel_tmp
+                            });
+
+                            tile_data
+                        })
+                        .await?;
+                }
+
+                Ok(RasterTile2D::new_with_tile_info(
+                    query_time, // FIXME this breaks the semantics we usually require
+                    tile_info,
+                    0,
+                    tile_data.into(),
+                    cache_hint,
+                ))
+            });
+
+            Ok(tiles.boxed())
+        } else {
+            Ok(generate_zeroed_tiles(
+                tiling_geo_transform,
+                self.tiling_specification,
+                &query,
+            ))
+        }
+    }
+
+    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+}
+
 fn generate_zeroed_tiles<'a>(
     tiling_geo_transform: GeoTransform,
     tiling_specification: TilingSpecification,
@@ -273,6 +504,19 @@ fn generate_zeroed_tiles<'a>(
             }),
     )
     .boxed()
+}
+
+/// Calculates the gaussian density value for
+/// `x`, the distance from the mean and
+/// `stddev`, the standard deviation
+fn gaussian(x: f64, stddev: f64) -> f64 {
+    (1. / (f64::sqrt(2. * f64::PI()) * stddev)) * f64::exp(-(x * x) / (2. * stddev * stddev))
+}
+
+/// The inverse function of [gaussian](gaussian)
+fn gaussian_inverse(x: f64, stddev: f64) -> f64 {
+    f64::sqrt(2.)
+        * f64::sqrt(stddev * stddev * f64::ln(1. / (f64::sqrt(2. * f64::PI()) * stddev * x)))
 }
 
 #[cfg(test)]
@@ -322,6 +566,7 @@ mod tests {
             params: RasterizationParams {
                 spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
                 origin_coordinate: [0., 0.].into(),
+                density_params: None,
             },
             sources: SingleVectorSource {
                 vector: MockPointSource {
@@ -381,6 +626,7 @@ mod tests {
             params: RasterizationParams {
                 spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
                 origin_coordinate: [0.0, 0.0].into(),
+                density_params: None,
             },
             sources: SingleVectorSource {
                 vector: MockPointSource {
