@@ -21,11 +21,12 @@ pub struct GdalReadAdvise {
     pub flip_y: bool,
 }
 
-impl GdalReadAdvise {
-    pub fn direct_read(&self) -> bool {
-        self.read_window_bounds == self.bounds_of_target
-    }
-}
+// TODO: re-implement direct read(?)
+// impl GdalReadAdvise {
+//     pub fn direct_read(&self) -> bool {
+//         self.read_window_bounds == self.bounds_of_target
+//     }
+// }
 
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug)]

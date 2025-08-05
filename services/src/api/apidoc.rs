@@ -1,5 +1,5 @@
 use crate::api::handlers;
-use crate::api::handlers::datasets::VolumeFileLayersResponse;
+use crate::api::handlers::datasets::{DatasetTile, VolumeFileLayersResponse};
 use crate::api::handlers::permissions::{
     PermissionListOptions, PermissionListing, PermissionRequest, Resource,
 };
@@ -103,6 +103,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::update_dataset_provenance_handler,
         handlers::datasets::update_dataset_symbology_handler,
         handlers::datasets::update_loading_info_handler,
+        handlers::datasets::add_dataset_tiles_handler,
         handlers::layers::add_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::add_existing_layer_to_collection,
@@ -395,6 +396,7 @@ use utoipa::{Modify, OpenApi};
             Volume,
             VolumeName,
             DataPath,
+            DatasetTile,
 
             PlotOutputFormat,
             WrappedPlotOutput,
