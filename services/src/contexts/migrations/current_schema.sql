@@ -51,6 +51,31 @@ CREATE TYPE "TimeStep" AS (
     step OID
 );
 
+CREATE TYPE "GridBoundingBox2D" AS (
+    y_min bigint,
+    y_max bigint,
+    x_min bigint,
+    x_max bigint
+);
+
+CREATE TYPE "GeoTransform" AS (
+    origin_coordinate "Coordinate2D",
+    x_pixel_size double precision,
+    y_pixel_size double precision
+);
+
+CREATE TYPE "SpatialGridDefinition" AS (
+    geo_transform "GeoTransform",
+    grid_bounds "GridBoundingBox2D"
+);
+
+CREATE TYPE "SpatialGridDescriptorState" AS ENUM ('Source', 'Merged');
+
+CREATE TYPE "SpatialGridDescriptor" AS (
+    "state" "SpatialGridDescriptorState",
+    spatial_grid "SpatialGridDefinition"
+);
+
 CREATE TYPE "DatasetName" AS (namespace text, name text);
 
 CREATE TYPE "Provenance" AS (
@@ -254,9 +279,8 @@ CREATE TYPE "RasterResultDescriptor" AS (
     -- SpatialReferenceOption
     spatial_reference "SpatialReference",
     "time" "TimeInterval",
-    bbox "SpatialPartition2D",
-    resolution "SpatialResolution",
-    bands "RasterBandDescriptor" []
+    bands "RasterBandDescriptor" [],
+    spatial_grid "SpatialGridDescriptor"
 );
 
 CREATE TYPE "VectorResultDescriptor" AS (
@@ -765,17 +789,6 @@ CREATE TYPE "DatasetLayerListingProviderDefinition" AS (
     priority smallint
 );
 
-CREATE TYPE "StacBand" AS (
-    "name" text,
-    no_data_value double precision,
-    data_type "RasterDataType"
-);
-
-CREATE TYPE "StacZone" AS (
-    "name" text,
-    epsg oid
-);
-
 CREATE TYPE "StacApiRetries" AS (
     number_of_retries bigint,
     initial_delay_ms bigint,
@@ -795,8 +808,6 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     "name" text,
     id uuid,
     api_url text,
-    bands "StacBand" [],
-    zones "StacZone" [],
     stac_api_retries "StacApiRetries",
     gdal_retries "GdalRetries",
     cache_ttl int,

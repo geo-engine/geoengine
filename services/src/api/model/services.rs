@@ -1,4 +1,5 @@
-use super::datatypes::{CacheTtlSeconds, DataId, DataProviderId, GdalConfigOption, RasterDataType};
+use super::datatypes::{CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption};
+use super::operators::TypedResultDescriptor;
 use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
@@ -16,7 +17,6 @@ use std::path::PathBuf;
 use url::Url;
 use utoipa::ToSchema;
 use validator::{Validate, ValidationErrors};
-
 pub const SECRET_REPLACEMENT: &str = "*****";
 
 #[allow(clippy::large_enum_variant)]
@@ -750,8 +750,6 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     pub description: String,
     pub priority: Option<i16>,
     pub api_url: String,
-    pub bands: Vec<StacBand>,
-    pub zones: Vec<StacZone>,
     #[serde(default)]
     pub stac_api_retries: StacApiRetries,
     #[serde(default)]
@@ -760,58 +758,6 @@ pub struct SentinelS2L2ACogsProviderDefinition {
     pub cache_ttl: CacheTtlSeconds,
     #[serde(default)]
     pub query_buffer: StacQueryBuffer,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct StacBand {
-    pub name: String,
-    pub no_data_value: Option<f64>,
-    pub data_type: RasterDataType,
-}
-
-impl From<StacBand> for crate::datasets::external::sentinel_s2_l2a_cogs::StacBand {
-    fn from(value: StacBand) -> Self {
-        crate::datasets::external::sentinel_s2_l2a_cogs::StacBand {
-            name: value.name,
-            no_data_value: value.no_data_value,
-            data_type: value.data_type.into(),
-        }
-    }
-}
-
-impl From<crate::datasets::external::sentinel_s2_l2a_cogs::StacBand> for StacBand {
-    fn from(value: crate::datasets::external::sentinel_s2_l2a_cogs::StacBand) -> Self {
-        StacBand {
-            name: value.name,
-            no_data_value: value.no_data_value,
-            data_type: value.data_type.into(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, ToSchema)]
-pub struct StacZone {
-    pub name: String,
-    pub epsg: u32,
-}
-
-impl From<StacZone> for crate::datasets::external::sentinel_s2_l2a_cogs::StacZone {
-    fn from(value: StacZone) -> Self {
-        crate::datasets::external::sentinel_s2_l2a_cogs::StacZone {
-            name: value.name,
-            epsg: value.epsg,
-        }
-    }
-}
-
-impl From<crate::datasets::external::sentinel_s2_l2a_cogs::StacZone> for StacZone {
-    fn from(value: crate::datasets::external::sentinel_s2_l2a_cogs::StacZone) -> Self {
-        StacZone {
-            name: value.name,
-            epsg: value.epsg,
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, ToSchema, Default)]
@@ -893,8 +839,6 @@ impl From<SentinelS2L2ACogsProviderDefinition>
             description: value.description,
             priority: value.priority,
             api_url: value.api_url,
-            bands: value.bands.into_iter().map(Into::into).collect(),
-            zones: value.zones.into_iter().map(Into::into).collect(),
             stac_api_retries: value.stac_api_retries.into(),
             gdal_retries: value.gdal_retries.into(),
             cache_ttl: value.cache_ttl.into(),
@@ -916,8 +860,6 @@ impl From<crate::datasets::external::sentinel_s2_l2a_cogs::SentinelS2L2ACogsProv
             description: value.description,
             priority: value.priority,
             api_url: value.api_url,
-            bands: value.bands.into_iter().map(Into::into).collect(),
-            zones: value.zones.into_iter().map(Into::into).collect(),
             stac_api_retries: value.stac_api_retries.into(),
             gdal_retries: value.gdal_retries.into(),
             cache_ttl: value.cache_ttl.into(),
@@ -1103,6 +1045,56 @@ impl From<&Volume> for crate::datasets::upload::Volume {
         Self {
             name: VolumeName(value.name.clone()),
             path: value.path.as_ref().map_or_else(PathBuf::new, PathBuf::from),
+        }
+    }
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
+#[serde(rename_all = "camelCase")]
+pub struct Dataset {
+    pub id: DatasetId,
+    pub name: DatasetName,
+    pub display_name: String,
+    pub description: String,
+    pub result_descriptor: TypedResultDescriptor,
+    pub source_operator: String,
+    pub symbology: Option<Symbology>,
+    pub provenance: Option<Vec<Provenance>>,
+    pub tags: Option<Vec<String>>,
+}
+
+impl From<Dataset> for crate::datasets::storage::Dataset {
+    fn from(value: Dataset) -> Self {
+        crate::datasets::storage::Dataset {
+            id: value.id.into(),
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            result_descriptor: value.result_descriptor.into(),
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value
+                .provenance
+                .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>()),
+            tags: value.tags,
+        }
+    }
+}
+
+impl From<crate::datasets::storage::Dataset> for Dataset {
+    fn from(value: crate::datasets::storage::Dataset) -> Self {
+        Dataset {
+            id: value.id.into(),
+            name: value.name,
+            display_name: value.display_name,
+            description: value.description,
+            result_descriptor: value.result_descriptor.into(),
+            source_operator: value.source_operator,
+            symbology: value.symbology,
+            provenance: value
+                .provenance
+                .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>()),
+            tags: value.tags,
         }
     }
 }

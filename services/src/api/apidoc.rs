@@ -7,20 +7,16 @@ use crate::api::handlers::plots::WrappedPlotOutput;
 use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
 use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
 use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
-use crate::api::handlers::users::AddRole;
-use crate::api::handlers::users::{Quota, UpdateQuota, UsageSummaryGranularity};
-use crate::api::handlers::wfs::{CollectionType, GeoJson};
-use crate::api::handlers::workflows::{ProvenanceEntry, RasterStreamWebsocketResultType};
 use crate::api::model::datatypes::{
     AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
     ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
     DataProviderId, DatasetId, DateTimeParseFormat, DateTimeString, ExternalDataId,
     FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement,
     MlModelName, MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry,
-    Palette, PlotOutputFormat, PlotQueryRectangle, RasterColorizer, RasterDataType,
-    RasterPropertiesEntryType, RasterPropertiesKey, RasterQueryRectangle, RgbaColor,
-    SpatialPartition2D, SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity,
-    TimeInstance, TimeInterval, TimeStep, VectorDataType, VectorQueryRectangle,
+    Palette, PlotOutputFormat, RasterColorizer, RasterDataType, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterToDatasetQueryRectangle, RgbaColor, SpatialPartition2D,
+    SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
+    TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
@@ -43,8 +39,8 @@ use crate::api::model::services::DatabaseConnectionConfig;
 use crate::api::model::services::EdrVectorSpec;
 use crate::api::model::services::LayerProviderListing;
 use crate::api::model::services::{
-    AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition, MetaDataSuggestion,
-    MlModel, Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
+    AddDataset, CreateDataset, DataPath, Dataset, DatasetDefinition, MetaDataDefinition,
+    MetaDataSuggestion, MlModel, Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
 };
 use crate::api::model::services::{
     ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition,
@@ -52,13 +48,25 @@ use crate::api::model::services::{
     EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition,
     GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition,
     NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition,
-    SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacQueryBuffer, StacZone,
+    SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacQueryBuffer,
     TypedDataProviderDefinition,
 };
-use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
+use crate::api::ogc::util::OgcBoundingBox;
+use crate::api::ogc::{wcs, wfs, wms};
+use crate::api::{
+    handlers::{
+        users::{AddRole, Quota, UpdateQuota, UsageSummaryGranularity},
+        wfs::{CollectionType, GeoJson},
+        workflows::{ProvenanceEntry, RasterStreamWebsocketResultType},
+    },
+    model::{
+        datatypes::{GeoTransform, GridBoundingBox2D, GridIdx2D, SpatialGridDefinition},
+        operators::{SpatialGridDescriptor, SpatialGridDescriptorState},
+    },
+};
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
-use crate::datasets::storage::{AutoCreateDataset, Dataset, SuggestMetaData};
+use crate::datasets::storage::{AutoCreateDataset, SuggestMetaData};
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
 use crate::layers::layer::{
@@ -279,9 +287,7 @@ use utoipa::{Modify, OpenApi};
             VectorColumnInfo,
             RasterDatasetFromWorkflow,
             RasterDatasetFromWorkflowResult,
-            RasterQueryRectangle,
-            VectorQueryRectangle,
-            PlotQueryRectangle,
+            RasterToDatasetQueryRectangle,
             BandSelection,
 
             TaskAbortOptions,
@@ -426,6 +432,12 @@ use utoipa::{Modify, OpenApi};
             RasterStreamWebsocketResultType,
             CacheTtlSeconds,
 
+            SpatialGridDefinition,
+            SpatialGridDescriptorState,
+            SpatialGridDescriptor,
+            GridBoundingBox2D,
+            GridIdx2D,
+            GeoTransform,
             TypedDataProviderDefinition,
             ArunaDataProviderDefinition,
             DatasetLayerListingProviderDefinition,
@@ -440,8 +452,6 @@ use utoipa::{Modify, OpenApi};
             SentinelS2L2ACogsProviderDefinition,
             DatabaseConnectionConfig,
             EdrVectorSpec,
-            StacBand,
-            StacZone,
             StacApiRetries,
             StacQueryBuffer,
             DatasetLayerListingCollection,

@@ -12,10 +12,11 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
-    RasterQueryRectangle, SpatialPartition2D,
+    RasterQueryRectangle,
 };
 use geoengine_datatypes::raster::{
-    MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    GridBoundingBox2D, MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -112,8 +113,7 @@ impl RasterOperator for Radiance {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
             time: in_desc.time,
-            bbox: in_desc.bbox,
-            resolution: in_desc.resolution,
+            spatial_grid: in_desc.spatial_grid,
             bands: RasterBandDescriptors::new(
                 in_desc
                     .bands
@@ -250,14 +250,14 @@ impl<Q, P> QueryProcessor for RadianceProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = SpatialPartition2D,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -285,7 +285,7 @@ mod tests {
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, MaskedGrid2D, TilingSpecification};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // #[tokio::test]
     // async fn test_msg_raster() {
@@ -312,7 +312,6 @@ mod tests {
     async fn test_ok() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -351,7 +350,6 @@ mod tests {
     async fn test_empty_raster() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -387,7 +385,6 @@ mod tests {
     async fn test_missing_offset() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -415,7 +412,6 @@ mod tests {
     async fn test_missing_slope() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -444,7 +440,6 @@ mod tests {
     async fn test_invalid_measurement_unitless() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -474,7 +469,6 @@ mod tests {
     async fn test_invalid_measurement_continuous() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -511,7 +505,6 @@ mod tests {
     async fn test_invalid_measurement_classification() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -525,7 +518,7 @@ mod tests {
                     None,
                     Some(Measurement::Classification(ClassificationMeasurement {
                         measurement: "invalid".into(),
-                        classes: HashMap::new(),
+                        classes: BTreeMap::new(),
                     })),
                 );
 

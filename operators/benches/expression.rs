@@ -2,16 +2,15 @@
 
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
-    primitives::{
-        BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-    },
-    raster::{RasterDataType, RasterTile2D, RenameBands},
+    primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+    raster::RenameBands,
+    raster::{GridBoundingBox2D, RasterDataType, RasterTile2D},
     util::test::TestDefault,
 };
 use geoengine_operators::{
     engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
-        SingleRasterSource, WorkflowOperatorPath,
+        MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
+        WorkflowOperatorPath,
     },
     processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
     source::{GdalSource, GdalSourceParameters},
@@ -55,7 +54,7 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
     let ndvi_id = add_ndvi_dataset(execution_context);
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: ndvi_id },
+        params: GdalSourceParameters::new(ndvi_id),
     };
 
     gdal_operator.boxed()
@@ -66,7 +65,7 @@ async fn main() {
     const RUNS: usize = 5;
 
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let ndvi_source = ndvi_source(&mut execution_context);
 
@@ -82,12 +81,11 @@ async fn main() {
         .unwrap();
 
     // World in 36000x18000 pixels",
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        attributes: BandSelection::first(),
-    };
+    let qrect = RasterQueryRectangle::new(
+        GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        BandSelection::first(),
+    );
 
     let mut times = NumberStatistics::default();
 

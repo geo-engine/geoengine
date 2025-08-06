@@ -1,5 +1,6 @@
 use super::DatasetName;
 use super::storage::MetaDataDefinition;
+use crate::api::model::operators::TypedResultDescriptor;
 use crate::config::{DatasetService, get_config_element};
 use crate::datasets::storage::{Dataset, validate_tags};
 use crate::error::Result;
@@ -8,7 +9,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_operators::engine::{
-    MetaDataProvider, RasterResultDescriptor, TypedResultDescriptor, VectorResultDescriptor,
+    MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};

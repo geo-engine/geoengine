@@ -53,15 +53,6 @@ impl Neighborhood {
         self.matrix.axis_size_x() / 2
     }
 
-    pub fn x_width(&self) -> usize {
-        self.matrix.axis_size_x()
-    }
-
-    /// Specifies the y extent beginning from the center pixel
-    pub fn y_width(&self) -> usize {
-        self.matrix.axis_size_y()
-    }
-
     /// Specifies the x extent right of one pixel
     pub fn y_radius(&self) -> usize {
         self.matrix.axis_size_y() / 2

@@ -1,7 +1,7 @@
 use crate::raster::{
-    BoundedGrid, Grid, Grid1D, Grid2D, Grid3D, GridBoundingBox, GridBounds, GridIdx,
-    GridIndexAccessMut, GridIntersection, GridOrEmpty, GridSize, GridSpaceToLinearSpace,
-    empty_grid::EmptyGrid, masked_grid::MaskedGrid,
+    BoundedGrid, Grid, Grid1D, Grid3D, GridBoundingBox, GridBounds, GridIdx, GridIndexAccessMut,
+    GridIntersection, GridOrEmpty, GridSize, GridSpaceToLinearSpace, empty_grid::EmptyGrid,
+    masked_grid::MaskedGrid,
 };
 
 pub trait GridBlit<O, T>
@@ -37,9 +37,12 @@ where
     }
 }
 
-impl<D, T> GridBlit<Grid<D, T>, T> for Grid2D<T>
+impl<D, D2, T> GridBlit<Grid<D, T>, T> for Grid<D2, T>
 where
     D: GridSize<ShapeArray = [usize; 2]>
+        + GridBounds<IndexArray = [isize; 2]>
+        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
+    D2: GridSize<ShapeArray = [usize; 2]>
         + GridBounds<IndexArray = [isize; 2]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
     T: Copy + Sized,
@@ -145,9 +148,12 @@ where
     }
 }
 
-impl<D, T> GridBlit<EmptyGrid<D, T>, T> for Grid2D<bool>
+impl<D, D2, T> GridBlit<EmptyGrid<D, T>, T> for Grid<D2, bool>
 where
     D: GridSize<ShapeArray = [usize; 2]>
+        + GridBounds<IndexArray = [isize; 2]>
+        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
+    D2: GridSize<ShapeArray = [usize; 2]>
         + GridBounds<IndexArray = [isize; 2]>
         + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
     T: Copy + Sized,
