@@ -529,9 +529,7 @@ impl ArunaDataProvider {
         info: &RasterInfo,
     ) -> geoengine_operators::util::Result<RasterResultDescriptor> {
         let shape = GridShape2D::new_2d(info.width, info.height).bounding_box();
-
-        let geo_transform = GeoTransform::try_from(info.geo_transform) // TODO: convert into tiling based bounds?
-            .expect("GeoTransform should be valid"); // TODO: check if that can be false
+        let geo_transform = GeoTransform::try_from(info.geo_transform)?;
 
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
