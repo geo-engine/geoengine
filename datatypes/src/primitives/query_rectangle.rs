@@ -10,13 +10,13 @@ use snafu::ensure;
 /// A spatio-temporal rectangle with a specified resolution and the selected bands
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct QueryRectangle<SpatialBounds, AttributeSelection: QueryAttributeSelection> {
+pub struct QueryRectangle<SpatialBounds, AttributeSelection> {
     spatial_bounds: SpatialBounds,
     time_interval: TimeInterval,
     attributes: AttributeSelection,
 }
 
-impl<SpatialBounds: Copy, A: QueryAttributeSelection> QueryRectangle<SpatialBounds, A> {
+impl<SpatialBounds: Copy, A: Clone> QueryRectangle<SpatialBounds, A> {
     pub fn time_interval(&self) -> TimeInterval {
         self.time_interval
     }

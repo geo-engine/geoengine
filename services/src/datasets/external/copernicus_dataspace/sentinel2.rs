@@ -2,17 +2,17 @@ use std::path::PathBuf;
 
 use crate::{
     datasets::external::copernicus_dataspace::stac::{
-        load_stac_items, resolve_datetime_duplicates,
+        StacQueryRectangle, load_stac_items, resolve_datetime_duplicates,
     },
     util::sentinel_2_utm_zones::UtmZone,
 };
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::{
     primitives::{
-        AxisAlignedRectangle, CacheTtlSeconds, ColumnSelection, DateTime, RasterQueryRectangle,
-        TimeInstance, TimeInterval, VectorQueryRectangle,
+        AxisAlignedRectangle, CacheTtlSeconds, DateTime, RasterQueryRectangle, TimeInstance,
+        TimeInterval,
     },
-    raster::{GeoTransform, GridShape2D, SpatialGridDefinition, TilingSpecification},
+    raster::{GeoTransform, SpatialGridDefinition},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use geoengine_operators::{
@@ -88,7 +88,7 @@ pub struct Sentinel2Metadata {
 impl Sentinel2Metadata {
     async fn crate_loading_info(
         &self,
-        query: VectorQueryRectangle, // TODO: here the name is misleading :(
+        query: StacQueryRectangle, // TODO: here the name is misleading :(
     ) -> Result<GdalLoadingInfo, CopernicusSentinel2Error> {
         let mut stac_items = load_stac_items(
             Url::parse(&self.stac_url).context(CannotParseStacUrl)?,
@@ -251,19 +251,21 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
-        // FIXME: get tiling_spec!
-        let tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+        // TODO: maybe get tiling_specification from self/ctx?
+        let tiling_specification = crate::config::get_config_element::<
+            crate::config::TilingSpecification,
+        >()
+        .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+            source: Box::new(e),
+        })?;
 
         let spatial_bounds = SpatialGridDescriptor::new_source(spatial_grid)
-            .tiling_grid_definition(tiling_specification)
+            .tiling_grid_definition(tiling_specification.into())
             .tiling_geo_transform()
             .grid_to_spatial_bounds(&query.spatial_bounds());
 
-        let spatial_bounds_query = VectorQueryRectangle::new(
-            spatial_bounds.as_bbox(),
-            query.time_interval(),
-            ColumnSelection::all(),
-        );
+        let spatial_bounds_query =
+            StacQueryRectangle::new(spatial_bounds.as_bbox(), query.time_interval(), ());
 
         self.crate_loading_info(spatial_bounds_query)
             .await
@@ -507,7 +509,7 @@ mod tests {
 
         // time=2020-07-01T12%3A00%3A00.000Z/2020-07-03T12%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=256&HEIGHT=256&CRS=EPSG%3A32632&BBOX=482500%2C5627500%2C483500%2C5628500
         let loading_info = metadata
-            .crate_loading_info(VectorQueryRectangle::new(
+            .crate_loading_info(StacQueryRectangle::new(
                 SpatialPartition2D::new_unchecked(
                     (482_500., 5_627_500.).into(),
                     (483_500., 5_628_500.).into(),
@@ -517,7 +519,7 @@ mod tests {
                     DateTime::parse_from_rfc3339("2020-07-01T12:00:00.000Z").unwrap(),
                     DateTime::parse_from_rfc3339("2020-07-03T12:00:00.000Z").unwrap(),
                 ),
-                ColumnSelection::all(),
+                (),
             ))
             .await
             .unwrap();

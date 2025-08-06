@@ -169,8 +169,6 @@ impl ConfigElement for ProjectService {
 
 #[derive(Debug, Deserialize)]
 pub struct TilingSpecification {
-    pub origin_coordinate_x: f64,
-    pub origin_coordinate_y: f64,
     pub tile_shape_pixels_x: usize,
     pub tile_shape_pixels_y: usize,
 }
