@@ -20,7 +20,7 @@ pub struct MultiBandGdalLoadingInfo {
     cache_hint: CacheHint,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct TileFile {
     pub time: TimeInterval,
     pub spatial_partition: SpatialPartition2D,
