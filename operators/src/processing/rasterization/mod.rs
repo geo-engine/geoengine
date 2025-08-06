@@ -542,7 +542,9 @@ mod tests {
         RasterOperator, SingleVectorSource, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockPointSource, MockPointSourceParams};
-    use crate::processing::rasterization::{Rasterization, RasterizationParams};
+    use crate::processing::rasterization::{
+        DensityParams, Rasterization, RasterizationParams, gaussian,
+    };
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{
         BandSelection, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialResolution,
@@ -690,6 +692,206 @@ mod tests {
                 vec![0., 0., 0., 1.],
                 vec![0., 0., 0., 1.],
                 vec![0., 0., 0., 1.],
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn density_basic() {
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let rasterization = Rasterization {
+            params: RasterizationParams {
+                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+                origin_coordinate: [0.0, 0.0].into(),
+                density_params: Some(DensityParams {
+                    cutoff: gaussian(0.99, 1.0) / gaussian(0., 1.0),
+                    stddev: 1.0,
+                }),
+            },
+            sources: SingleVectorSource {
+                vector: MockPointSource {
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![(-1., 1.).into(), (1., 1.).into()],
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., -2.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .await
+        .unwrap();
+
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, -1, -2, 1).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
+
+        let res = get_results(
+            rasterization,
+            query,
+            &execution_context.mock_query_context_test_default(),
+        )
+        .await;
+
+        assert_eq!(
+            res,
+            vec![
+                vec![
+                    gaussian(
+                        Coordinate2D::new(-1., 1.)
+                            .euclidean_distance(&Coordinate2D::new(-1.5, 1.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(-1., 1.)
+                            .euclidean_distance(&Coordinate2D::new(-0.5, 1.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(-1., 1.)
+                            .euclidean_distance(&Coordinate2D::new(-1.5, 0.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(-1., 1.)
+                            .euclidean_distance(&Coordinate2D::new(-0.5, 0.5)),
+                        1.0
+                    )
+                ],
+                vec![
+                    gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(0.5, 1.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(1.5, 1.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(0.5, 0.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(1.5, 0.5)),
+                        1.0
+                    )
+                ],
+            ]
+        );
+    }
+
+    #[tokio::test]
+    async fn density_radius_overlap() {
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
+        let rasterization = Rasterization {
+            params: RasterizationParams {
+                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+                origin_coordinate: [0.0, 0.0].into(),
+                density_params: Some(DensityParams {
+                    cutoff: gaussian(1.99, 1.0) / gaussian(0., 1.0),
+                    stddev: 1.0,
+                }),
+            },
+            sources: SingleVectorSource {
+                vector: MockPointSource {
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![(-1., 1.).into(), (1., 1.).into()],
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., -2.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
+                }
+                .boxed(),
+            },
+        }
+        .boxed()
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .await
+        .unwrap();
+
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, -1, -2, 1).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
+
+        let res = get_results(
+            rasterization,
+            query,
+            &execution_context.mock_query_context_test_default(),
+        )
+        .await;
+
+        assert_eq!(
+            res,
+            vec![
+                vec![
+                    gaussian(
+                        Coordinate2D::new(-1., 1.)
+                            .euclidean_distance(&Coordinate2D::new(-1.5, 1.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(-1., 1.)
+                            .euclidean_distance(&Coordinate2D::new(-0.5, 1.5)),
+                        1.0
+                    ) + gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(-0.5, 1.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(-1., 1.)
+                            .euclidean_distance(&Coordinate2D::new(-1.5, 0.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(-1., 1.)
+                            .euclidean_distance(&Coordinate2D::new(-0.5, 0.5)),
+                        1.0
+                    ) + gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(-0.5, 0.5)),
+                        1.0
+                    )
+                ],
+                vec![
+                    gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(0.5, 1.5)),
+                        1.0
+                    ) + gaussian(
+                        Coordinate2D::new(-1., 1.).euclidean_distance(&Coordinate2D::new(0.5, 1.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(1.5, 1.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(0.5, 0.5)),
+                        1.0
+                    ) + gaussian(
+                        Coordinate2D::new(-1., 1.).euclidean_distance(&Coordinate2D::new(0.5, 0.5)),
+                        1.0
+                    ),
+                    gaussian(
+                        Coordinate2D::new(1., 1.).euclidean_distance(&Coordinate2D::new(1.5, 0.5)),
+                        1.0
+                    )
+                ],
             ]
         );
     }
