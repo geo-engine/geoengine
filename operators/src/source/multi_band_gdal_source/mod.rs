@@ -269,7 +269,7 @@ impl GdalRasterLoader {
         reader_mode: GdalReaderMode,
         tile_information: TileInformation,
     ) -> Result<Option<GridAndProperties<T>>> {
-        println!(
+        debug!(
             "Loading raster tile from file: {:?}",
             dataset_params.file_path
         );

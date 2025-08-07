@@ -107,5 +107,15 @@ vergen-gitcl = { workspace = true, features = ["build"] }
 name = "quota_check"
 harness = false
 
+
+# TODO: this should be a bench but `cargo bench` makes problems (SIGKILL under WSL, disconnect under Remote VS Code)
+[[bin]]
+name = "tiled_gdal_source"
+path = "benches/tiled_gdal_source.rs"
+
+# [[bench]]
+# name = "tiled_gdal_source"
+# harness = false
+
 [lints]
 workspace = true
