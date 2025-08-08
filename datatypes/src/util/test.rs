@@ -1,7 +1,7 @@
 use float_cmp::approx_eq;
 
 use crate::raster::{
-    EmptyGrid, GeoTransform, Grid, GridIndexAccess, GridOrEmpty, GridSize, MaskedGrid,
+    EmptyGrid, GeoTransform, Grid, GridIndexAccess, GridOrEmpty, GridSize, MaskedGrid, Pixel,
     RasterTile2D, grid_idx_iter_2d,
 };
 use std::panic;
@@ -89,6 +89,14 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
 pub fn assert_eq_two_list_of_tiles_u8(
     list_a: &[RasterTile2D<u8>],
     list_b: &[RasterTile2D<u8>],
+    compare_cache_hint: bool,
+) {
+    assert_eq_two_list_of_tiles::<u8>(list_a, list_b, compare_cache_hint);
+}
+
+pub fn assert_eq_two_list_of_tiles<P: Pixel>(
+    list_a: &[RasterTile2D<P>],
+    list_b: &[RasterTile2D<P>],
     compare_cache_hint: bool,
 ) {
     assert_eq!(

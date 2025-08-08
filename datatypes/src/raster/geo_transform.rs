@@ -282,7 +282,11 @@ impl GeoTransform {
         approx_eq!(
             Coordinate2D,
             self.distance_to_nearest_pixel_edge(coordinate),
-            Coordinate2D::new(0., 0.)
+            Coordinate2D::new(0., 0.),
+            float_cmp::F64Margin {
+                epsilon: 0.000_001, // TODO: check
+                ulps: 2
+            }
         )
     }
 

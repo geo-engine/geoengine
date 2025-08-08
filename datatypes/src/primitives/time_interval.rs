@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::{cmp::Ordering, convert::TryInto};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql, Hash)]
 #[repr(C)]
 pub struct TimeInterval {
     start: TimeInstance,
