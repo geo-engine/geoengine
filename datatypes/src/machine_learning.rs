@@ -1,16 +1,16 @@
 use crate::{
     dataset::{SYSTEM_NAMESPACE, is_invalid_name_char},
-    raster::RasterDataType,
+    raster::{GridShape2D, GridSize},
 };
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize, de::Visitor};
 use snafu::Snafu;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::{fmt::Display, str::FromStr};
 use strum::IntoStaticStr;
 
 const NAME_DELIMITER: char = ':';
 
-#[derive(Debug, Clone, Hash, Eq, PartialEq)]
+#[derive(Debug, Clone, Hash, Eq, PartialEq, ToSql, FromSql)]
 pub struct MlModelName {
     pub namespace: Option<String>,
     pub name: String,
@@ -41,11 +41,48 @@ impl MlModelName {
         }
     }
 
-    pub fn new<S: Into<String>>(namespace: Option<String>, name: S) -> Self {
+    pub fn new_unchecked<S: Into<String>>(namespace: Option<String>, name: S) -> Self {
         Self {
             namespace,
             name: name.into(),
         }
+    }
+
+    pub fn try_new<S: Into<String>, N: Into<String>>(
+        namespace: Option<N>,
+        name: S,
+    ) -> Result<Self, MlModelNameError> {
+        let name: String = name.into();
+        let namespace: Option<String> = namespace.map(Into::into);
+
+        if name.is_empty() {
+            return Err(MlModelNameError::IsEmpty);
+        }
+
+        if let Some(c) = name.matches(is_invalid_name_char).next() {
+            return Err(MlModelNameError::InvalidCharacter {
+                invalid_char: c.to_string(),
+            });
+        }
+
+        let ns = match namespace {
+            None => Ok(None),
+            Some(n) if n.is_empty() => Ok(None),
+            Some(n) => {
+                if let Some(c) = n.matches(is_invalid_name_char).next() {
+                    Err(MlModelNameError::InvalidCharacter {
+                        invalid_char: c.to_string(),
+                    })
+                } else {
+                    Ok(Self::canonicalize(n, SYSTEM_NAMESPACE))
+                }
+            }
+        }?;
+
+        Ok(Self {
+            namespace: ns,
+            name,
+        })
     }
 }
 
@@ -54,13 +91,7 @@ impl Serialize for MlModelName {
     where
         S: serde::Serializer,
     {
-        let d = NAME_DELIMITER;
-        let serialized = match (&self.namespace, &self.name) {
-            (None, name) => name.to_string(),
-            (Some(namespace), name) => {
-                format!("{namespace}{d}{name}")
-            }
-        };
+        let serialized = self.to_string();
 
         serializer.serialize_str(&serialized)
     }
@@ -79,37 +110,17 @@ impl FromStr for MlModelName {
     type Err = MlModelNameError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let mut strings = [None, None];
         let mut split = s.split(NAME_DELIMITER);
-
-        for (buffer, part) in strings.iter_mut().zip(&mut split) {
-            if part.is_empty() {
-                return Err(MlModelNameError::IsEmpty);
-            }
-
-            if let Some(c) = part.matches(is_invalid_name_char).next() {
-                return Err(MlModelNameError::InvalidCharacter {
-                    invalid_char: c.to_string(),
-                });
-            }
-
-            *buffer = Some(part.to_string());
-        }
-
+        let first = split.next();
+        let second = split.next();
         if split.next().is_some() {
             return Err(MlModelNameError::TooManyParts);
         }
 
-        match strings {
-            [Some(namespace), Some(name)] => Ok(MlModelName {
-                namespace: MlModelName::canonicalize(namespace, SYSTEM_NAMESPACE),
-                name,
-            }),
-            [Some(name), None] => Ok(MlModelName {
-                namespace: None,
-                name,
-            }),
-            _ => Err(MlModelNameError::IsEmpty),
+        match [first, second] {
+            [None, None] => Err(MlModelNameError::IsEmpty),
+            [Some(name), None] => Self::try_new(None::<&str>, name),
+            [namespace, Some(name)] => Self::try_new(namespace, name),
         }
     }
 }
@@ -135,15 +146,53 @@ impl Visitor<'_> for MlModelNameDeserializeVisitor {
     }
 }
 
-// For now we assume all models are pixel-wise, i.e., they take a single pixel with multiple bands as input and produce a single output value.
-// To support different inputs, we would need a more sophisticated logic to produce the inputs for the model.
-#[derive(Debug, Clone, Hash, Eq, PartialEq, Deserialize, Serialize)]
-pub struct MlModelMetadata {
-    pub file_path: PathBuf,
-    pub input_type: RasterDataType,
-    pub num_input_bands: u32, // number of features per sample (bands per pixel)
-    pub output_type: RasterDataType, // TODO: support multiple outputs, e.g. one band for the probability of prediction
-                                     // TODO: output measurement, e.g. classification or regression, label names for classification. This would have to be provided by the model creator along the model file as it cannot be extracted from the model file(?)
+impl Display for MlModelName {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let d = NAME_DELIMITER;
+        let s = match (&self.namespace, &self.name) {
+            (None, name) => name.to_string(),
+            (Some(namespace), name) => {
+                format!("{namespace}{d}{name}")
+            }
+        };
+
+        f.write_str(&s)
+    }
+}
+
+/// A struct describing tensor shape for `MlModelMetadata`
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Deserialize, Serialize, ToSql, FromSql)]
+pub struct MlTensorShape3D {
+    pub y: u32,
+    pub x: u32,
+    pub bands: u32, // TODO: named attributes?
+}
+
+impl MlTensorShape3D {
+    pub fn new_y_x_bands(y: u32, x: u32, bands: u32) -> Self {
+        Self { y, x, bands }
+    }
+
+    pub fn new_single_pixel_bands(bands: u32) -> Self {
+        Self { y: 1, x: 1, bands }
+    }
+
+    pub fn new_single_pixel_single_band() -> Self {
+        Self::new_single_pixel_bands(1)
+    }
+
+    pub fn axis_size_y(&self) -> u32 {
+        self.y
+    }
+
+    pub fn axis_size_x(&self) -> u32 {
+        self.x
+    }
+
+    pub fn yx_matches_tile_shape(&self, tile_shape: &GridShape2D) -> bool {
+        self.axis_size_x() as usize == tile_shape.axis_size_x()
+            && self.axis_size_y() as usize == tile_shape.axis_size_y()
+    }
 }
 
 #[cfg(test)]

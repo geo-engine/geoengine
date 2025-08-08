@@ -3,9 +3,7 @@ use super::{
     SpatialGridDefinition,
 };
 use crate::{
-    primitives::{
-        Coordinate2D, RasterSpatialQueryRectangle, SpatialPartition2D, SpatialPartitioned,
-    },
+    primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned},
     raster::GridBounds,
     util::test::TestDefault,
 };
@@ -113,13 +111,14 @@ impl TilingStrategy {
     ///
     pub fn raster_spatial_query_to_tiling_grid_box(
         &self,
-        raster_spatial_query: &RasterSpatialQueryRectangle,
+        raster_spatial_query: GridBoundingBox2D,
     ) -> GridBoundingBox2D {
-        self.global_pixel_grid_bounds_to_tile_grid_bounds(raster_spatial_query.grid_bounds())
+        self.global_pixel_grid_bounds_to_tile_grid_bounds(raster_spatial_query)
     }
 
     /// Returns an iterator over all tile indices that intersect with the given `grid_bounds`.
     pub fn tile_idx_iterator_from_grid_bounds(
+        // TODO: indicate that this uses pixel bounds!
         &self,
         grid_bounds: GridBoundingBox2D,
     ) -> impl Iterator<Item = GridIdx2D> + use<> {
@@ -134,6 +133,7 @@ impl TilingStrategy {
     /// generates the tile information for the tiles intersecting the bounding box
     /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_information_iterator_from_grid_bounds(
+        // TODO: indicate that this uses pixel bounds!
         &self,
         grid_bounds: GridBoundingBox2D,
     ) -> impl Iterator<Item = TileInformation> + use<> {

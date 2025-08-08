@@ -33,20 +33,21 @@ use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
-use crate::{
-    contexts::GeoEngineDb,
-    layers::{
-        external::{DataProvider, DataProviderDefinition},
-        listing::{LayerCollectionProvider, ProviderCapabilities, SearchCapabilities},
-    },
-};
-
 use super::{
     ids::{
         CopernicusDataId, CopernicusDataspaceLayerCollectionId, CopernicusDataspaceLayerId,
         Sentinel2LayerCollectionId, Sentinel2LayerId, Sentinel2Product, Sentinel2ProductBand,
     },
     sentinel2::Sentinel2Metadata,
+};
+use crate::api::model::services::SECRET_REPLACEMENT;
+use crate::layers::external::TypedDataProviderDefinition;
+use crate::{
+    contexts::GeoEngineDb,
+    layers::{
+        external::{DataProvider, DataProviderDefinition},
+        listing::{LayerCollectionProvider, ProviderCapabilities, SearchCapabilities},
+    },
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -95,6 +96,22 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for CopernicusDataspaceDataProvid
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(mut new) => {
+                if new.s3_secret_key == SECRET_REPLACEMENT {
+                    new.s3_secret_key.clone_from(&self.s3_secret_key);
+                }
+                // TODO Also hide access key?
+                TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 

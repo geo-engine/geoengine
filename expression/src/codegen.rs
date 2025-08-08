@@ -50,7 +50,7 @@ impl ExpressionAst {
             Ok(code) => prettyplease::unparse(&code),
             Err(e) => {
                 // fallback to unformatted code
-                log::error!("Cannot parse expression: {e}");
+                tracing::error!("Cannot parse expression: {e}");
                 self.code()
             }
         }

@@ -112,13 +112,15 @@ where
     {
         let mut known_time_start: Option<TimeInstance> = None;
         let mut known_time_end: Option<TimeInstance> = None;
+        let qt = query.time_interval();
+        let qg = query.spatial_bounds();
         let parts: Vec<RasterTile2D<T>> = self
             .data
             .iter()
             .inspect(|m| {
                 let time_interval = m.time;
 
-                if time_interval.contains(&query.time_interval) {
+                if time_interval.contains(&qt) {
                     let t1 = time_interval.start();
                     let t2 = time_interval.end();
                     known_time_start = Some(t1);
@@ -126,27 +128,27 @@ where
                     return;
                 }
 
-                if time_interval.end() <= query.time_interval.start() {
+                if time_interval.end() <= qt.start() {
                     let t1 = time_interval.end();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
-                } else if time_interval.start() <= query.time_interval.start() {
+                } else if time_interval.start() <= qt.start() {
                     let t1 = time_interval.start();
                     known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
                 }
 
-                if time_interval.start() >= query.time_interval.end() {
+                if time_interval.start() >= qt.end() {
                     let t2 = time_interval.start();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                } else if time_interval.end() >= query.time_interval.end() {
+                } else if time_interval.end() >= qt.end() {
                     let t2 = time_interval.end();
                     known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                 }
             })
             .filter(move |t| {
-                t.time.intersects(&query.time_interval)
+                t.time.intersects(&qt)
                     && t.tile_information()
                         .global_pixel_bounds()
-                        .intersects(&query.spatial_query.grid_bounds())
+                        .intersects(&query.spatial_bounds())
             })
             .cloned()
             .collect();
@@ -166,13 +168,12 @@ where
         // use SparseTilesFillAdapter to fill all the gaps
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
-            tiling_strategy
-                .global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_query.grid_bounds()),
+            tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(qg),
             self.result_descriptor.bands.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
-            query.time_interval,
+            qt,
             FillerTimeBounds::new(known_time_before, known_time_after),
         )
         .boxed())
@@ -336,8 +337,7 @@ where
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptors,
-        SpatialGridDescriptor,
+        MockExecutionContext, QueryProcessor, RasterBandDescriptors, SpatialGridDescriptor,
     };
     use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval};
     use geoengine_datatypes::raster::{
@@ -557,11 +557,11 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
 
         // QUERY 1
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 4),
             BandSelection::first(),
@@ -587,7 +587,7 @@ mod tests {
 
         // QUERY 2
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(2, 4),
             BandSelection::first(),

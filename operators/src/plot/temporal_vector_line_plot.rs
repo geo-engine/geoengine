@@ -13,7 +13,6 @@ use geoengine_datatypes::{
     plots::{DataPoint, MultiLineChart, Plot, PlotData},
     primitives::{
         ColumnSelection, FeatureDataType, Geometry, Measurement, PlotQueryRectangle, TimeInterval,
-        VectorQueryRectangle,
     },
     util::arrow::ArrowTyped,
 };
@@ -167,11 +166,7 @@ where
     ) -> Result<Self::OutputFormat> {
         let values = FeatureAttributeValues::<MAX_FEATURES>::default();
 
-        let query = VectorQueryRectangle::new(
-            query.spatial_query,
-            query.time_interval,
-            ColumnSelection::all(),
-        );
+        let query = query.select_attributes(ColumnSelection::all());
 
         let values = self
             .features
@@ -351,7 +346,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -498,7 +493,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -633,7 +628,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),

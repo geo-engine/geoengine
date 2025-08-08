@@ -6,13 +6,11 @@ use crate::{
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
-    primitives::{
-        BandSelection, CacheHint, RasterQueryRectangle, RasterSpatialQueryRectangle, TimeInterval,
-    },
+    primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
-        ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
-        GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel,
-        RasterTile2D,
+        ConvertDataType, FromIndexFnParallel, GeoTransform, GridBoundingBox2D, GridIdx2D,
+        GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
+        MapElementsParallel, Pixel, RasterTile2D,
     },
 };
 use geoengine_expression::LinkedExpression;
@@ -62,7 +60,7 @@ where
     Tuple: ExpressionTupleProcessor<TO>,
 {
     type Output = RasterTile2D<TO>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -72,11 +70,7 @@ where
         ctx: &'b dyn QueryContext,
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
         // rewrite query to request all input bands from the source. They are all combined in the single output band by means of the expression.
-        let source_query = RasterQueryRectangle {
-            spatial_query: query.spatial_query,
-            time_interval: query.time_interval,
-            attributes: BandSelection::first_n(Tuple::num_bands()),
-        };
+        let source_query = query.select_attributes(BandSelection::first_n(Tuple::num_bands()));
 
         let stream =
             self.sources
@@ -337,7 +331,19 @@ where
         let grid_shape = rasters.0.grid_shape();
         let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
 
-        Result::Ok(out)
+        let out_or_empty = match out {
+            GridOrEmpty::Empty(t) => GridOrEmpty::Empty(t),
+            GridOrEmpty::Grid(t) => {
+                if t.validity_mask.data.iter().all(|&t| !t) {
+                    tracing::trace!("Converting empty expression output to EmptyGrid");
+                    GridOrEmpty::new_empty_shape(t.grid_shape())
+                } else {
+                    GridOrEmpty::Grid(t)
+                }
+            }
+        };
+
+        Result::Ok(out_or_empty)
     }
 
     fn num_bands() -> u32 {

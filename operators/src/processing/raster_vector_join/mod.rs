@@ -510,7 +510,7 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -587,7 +587,7 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -610,10 +610,10 @@ mod tests {
         assert_eq!(
             data.as_ref(),
             &[
-                (54. + 52.) / 2.,
-                (55. + 55.) / 2.,
-                (51. + 50.) / 2.,
-                (55. + 53.) / 2.,
+                f64::midpoint(54., 52.),
+                f64::midpoint(55., 55.),
+                f64::midpoint(51., 50.),
+                f64::midpoint(55., 53.),
             ]
         );
     }
@@ -667,7 +667,7 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     ColumnSelection::all(),

@@ -1,6 +1,6 @@
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector, ReprojectClipped},
-    primitives::{AxisAlignedRectangle, DateTime, Duration, VectorQueryRectangle},
+    primitives::{AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, QueryRectangle},
     spatial_reference::SpatialReference,
 };
 use snafu::{ResultExt, Snafu};
@@ -11,6 +11,8 @@ use crate::util::join_base_url_and_path;
 // API limits
 const MAX_NUM_PAGES: usize = 100;
 const MAX_PAGE_SIZE: usize = 1000;
+
+pub type StacQueryRectangle = QueryRectangle<BoundingBox2D, ()>;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -38,18 +40,18 @@ pub enum CopernicusStacError {
 }
 
 fn bbox_time_query(
-    query: &VectorQueryRectangle,
+    query: &StacQueryRectangle,
     query_projection: SpatialReference,
 ) -> Result<[(&'static str, String); 2], CopernicusStacError> {
     // TODO: add query buffer like in Element84 provider?
-    let time_start = query.time_interval.start();
-    let time_end = query.time_interval.end();
+    let time_start = query.time_interval().start();
+    let time_end = query.time_interval().end();
 
     let projector =
         CoordinateProjector::from_known_srs(query_projection, SpatialReference::epsg_4326())
             .context(CannotReprojectBbox)?;
 
-    let bbox = query.spatial_query.spatial_bounds; // TODO: use SpatialPartition2D directly
+    let bbox = query.spatial_bounds(); // TODO: use SpatialPartition2D directly
 
     // TODO: query the whole zone instead? (for Sentinel-2)
     let bbox = bbox
@@ -90,7 +92,7 @@ fn bbox_time_query(
 pub async fn load_stac_items(
     stac_url: Url,
     collection: &str,
-    query: VectorQueryRectangle,
+    query: StacQueryRectangle,
     query_projection: SpatialReference,
     product_type: &str,
 ) -> Result<Vec<stac::Item>, CopernicusStacError> {
@@ -107,7 +109,7 @@ pub async fn load_stac_items(
     let mut stac_items = Vec::new();
 
     loop {
-        log::debug!("Copernicus Dataspace Provider: Requesting page {page} of STAC API");
+        tracing::debug!("Copernicus Dataspace Provider: Requesting page {page} of STAC API");
 
         let response = client
             .get(url.clone())
@@ -141,7 +143,7 @@ pub async fn load_stac_items(
         // there may be more items available, so go to next page, if possible
 
         if page >= MAX_NUM_PAGES {
-            log::warn!(
+            tracing::warn!(
                 "Copernicus Data Provider reached maximum number of pages of the STAC API and there may be more items available. This may lead to incomplete results. Try shorter queries."
             );
             break;

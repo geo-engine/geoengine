@@ -306,7 +306,7 @@ where
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
         let accu = TileAccumulator {
-            time: query_rect.time_interval,
+            time: query_rect.time_interval(),
             tile_position: tile_info.global_tile_position,
             global_geo_transform: tile_info.global_geo_transform,
             state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
@@ -326,7 +326,7 @@ where
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let snapped_start_time = self.step.snap_relative(self.step_reference, start_time)?;
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             tile_info.global_pixel_bounds(),
             TimeInterval::new(snapped_start_time, (snapped_start_time + self.step)?)?,
             band_idx.into(),
@@ -365,7 +365,7 @@ where
     ) -> Self::TileAccuFuture {
         let accu = GlobalStateTileAccumulator {
             aggregator: self.aggregator.clone(),
-            time: query_rect.time_interval,
+            time: query_rect.time_interval(),
             tile_position: tile_info.global_tile_position,
             global_geo_transform: tile_info.global_geo_transform,
             state_grid: EmptyGrid2D::new(tile_info.tile_size_in_pixels).into(),
@@ -385,7 +385,7 @@ where
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             tile_info.global_pixel_bounds(),
             TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
             band_idx.into(),

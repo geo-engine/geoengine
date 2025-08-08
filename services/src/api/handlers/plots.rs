@@ -130,22 +130,20 @@ async fn get_plot_handler<C: ApplicationContext>(
     let request_spatial_ref: SpatialReference =
         params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
-    let query_rect = PlotQueryRectangle::with_bounds(
-        params.bbox,
-        params.time.into(),
-        PlotSeriesSelection::all(),
-    );
+    let query_rect =
+        PlotQueryRectangle::new(params.bbox, params.time.into(), PlotSeriesSelection::all());
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
         Some(query_rect)
     } else {
         let repr_spatial_query = reproject_spatial_query(
-            query_rect.spatial_query(),
+            query_rect.spatial_bounds(),
             workflow_spatial_ref,
             request_spatial_ref,
         )?;
-        repr_spatial_query
-            .map(|r| PlotQueryRectangle::new(r, query_rect.time_interval, query_rect.attributes))
+        repr_spatial_query.map(|r| {
+            PlotQueryRectangle::new(r, query_rect.time_interval(), *query_rect.attributes())
+        })
     };
 
     let Some(query_rect) = query_rect else {

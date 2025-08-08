@@ -322,13 +322,11 @@ where
 
         for (idx, source) in self.sources.iter().enumerate() {
             let Some(bands) =
-                map_query_bands_to_source_bands(&query.attributes, &self.bands_per_source, idx)
+                map_query_bands_to_source_bands(query.attributes(), &self.bands_per_source, idx)
             else {
                 continue;
             };
 
-            let mut source_query = query.clone();
-            source_query.attributes = bands.clone();
             sources.push(RasterStackerSource {
                 queryable: QueryWrapper { p: source, ctx },
                 band_idxs: bands.as_vec(),
@@ -362,8 +360,8 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
-            SingleRasterSource, SpatialGridDescriptor,
+            MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, SingleRasterSource,
+            SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams},
@@ -528,13 +526,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             [0, 1].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -782,13 +780,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             [0, 1, 2, 3].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -957,13 +955,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             1.into(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1037,10 +1035,10 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         // query both bands
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
@@ -1060,7 +1058,7 @@ mod tests {
         assert!(!result.is_empty());
 
         // query only first band
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
@@ -1080,7 +1078,7 @@ mod tests {
         assert!(!result.is_empty());
 
         // query only second band
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),

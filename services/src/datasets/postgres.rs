@@ -879,9 +879,9 @@ where
                 (time).start, band, z_index",
                 &[
                     &self.dataset_id,
-                    &query.spatial_query.spatial_bounds,
-                    &query.time_interval,
-                    &query.attributes.as_slice(),
+                    &query.spatial_bounds(),
+                    &query.time_interval(),
+                    &query.attributes().as_slice(),
                 ],
             )
             .await
@@ -900,7 +900,7 @@ where
             })
             .collect();
 
-        let time_steps = create_gap_free_time_steps(self.dataset_id, query.time_interval, &conn)
+        let time_steps = create_gap_free_time_steps(self.dataset_id, query.time_interval(), &conn)
             .await
             .map_err(|e| geoengine_operators::error::Error::MetaData {
                 source: Box::new(e),
@@ -951,7 +951,7 @@ where
             name: id.to_string(),
         });
 
-        log::info!(
+        tracing::info!(
             "Adding dataset with name: {:?}, tags: {:?}",
             name,
             dataset.tags
@@ -1058,9 +1058,11 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
+        let typed_meta_data = meta_data.to_typed_metadata();
+
         tx.execute(
-            "UPDATE datasets SET meta_data = $2 WHERE id = $1;",
-            &[&dataset, &meta_data],
+            "UPDATE datasets SET meta_data = $2, result_descriptor = $3 WHERE id = $1;",
+            &[&dataset, &meta_data, &typed_meta_data.result_descriptor],
         )
         .await?;
 

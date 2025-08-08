@@ -25,17 +25,14 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialGridQueryRectangle,
-    TimeInstance,
-};
-use geoengine_datatypes::raster::{Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInstance};
+use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use tracing::debug;
 
 use typetag;
 
@@ -217,7 +214,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>
         + QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = SpatialGridQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -301,10 +298,10 @@ where
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<P>>>> {
         ensure!(
-            query.attributes.count() == 1,
+            query.attributes().count() == 1,
             error::InvalidBandCount {
                 expected: 1u32,
-                found: query.attributes.count()
+                found: query.attributes().count()
             }
         );
 
@@ -469,14 +466,14 @@ impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -501,7 +498,7 @@ mod tests {
     use super::*;
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
             SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
@@ -565,12 +562,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -690,12 +687,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -815,12 +812,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -940,12 +937,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1073,12 +1070,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1155,12 +1152,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1259,12 +1256,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1364,12 +1361,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1469,12 +1466,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1574,12 +1571,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1679,12 +1676,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1785,12 +1782,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1909,12 +1906,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2014,12 +2011,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2131,12 +2128,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2268,12 +2265,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2392,12 +2389,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2497,12 +2494,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2602,12 +2599,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(5, 5),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2900,12 +2897,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             [0, 1].try_into().unwrap(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -3076,13 +3073,13 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

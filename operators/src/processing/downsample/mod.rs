@@ -13,8 +13,7 @@ use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution, TimeInstance,
-    TimeInterval,
+    RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
@@ -240,14 +239,14 @@ impl<Q, P> QueryProcessor for DownsampleProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -355,7 +354,7 @@ where
             .input_geo_transform
             .spatial_to_grid_bounds(&out_tile_spatial_bounds);
 
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             input_pixel_bounds,
             TimeInterval::new_instant(start_time)?,
             BandSelection::new_single(band_idx),
@@ -653,7 +652,7 @@ mod tests {
         }
         .boxed();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(0, 3, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 5),
             [0].try_into().unwrap(),
@@ -886,7 +885,7 @@ mod tests {
         }
         .boxed();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(0, 2, 0, 2).unwrap(),
             TimeInterval::new_unchecked(0, 5),
             [0].try_into().unwrap(),

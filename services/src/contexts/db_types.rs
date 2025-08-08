@@ -3,7 +3,7 @@ use crate::{
         dataset_listing_provider::DatasetLayerListingProviderDefinition,
         external::{
             CopernicusDataspaceDataProviderDefinition, GdalRetries,
-            SentinelS2L2ACogsProviderDefinition, StacApiRetries,
+            SentinelS2L2ACogsProviderDefinition, StacApiRetries, WildliveDataConnectorDefinition,
             aruna::ArunaDataProviderDefinition,
             edr::{EdrDataProviderDefinition, EdrVectorSpec},
             gbif::GbifDataProviderDefinition,
@@ -934,6 +934,7 @@ pub struct TypedDataProviderDefinitionDbType {
     edr_data_provider_definition: Option<EdrDataProviderDefinition>,
     copernicus_dataspace_provider_definition: Option<CopernicusDataspaceDataProviderDefinition>,
     sentinel_s2_l2_a_cogs_provider_definition: Option<SentinelS2L2ACogsProviderDefinition>,
+    wildlive_data_connector_definition: Option<WildliveDataConnectorDefinition>,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -953,6 +954,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                     edr_data_provider_definition: None,
                     copernicus_dataspace_provider_definition: None,
                     sentinel_s2_l2_a_cogs_provider_definition: None,
+                    wildlive_data_connector_definition: None,
                 }
             }
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
@@ -969,6 +971,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::GbifDataProviderDefinition(data_provider_definition) => {
                 Self {
@@ -983,6 +986,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                     edr_data_provider_definition: None,
                     copernicus_dataspace_provider_definition: None,
                     sentinel_s2_l2_a_cogs_provider_definition: None,
+                    wildlive_data_connector_definition: None,
                 }
             }
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
@@ -999,6 +1003,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
                 data_provider_definition,
@@ -1014,6 +1019,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
                 data_provider_definition,
@@ -1029,6 +1035,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
                 data_provider_definition,
@@ -1044,6 +1051,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(
                 data_provider_definition,
@@ -1059,6 +1067,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::EdrDataProviderDefinition(data_provider_definition) => {
                 Self {
@@ -1073,6 +1082,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                     edr_data_provider_definition: Some(data_provider_definition.clone()),
                     copernicus_dataspace_provider_definition: None,
                     sentinel_s2_l2_a_cogs_provider_definition: None,
+                    wildlive_data_connector_definition: None,
                 }
             }
             TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
@@ -1089,6 +1099,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: Some(data_provider_definition.clone()),
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
                 data_provider_definition,
@@ -1104,6 +1115,23 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: Some(data_provider_definition.clone()),
+                wildlive_data_connector_definition: None,
+            },
+            TypedDataProviderDefinition::WildliveDataConnectorDefinition(
+                data_provider_definition,
+            ) => Self {
+                aruna_data_provider_definition: None,
+                dataset_layer_listing_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+                edr_data_provider_definition: None,
+                copernicus_dataspace_provider_definition: None,
+                sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: Some(data_provider_definition.clone()),
             },
         }
     }
@@ -1127,6 +1155,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::ArunaDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1142,6 +1171,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
                     data_provider_definition,
@@ -1159,6 +1189,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::GbifDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1174,6 +1205,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
                     data_provider_definition,
@@ -1191,6 +1223,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
                     data_provider_definition,
@@ -1208,6 +1241,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
                     data_provider_definition,
@@ -1225,6 +1259,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1240,6 +1275,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::PangaeaDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1255,6 +1291,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: Some(data_provider_definition),
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::EdrDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1270,6 +1307,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: Some(data_provider_definition),
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
                     data_provider_definition,
@@ -1287,8 +1325,27 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: Some(data_provider_definition),
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
+                    data_provider_definition,
+                ),
+            ),
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: None,
+                dataset_layer_listing_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+                edr_data_provider_definition: None,
+                copernicus_dataspace_provider_definition: None,
+                sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: Some(data_provider_definition),
+            } => Ok(
+                TypedDataProviderDefinition::WildliveDataConnectorDefinition(
                     data_provider_definition,
                 ),
             ),

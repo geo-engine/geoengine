@@ -15,7 +15,6 @@ use crate::layers::add_from_directory::{
     add_providers_from_directory,
 };
 use crate::machine_learning::error::MachineLearningError;
-use crate::machine_learning::name::MlModelName;
 use crate::quota::{QuotaTrackingFactory, initialize_quota_tracking};
 use crate::tasks::SimpleTaskManagerContext;
 use crate::tasks::{TypedTaskManagerBackend, UserTaskManager};
@@ -28,18 +27,19 @@ use bb8_postgres::{
     bb8::PooledConnection,
     tokio_postgres::{Config, Socket, tls::MakeTlsConnect, tls::TlsConnect},
 };
+use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::meta::quota::QuotaChecker;
 use geoengine_operators::util::create_rayon_thread_pool;
-use log::info;
 use rayon::ThreadPool;
 use snafu::ResultExt;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio_postgres::error::SqlState;
+use tracing::info;
 use uuid::Uuid;
 
 // TODO: do not report postgres error details to user
@@ -464,7 +464,6 @@ where
 mod tests {
     use super::*;
     use crate::{
-        api::model::datatypes::RasterDataType as ApiRasterDataType,
         config::QuotaTrackingMode,
         datasets::{
             AddDataset, DatasetIdAndName,
@@ -489,7 +488,7 @@ mod tests {
                 LayerProviderListingOptions,
             },
         },
-        machine_learning::{MlModel, MlModelDb, MlModelIdAndName, MlModelMetadata},
+        machine_learning::{MlModel, MlModelDb, MlModelIdAndName},
         permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId},
         projects::{
             CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
@@ -512,6 +511,7 @@ mod tests {
     use geoengine_datatypes::{
         collections::VectorDataType,
         dataset::{DataProviderId, LayerId},
+        machine_learning::MlTensorShape3D,
         primitives::{
             BoundingBox2D, CacheTtlSeconds, ColumnSelection, Coordinate2D, DateTime, Duration,
             FeatureDataType, Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance,
@@ -528,6 +528,7 @@ mod tests {
             RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
             TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
         },
+        machine_learning::MlModelMetadata,
         mock::{MockPointSource, MockPointSourceParams},
         plot::{Statistics, StatisticsParams},
         source::{
@@ -1146,7 +1147,7 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all()
@@ -4960,13 +4961,18 @@ mod tests {
         let model = MlModel {
             description: "No real model here".to_owned(),
             display_name: "my unreal model".to_owned(),
+            file_name: "myUnrealmodel.onnx".to_owned(),
             metadata: MlModelMetadata {
-                file_name: "myUnrealmodel.onnx".to_owned(),
-                input_type: ApiRasterDataType::F32,
-                num_input_bands: 17,
-                output_type: ApiRasterDataType::F64,
+                input_type: RasterDataType::F32,
+                input_shape: MlTensorShape3D::new_single_pixel_bands(17),
+                output_shape: MlTensorShape3D::new_single_pixel_single_band(),
+                output_type: RasterDataType::F64,
+                input_no_data_handling:
+                    geoengine_operators::machine_learning::MlModelInputNoDataHandling::SkipIfNoData,
+                output_no_data_handling:
+                    geoengine_operators::machine_learning::MlModelOutputNoDataHandling::NanIsNoData,
             },
-            name: MlModelName::new(None, "myUnrealModel"),
+            name: MlModelName::try_new(None::<&str>, "myUnrealModel").unwrap(),
             upload: upload_id,
         };
 

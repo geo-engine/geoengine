@@ -1,4 +1,4 @@
-use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
+use crate::api::handlers::spatial_references::spatial_reference_specification;
 use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
 use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::config;
@@ -22,10 +22,10 @@ use geoengine_operators::engine::{
 use geoengine_operators::util::raster_stream_to_geotiff::{
     GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
 };
-use log::info;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use tracing::info;
 use url::Url;
 use uuid::Uuid;
 
@@ -219,31 +219,23 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
-    let bounds = spatial_grid_descriptor.spatial_partition();
-
-    let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        match spatial_reference_specification(spatial_reference.into())?
+    let spatial_reference_spec = spatial_reference_specification(spatial_reference.into())?;
+    let spatial_ref_axis_order =
+        spatial_reference_spec
             .axis_order
             .ok_or(Error::AxisOrderingNotKnownForSrs {
                 srs_string: spatial_reference.srs_string(),
-            })? {
-            AxisOrder::EastNorth => (
-                bounds.lower_left().x,
-                bounds.lower_left().y,
-                bounds.upper_right().x,
-                bounds.upper_right().y,
-            ),
-            AxisOrder::NorthEast => (
-                bounds.lower_left().y,
-                bounds.lower_left().x,
-                bounds.upper_right().y,
-                bounds.upper_right().x,
-            ),
-        };
+            })?;
+    let bounds = spatial_grid_descriptor.spatial_partition();
 
-    let GridShape2D {
-        shape_array: [raster_size_y, raster_size_x],
-    } = spatial_grid_descriptor.grid_shape();
+    let [bbox_ll_0, bbox_ll_1] =
+        spatial_ref_axis_order.xy_to_native_order([bounds.lower_left().x, bounds.lower_left().y]);
+    let [bbox_ur_0, bbox_ur_1] =
+        spatial_ref_axis_order.xy_to_native_order([bounds.upper_right().x, bounds.upper_right().y]);
+
+    let GridShape2D { shape_array } = spatial_grid_descriptor.grid_shape();
+
+    let [raster_size_0, raster_size_1] = spatial_ref_axis_order.xy_to_native_order(shape_array);
 
     let SpatialResolution {
         x: pixel_size_x,
@@ -271,7 +263,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
                     </ows:BoundingBox>
                     <ows:BoundingBox crs="urn:ogc:def:crs:OGC:1.3:CRS:imageCRS" dimensions="2">
                         <ows:LowerCorner>0 0</ows:LowerCorner>
-                        <ows:UpperCorner>{raster_size_x} {raster_size_y}</ows:UpperCorner>
+                        <ows:UpperCorner>{raster_size_0} {raster_size_1}</ows:UpperCorner>
                     </ows:BoundingBox>
                     <wcs:GridCRS>
                         <wcs:GridBaseCRS>urn:ogc:def:crs:{srs_authority}::{srs_code}</wcs:GridBaseCRS>
@@ -409,10 +401,10 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         .tiling_spatial_grid_definition()
         .spatial_bounds_to_compatible_spatial_grid(request_partition);
 
-    let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+    let query_rect = RasterQueryRectangle::new(
         query_tiling_pixel_grid.grid_bounds(),
         request_time,
-        BandSelection::first(),
+        BandSelection::first(), // TODO: support multi bands in API and set the selection here
     );
 
     let processor = wrapped.initialized_operator.query_processor()?;

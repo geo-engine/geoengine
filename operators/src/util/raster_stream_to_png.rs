@@ -30,9 +30,9 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     conn_closed: BoxFuture<'_, ()>,
 ) -> Result<(Vec<u8>, CacheHint)> {
     debug_assert!(
-        query_rect.attributes.count() <= 3
+        query_rect.attributes().count() <= 3
             || query_rect
-                .attributes
+                .attributes()
                 .as_slice()
                 .windows(2)
                 .all(|w| w[0] < w[1]), // TODO: replace with `is_sorted` once it is stable
@@ -64,7 +64,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         .iter()
         .filter_map(|band| {
             query_rect
-                .attributes
+                .attributes()
                 .as_slice()
                 .iter()
                 .position(|b| b == band)
@@ -73,7 +73,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
     if band_positions.len() != required_bands.len() {
         return Err(PngCreationError::ColorizerBandsMustBePresentInQuery {
-            bands_present: query_rect.attributes.as_vec(),
+            bands_present: query_rect.attributes().as_vec(),
             required_bands,
         })?;
     }
@@ -125,15 +125,14 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
     conn_closed: BoxFuture<'_, ()>,
     query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
-    debug_assert_eq!(query_rect.attributes.count(), 1);
+    debug_assert_eq!(query_rect.attributes().count(), 1);
 
     // the tile stream will allways produce tiles aligned to the tiling origin
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
     let output_cache_hint = CacheHint::max_duration();
 
-    let output_grid = GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(
-        query_rect.spatial_query.grid_bounds(),
-    );
+    let output_grid =
+        GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(query_rect.spatial_bounds());
 
     let accu = Ok((output_grid, output_cache_hint));
 
@@ -165,10 +164,10 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     conn_closed: BoxFuture<'_, ()>,
     query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
-    let rgb_channel_count = query_rect.attributes.count() as usize;
+    let rgb_channel_count = query_rect.attributes().count() as usize;
     let no_data_color = rgb_params.no_data_color;
     let tile_template: GridOrEmpty<GridBoundingBox2D, u32> =
-        GridOrEmpty::new_empty_shape(query_rect.spatial_query.grid_bounds());
+        GridOrEmpty::new_empty_shape(query_rect.spatial_bounds());
     let output_cache_hint = CacheHint::max_duration();
     let red_band_index = band_positions[0];
     let green_band_index = band_positions[1];
@@ -342,9 +341,8 @@ pub enum PngCreationError {
 mod tests {
     use std::marker::PhantomData;
 
-    use crate::{
-        engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
-    };
+    use crate::engine::MockExecutionContext;
+    use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
     use geoengine_datatypes::primitives::{DateTime, TimeInstance};
     use geoengine_datatypes::{
         primitives::BandSelection,
@@ -372,7 +370,8 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::test_default();
+        let ctx = exe_ctx.mock_query_context_test_default();
         let tiling_specification = TilingSpecification::new([600, 600].into());
 
         let meta_data = create_ndvi_meta_data();
@@ -386,7 +385,7 @@ mod tests {
             _phantom_data: PhantomData,
         };
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-800, -100], [-199, 499]).unwrap(),
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             BandSelection::first(),

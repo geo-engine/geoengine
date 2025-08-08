@@ -477,6 +477,19 @@ impl GridBoundingBoxExt for GridBoundingBox3D {
     }
 }
 
+impl core::fmt::Display for GridBoundingBox2D {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "GridBoundingBox2D: upper_left [y: {}, x:{}], lower_right [y: {}, x: {}]",
+            self.y_max(),
+            self.x_min(),
+            self.y_min(),
+            self.x_max()
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

@@ -14,10 +14,10 @@ use geoengine_datatypes::{
     raster::{GridContains, Pixel},
     util::{ByteSize, Identifier, arrow::ArrowTyped, test::TestDefault},
 };
-use log::{debug, log_enabled};
 use lru::LruCache;
 use std::{collections::HashMap, hash::Hash, sync::Arc};
 use tokio::sync::RwLock;
+use tracing::{debug, event_enabled};
 
 /// The tile cache caches all tiles of a query and is able to answer queries that are fully contained in the cache.
 /// New tiles are inserted into the cache on-the-fly as they are produced by query processors.
@@ -169,7 +169,7 @@ where
             self.landing_zone_size.remove_element_bytes(&entry);
 
             // debug output
-            log::debug!(
+            tracing::debug!(
                 "Removed query {}. Landing zone size: {}. Landing zone size used: {}, Landing zone used percentage: {}.",
                 query_id,
                 self.landing_zone_size.total_byte_size(),
@@ -198,7 +198,7 @@ where
             self.cache_size.remove_element_bytes(cache_entry_id);
             self.cache_size.remove_element_bytes(&entry);
 
-            log::debug!(
+            tracing::debug!(
                 "Removed cache entry {}. Cache size: {}. Cache size used: {}, Cache used percentage: {}.",
                 cache_entry_id,
                 self.cache_size.total_byte_size(),
@@ -243,7 +243,7 @@ where
             .ok_or(CacheError::QueryNotFoundInLandingZone)?;
 
         if landing_zone_element.cache_hint().is_expired() {
-            log::trace!("Element is already expired");
+            tracing::trace!("Element is already expired");
             return Err(CacheError::TileExpiredBeforeInsertion);
         }
 
@@ -266,7 +266,7 @@ where
             "The Landing Zone must have enough space for the element since we checked it before",
         );
 
-        log::trace!(
+        tracing::trace!(
             "Inserted tile for query {} into landing zone. Landing zone size: {}. Landing zone size used: {}. Landing zone used percentage: {}",
             query_id,
             self.landing_zone_size.total_byte_size(),
@@ -316,7 +316,7 @@ where
         }
 
         // debug output
-        log::trace!(
+        tracing::trace!(
             "Added query {} to landing zone. Landing zone size: {}. Landing zone size used: {}, Landing zone used percentage: {}.",
             query_id,
             self.landing_zone_size.total_byte_size(),
@@ -355,7 +355,7 @@ where
         );
 
         // debug output
-        log::trace!(
+        tracing::trace!(
             "Added cache entry {}. Cache size: {}. Cache size used: {}, Cache used percentage: {}.",
             cache_entry_id,
             self.cache_size.total_byte_size(),
@@ -853,26 +853,22 @@ pub trait CacheQueryMatch<RHS = Self> {
 
 impl CacheQueryMatch for RasterQueryRectangle {
     fn is_match(&self, query: &RasterQueryRectangle) -> bool {
-        let cache_spatial_query = self.spatial_query();
-        let query_spatial_query = query.spatial_query();
+        let cache_spatial_query = self.spatial_bounds();
+        let query_spatial_query = query.spatial_bounds();
 
-        cache_spatial_query
-            .grid_bounds()
-            .contains(&query_spatial_query.grid_bounds())
-            && self.time_interval.contains(&query.time_interval)
+        cache_spatial_query.contains(&query_spatial_query)
+            && self.time_interval().contains(&query.time_interval())
     }
 }
 
 impl CacheQueryMatch for VectorQueryRectangle {
     fn is_match(&self, query: &VectorQueryRectangle) -> bool {
-        let cache_spatial_query = self.spatial_query();
-        let query_spatial_query = query.spatial_query();
+        let cache_spatial_query = self.spatial_bounds();
+        let query_spatial_query = query.spatial_bounds();
 
-        cache_spatial_query
-            .spatial_bounds
-            .contains_bbox(&query_spatial_query.spatial_bounds)
-            && self.time_interval.contains(&query.time_interval)
-            && self.attributes == query.attributes
+        cache_spatial_query.contains_bbox(&query_spatial_query)
+            && self.time_interval().contains(&query.time_interval())
+            && self.attributes() == query.attributes()
     }
 }
 
@@ -980,8 +976,8 @@ where
         query_id: &QueryId,
         landing_zone_element: C,
     ) -> Result<(), CacheError> {
-        const LOG_LEVEL_THRESHOLD: log::Level = log::Level::Trace;
-        let element_size = if log_enabled!(LOG_LEVEL_THRESHOLD) {
+        const LOG_LEVEL_THRESHOLD: tracing::Level = tracing::Level::TRACE;
+        let element_size = if event_enabled!(LOG_LEVEL_THRESHOLD) {
             landing_zone_element.byte_size()
         } else {
             0
@@ -992,7 +988,7 @@ where
                 .await
                 .map_err(|_| CacheError::BlockingElementConversion)?;
 
-        if log_enabled!(LOG_LEVEL_THRESHOLD) {
+        if event_enabled!(LOG_LEVEL_THRESHOLD) {
             let storeable_element_size = storeable_element.byte_size();
             tracing::trace!(
                 "Inserting element into landing zone for query {:?} on operator {}. Element size: {} bytes, storable element size: {} bytes, ratio: {}",
@@ -1109,7 +1105,7 @@ mod tests {
     }
 
     fn query_rect() -> RasterQueryRectangle {
-        RasterQueryRectangle::new_with_grid_bounds(
+        RasterQueryRectangle::new(
             GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
             TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
             BandSelection::first(),

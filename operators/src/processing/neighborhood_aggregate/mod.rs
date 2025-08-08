@@ -13,11 +13,9 @@ use crate::engine::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle,
-};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    Grid2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
+    Grid2D, GridBoundingBox2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
 use num::Integer;
 use num_traits::AsPrimitive;
@@ -254,7 +252,7 @@ impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -263,7 +261,7 @@ where
     A: AggregateFunction + 'static,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -307,8 +305,8 @@ mod tests {
     use super::*;
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor, SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -328,7 +326,8 @@ mod tests {
             RenameBands, TileInformation, TilesEqualIgnoringCacheHint, TilingSpecification,
         },
         spatial_reference::SpatialReference,
-        util::test::TestDefault,
+        test_data,
+        util::{assert_image_equals, test::TestDefault},
     };
 
     #[test]
@@ -462,12 +461,12 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 
@@ -513,12 +512,12 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 
@@ -688,7 +687,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters::new(ndvi_id),
+                    params: GdalSourceParameters::new_with_overview_level(ndvi_id, 10),
                 }
                 .boxed(),
             },
@@ -702,12 +701,12 @@ mod tests {
         let result_descriptor = processor.result_descriptor();
         let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             result_descriptor
                 .tiling_grid_definition(query_ctx.tiling_specification())
                 .tiling_geo_transform()
                 .spatial_to_grid_bounds(
-                    &SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap(),
+                    &SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
                 ),
             TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
             BandSelection::first(),
@@ -729,8 +728,8 @@ mod tests {
             processor,
             query_rect,
             query_ctx,
-            600,
-            600,
+            360,
+            180,
             None,
             Some(colorizer),
             Box::pin(futures::future::pending()),
@@ -739,7 +738,7 @@ mod tests {
         .unwrap();
 
         // Use for getting the image to compare against
-        // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur_bla.png");
+        // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur.png");
 
         assert_eq!(
             bytes,
@@ -747,7 +746,6 @@ mod tests {
         );
     }
 
-    #[ignore] // TODO: remove
     #[tokio::test]
     async fn test_ndvi_partial_derivative() {
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -762,7 +760,7 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: GdalSource {
-                    params: GdalSourceParameters::new(ndvi_id),
+                    params: GdalSourceParameters::new_with_overview_level(ndvi_id, 10),
                 }
                 .boxed(),
             },
@@ -775,9 +773,9 @@ mod tests {
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
         let result_descriptor = processor.result_descriptor();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             result_descriptor
                 .tiling_grid_definition(query_ctx.tiling_specification())
                 .tiling_geo_transform()
@@ -815,13 +813,10 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            bytes,
-            include_bytes!("../../../../test_data/wms/partial_derivative.png")
-        );
-
         // Use for getting the image to compare against
         // save_test_bytes(&bytes, "sobel_filter.png");
+
+        assert_image_equals(test_data!("wms/partial_derivative.png"), &bytes);
     }
 
     #[tokio::test]
@@ -855,12 +850,12 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 5]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::new(vec![0, 2]).unwrap(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await.unwrap();
 

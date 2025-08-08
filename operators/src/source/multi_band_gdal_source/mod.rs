@@ -26,15 +26,11 @@ use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as Gd
 use gdal_sys::VSICurlPartialClearCache;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, QueryRectangle, SpatialPartition2D, SpatialPartitioned,
-    SpatialQueryRectangle,
 };
 use geoengine_datatypes::raster::TilingSpatialGridDefinition;
 use geoengine_datatypes::{
     dataset::NamedData,
-    primitives::{
-        BandSelection, Coordinate2D, RasterQueryRectangle, RasterSpatialQueryRectangle,
-        TimeInterval,
-    },
+    primitives::{BandSelection, Coordinate2D, RasterQueryRectangle, TimeInterval},
     raster::{
         ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D, GridOrEmpty,
         GridSize, MapElements, MaskedGrid, NoDataValueGrid, Pixel, RasterDataType,
@@ -43,7 +39,6 @@ use geoengine_datatypes::{
     },
 };
 pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
-use log::debug;
 use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
 use reader::{
     GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties, OverviewReaderState,
@@ -54,6 +49,7 @@ use snafu::ResultExt;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::Path;
+use tracing::debug;
 
 mod error;
 mod loading_info;
@@ -110,22 +106,19 @@ type MultiBandGdalMetaData = Box<
         >,
 >;
 
-pub type MultiBandGdalLoadingInfoQueryRectangle =
-    QueryRectangle<SpatialQueryRectangle<SpatialPartition2D>, BandSelection>;
+pub type MultiBandGdalLoadingInfoQueryRectangle = QueryRectangle<SpatialPartition2D, BandSelection>;
 
 fn raster_query_rectangle_to_loading_info_query_rectangle(
     raster_query_rectangle: RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
-    MultiBandGdalLoadingInfoQueryRectangle {
-        spatial_query: SpatialQueryRectangle::new(
-            tiling_spatial_grid
-                .tiling_geo_transform()
-                .grid_to_spatial_bounds(&raster_query_rectangle.spatial_query.grid_bounds()),
-        ),
-        time_interval: raster_query_rectangle.time_interval,
-        attributes: raster_query_rectangle.attributes,
-    }
+    MultiBandGdalLoadingInfoQueryRectangle::new(
+        tiling_spatial_grid
+            .tiling_geo_transform()
+            .grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
+        raster_query_rectangle.time_interval(),
+        raster_query_rectangle.attributes().clone(),
+    )
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
@@ -389,7 +382,7 @@ where
     P: Pixel + gdal::raster::GdalType + FromPrimitive,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -452,9 +445,9 @@ where
             .await?;
 
         let time_steps = loading_info.time_steps().to_vec();
-        let bands = query.attributes.as_vec();
+        let bands = query.attributes().clone().as_vec();
         let spatial_tiles = tiling_strategy
-            .tile_information_iterator_from_grid_bounds(query.spatial_query.grid_bounds())
+            .tile_information_iterator_from_grid_bounds(query.spatial_bounds())
             .collect::<Vec<_>>();
 
         for tile_info in spatial_tiles.iter() {
@@ -930,8 +923,7 @@ mod tests {
 
     use super::*;
     use crate::engine::{
-        ExecutionContext, MockExecutionContext, MockQueryContext, RasterBandDescriptor,
-        StaticMetaData,
+        ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
     };
     use crate::test_data;
     use crate::util::test::raster_tile_from_file;
@@ -1680,7 +1672,7 @@ mod tests {
     #[tokio::test]
     async fn it_loads_multi_band_multi_file_mosaics() -> Result<()> {
         let mut execution_context = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
 
         let time_steps = vec![TimeInterval::new_unchecked(
             TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
@@ -1725,7 +1717,7 @@ mod tests {
                 (180.0, -90.).into(),
             ));
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new_instant(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
@@ -1781,7 +1773,7 @@ mod tests {
     #[tokio::test]
     async fn it_loads_multi_band_multi_file_mosaics_2_bands() -> Result<()> {
         let mut execution_context = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
 
         let time_steps = vec![TimeInterval::new_unchecked(
             TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
@@ -1830,7 +1822,7 @@ mod tests {
                 (180.0, -90.).into(),
             ));
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new_instant(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
@@ -1897,7 +1889,7 @@ mod tests {
     #[tokio::test]
     async fn it_loads_multi_band_multi_file_mosaics_2_bands_2_timesteps() -> Result<()> {
         let mut execution_context = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
 
         let time_steps = vec![
             TimeInterval::new_unchecked(
@@ -1960,7 +1952,7 @@ mod tests {
                 (180.0, -90.).into(),
             ));
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
@@ -2053,7 +2045,7 @@ mod tests {
     #[tokio::test]
     async fn it_loads_multi_band_multi_file_mosaics_with_time_gaps() -> Result<()> {
         let mut execution_context = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
 
         let time_steps = vec![
             TimeInterval::new_unchecked(
@@ -2141,7 +2133,7 @@ mod tests {
             ));
 
         // query a time interval that is greater than the time interval of the tiles and covers a region with a temporal gap
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2024-12-01T00:00:00Z")
@@ -2329,7 +2321,7 @@ mod tests {
     #[tokio::test]
     async fn it_loads_multi_band_multi_file_mosaics_reverse_z_index() -> Result<()> {
         let mut execution_context = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
 
         let time_steps = vec![TimeInterval::new_unchecked(
             TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
@@ -2374,7 +2366,7 @@ mod tests {
                 (180.0, -90.).into(),
             ));
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new_instant(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")

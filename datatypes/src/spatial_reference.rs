@@ -262,10 +262,7 @@ impl SpatialReferenceOption {
     }
 
     pub fn as_option(self) -> Option<SpatialReference> {
-        match self {
-            SpatialReferenceOption::SpatialReference(s) => Some(s),
-            SpatialReferenceOption::Unreferenced => None,
-        }
+        self.into()
     }
 }
 

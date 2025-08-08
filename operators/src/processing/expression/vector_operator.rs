@@ -705,7 +705,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor},
+        engine::{ChunkByteSize, MockExecutionContext, QueryProcessor},
         mock::MockFeatureCollectionSource,
     };
     use geoengine_datatypes::{
@@ -714,7 +714,6 @@ mod tests {
             MultiPolygonCollection,
         },
         primitives::{BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, TimeInterval},
-        raster::TilingSpecification,
         util::test::TestDefault,
     };
 
@@ -797,7 +796,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -885,7 +884,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -975,7 +974,7 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
                 TimeInterval::default(),
                 ColumnSelection::all(),
@@ -1057,7 +1056,7 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
                 TimeInterval::default(),
                 ColumnSelection::all(),
@@ -1153,7 +1152,7 @@ mod tests {
                     .boxed()
                     .into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (0., 0.).into(),
                     (NUMBER_OF_ROWS as f64, NUMBER_OF_ROWS as f64).into(),
@@ -1199,7 +1198,8 @@ mod tests {
         let query_processor: Box<dyn VectorQueryProcessor<VectorType = C>> =
             operator.query_processor().unwrap().try_into().unwrap();
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 

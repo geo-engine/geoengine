@@ -1,4 +1,4 @@
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
 use snafu::Snafu;
 
 #[derive(Debug, Snafu)]
@@ -9,7 +9,5 @@ pub enum GdalSourceError {
     UnsupportedRasterType { raster_type: RasterDataType },
 
     #[snafu(display("Unsupported spatial query: {spatial_query:?}"))]
-    IncompatibleSpatialQuery {
-        spatial_query: geoengine_datatypes::primitives::SpatialGridQueryRectangle,
-    },
+    IncompatibleSpatialQuery { spatial_query: GridBoundingBox2D },
 }

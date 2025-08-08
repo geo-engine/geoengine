@@ -15,8 +15,8 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, ColumnSelection, FeatureDataType, Geometry, RasterQueryRectangle,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
+    BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureDataType, Geometry,
+    RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridIdx2D, GridIndexAccess, RasterTile2D,
@@ -96,7 +96,7 @@ where
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         if collection.is_empty() {
-            log::debug!(
+            tracing::debug!(
                 "input collection is empty, returning empty collection, skipping raster query"
             );
 
@@ -109,16 +109,16 @@ where
 
         let bbox = collection
             .bbox()
-            .and_then(|bbox| bbox.intersection(&query.spatial_query.spatial_bounds));
+            .and_then(|bbox| bbox.intersection(&query.spatial_bounds()));
 
         let time = collection
             .time_bounds()
-            .and_then(|time| time.intersect(&query.time_interval));
+            .and_then(|time| time.intersect(&query.time_interval()));
 
         // TODO: also intersect with raster spatial / time bounds
 
         let (Some(spatial_bounds), Some(time_interval)) = (bbox, time) else {
-            log::debug!(
+            tracing::debug!(
                 "spatial or temporal intersection is empty, returning the same collection, skipping raster query"
             );
 
@@ -136,7 +136,7 @@ where
             .tiling_geo_transform()
             .bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             pixel_bounds,
             time_interval,
             BandSelection::first_n(column_names.len() as u32),
@@ -389,7 +389,7 @@ where
     FeatureCollection<G>: GeometryCollection + PixelCoverCreator<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -402,7 +402,7 @@ where
 
         // TODO: adjust raster bands to the vector attribute selection in the query once we support it
         for raster_input in &self.raster_inputs {
-            log::debug!(
+            tracing::debug!(
                 "processing raster for new columns {:?}",
                 raster_input.column_names
             );
@@ -525,7 +525,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_instant,
                     ColumnSelection::all(),
@@ -631,7 +631,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
@@ -749,7 +749,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(),
                     ColumnSelection::all(),
@@ -866,7 +866,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
@@ -1064,7 +1064,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),
@@ -1098,10 +1098,10 @@ mod tests {
                     &[(
                         "ndvi",
                         FeatureData::Float(vec![
-                            (6. + 60.) / 2.,
-                            (5. + 50.) / 2.,
-                            (1. + 10.) / 2.,
-                            (2. + 20.) / 2.
+                            f64::midpoint(6., 60.),
+                            f64::midpoint(5., 50.),
+                            f64::midpoint(1., 10.),
+                            f64::midpoint(2., 20.)
                         ])
                     )],
                 )
@@ -1284,7 +1284,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),
@@ -1600,7 +1600,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),

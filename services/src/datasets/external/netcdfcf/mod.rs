@@ -46,13 +46,13 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use tracing::debug;
 use walkdir::{DirEntry, WalkDir};
 
 pub use self::database::NetCdfCfProviderDb;
@@ -1978,7 +1978,7 @@ mod tests {
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+            .loading_info(RasterQueryRectangle::new(
                 GridBoundingBox2D::new([0, 0], [9, 9]).unwrap(),
                 TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
                 BandSelection::first(),
@@ -2113,7 +2113,7 @@ mod tests {
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+            .loading_info(RasterQueryRectangle::new(
                 GridBoundingBox2D::new([0, 0], [9, 9]).unwrap(), // Fixme: adapt to tiling bounds
                 TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
                 BandSelection::first(),
@@ -2360,7 +2360,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new(
                         (46.478_278_849, 40.584_655_660_000_1).into(),
                         (87.323_796_021_000_1, 55.434_550_273).into(),

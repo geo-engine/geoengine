@@ -1,7 +1,8 @@
+use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::{Error, Result};
-use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerCollectionListing,
     LayerListing, ProviderLayerCollectionId, ProviderLayerId,
@@ -87,6 +88,21 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GbifDataProviderDefinition {
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::GbifDataProviderDefinition(mut new) => {
+                if new.db_config.password == SECRET_REPLACEMENT {
+                    new.db_config.password.clone_from(&self.db_config.password);
+                }
+                TypedDataProviderDefinition::GbifDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 
@@ -1544,6 +1560,7 @@ mod tests {
     use crate::layers::layer::Layer;
     use crate::layers::layer::ProviderLayerCollectionId;
     use crate::test_data;
+    use crate::util::tests::MockQueryContext;
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
     use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
@@ -1552,9 +1569,8 @@ mod tests {
         BoundingBox2D, CacheHint, FeatureData, MultiPoint, TimeInterval,
     };
     use geoengine_datatypes::primitives::{ColumnSelection, TimeInstance};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
-    use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
+    use geoengine_operators::source::OgrSourceProcessor;
     use std::collections::HashMap;
     use std::{fs::File, io::Read, path::PathBuf};
 
@@ -2213,7 +2229,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -2408,7 +2424,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -2542,7 +2558,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -2645,7 +2661,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
@@ -2655,7 +2671,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3014,7 +3030,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
@@ -3024,7 +3040,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3133,7 +3149,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (-61.065_22, 14.775_33).into(),
                     (-61.065_22, 14.775_33).into(),
@@ -3143,7 +3159,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3244,13 +3260,13 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::new_instant(1_517_011_200_000).unwrap(),
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3287,13 +3303,11 @@ mod tests {
                 return Err(format!("{result:?} != {expected:?}"));
             }
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::new_instant(1_517_443_200_000).unwrap(),
                 ColumnSelection::all(),
             );
-
-            let ctx = MockQueryContext::test_default();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3343,10 +3357,10 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn it_loads_for_lite_subset_selected_columns_with_time_range_filter(
         db_config: DatabaseConnectionConfig,
-        ctx: PostgresSessionContext<NoTls>,
+        ps_ctx: PostgresSessionContext<NoTls>,
     ) {
         async fn test(
-            ctx: PostgresSessionContext<NoTls>,
+            ps_ctx: PostgresSessionContext<NoTls>,
             db_config: DatabaseConnectionConfig,
         ) -> Result<(), String> {
             let provider = Box::new(GbifDataProviderDefinition {
@@ -3358,7 +3372,7 @@ mod tests {
                 autocomplete_timeout: 5,
                 columns: vec!["gbifid".to_string()],
             })
-            .initialize(ctx.db())
+            .initialize(ps_ctx.db())
             .await
             .map_err(|e| e.to_string())?;
 
@@ -3384,7 +3398,7 @@ mod tests {
                 vec![],
             );
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::new(
                     TimeInstance::from_millis_unchecked(1_517_011_200_000),
@@ -3394,7 +3408,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ps_ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3431,7 +3445,7 @@ mod tests {
                 return Err(format!("{result:?} != {expected:?}"));
             }
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::new(
                     TimeInstance::from_millis_unchecked(1_517_011_200_000),
@@ -3441,7 +3455,7 @@ mod tests {
                 ColumnSelection::all(),
             );
 
-            let ctx = MockQueryContext::test_default();
+            let ctx = ps_ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)
@@ -3496,7 +3510,7 @@ mod tests {
 
         add_test_data(&db_config).await;
 
-        let result = test(ctx, db_config).await;
+        let result = test(ps_ctx, db_config).await;
 
         assert!(result.is_ok());
     }

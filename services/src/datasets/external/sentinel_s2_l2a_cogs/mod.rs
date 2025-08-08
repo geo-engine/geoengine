@@ -37,7 +37,6 @@ use geoengine_operators::source::{
     OgrSourceDataset,
 };
 use geoengine_operators::util::retry::retry;
-use log::debug;
 use postgres_types::{FromSql, ToSql};
 use reqwest::Client;
 use sentinel_2_l2a_bands::{ImageProduct, ImageProductpec};
@@ -48,6 +47,7 @@ use std::convert::TryInto;
 use std::fmt::Debug;
 use std::ops::Neg;
 use std::path::PathBuf;
+use tracing::debug;
 
 mod sentinel_2_l2a_bands;
 
@@ -414,14 +414,14 @@ impl SentinelS2L2aCogsMetaData {
         let query_end_buffer = Duration::seconds(self.stac_query_buffer.end_seconds);
 
         if request_params.is_none() {
-            log::debug!("Request params are empty -> returning empty loading info");
+            tracing::debug!("Request params are empty -> returning empty loading info");
             return Ok(GdalLoadingInfo::new(
                 // we do not know anything about the data. Can only use query -/+ buffer to determine time bounds.
                 GdalLoadingInfoTemporalSliceIterator::Static {
                     parts: vec![].into_iter(),
                 },
-                query.time_interval.start() - query_start_buffer,
-                query.time_interval.end() + query_end_buffer,
+                query.time_interval().start() - query_start_buffer,
+                query.time_interval().end() + query_end_buffer,
             ));
         }
 
@@ -509,30 +509,30 @@ impl SentinelS2L2aCogsMetaData {
 
             let time_interval = TimeInterval::new(start, end)?;
 
-            if time_interval.contains(&query.time_interval) {
-                let t1 = time_interval.start();
-                let t2 = time_interval.end();
-                known_time_start = Some(t1);
-                known_time_end = Some(t2);
+            if time_interval.contains(&query.time_interval()) {
+                known_time_start = Some(time_interval.start());
+                known_time_end = Some(time_interval.end());
             } else {
-                if time_interval.end() <= query.time_interval.start() {
-                    let t1 = time_interval.end();
-                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
-                } else if time_interval.start() <= query.time_interval.start() {
-                    let t1 = time_interval.start();
-                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                if time_interval.start() <= query.time_interval().start() {
+                    let t = if time_interval.end() > query.time_interval().start() {
+                        time_interval.start()
+                    } else {
+                        time_interval.end()
+                    };
+                    known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
                 }
 
-                if time_interval.start() >= query.time_interval.end() {
-                    let t2 = time_interval.start();
-                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                } else if time_interval.end() >= query.time_interval.end() {
-                    let t2 = time_interval.end();
-                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                if time_interval.end() >= query.time_interval().end() {
+                    let t = if time_interval.start() < query.time_interval().end() {
+                        time_interval.end()
+                    } else {
+                        time_interval.start()
+                    };
+                    known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
                 }
             }
 
-            if time_interval.intersects(&query.time_interval) {
+            if time_interval.intersects(&query.time_interval()) {
                 debug!(
                     "STAC asset time: {}, url: {}",
                     time_interval,
@@ -556,10 +556,10 @@ impl SentinelS2L2aCogsMetaData {
         debug!("number of generated loading infos: {}", parts.len());
 
         // if there is no information of time outside the query, we fallback to the only information we know: query -/+ buffer. We also use that information if we did not find a better time
-        let query_start = query.time_interval.start() - query_start_buffer;
+        let query_start = query.time_interval().start() - query_start_buffer;
         let known_time_before = known_time_start.unwrap_or(query_start).min(query_start);
 
-        let query_end = query.time_interval.end() + query_end_buffer;
+        let query_end = query.time_interval().end() + query_end_buffer;
         let known_time_after = known_time_end.unwrap_or(query_end).max(query_end);
 
         Ok(GdalLoadingInfo::new(
@@ -583,7 +583,7 @@ impl SentinelS2L2aCogsMetaData {
                 if t_start == prev_start {
                     let prev_u_start = unique_start_times[i - 1];
                     let new_u_start = prev_u_start + 1;
-                    log::debug!(
+                    tracing::debug!(
                         "duplicate start time: {} insert as {} following {}",
                         t_start.as_datetime_string(),
                         new_u_start.as_datetime_string(),
@@ -653,7 +653,7 @@ impl SentinelS2L2aCogsMetaData {
         &self,
         query: &RasterQueryRectangle,
     ) -> Result<Option<Vec<(String, String)>>> {
-        let (t_start, t_end) = Self::time_range_request(&query.time_interval)?;
+        let (t_start, t_end) = Self::time_range_request(&query.time_interval())?;
 
         let t_start = t_start - Duration::seconds(self.stac_query_buffer.start_seconds);
         let t_end = t_end + Duration::seconds(self.stac_query_buffer.end_seconds);
@@ -921,8 +921,8 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            ChunkByteSize, ExecutionContext, MockExecutionContext, MockQueryContext,
-            RasterOperator, WorkflowOperatorPath,
+            ChunkByteSize, ExecutionContext, MockExecutionContext, RasterOperator,
+            WorkflowOperatorPath,
         },
         source::{FileNotFoundHandling, GdalMetaDataStatic, GdalSource, GdalSourceParameters},
     };
@@ -975,7 +975,7 @@ mod tests {
             .spatial_to_grid_bounds(&data_bounds);
 
         let loading_info = meta
-            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+            .loading_info(RasterQueryRectangle::new(
                 data_bounds_in_pixel_grid,
                 TimeInterval::new_instant(DateTime::new_utc(2021, 1, 2, 10, 2, 26))?,
                 BandSelection::first(),
@@ -1094,7 +1094,7 @@ mod tests {
             .tiling_geo_transform()
             .spatial_to_grid_bounds(&sp);
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             sp,
             TimeInterval::new_instant(DateTime::new_utc(2018, 10, 19, 13, 23, 25))?,
             BandSelection::first(),
@@ -1372,7 +1372,7 @@ mod tests {
         let sp: geoengine_datatypes::raster::GridBoundingBox<[isize; 2]> =
             tiling_geo_transform.spatial_to_grid_bounds(&data_bounds);
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             sp,
             TimeInterval::new_instant(DateTime::new_utc(2021, 9, 23, 8, 10, 44)).unwrap(),
             BandSelection::first(),
@@ -1462,7 +1462,7 @@ mod tests {
         .get_u16()
         .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let data_bounds = SpatialPartition2D::new_unchecked(
             (499_980., 9_804_800.).into(),
@@ -1474,7 +1474,7 @@ mod tests {
 
         let stream = gdal_source
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     sp,
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
                     BandSelection::first(),

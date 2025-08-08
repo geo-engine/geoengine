@@ -58,9 +58,8 @@ mod test_util {
     use num_traits::AsPrimitive;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptor,
-        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
-        WorkflowOperatorPath,
+        MockExecutionContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
+        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -90,7 +89,7 @@ mod test_util {
 
         let processor = op.query_processor().unwrap().get_f32().unwrap();
 
-        let ctx = MockQueryContext::test_default();
+        let ctx = ctx.mock_query_context_test_default();
         let result_stream = processor.query(query, &ctx).await.unwrap();
         let mut result: Vec<Result<RasterTile2D<f32>>> = result_stream.collect().await;
         assert_eq!(1, result.len());
@@ -124,7 +123,7 @@ mod test_util {
     }
 
     pub(crate) fn _create_gdal_query() -> RasterQueryRectangle {
-        RasterQueryRectangle::new_with_grid_bounds(
+        RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(0, 599, 0, 599).unwrap(),
             TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2012, 12, 12, 12, 0, 0)),
@@ -135,7 +134,7 @@ mod test_util {
     }
 
     pub(crate) fn create_mock_query() -> RasterQueryRectangle {
-        RasterQueryRectangle::new_with_grid_bounds(
+        RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
             Default::default(),
             BandSelection::first(),

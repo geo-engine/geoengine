@@ -66,7 +66,7 @@ async fn bench_gdal_source() {
             .get_u8()
             .unwrap();
 
-        let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        let qrect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new(
                 TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
@@ -128,7 +128,7 @@ async fn bench_multi_band_gdal_source() {
             .get_u8()
             .unwrap();
 
-        let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        let qrect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new(
                 TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),

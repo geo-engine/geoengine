@@ -3,26 +3,30 @@ use crate::api::handlers::datasets::{DatasetTile, VolumeFileLayersResponse};
 use crate::api::handlers::permissions::{
     PermissionListOptions, PermissionListing, PermissionRequest, Resource,
 };
+use crate::api::handlers::plots::WrappedPlotOutput;
+use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
+use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
+use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use crate::api::model::datatypes::{
     AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
     ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
     DataProviderId, DatasetId, DateTimeParseFormat, DateTimeString, ExternalDataId,
     FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry, Palette, PlotOutputFormat,
-    RasterColorizer, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey,
-    RasterToDatasetQueryRectangle, RgbaColor, SpatialPartition2D, SpatialReferenceAuthority,
-    SpatialResolution, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType,
+    MlModelName, MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry,
+    Palette, PlotOutputFormat, RasterColorizer, RasterDataType, RasterPropertiesEntryType,
+    RasterPropertiesKey, RasterToDatasetQueryRectangle, RgbaColor, SpatialPartition2D,
+    SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
+    TimeInterval, TimeStep, VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
     GdalDatasetParameters, GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular,
     GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder,
-    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
-    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
-    OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterResultDescriptor, TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor,
-    UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
+    MlModelMetadata, MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData,
+    OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+    OgrSourceErrorSpec, OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor,
+    RasterBandDescriptors, RasterResultDescriptor, TimeReference, TypedGeometry, TypedOperator,
+    TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::ml_models::MlModelNameResponse;
@@ -31,17 +35,26 @@ use crate::api::model::responses::{
     UnauthorizedAdminResponse, UnauthorizedUserResponse, UnsupportedMediaTypeForJsonResponse,
     ZipResponse,
 };
+use crate::api::model::services::DatabaseConnectionConfig;
+use crate::api::model::services::EdrVectorSpec;
+use crate::api::model::services::LayerProviderListing;
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, Dataset, DatasetDefinition, MetaDataDefinition,
-    MetaDataSuggestion, Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
+    MetaDataSuggestion, MlModel, Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
 };
-use crate::api::ogc::{util::OgcBoundingBox, wcs, wfs, wms};
+use crate::api::model::services::{
+    ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition,
+    DatasetLayerListingCollection, DatasetLayerListingProviderDefinition,
+    EbvPortalDataProviderDefinition, EdrDataProviderDefinition, GbifDataProviderDefinition,
+    GfbioAbcdDataProviderDefinition, GfbioCollectionsDataProviderDefinition,
+    NetCdfCfDataProviderDefinition, PangaeaDataProviderDefinition,
+    SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacQueryBuffer,
+    TypedDataProviderDefinition,
+};
+use crate::api::ogc::util::OgcBoundingBox;
+use crate::api::ogc::{wcs, wfs, wms};
 use crate::api::{
     handlers::{
-        plots::WrappedPlotOutput,
-        spatial_references::{AxisOrder, SpatialReferenceSpecification},
-        tasks::{TaskAbortOptions, TaskResponse},
-        upload::{UploadFileLayersResponse, UploadFilesResponse},
         users::{AddRole, Quota, UpdateQuota, UsageSummaryGranularity},
         wfs::{CollectionType, GeoJson},
         workflows::{ProvenanceEntry, RasterStreamWebsocketResultType},
@@ -64,8 +77,7 @@ use crate::layers::layer::{
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
-use crate::machine_learning::name::MlModelName;
-use crate::machine_learning::{MlModel, MlModelId, MlModelMetadata};
+use crate::machine_learning::MlModelId;
 use crate::permissions::{Permission, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
@@ -118,6 +130,13 @@ use utoipa::{Modify, OpenApi};
         handlers::layers::remove_collection_from_collection,
         handlers::layers::remove_collection,
         handlers::layers::remove_layer_from_collection,
+        handlers::layers::add_provider,
+        handlers::layers::get_provider_definition,
+        handlers::layers::update_provider_definition,
+        handlers::layers::delete_provider,
+        handlers::layers::list_providers,
+        handlers::users::session_project_handler,
+        handlers::users::session_view_handler,
         handlers::layers::remove_layer,
         handlers::layers::search_handler,
         handlers::layers::update_collection,
@@ -421,6 +440,24 @@ use utoipa::{Modify, OpenApi};
             GridBoundingBox2D,
             GridIdx2D,
             GeoTransform,
+            TypedDataProviderDefinition,
+            ArunaDataProviderDefinition,
+            DatasetLayerListingProviderDefinition,
+            GbifDataProviderDefinition,
+            GfbioAbcdDataProviderDefinition,
+            GfbioCollectionsDataProviderDefinition,
+            EbvPortalDataProviderDefinition,
+            NetCdfCfDataProviderDefinition,
+            PangaeaDataProviderDefinition,
+            EdrDataProviderDefinition,
+            CopernicusDataspaceDataProviderDefinition,
+            SentinelS2L2ACogsProviderDefinition,
+            DatabaseConnectionConfig,
+            EdrVectorSpec,
+            StacApiRetries,
+            StacQueryBuffer,
+            DatasetLayerListingCollection,
+            LayerProviderListing,
 
             PermissionRequest,
             Resource,
@@ -435,7 +472,8 @@ use utoipa::{Modify, OpenApi};
             MlModelId,
             MlModelName,
             MlModelMetadata,
-            MlModelNameResponse
+            MlModelNameResponse,
+            MlTensorShape3D,
         ),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),

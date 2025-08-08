@@ -13,11 +13,14 @@ use super::storage::{
     LayerProviderListingOptions,
 };
 use crate::contexts::PostgresDb;
+use crate::error::Error::{
+    ProviderIdAlreadyExists, ProviderIdUnmodifiable, ProviderTypeUnmodifiable,
+};
 use crate::layers::external::DataProviderDefinition;
 use crate::permissions::{Permission, RoleId, TxPermissionDb};
 use crate::workflows::registry::TxWorkflowRegistry;
 use crate::{
-    error::{self, Result},
+    error::Result,
     layers::{
         LayerDbError,
         layer::{AddLayer, AddLayerCollection},
@@ -34,7 +37,7 @@ use bb8_postgres::tokio_postgres::{
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::HashMapTextTextDbType;
-use snafu::{ResultExt, ensure};
+use snafu::ResultExt;
 use std::str::FromStr;
 use tokio_postgres::Transaction;
 use tonic::async_trait;
@@ -326,7 +329,7 @@ where
 
         transaction
             .execute(
-                "UPDATE layer_collections 
+                "UPDATE layer_collections
                 SET name = $1, description = $2, properties = $3
                 WHERE id = $4;",
                 &[
@@ -350,14 +353,14 @@ fn create_search_query(full_info: bool) -> String {
         )
         SELECT DISTINCT *
         FROM (
-            SELECT 
+            SELECT
                 {}
             FROM user_permitted_layer_collections u
                 JOIN layer_collections lc ON (u.layer_collection_id = lc.id)
                 JOIN (SELECT DISTINCT child FROM collection_children JOIN parents ON (id = parent)) cc ON (id = cc.child)
             WHERE u.user_id = $4 AND name ILIKE $5
         ) u UNION (
-            SELECT 
+            SELECT
                 {}
             FROM user_permitted_layers ul
                 JOIN layers uc ON (ul.layer_id = uc.id)
@@ -365,7 +368,7 @@ fn create_search_query(full_info: bool) -> String {
             WHERE ul.user_id = $4 AND name ILIKE $5
         )
         ORDER BY {}name ASC
-        LIMIT $2 
+        LIMIT $2
         OFFSET $3;",
         if full_info {
             "concat(id, '') AS id,
@@ -437,8 +440,8 @@ where
             .prepare(
                 "
         SELECT name, description, properties
-        FROM user_permitted_layer_collections p 
-            JOIN layer_collections c ON (p.layer_collection_id = c.id) 
+        FROM user_permitted_layer_collections p
+            JOIN layer_collections c ON (p.layer_collection_id = c.id)
         WHERE p.user_id = $1 AND layer_collection_id = $2;",
             )
             .await?;
@@ -462,7 +465,7 @@ where
                 description, 
                 properties, 
                 FALSE AS is_layer
-            FROM user_permitted_layer_collections u 
+            FROM user_permitted_layer_collections u
                 JOIN layer_collections lc ON (u.layer_collection_id = lc.id)
                 JOIN collection_children cc ON (layer_collection_id = cc.child)
             WHERE u.user_id = $4 AND cc.parent = $1
@@ -474,7 +477,7 @@ where
                 properties, 
                 TRUE AS is_layer
             FROM user_permitted_layers ul
-                JOIN layers uc ON (ul.layer_id = uc.id) 
+                JOIN layers uc ON (ul.layer_id = uc.id)
                 JOIN collection_layers cl ON (layer_id = cl.layer)
             WHERE ul.user_id = $4 AND cl.collection = $1
         )
@@ -566,8 +569,8 @@ where
             .prepare(
                 "
         SELECT name, description, properties
-        FROM user_permitted_layer_collections p 
-            JOIN layer_collections c ON (p.layer_collection_id = c.id) 
+        FROM user_permitted_layer_collections p
+            JOIN layer_collections c ON (p.layer_collection_id = c.id)
         WHERE p.user_id = $1 AND layer_collection_id = $2;",
             )
             .await?;
@@ -761,6 +764,38 @@ where
     }
 }
 
+impl<Tls> PostgresDb<Tls>
+where
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    Tls: 'static + Clone + MakeTlsConnect<Socket> + Send + Sync + std::fmt::Debug,
+{
+    fn clamp_prio(provider: &TypedDataProviderDefinition, prio: i16) -> i16 {
+        let clamp_prio = prio.clamp(-1000, 1000);
+
+        if prio != clamp_prio {
+            tracing::warn!(
+                "The priority of the provider {} is out of range! --> clamped {} to {}",
+                DataProviderDefinition::<Self>::name(provider),
+                prio,
+                clamp_prio
+            );
+        }
+        clamp_prio
+    }
+
+    async fn id_exists(tx: &Transaction<'_>, id: &DataProviderId) -> Result<bool> {
+        Ok(tx
+            .query_one(
+                "SELECT EXISTS(SELECT 1 FROM layer_providers WHERE id = $1)",
+                &[&id],
+            )
+            .await?
+            .get::<usize, bool>(0))
+    }
+}
+
 #[async_trait]
 impl<Tls> LayerProviderDb for PostgresDb<Tls>
 where
@@ -773,28 +808,25 @@ where
         &self,
         provider: TypedDataProviderDefinition,
     ) -> Result<DataProviderId> {
-        ensure!(self.session.is_admin(), error::PermissionDenied);
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
 
-        let conn = self.conn_pool.get().await?;
+        let id = DataProviderDefinition::<Self>::id(&provider);
 
-        let prio = DataProviderDefinition::<Self>::priority(&provider);
-        let clamp_prio = prio.clamp(-1000, 1000);
-
-        if prio != clamp_prio {
-            log::warn!(
-                "The priority of the provider {} is out of range! --> clamped {} to {}",
-                DataProviderDefinition::<Self>::name(&provider),
-                prio,
-                clamp_prio
-            );
+        if Self::id_exists(&tx, &id).await? {
+            return Err(ProviderIdAlreadyExists { provider_id: id });
         }
 
-        let stmt = conn
+        let prio = DataProviderDefinition::<Self>::priority(&provider);
+
+        let clamp_prio = Self::clamp_prio(&provider, prio);
+
+        let stmt = tx
             .prepare(
                 "
               INSERT INTO layer_providers (
-                  id, 
-                  type_name, 
+                  id,
+                  type_name,
                   name,
                   definition,
                   priority
@@ -803,8 +835,7 @@ where
             )
             .await?;
 
-        let id = DataProviderDefinition::<Self>::id(&provider);
-        conn.execute(
+        tx.execute(
             &stmt,
             &[
                 &id,
@@ -815,6 +846,23 @@ where
             ],
         )
         .await?;
+
+        let stmt = tx
+            .prepare(
+                "
+            INSERT INTO permissions (role_id, permission, provider_id)
+            VALUES ($1, $2, $3) ON CONFLICT DO NOTHING;",
+            )
+            .await?;
+
+        tx.execute(
+            &stmt,
+            &[&RoleId::from(self.session.user.id), &Permission::Owner, &id],
+        )
+        .await?;
+
+        tx.commit().await?;
+
         Ok(id)
     }
 
@@ -822,23 +870,23 @@ where
         &self,
         options: LayerProviderListingOptions,
     ) -> Result<Vec<LayerProviderListing>> {
-        // TODO: permission
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
             .prepare(
                 "
-                SELECT 
-                    id, 
+                SELECT
+                    id,
                     name,
                     type_name,
                     priority
-                FROM 
-                    layer_providers
+                FROM
+                    user_permitted_providers p
+                    JOIN layer_providers l ON (p.provider_id = l.id)
                 WHERE
-                    priority > -1000
+                    p.user_id = $3 AND priority > -1000
                 ORDER BY priority desc, name ASC
-                LIMIT $1 
+                LIMIT $1
                 OFFSET $2;
                 ",
             )
@@ -847,7 +895,11 @@ where
         let rows = conn
             .query(
                 &stmt,
-                &[&i64::from(options.limit), &i64::from(options.offset)],
+                &[
+                    &i64::from(options.limit),
+                    &i64::from(options.offset),
+                    &self.session.user.id,
+                ],
             )
             .await?;
 
@@ -862,7 +914,20 @@ where
     }
 
     async fn load_layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>> {
-        // TODO: permissions
+        let definition = self.get_layer_provider_definition(id).await?;
+
+        return Box::new(definition)
+            .initialize(PostgresDb {
+                conn_pool: self.conn_pool.clone(),
+                session: self.session.clone(),
+            })
+            .await;
+    }
+
+    async fn get_layer_provider_definition(
+        &self,
+        id: DataProviderId,
+    ) -> Result<TypedDataProviderDefinition> {
         let conn = self.conn_pool.get().await?;
 
         let stmt = conn
@@ -871,22 +936,107 @@ where
                 SELECT
                     definition
                 FROM
-                    layer_providers
+                    user_permitted_providers p
+                    JOIN layer_providers l ON (p.provider_id = l.id)
                 WHERE
-                    id = $1
+                    id = $1 AND p.user_id = $2
                 ",
             )
             .await?;
 
-        let row = conn.query_one(&stmt, &[&id]).await?;
-        let definition: TypedDataProviderDefinition = row.get(0);
+        let row = conn.query_one(&stmt, &[&id, &self.session.user.id]).await?;
 
-        return Box::new(definition)
-            .initialize(PostgresDb {
-                conn_pool: self.conn_pool.clone(),
-                session: self.session.clone(),
-            })
-            .await;
+        Ok(row.get(0))
+    }
+
+    async fn update_layer_provider_definition(
+        &self,
+        id: DataProviderId,
+        provider: TypedDataProviderDefinition,
+    ) -> Result<()> {
+        if id.0 != DataProviderDefinition::<Self>::id(&provider).0 {
+            return Err(ProviderIdUnmodifiable);
+        }
+
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(id.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        let type_name_matches: bool = tx
+            .query_one(
+                "SELECT type_name = $2 FROM layer_providers WHERE id = $1",
+                &[&id, &DataProviderDefinition::<Self>::type_name(&provider)],
+            )
+            .await?
+            .get(0);
+
+        if !type_name_matches {
+            return Err(ProviderTypeUnmodifiable);
+        }
+
+        let old_definition = self.get_layer_provider_definition(id).await?;
+        let provider = DataProviderDefinition::<Self>::update(&old_definition, provider);
+
+        println!("{:?}", provider);
+
+        let prio = DataProviderDefinition::<Self>::priority(&provider);
+
+        let clamp_prio = Self::clamp_prio(&provider, prio);
+
+        let stmt = tx
+            .prepare(
+                "
+              UPDATE layer_providers
+              SET
+                name = $2,
+                definition = $3,
+                priority = $4
+              WHERE id = $1
+              ",
+            )
+            .await?;
+
+        tx.execute(
+            &stmt,
+            &[
+                &id,
+                &DataProviderDefinition::<Self>::name(&provider),
+                &provider,
+                &clamp_prio,
+            ],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn delete_layer_provider(&self, id: DataProviderId) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(id.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        let stmt = tx
+            .prepare(
+                "
+              DELETE FROM layer_providers
+              WHERE id = $1
+              ",
+            )
+            .await?;
+
+        tx.execute(&stmt, &[&id]).await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 }
 

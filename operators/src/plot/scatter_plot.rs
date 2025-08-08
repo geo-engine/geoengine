@@ -13,9 +13,7 @@ use crate::engine::{
 };
 use crate::error::Error;
 use crate::util::Result;
-use geoengine_datatypes::primitives::{
-    ColumnSelection, Coordinate2D, PlotQueryRectangle, VectorQueryRectangle,
-};
+use geoengine_datatypes::primitives::{ColumnSelection, Coordinate2D, PlotQueryRectangle};
 
 pub const SCATTERPLOT_OPERATOR_NAME: &str = "ScatterPlot";
 
@@ -158,11 +156,7 @@ impl PlotQueryProcessor for ScatterPlotQueryProcessor {
         let mut collector =
             CollectorKind::Values(Collector::new(self.column_x.clone(), self.column_y.clone()));
 
-        let query = VectorQueryRectangle::new(
-            query.spatial_query,
-            query.time_interval,
-            ColumnSelection::all(),
-        );
+        let query = query.select_attributes(ColumnSelection::all());
 
         call_on_generic_vector_processor!(&self.input, processor => {
             let mut query = processor.query(query, ctx).await?;
@@ -385,7 +379,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -462,7 +456,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -647,7 +641,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -700,7 +694,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -755,7 +749,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -835,7 +829,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),

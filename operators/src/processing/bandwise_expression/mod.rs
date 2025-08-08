@@ -259,7 +259,7 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
             SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
@@ -411,13 +411,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             [0, 1].try_into().unwrap(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = expression
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

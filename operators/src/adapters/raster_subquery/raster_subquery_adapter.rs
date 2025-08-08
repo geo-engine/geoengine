@@ -13,9 +13,9 @@ use futures::{
     stream::{BoxStream, TryFold},
 };
 use futures::{Stream, StreamExt, TryFutureExt};
+use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, RasterSpatialQueryRectangle};
 use geoengine_datatypes::raster::{
     EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep, TilingStrategy,
 };
@@ -132,8 +132,8 @@ where
         query_ctx: &'a dyn QueryContext,
         sub_query: SubQuery,
     ) -> Self {
-        let grid_bounds = query_rect_to_answer.spatial_query.grid_bounds();
-        let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
+        let tile_bounds = tiling_strategy
+            .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect_to_answer.spatial_bounds());
 
         let first_tile_spec = TileInformation {
             global_geo_transform: tiling_strategy.geo_transform,
@@ -144,10 +144,10 @@ where
         Self {
             current_tile_spec: first_tile_spec,
             current_time_end: None,
-            current_time_start: query_rect_to_answer.time_interval.start(),
+            current_time_start: query_rect_to_answer.time_interval().start(),
             current_band_index: 0,
             tile_grid_bounds: tile_bounds,
-            bands: query_rect_to_answer.attributes.as_vec(),
+            bands: query_rect_to_answer.attributes().as_vec(),
             query_ctx,
             query_rect_to_answer,
             source_processor,
@@ -169,7 +169,7 @@ where
         let global_geo_transform = self.current_tile_spec.global_geo_transform;
         let tile_shape = self.current_tile_spec.tile_size_in_pixels;
         let num_bands = self.bands.len() as u32;
-        let query_time_bounds = self.query_rect_to_answer.time_interval;
+        let query_time_bounds = self.query_rect_to_answer.time_interval();
 
         let s = self.filter_map(|x| async move {
             match x {
@@ -209,7 +209,7 @@ where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
             Output = RasterTile2D<PixelType>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -226,7 +226,7 @@ where
     PixelType: Pixel,
     RasterProcessorType: QueryProcessor<
             Output = RasterTile2D<PixelType>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -410,7 +410,7 @@ where
                 // NOTE: this assumes that the input operator produces no data tiles for queries where time and space are valid but no data is avalable.
                 debug_assert!(&tile_option.is_none());
                 debug_assert!(
-                    *this.current_time_start == this.query_rect_to_answer.time_interval.start()
+                    *this.current_time_start == this.query_rect_to_answer.time_interval().start()
                 );
                 this.state.set(StateInner::Ended);
             }
@@ -421,7 +421,7 @@ where
                 *this.current_time_end = None;
 
                 // check if the next time to request is inside the bounds we are want to answer.
-                if *this.current_time_start >= this.query_rect_to_answer.time_interval.end() {
+                if *this.current_time_start >= this.query_rect_to_answer.time_interval().end() {
                     this.state.set(StateInner::Ended);
                 }
             }
@@ -432,7 +432,7 @@ where
                 *this.current_time_end = None;
 
                 // check if the next time to request is inside the bounds we are want to answer.
-                if *this.current_time_start >= this.query_rect_to_answer.time_interval.end() {
+                if *this.current_time_start >= this.query_rect_to_answer.time_interval().end() {
                     this.state.set(StateInner::Ended);
                 }
             }
@@ -562,7 +562,7 @@ where
         start_time: TimeInstance,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             tile_info.global_pixel_bounds(),
             TimeInterval::new_instant(start_time)?,
             band_idx.into(),
@@ -579,7 +579,7 @@ pub fn identity_accu<T: Pixel>(
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> + use<T> {
-    let time_interval = query_rect.time_interval;
+    let time_interval = query_rect.time_interval();
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
         let output_tile = RasterTile2D::new_with_tile_info(

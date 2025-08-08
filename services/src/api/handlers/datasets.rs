@@ -1477,7 +1477,7 @@ mod tests {
         operations::image::{RasterColorizer, RgbaColor},
         primitives::{
             BandSelection, BoundingBox2D, ColumnSelection, DateTimeParseFormat,
-            RasterQueryRectangle, SpatialPartition2D, SpatialQueryRectangle,
+            RasterQueryRectangle, SpatialPartition2D,
         },
         raster::{GridShape2D, TilingSpecification},
         spatial_reference::SpatialReferenceOption,
@@ -1826,16 +1826,11 @@ mod tests {
 
         let query = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_query: SpatialQueryRectangle::<BoundingBox2D> {
-                        spatial_bounds: BoundingBox2D::new(
-                            (1.85, 50.88).into(),
-                            (4.82, 52.95).into(),
-                        )?,
-                    },
-                    time_interval: Default::default(),
-                    attributes: ColumnSelection::all(),
-                },
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
+                    Default::default(),
+                    ColumnSelection::all(),
+                ),
                 &query_ctx,
             )
             .await?;
@@ -3100,7 +3095,7 @@ mod tests {
 
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -3625,7 +3620,7 @@ mod tests {
                 (180.0, -90.).into(),
             ));
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new_instant(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
@@ -3719,7 +3714,7 @@ mod tests {
                 (180.0, -90.).into(),
             ));
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new_instant(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
@@ -3821,7 +3816,7 @@ mod tests {
                 (180.0, -90.).into(),
             ));
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
@@ -3950,7 +3945,7 @@ mod tests {
             ));
 
         // query a time interval that is greater than the time interval of the tiles and covers a region with a temporal gap
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2024-12-01T00:00:00Z")
@@ -4173,7 +4168,7 @@ mod tests {
                 (180.0, -90.).into(),
             ));
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             TimeInterval::new_instant(
                 geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")

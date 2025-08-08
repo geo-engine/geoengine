@@ -5,6 +5,9 @@ use crate::{
     raster::{GridBoundingBox2D, GridIdx2D, GridSize, SpatialGridDefinition},
 };
 
+/// A trait that allows to generate sample points for rectangles (and polygons?).
+/// The `Coord` type allows to specify the output type e.g. pixel coordinates or geo coordinates.
+/// It is used mainly for the reprojection operation with pixel and geo coordinates.
 pub trait SamplePoints {
     type Coord;
 

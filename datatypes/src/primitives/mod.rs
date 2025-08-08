@@ -40,9 +40,7 @@ pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
 pub use query_rectangle::{
     BandSelection, ColumnSelection, PlotQueryRectangle, PlotSeriesSelection,
-    PlotSpatialQueryRectangle, QueryAttributeSelection, QueryRectangle, RasterQueryRectangle,
-    RasterSpatialQueryRectangle, SpatialGridQueryRectangle, SpatialQueryRectangle,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
+    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
 pub use spatial_partition::{
     AxisAlignedRectangle, SpatialPartition2D, SpatialPartitioned, partitions_extent,

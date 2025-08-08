@@ -1,0 +1,176 @@
+{
+  "pageNum": 0,
+  "pageSize": -1,
+  "size": 21,
+  "facets": [],
+  "results": [
+    {
+      "id": "wildlive/79e043c3053fb39df381",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/c2bd44066dbda6f0d1ac",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/16f3b0b65b4a58acb782",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/0ff0ce1ddfcfb0aff407",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/52baefeffeb2648fdaf7",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/024b9357f1e23877a243",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -61.9
+      }
+    },
+    {
+      "id": "wildlive/f421dc2239b8fd7a1980",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/797cb6f275e9fc8afa4b",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/a43254afb230ce163256",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/229392d20de8b45e8114",
+      "content": {
+        "inStationsLayout": "wildlive/667cc39364fd45136c7a",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/3204d6391519562525ec",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/468ba2036b2a4ff004c9",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/ea64f18b8fa1dec31196",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/259cfcfd85fcb0ce276d",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/358df8fa949f35e91a64",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -61.9
+      }
+    },
+    {
+      "id": "wildlive/33516c1ce3b7e26c296d",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/498ae1629861699f5323",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/6bf42fa2eb245604bb31",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/2cd0a46deb9e47b0518f",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.3,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/8ced32ac3ca4f646a53b",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    },
+    {
+      "id": "wildlive/de7f4396c2689d1fbf6d",
+      "content": {
+        "inStationsLayout": "wildlive/151c43fdd5881eba0bd5",
+        "decimalLatitude": -16.4,
+        "decimalLongitude": -62
+      }
+    }
+  ]
+}

@@ -1,10 +1,11 @@
 use super::gfbio_abcd::GfbioAbcdDataProvider;
 use super::pangaea::{PangaeaDataProvider, PangaeaMetaData};
+use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error::ProviderDoesNotSupportBrowsing;
 use crate::error::{Error, Result};
-use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
@@ -95,6 +96,27 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioCollectionsDataProviderD
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(mut new) => {
+                if new.abcd_db_config.password == SECRET_REPLACEMENT {
+                    new.abcd_db_config
+                        .password
+                        .clone_from(&self.abcd_db_config.password);
+                }
+                if new.collection_api_auth_token == SECRET_REPLACEMENT {
+                    new.collection_api_auth_token
+                        .clone_from(&self.collection_api_auth_token);
+                }
+                TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 
@@ -1120,7 +1142,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),

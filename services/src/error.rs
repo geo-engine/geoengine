@@ -7,7 +7,7 @@ use crate::datasets::external::netcdfcf::NetCdfCf4DProviderError;
 use crate::{layers::listing::LayerCollectionId, workflows::workflow::WorkflowId};
 use actix_web::HttpResponse;
 use actix_web::http::StatusCode;
-use geoengine_datatypes::dataset::LayerId;
+use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::ErrorSource;
 use geoengine_datatypes::util::helpers::ge_report;
 use ordered_float::FloatIsNan;
@@ -114,11 +114,11 @@ pub enum Error {
     #[snafu(display("Failed to delete the project."))]
     ProjectDeleteFailed,
     PermissionFailed,
-    #[snafu(display("A permission error occured: {source}."))]
+    #[snafu(display("A permission error occurred: {source}."))]
     PermissionDb {
         source: Box<dyn ErrorSource>,
     },
-    #[snafu(display("A role error occured: {source}."))]
+    #[snafu(display("A role error occurred: {source}."))]
     RoleDb {
         source: Box<dyn ErrorSource>,
     },
@@ -137,7 +137,6 @@ pub enum Error {
 
     NoWorkflowForGivenId,
 
-    #[snafu(display("Postgres error: {source}"))]
     TokioPostgres {
         source: bb8_postgres::tokio_postgres::Error,
     },
@@ -500,8 +499,6 @@ pub enum Error {
     #[snafu(display("Raster band names must not be longer than 256 bytes"))]
     RasterBandNameTooLong,
 
-    ResolutionMissmatch, // FIXME: added this to mark sections where we need to do something about resolutions later
-
     #[snafu(display("Resource id is invalid: type: {}, id: {}", resource_type, resource_id))]
     InvalidResourceId {
         resource_type: String,
@@ -517,6 +514,17 @@ pub enum Error {
     CannotAccessVolumePath {
         volume_name: String,
     },
+
+    #[snafu(display("A provider with id '{}' already exists", provider_id))]
+    ProviderIdAlreadyExists {
+        provider_id: DataProviderId,
+    },
+
+    #[snafu(display("An existing provider's type cannot be modified"))]
+    ProviderTypeUnmodifiable,
+
+    #[snafu(display("An existing provider's id cannot be modified"))]
+    ProviderIdUnmodifiable,
 
     #[snafu(display("Unknown resource name {} of kind {}", name, kind))]
     UnknownResource {
@@ -536,6 +544,11 @@ pub enum Error {
 
     MlModelName {
         source: geoengine_datatypes::machine_learning::MlModelNameError,
+    },
+
+    #[snafu(display("WildLIVE connector error: {source}"), context(false))]
+    Wildlive {
+        source: crate::datasets::external::WildliveError,
     },
 }
 

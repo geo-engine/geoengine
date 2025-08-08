@@ -1,8 +1,6 @@
 mod postgres_workflow_registry;
-mod raster_stream;
 pub mod registry;
-mod vector_stream;
+mod websocket_stream;
 pub mod workflow;
 
-pub use raster_stream::RasterWebsocketStreamHandler;
-pub use vector_stream::VectorWebsocketStreamHandler;
+pub use websocket_stream::{WebsocketStreamTask, handle_websocket_message, send_websocket_message};

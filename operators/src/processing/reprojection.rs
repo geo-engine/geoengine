@@ -26,11 +26,10 @@ use geoengine_datatypes::{
         reproject_spatial_query,
     },
     primitives::{
-        BandSelection, ColumnSelection, Geometry, RasterQueryRectangle,
-        RasterSpatialQueryRectangle, SpatialGridQueryRectangle, SpatialPartition2D,
-        VectorQueryRectangle, VectorSpatialQueryRectangle,
+        BandSelection, BoundingBox2D, ColumnSelection, Geometry, RasterQueryRectangle,
+        SpatialPartition2D, VectorQueryRectangle,
     },
-    raster::{Pixel, RasterTile2D, TilingSpecification},
+    raster::{GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
     util::arrow::ArrowTyped,
 };
@@ -149,14 +148,14 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         let out_spatial_grid = match params.derive_out_spec {
             DeriveOutRasterSpecsSource::DataBounds => in_desc
                 .spatial_grid_descriptor()
-                .reproject_clipped(&proj_from_to)?,
+                .reproject_clipped(&proj_from_to)?, // TODO: we could skip the intersection (clipped) and try to project larger area
             DeriveOutRasterSpecsSource::ProjectionBounds => {
                 let in_srs_area: SpatialPartition2D = in_srs.area_of_use_projected()?; // TODO: since we clip in projection anyway, we could use the AOU of the source projection?
                 let target_proj_total_grid = in_desc
                     .spatial_grid_descriptor()
                     .spatial_bounds_to_compatible_spatial_grid(in_srs_area)
                     .reproject_clipped(&proj_from_to)?;
-                // jetzt grid mit origin (tl) auf grid vom dataset. dann umprojeziren. Dann intersection mit boundingbox in dataset
+                // TODO: we could skip the intersection and try to project larger area
                 let spatial_bounds_proj =
                     in_desc.spatial_bounds().reproject_clipped(&proj_from_to)?;
                 target_proj_total_grid.and_then(|x| {
@@ -247,12 +246,12 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
                     source,
                     self.result_descriptor.clone(),
                     move |query: VectorQueryRectangle| {
-                        reproject_spatial_query(query.spatial_query(), source_srs, target_srs)
+                        reproject_spatial_query(query.spatial_bounds(), source_srs, target_srs)
                             .map(|sqr| {
                                 sqr.map(|x| {
                                     VectorQueryRectangle::new(
                                         x,
-                                        query.time_interval,
+                                        query.time_interval(),
                                         ColumnSelection::all(),
                                     )
                                 })
@@ -346,7 +345,7 @@ impl<Q, G> QueryProcessor for VectorReprojectionProcessor<Q, G>
 where
     Q: QueryProcessor<
             Output = FeatureCollection<G>,
-            SpatialQuery = VectorSpatialQueryRectangle,
+            SpatialBounds = BoundingBox2D,
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         >,
@@ -354,7 +353,7 @@ where
     G: Geometry + ArrowTyped,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -364,10 +363,9 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let rewritten_spatial_query =
-            reproject_spatial_query(query.spatial_query(), self.from, self.to)?;
+            reproject_spatial_query(query.spatial_bounds(), self.from, self.to)?;
 
-        let rewritten_query = rewritten_spatial_query
-            .map(|rwq| VectorQueryRectangle::new(rwq, query.time_interval, query.attributes));
+        let rewritten_query = rewritten_spatial_query.map(|rwq| query.select_spatial_bounds(rwq));
 
         if let Some(rewritten_query) = rewritten_query {
             Ok(self
@@ -593,7 +591,7 @@ impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = SpatialGridQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -622,14 +620,14 @@ impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
     Q: QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = RasterSpatialQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -674,9 +672,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterBandDescriptors, SpatialGridDescriptor,
-    };
+    use crate::engine::{MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor};
     use crate::mock::MockFeatureCollectionSource;
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -768,7 +764,7 @@ mod tests {
 
         let query_processor = query_processor.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -844,7 +840,7 @@ mod tests {
 
         let query_processor = query_processor.multi_line_string().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -927,7 +923,7 @@ mod tests {
 
         let query_processor = query_processor.multi_polygon().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new(
                 (COLOGNE_EPSG_4326.x, MARBURG_EPSG_4326.y).into(),
                 (MARBURG_EPSG_4326.x, HAMBURG_EPSG_4326.y).into(),
@@ -1093,7 +1089,7 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
@@ -1181,11 +1177,7 @@ mod tests {
         let query_bounds =
             GridBoundingBox2D::new(query_tl_pixel, query_tl_pixel + [511, 511]).unwrap();
 
-        let qrect = RasterQueryRectangle::new_with_grid_bounds(
-            query_bounds,
-            time_interval,
-            BandSelection::first(),
-        );
+        let qrect = RasterQueryRectangle::new(query_bounds, time_interval, BandSelection::first());
 
         let qs = qp.raster_query(qrect.clone(), &query_ctx).await.unwrap();
 
@@ -1236,7 +1228,7 @@ mod tests {
 
     #[test]
     fn query_rewrite_4326_3857() {
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -1248,7 +1240,7 @@ mod tests {
         );
 
         let reprojected = reproject_spatial_query(
-            query.spatial_query(),
+            query.spatial_bounds(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
             SpatialReference::epsg_4326(),
         )
@@ -1258,7 +1250,7 @@ mod tests {
         assert!(approx_eq!(
             BoundingBox2D,
             expected,
-            reprojected.spatial_bounds,
+            reprojected,
             epsilon = 0.000_001
         ));
     }
@@ -1359,7 +1351,7 @@ mod tests {
 
         let qs = qp
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     qr.spatial_grid_descriptor()
                         .tiling_grid_definition(query_ctx.tiling_specification())
                         .tiling_grid_bounds(),
@@ -1463,7 +1455,7 @@ mod tests {
 
         let result = qp
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new_min_max(500, 1000, 500, 1000).unwrap(),
                     time_interval,
                     BandSelection::first(),
@@ -1486,7 +1478,7 @@ mod tests {
     #[tokio::test]
     async fn points_from_wgs84_to_utm36n() {
         let exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let point_source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -1534,7 +1526,7 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     spatial_bounds,
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -1614,7 +1606,7 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     spatial_bounds,
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -1646,7 +1638,7 @@ mod tests {
         // This test checks that points that are outside the area of use of the target spatial reference are not projected and an empty collection is returned
 
         let exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
             vec![
@@ -1695,7 +1687,7 @@ mod tests {
 
         let qs = qp
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     spatial_bounds,
                     TimeInterval::default(),
                     ColumnSelection::all(),

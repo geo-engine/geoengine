@@ -6,8 +6,7 @@ use geoengine_datatypes::operations::reproject::{CoordinateProjection, Reproject
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, Coordinate2D,
     FeatureDataType, Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle,
-    SpatialGridQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-    VectorSpatialQueryRectangle,
+    SpatialPartition2D, SpatialResolution, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
@@ -297,7 +296,7 @@ pub struct RasterResultDescriptor {
 
 impl ResultDescriptor for RasterResultDescriptor {
     type DataType = RasterDataType;
-    type QueryRectangleSpatialBounds = SpatialGridQueryRectangle;
+    type QueryRectangleSpatialBounds = GridBoundingBox2D;
     type QueryRectangleAttributeSelection = BandSelection;
 
     fn data_type(&self) -> Self::DataType {
@@ -348,7 +347,7 @@ impl ResultDescriptor for RasterResultDescriptor {
             Self::QueryRectangleAttributeSelection,
         >,
     ) -> Result<()> {
-        for band in query.attributes.as_slice() {
+        for band in query.attributes().as_slice() {
             if *band as usize >= self.bands.len() {
                 return Err(Error::BandDoesNotExist { band_idx: *band });
             }
@@ -456,7 +455,7 @@ impl VectorResultDescriptor {
 
 impl ResultDescriptor for VectorResultDescriptor {
     type DataType = VectorDataType;
-    type QueryRectangleSpatialBounds = VectorSpatialQueryRectangle;
+    type QueryRectangleSpatialBounds = BoundingBox2D;
     type QueryRectangleAttributeSelection = ColumnSelection;
 
     fn data_type(&self) -> Self::DataType {
@@ -1015,59 +1014,6 @@ mod tests {
         );
     }
 
-    /* FIXME: bring back?
-        #[test]
-        fn raster_tiling_origin() {
-            let descriptor = RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                time: None,
-                geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.3, -0.3),
-                pixel_bounds_x: GridShape2D::new([36, 30]).bounding_box(),
-                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                    "foo".into(),
-                    Measurement::Unitless,
-                )])
-                .unwrap(),
-            };
-
-            let to = descriptor.tiling_origin();
-
-            assert_approx_eq!(f64, to.x, -0.09999, epsilon = 0.00001); // we are only interested in a number thats smaller then the pixel size
-            assert_approx_eq!(f64, to.y, 0.09999, epsilon = 0.00001);
-        }
-
-        #[test]
-        fn raster_tiling_equals() {
-            let descriptor = RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                time: None,
-                geo_transform_x: GeoTransform::new(Coordinate2D::new(-15., 15.), 0.5, -0.5),
-                pixel_bounds_x: GridShape2D::new([50, 50]).bounding_box(),
-                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                    "foo".into(),
-                    Measurement::Unitless,
-                )])
-                .unwrap(),
-            };
-
-            let descriptor2 = RasterResultDescriptor {
-                data_type: RasterDataType::U8,
-                spatial_reference: SpatialReferenceOption::Unreferenced,
-                time: None,
-                geo_transform_x: GeoTransform::new(Coordinate2D::new(-10., 10.), 0.5, -0.5),
-                pixel_bounds_x: GridShape2D::new([9, 11]).bounding_box(),
-                bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
-                    "foo".into(),
-                    Measurement::Unitless,
-                )])
-                .unwrap(),
-            };
-
-            assert!(descriptor.spatial_tiling_equals(&descriptor2));
-        }
-    */
     #[test]
     fn it_checks_duplicate_bands() {
         assert!(

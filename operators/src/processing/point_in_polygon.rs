@@ -395,7 +395,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext};
+    use crate::engine::{ChunkByteSize, MockExecutionContext};
     use crate::error::Error;
     use crate::mock::MockFeatureCollectionSource;
 
@@ -532,7 +532,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -588,7 +588,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -655,7 +655,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -743,7 +743,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -788,6 +788,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_points() {
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
         let point_collection = MultiPointCollection::from_data(
             vec![],
             vec![],
@@ -828,7 +829,7 @@ mod tests {
         .await
         .unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -836,7 +837,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = exe_ctx.mock_query_context_test_default();
 
         let query = query_processor
             .query(query_rectangle, &query_context)

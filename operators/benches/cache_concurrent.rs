@@ -118,7 +118,7 @@ async fn read_cache(tile_cache: &SharedCache, op_no: usize) -> ReadMeasurement {
 }
 
 fn query_rect() -> RasterQueryRectangle {
-    RasterQueryRectangle::new_with_grid_bounds(
+    RasterQueryRectangle::new(
         GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
         TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
         BandSelection::first(),

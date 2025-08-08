@@ -220,11 +220,14 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
         // query the source with all bands, to compute the aggregate
         // then, select only the queried bands
         // TODO: avoid computing the aggregate for bands that are not queried
-        let mut source_query = query.clone();
         let source_result_descriptor = self.source.raster_result_descriptor();
-        source_query.attributes = (&source_result_descriptor.bands).into();
+        let source_query = RasterQueryRectangle::new(
+            query.spatial_bounds(),
+            query.time_interval(),
+            (&source_result_descriptor.bands).into(),
+        );
 
-        let must_extract_bands = query.attributes != source_query.attributes;
+        let must_extract_bands = query.attributes() != source_query.attributes();
 
         let aggregate = match &self.aggregate {
             NeighborhoodAggregate::FirstDerivative { band_distance } => {
@@ -256,7 +259,7 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
 
         if must_extract_bands {
             Ok(Box::pin(aggregate.extract_bands(
-                query.attributes.as_vec(),
+                query.attributes().as_vec(),
                 source_result_descriptor.bands.count(),
             )))
         } else {
@@ -665,11 +668,7 @@ impl Accu for MovingAverageAccu {
 
         // compute bands required for the window
         let window_radius = self.window_size / 2;
-        let first_band = if self.output_band_idx < window_radius {
-            0
-        } else {
-            self.output_band_idx - window_radius
-        };
+        let first_band = self.output_band_idx.saturating_sub(window_radius);
 
         debug_assert!(
             self.input_band_tiles
@@ -753,9 +752,7 @@ mod tests {
     };
 
     use crate::{
-        engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors, SpatialGridDescriptor,
-        },
+        engine::{MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -1207,13 +1204,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 5),
             BandSelection::new_unchecked(vec![0, 1, 2]),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = band_neighborhood_aggregate
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1350,13 +1347,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 5),
             BandSelection::new_unchecked(vec![0]), // only get first band
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = band_neighborhood_aggregate
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

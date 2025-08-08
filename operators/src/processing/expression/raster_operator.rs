@@ -314,7 +314,7 @@ mod tests {
         let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -370,7 +370,7 @@ mod tests {
         let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -437,7 +437,7 @@ mod tests {
         let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -507,7 +507,7 @@ mod tests {
         let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -578,7 +578,7 @@ mod tests {
         let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -662,7 +662,7 @@ mod tests {
         let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -734,7 +734,7 @@ mod tests {
         let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -803,7 +803,7 @@ mod tests {
         let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -915,7 +915,7 @@ mod tests {
         let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -981,7 +981,7 @@ mod tests {
         let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),
@@ -1049,7 +1049,7 @@ mod tests {
         let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
                     Default::default(),
                     BandSelection::first(),

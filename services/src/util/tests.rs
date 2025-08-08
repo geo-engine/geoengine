@@ -90,6 +90,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use tokio::sync::RwLock;
 use tokio::sync::Semaphore;
 use tokio_postgres::NoTls;
+use tracing::debug;
 use tracing_actix_web::TracingLogger;
 use uuid::Uuid;
 
@@ -547,12 +548,20 @@ async fn dummy_handler() -> impl Responder {
     HttpResponse::Ok().body("Hey there!")
 }
 
-pub async fn send_test_request(
-    req: test::TestRequest,
+pub fn create_test_app(
     app_ctx: PostgresContext<NoTls>,
-) -> ServiceResponse {
-    #[allow(unused_mut)]
-    let mut app = App::new()
+) -> App<
+    impl actix_web::dev::ServiceFactory<
+        actix_web::dev::ServiceRequest,
+        Config = (),
+        Response = ServiceResponse<
+            tracing_actix_web::StreamSpan<actix_web::body::EitherBody<actix_web::body::BoxBody>>,
+        >,
+        Error = actix_web::Error,
+        InitError = (),
+    >,
+> {
+    App::new()
         .app_data(web::Data::new(app_ctx))
         .wrap(OutputRequestId)
         .wrap(
@@ -579,7 +588,15 @@ pub async fn send_test_request(
         .configure(handlers::wms::init_wms_routes::<PostgresContext<NoTls>>)
         .configure(handlers::workflows::init_workflow_routes::<PostgresContext<NoTls>>)
         .configure(handlers::machine_learning::init_ml_routes::<PostgresContext<NoTls>>)
-        .service(dummy_handler);
+        .service(dummy_handler)
+}
+
+pub async fn send_test_request(
+    req: test::TestRequest,
+    app_ctx: PostgresContext<NoTls>,
+) -> ServiceResponse {
+    #[allow(unused_mut)]
+    let mut app = create_test_app(app_ctx);
 
     let app = test::init_service(app).await;
     test::call_service(&app, req.to_request())
@@ -699,6 +716,7 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, DatabaseConnectionConfi
 
     let mut db_config = get_config_element::<Postgres>().unwrap();
     db_config.schema = format!("geoengine_test_{}", rand::rng().next_u64()); // generate random temp schema
+    debug!("Creating schema {}", db_config.schema);
 
     let db_config = DatabaseConnectionConfig {
         host: db_config.host,
