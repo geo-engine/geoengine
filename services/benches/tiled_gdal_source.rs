@@ -30,6 +30,7 @@ use geoengine_services::{
     users::{UserAuth, UserSession},
     util::tests::{add_ndvi_to_datasets2, with_temp_context},
 };
+use std::env;
 use std::str::FromStr;
 use tokio_postgres::NoTls;
 use uuid::Uuid;
@@ -39,7 +40,7 @@ const RUNS: usize = 10;
 #[tokio::main]
 async fn main() {
     bench_gdal_source().await;
-    bench_multi_band_gdal_source().await;
+    bench_multi_band_gdal_source().await
 }
 
 async fn bench_gdal_source() {
@@ -70,7 +71,7 @@ async fn bench_gdal_source() {
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new(
                 TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
-                TimeInstance::from_str("2014-07-01T00:01:00Z").unwrap(),
+                TimeInstance::from_str("2014-07-01T00:00:00Z").unwrap(),
             )
             .unwrap(),
             BandSelection::first(),
@@ -132,7 +133,7 @@ async fn bench_multi_band_gdal_source() {
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new(
                 TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
-                TimeInstance::from_str("2014-07-01T00:01:00Z").unwrap(),
+                TimeInstance::from_str("2014-07-01T00:00:00Z").unwrap(),
             )
             .unwrap(),
             BandSelection::first(),

@@ -24,9 +24,7 @@ use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, QueryRectangle, SpatialPartition2D, SpatialPartitioned,
-};
+use geoengine_datatypes::primitives::{QueryRectangle, SpatialPartition2D, SpatialPartitioned};
 use geoengine_datatypes::raster::TilingSpatialGridDefinition;
 use geoengine_datatypes::{
     dataset::NamedData,
@@ -49,7 +47,7 @@ use snafu::ResultExt;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::Path;
-use tracing::debug;
+use tracing::{debug, trace};
 
 mod error;
 mod loading_info;
@@ -151,25 +149,17 @@ impl GdalRasterLoader {
         time: TimeInterval,
         band: u32,
     ) -> Result<RasterTile2D<T>> {
-        // println!(
-        //     "loading tile from files for time: {time:?}, band: {band}, tile_information: {tile_information:?}"
-        // );
+        debug!(
+            "loading tile {:?} for time: {}, band: {band}",
+            tile_information.global_tile_position.inner(),
+            time.to_string()
+        );
         let tile_files = loading_info
             .tile_files(time, tile_information, band)
             .await?;
 
-        // println!(
-        //     "tile info: {:?}",
-        //     tile_information.spatial_grid_definition()
-        // );
-        debug!(
-            "load files for tile {}, {}",
-            tile_information.spatial_partition().lower_left(),
-            tile_information.spatial_partition().upper_right()
-        );
-
         for tile_file in tile_files.iter() {
-            debug!(
+            trace!(
                 "tile_file: {:?}, {:?}",
                 tile_file.file_path,
                 tile_file
@@ -264,7 +254,7 @@ impl GdalRasterLoader {
     ) -> Result<Option<GridAndProperties<T>>> {
         debug!(
             "Loading raster tile from file: {:?}",
-            dataset_params.file_path
+            dataset_params.file_path.file_name().unwrap_or_default()
         );
         let gdal_read_advise: Option<GdalReadAdvise> = reader_mode.tiling_to_dataset_read_advise(
             &dataset_params.spatial_grid_definition(),
@@ -466,7 +456,7 @@ where
         );
 
         let stream = stream::iter(time_tile_band_iter)
-            .then(move |(time_interval, tile_info, band_idx)| {
+            .map(move |(time_interval, tile_info, band_idx)| {
                 GdalRasterLoader::load_tile_from_files_async::<P>(
                     loading_info.clone(),
                     reader_mode,
@@ -475,6 +465,7 @@ where
                     band_idx as u32,
                 )
             })
+            .buffered(16) // TODO: make configurable
             .boxed();
 
         return Ok(stream);
