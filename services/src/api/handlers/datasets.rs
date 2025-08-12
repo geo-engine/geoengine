@@ -3332,8 +3332,6 @@ mod tests {
 
         let tiles = create_ndvi_tiles();
 
-        std::fs::write("ndvi_tiles.json", serde_json::to_string(&tiles).unwrap()).unwrap();
-
         let req = actix_web::test::TestRequest::post()
             .uri(&format!("/dataset/{dataset_name}/tiles"))
             .append_header((header::CONTENT_LENGTH, 0))

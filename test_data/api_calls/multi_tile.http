@@ -8,7 +8,7 @@ POST http://localhost:3030/api/dataset
 Content-Type: application/json
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 
-< ../raster/multi_tile/dataset.json
+< ../raster/multi_tile/metadata/dataset.json
 
 ###
 
@@ -33,7 +33,7 @@ POST http://localhost:3030/api/dataset/{{dataset.response.body.$.datasetName}}/t
 Content-Type: application/json
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 
-< ../raster/multi_tile/loading_info.json
+< ../raster/multi_tile/metadata/loading_info.json
 
 
 ###

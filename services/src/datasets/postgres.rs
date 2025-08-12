@@ -678,9 +678,7 @@ where
             _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         };
 
-        // self.tili
-
-        Ok(Box::new(Magic {
+        Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
             db: self.clone(),
@@ -689,7 +687,7 @@ where
 }
 
 #[derive(Debug, Clone)]
-pub struct Magic<Tls>
+pub struct MultiBandGdalLoadingInfoProvider<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
@@ -843,7 +841,7 @@ impl<Tls>
         MultiBandGdalLoadingInfo,
         RasterResultDescriptor,
         MultiBandGdalLoadingInfoQueryRectangle,
-    > for Magic<Tls>
+    > for MultiBandGdalLoadingInfoProvider<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
