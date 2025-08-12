@@ -719,8 +719,7 @@ where
             FROM
                 dataset_tiles
             WHERE
-                dataset_id = $1 AND
-                time_interval_intersects(time, $2)
+                dataset_id = $1 AND time_interval_intersects(time, $2)
             ORDER BY
                (time).start",
             &[&dataset_id, &query_time],
@@ -770,8 +769,7 @@ where
             FROM
                 dataset_tiles
             WHERE
-                dataset_id = $1 AND
-                (time).end < $2
+                dataset_id = $1 AND (time).end < $2
             ORDER BY
                (time).end DESC
             LIMIT 1",
@@ -805,8 +803,7 @@ where
             FROM
                 dataset_tiles
             WHERE
-                dataset_id = $1 AND
-                (time).start > $2
+                dataset_id = $1 AND (time).start > $2
             ORDER BY
                (time).start ASC
             LIMIT 1",

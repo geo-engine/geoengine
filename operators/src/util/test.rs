@@ -129,7 +129,7 @@ pub fn raster_tile_from_file<T: Pixel + GdalType>(
     )?;
 
     let (_, buffer_data) = buffer.into_shape_and_vec();
-    let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
+    let data_grid = Grid::new(out_shape, buffer_data)?;
 
     let mask_band = rasterband.open_mask_band()?;
     let mask_buffer = mask_band.read_as::<u8>(

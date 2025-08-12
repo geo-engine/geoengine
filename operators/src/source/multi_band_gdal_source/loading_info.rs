@@ -1,5 +1,5 @@
 use super::GdalDatasetParameters;
-use crate::{engine::RasterResultDescriptor, util::Result};
+use crate::engine::RasterResultDescriptor;
 use geoengine_datatypes::{
     primitives::{CacheHint, SpatialPartition2D, SpatialPartitioned, TimeInterval},
     raster::TileInformation,
@@ -48,9 +48,7 @@ impl MultiBandGdalLoadingInfo {
             for ((time, band), group) in &groups {
                 debug_assert!(
                     group.windows(2).all(|w| w[0].z_index <= w[1].z_index),
-                    "Files for time {:?} and band {} are not sorted by z_index",
-                    time,
-                    band,
+                    "Files for time {time:?} and band {band} are not sorted by z_index",
                 );
             }
         }
@@ -68,12 +66,12 @@ impl MultiBandGdalLoadingInfo {
     }
 
     /// Return all files necessary to load a single tile, sorted by z-index. Might be empty if no files are needed.
-    pub async fn tile_files(
+    pub fn tile_files(
         &self,
         time: TimeInterval,
         tile: TileInformation,
         band: u32,
-    ) -> Result<Vec<GdalDatasetParameters>> {
+    ) -> Vec<GdalDatasetParameters> {
         let tile_partition = tile.spatial_partition();
 
         let mut files = vec![];
@@ -88,7 +86,7 @@ impl MultiBandGdalLoadingInfo {
             }
         }
 
-        Ok(files)
+        files
     }
 
     pub fn cache_hint(&self) -> CacheHint {

@@ -2,6 +2,7 @@ use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty, GridShape2D,
     GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
 };
+use tracing::warn;
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
 /// The Workflow is as follows:
@@ -103,7 +104,7 @@ impl ReaderState {
         ); // TODO: raise error if this fails!
 
         let Some(tile_in_gdal_dataset_bounds) = tile_in_gdal_dataset_bounds else {
-            dbg!("BUG: Tile is not in the dataset bounds, skipping read advise generation");
+            warn!("BUG: Tile is not in the dataset bounds, skipping read advise generation");
             return None;
         };
 

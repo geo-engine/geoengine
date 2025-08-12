@@ -40,7 +40,7 @@ const RUNS: usize = 10;
 #[tokio::main]
 async fn main() {
     bench_gdal_source().await;
-    bench_multi_band_gdal_source().await
+    bench_multi_band_gdal_source().await;
 }
 
 async fn bench_gdal_source() {

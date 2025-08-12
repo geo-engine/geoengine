@@ -3283,6 +3283,7 @@ mod tests {
     }
 
     #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_adds_tiles_to_dataset(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let volume = VolumeName("test_data".to_string());
 
@@ -3329,7 +3330,6 @@ mod tests {
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         // add tiles
-
         let tiles = create_ndvi_tiles();
 
         let req = actix_web::test::TestRequest::post()
@@ -3777,6 +3777,7 @@ mod tests {
     }
 
     #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_loads_multi_band_multi_file_mosaics_2_bands_2_timesteps(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
@@ -3905,6 +3906,7 @@ mod tests {
     }
 
     #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_loads_multi_band_multi_file_mosaics_with_time_gaps(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {

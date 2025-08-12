@@ -107,7 +107,7 @@ type MultiBandGdalMetaData = Box<
 pub type MultiBandGdalLoadingInfoQueryRectangle = QueryRectangle<SpatialPartition2D, BandSelection>;
 
 fn raster_query_rectangle_to_loading_info_query_rectangle(
-    raster_query_rectangle: RasterQueryRectangle,
+    raster_query_rectangle: &RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
     MultiBandGdalLoadingInfoQueryRectangle::new(
@@ -154,11 +154,9 @@ impl GdalRasterLoader {
             tile_information.global_tile_position.inner(),
             time.to_string()
         );
-        let tile_files = loading_info
-            .tile_files(time, tile_information, band)
-            .await?;
+        let tile_files = loading_info.tile_files(time, tile_information, band);
 
-        for tile_file in tile_files.iter() {
+        for tile_file in &tile_files {
             trace!(
                 "tile_file: {:?}, {:?}",
                 tile_file.file_path,
@@ -178,17 +176,17 @@ impl GdalRasterLoader {
         for dataset_params in tile_files {
             let Some(file_tile) = Self::retrying_load_raster_tile_from_file::<T>(
                 &dataset_params,
-                reader_mode.clone(),
-                tile_information.clone(),
+                reader_mode,
+                tile_information,
             )
             .await?
             else {
-                println!("didn't load from file: {:?}", dataset_params.file_path);
+                debug!("didn't load from file: {:?}", dataset_params.file_path);
                 continue;
             };
             tile_raster.grid_blit_from(&file_tile.grid);
 
-            properties = file_tile.properties
+            properties = file_tile.properties;
         }
 
         Ok(RasterTile2D::new_with_properties(
@@ -304,7 +302,7 @@ impl GdalRasterLoader {
         let rasterband = dataset.rasterband(dataset_params.rasterband_channel)?;
 
         // overwrite old properties with the properties of the current dataset (z-index)
-        let properties = read_raster_properties(&dataset, &dataset_params, &rasterband);
+        let properties = read_raster_properties(&dataset, dataset_params, &rasterband);
 
         let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
         // check that the dataset geo transform is the same as the one we get from GDAL
@@ -336,7 +334,7 @@ impl GdalRasterLoader {
                 &rasterband,
                 &gdal_read_advise.gdal_read_widow,
                 gdal_read_advise.read_window_bounds,
-                &dataset_params,
+                dataset_params,
                 gdal_read_advise.flip_y,
             )?,
             properties,
@@ -429,7 +427,7 @@ where
         let loading_info = self
             .meta_data
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
-                query.clone(),
+                &query,
                 produced_tiling_grid,
             ))
             .await?;
@@ -440,7 +438,7 @@ where
             .tile_information_iterator_from_grid_bounds(query.spatial_bounds())
             .collect::<Vec<_>>();
 
-        for tile_info in spatial_tiles.iter() {
+        for tile_info in &spatial_tiles {
             debug!(
                 "Output Tile: pixel: {:?}, crs: {:?}",
                 tile_info.global_pixel_bounds(),
@@ -462,7 +460,7 @@ where
                     reader_mode,
                     tile_info,
                     time_interval,
-                    band_idx as u32,
+                    band_idx,
                 )
             })
             .buffered(16) // TODO: make configurable
@@ -1568,11 +1566,11 @@ mod tests {
         }
     }
 
-    async fn add_multi_tile_dataset(
+    fn add_multi_tile_dataset(
         ctx: &mut MockExecutionContext,
         mut files: Vec<TileFile>,
         time_steps: Vec<TimeInterval>,
-    ) -> Result<NamedData> {
+    ) -> NamedData {
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("multi_tiles");
 
@@ -1609,7 +1607,7 @@ mod tests {
 
         ctx.add_meta_data(id, name.clone(), meta);
 
-        Ok(name)
+        name
     }
 
     fn tile_files() -> Vec<TileFile> {
@@ -1677,11 +1675,10 @@ mod tests {
             "2025-01-01_tile_x1_y1_b0.tif",
         ]);
 
-        let dataset_name =
-            add_multi_tile_dataset(&mut execution_context, files, time_steps).await?;
+        let dataset_name = add_multi_tile_dataset(&mut execution_context, files, time_steps);
 
         let operator = MultiBandGdalSource {
-            params: GdalSourceParameters::new(dataset_name.into()),
+            params: GdalSourceParameters::new(dataset_name),
         }
         .boxed();
 
@@ -1782,11 +1779,10 @@ mod tests {
             "2025-01-01_tile_x1_y1_b1.tif",
         ]);
 
-        let dataset_name =
-            add_multi_tile_dataset(&mut execution_context, files, time_steps).await?;
+        let dataset_name = add_multi_tile_dataset(&mut execution_context, files, time_steps);
 
         let operator = MultiBandGdalSource {
-            params: GdalSourceParameters::new(dataset_name.into()),
+            params: GdalSourceParameters::new(dataset_name),
         }
         .boxed();
 
@@ -1878,6 +1874,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_loads_multi_band_multi_file_mosaics_2_bands_2_timesteps() -> Result<()> {
         let mut execution_context = MockExecutionContext::test_default();
         let query_ctx = execution_context.mock_query_context_test_default();
@@ -1912,11 +1909,10 @@ mod tests {
             "2025-02-01_tile_x1_y1_b1.tif",
         ]);
 
-        let dataset_name =
-            add_multi_tile_dataset(&mut execution_context, files, time_steps).await?;
+        let dataset_name = add_multi_tile_dataset(&mut execution_context, files, time_steps);
 
         let operator = MultiBandGdalSource {
-            params: GdalSourceParameters::new(dataset_name.into()),
+            params: GdalSourceParameters::new(dataset_name),
         }
         .boxed();
 
@@ -2034,6 +2030,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_loads_multi_band_multi_file_mosaics_with_time_gaps() -> Result<()> {
         let mut execution_context = MockExecutionContext::test_default();
         let query_ctx = execution_context.mock_query_context_test_default();
@@ -2092,11 +2089,10 @@ mod tests {
             "2025-04-01_tile_x1_y1_b1.tif",
         ]);
 
-        let dataset_name =
-            add_multi_tile_dataset(&mut execution_context, files, time_steps).await?;
+        let dataset_name = add_multi_tile_dataset(&mut execution_context, files, time_steps);
 
         let operator = MultiBandGdalSource {
-            params: GdalSourceParameters::new(dataset_name.into()),
+            params: GdalSourceParameters::new(dataset_name),
         }
         .boxed();
 
@@ -2326,11 +2322,10 @@ mod tests {
             "2025-01-01_tile_x0_y0_b0.tif",
         ]);
 
-        let dataset_name =
-            add_multi_tile_dataset(&mut execution_context, files, time_steps).await?;
+        let dataset_name = add_multi_tile_dataset(&mut execution_context, files, time_steps);
 
         let operator = MultiBandGdalSource {
-            params: GdalSourceParameters::new(dataset_name.into()),
+            params: GdalSourceParameters::new(dataset_name),
         }
         .boxed();
 

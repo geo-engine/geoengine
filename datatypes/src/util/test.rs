@@ -94,6 +94,10 @@ pub fn assert_eq_two_list_of_tiles_u8(
     assert_eq_two_list_of_tiles::<u8>(list_a, list_b, compare_cache_hint);
 }
 
+/// Method that compares two lists of tiles and panics with a message why there is a difference.
+///
+/// # Panics
+/// If there is a difference between two tiles or the length of the lists
 pub fn assert_eq_two_list_of_tiles<P: Pixel>(
     list_a: &[RasterTile2D<P>],
     list_b: &[RasterTile2D<P>],

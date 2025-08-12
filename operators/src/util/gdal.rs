@@ -84,6 +84,7 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
     }
 }
 
+#[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_result_descriptor() -> RasterResultDescriptor {
     RasterResultDescriptor {
         data_type: RasterDataType::U8,
