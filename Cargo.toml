@@ -151,6 +151,7 @@ pwhash = "1.0"
 quote = "1.0"
 rand = "0.9"
 rayon = "1.8"
+regex = "1.11"
 reqwest = { version = "0.12", features = [
     "json",
     "multipart",

@@ -366,7 +366,7 @@ pub fn raster_descriptor_from_dataset_and_sref(
     })
 }
 
-fn measurement_from_rasterband(dataset: &Dataset, band: usize) -> Result<Measurement> {
+pub fn measurement_from_rasterband(dataset: &Dataset, band: usize) -> Result<Measurement> {
     let unit = dataset.rasterband(band)?.unit();
 
     if unit.trim().is_empty() || unit == "no unit" {
