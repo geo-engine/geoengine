@@ -489,11 +489,27 @@ pub fn reproject_and_unify_bbox<T: AxisAlignedRectangle>(
     let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
 
     let target_bbox_clipped = source_bbox.reproject_clipped(&proj_from_to)?;
+    let target_bbox_non_clipped = source_bbox.reproject(&proj_from_to).ok();
 
-    if let Some(target_b) = target_bbox_clipped {
-        let source_bbox_clipped = target_b.reproject(&proj_to_from)?;
+    if let (Some(target_b_clipped), Some(target_b_non_clipped)) =
+        (target_bbox_clipped, target_bbox_non_clipped)
+    {
+        // If both bbox reprojections succeeded, we combine them
+        let source_bbox_clipped = target_b_clipped.reproject(&proj_to_from)?;
+        let source_bbox_non_clipped = target_b_non_clipped.reproject(&proj_to_from)?;
+        let source_bbox_union = source_bbox_clipped.union(&source_bbox_non_clipped);
+        let target_bbox_union = target_b_clipped.union(&target_b_non_clipped);
+        Ok((Some(source_bbox_union), Some(target_bbox_union)))
+    } else if let Some(target_b_clipped) = target_bbox_clipped {
+        // If the non-clipped bbox reprojection failed, we use the clipped bbox
+        let source_bbox_clipped = target_b_clipped.reproject(&proj_to_from)?;
         Ok((Some(source_bbox_clipped), target_bbox_clipped))
+    } else if let Some(target_b_non_clipped) = target_bbox_non_clipped {
+        // If the clipped bbox reprojection failed, we use the non-clipped bbox
+        let source_bbox_non_clipped = target_b_non_clipped.reproject(&proj_to_from)?;
+        Ok((Some(source_bbox_non_clipped), target_bbox_non_clipped))
     } else {
+        // If both bbox reprojections failed, we return None
         Ok((None, None))
     }
 }
@@ -822,14 +838,37 @@ mod tests {
 
         assert_eq!(
             input.unwrap(),
-            SpatialPartition2D::new_unchecked((-180., 85.06).into(), (180., -85.06).into())
+            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into())
         );
 
         assert_eq!(
             output.unwrap(),
             SpatialPartition2D::new_unchecked(
-                (-20_037_508.342_789_244, 20_048_966.104_014_594).into(),
-                (20_037_508.342_789_244, -20_048_966.104_014_594).into()
+                (-20_037_508.342_789_244, 242_528_680.943_742_72).into(),
+                (20_037_508.342_789_244, -242_528_680.943_742_72).into()
+            )
+        );
+
+        let (input, output) = reproject_and_unify_bbox(
+            bbox,
+            SpatialReference::epsg_4326(),
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 25832),
+        )
+        .unwrap();
+
+        assert_eq!(
+            input.unwrap(),
+            SpatialPartition2D::new_unchecked(
+                (-179.534_226_944_867_13, 84.365_580_084_111_7).into(),
+                (180., -73.092_416_467_242_37).into()
+            )
+        );
+
+        assert_eq!(
+            output.unwrap(),
+            SpatialPartition2D::new_unchecked(
+                (239_323.444_975_331_9, 19_995_929.885_877_542).into(),
+                (1_505_646.899_515_872, -17_479_695.521_371_62).into()
             )
         );
     }
