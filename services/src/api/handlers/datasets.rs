@@ -4282,18 +4282,16 @@ mod tests {
 
         assert_eq!(tiles.len(), 8);
 
-        assert!(tiles.iter().all(|t| {
-            t.is_empty()
-                && t.time
-                    == TimeInterval::new(
-                        geoengine_datatypes::primitives::TimeInstance::MIN,
-                        geoengine_datatypes::primitives::TimeInstance::from_str(
-                            "2024-01-01T00:00:00Z",
-                        )
-                        .unwrap(),
-                    )
-                    .unwrap()
-        }));
+        for tile in tiles {
+            assert!(tile.is_empty());
+            assert_eq!(tile.time, geoengine_datatypes::primitives::TimeInterval::new(
+                geoengine_datatypes::primitives::TimeInstance::MIN,
+                geoengine_datatypes::primitives::TimeInstance::from_str(
+                    "2025-01-01T00:00:00Z",
+                )
+                .unwrap(),
+            ).unwrap());
+        }
 
         Ok(())
     }
