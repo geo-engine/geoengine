@@ -3,7 +3,10 @@ use geoengine_datatypes::dataset::NamedData;
 use geoengine_operators::{
     engine::{OperatorName, RasterOperator, TypedOperator, VectorOperator},
     mock::{MockDatasetDataSource, MockDatasetDataSourceParams},
-    source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
+    source::{
+        GdalSource, GdalSourceParameters, MultiBandGdalSource, MultiBandGdalSourceParameters,
+        OgrSource, OgrSourceParameters,
+    },
 };
 
 pub fn source_operator_from_dataset(
@@ -30,6 +33,12 @@ pub fn source_operator_from_dataset(
         MockDatasetDataSource::TYPE_NAME => TypedOperator::Vector(
             MockDatasetDataSource {
                 params: MockDatasetDataSourceParams { data: name.clone() },
+            }
+            .boxed(),
+        ),
+        MultiBandGdalSource::TYPE_NAME => TypedOperator::Raster(
+            MultiBandGdalSource {
+                params: MultiBandGdalSourceParameters::new(name.clone()),
             }
             .boxed(),
         ),

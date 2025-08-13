@@ -230,13 +230,13 @@ fn add_dataset_and_tiles_to_geoengine(
 
     if !response.status().is_success() {
         println!(
-            "Failed to add dataset: {}",
+            "Failed to add tile to dataset: {}",
             response.text().unwrap_or_default()
         );
         return;
     }
 
-    println!("Dataset added successfully for product: {product_name}");
+    println!("Dataset tiles added successfully for product: {product_name}");
 }
 
 fn extract_products_from_files(

@@ -3581,7 +3581,6 @@ mod tests {
         Ok((ctx, dataset_name))
     }
 
-    // TODO: where to actually put this test? Can't be in the multi dim gdalsource because then we can't test the database access of the tiles is correct
     #[ge_context::test]
     async fn it_loads_multi_band_multi_file_mosaics(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false).await?;
@@ -4222,6 +4221,79 @@ mod tests {
             .collect();
 
         assert_eq_two_list_of_tiles(&tiles, &expected_tiles, false);
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_loads_multi_band_nodata_only(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false).await?;
+
+        let operator = MultiBandGdalSource {
+            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+        }
+        .boxed();
+
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?;
+
+        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let tiling_spec = execution_context.tiling_specification();
+
+        let tiling_spatial_grid_definition = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec);
+
+        let query_tiling_pixel_grid = tiling_spatial_grid_definition
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180.0, -90.).into(),
+            ));
+
+        let query_rect = RasterQueryRectangle::new(
+            query_tiling_pixel_grid.grid_bounds(),
+            TimeInterval::new_instant(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2024-01-01T00:00:00Z")
+                    .unwrap(),
+            )
+            .unwrap(),
+            BandSelection::first(),
+        );
+
+        let tiles = processor
+            .get_u16()
+            .unwrap()
+            .query(query_rect, &query_ctx)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        assert_eq!(tiles.len(), 8);
+
+        assert!(tiles.iter().all(|t| {
+            t.is_empty()
+                && t.time
+                    == TimeInterval::new(
+                        geoengine_datatypes::primitives::TimeInstance::MIN,
+                        geoengine_datatypes::primitives::TimeInstance::from_str(
+                            "2024-01-01T00:00:00Z",
+                        )
+                        .unwrap(),
+                    )
+                    .unwrap()
+        }));
 
         Ok(())
     }

@@ -31,6 +31,8 @@ pub struct TileFile {
 
 impl MultiBandGdalLoadingInfo {
     pub fn new(time_steps: Vec<TimeInterval>, files: Vec<TileFile>, cache_hint: CacheHint) -> Self {
+        debug_assert!(time_steps.len() > 0, "time_steps must not be empty");
+
         debug_assert!(
             time_steps.windows(2).all(|w| w[0] <= w[1]),
             "time_steps must be sorted"
@@ -93,6 +95,3 @@ impl MultiBandGdalLoadingInfo {
         self.cache_hint
     }
 }
-
-#[cfg(test)]
-mod tests {}

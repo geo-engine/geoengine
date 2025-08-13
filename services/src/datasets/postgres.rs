@@ -731,6 +731,65 @@ where
 
     let time_steps: Vec<TimeInterval> = rows.into_iter().map(|row| row.get(0)).collect();
 
+    // handle case where no time steps are found
+    if time_steps.is_empty() {
+        // Query for the closest time step before the query time
+        let before_rows = conn
+            .query(
+                "
+                SELECT
+                    (time).end
+                FROM
+                    dataset_tiles
+                WHERE
+                    dataset_id = $1 AND (time).end <= $2
+                ORDER BY
+                   (time).end DESC
+                LIMIT 1",
+                &[&dataset_id, &query_time.start()],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        // Query for the closest time step after the query time
+        let after_rows = conn
+            .query(
+                "
+                SELECT
+                    (time).start
+                FROM
+                    dataset_tiles
+                WHERE
+                    dataset_id = $1 AND (time).start >= $2
+                ORDER BY
+                   (time).start ASC
+                LIMIT 1",
+                &[&dataset_id, &query_time.end()],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let start = if let Some(row) = before_rows.first() {
+            row.get(0)
+        } else {
+            TimeInstance::MIN
+        };
+
+        let end = if let Some(row) = after_rows.first() {
+            row.get(0)
+        } else {
+            TimeInstance::MAX
+        };
+
+        return Ok(vec![
+            TimeInterval::new(start, end).expect("start must be before end"),
+        ]);
+    }
+
     // fill the gaps in the returned time steps
     let mut filled_time_steps = vec![];
 

@@ -24,7 +24,7 @@ use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
-use geoengine_datatypes::primitives::{QueryRectangle, SpatialPartition2D, SpatialPartitioned};
+use geoengine_datatypes::primitives::{QueryRectangle, SpatialPartition2D};
 use geoengine_datatypes::raster::TilingSpatialGridDefinition;
 use geoengine_datatypes::{
     dataset::NamedData,
@@ -438,13 +438,12 @@ where
             .tile_information_iterator_from_grid_bounds(query.spatial_bounds())
             .collect::<Vec<_>>();
 
-        for tile_info in &spatial_tiles {
-            debug!(
-                "Output Tile: pixel: {:?}, crs: {:?}",
-                tile_info.global_pixel_bounds(),
-                tile_info.spatial_partition()
-            );
-        }
+        debug!(
+            "num timesteps: {}, num bands: {}, num spatial tiles: {}",
+            time_steps.len(),
+            bands.len(),
+            spatial_tiles.len()
+        );
 
         // create a stream with a tile for each band of each spatial tile for each time step
         let time_tile_band_iter = itertools::iproduct!(
