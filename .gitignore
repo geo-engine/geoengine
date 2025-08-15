@@ -10,6 +10,10 @@ lcov.info
 /.idea
 /.vscode
 Settings.toml
+.env
+
+# Venvs
+/.venv
 
 # Data
 upload/
@@ -18,5 +22,6 @@ services/test_upload/
 **/*.gpkg-shm
 **/*.gpkg-wal
 geo_engine_*.log
+geo_engine.*.log
 **/**.aux.xml
 test_data/netcdf4d/overviews/*

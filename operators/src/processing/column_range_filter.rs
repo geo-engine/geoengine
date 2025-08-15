@@ -5,18 +5,18 @@ use crate::engine::{
 };
 use crate::error;
 use crate::optimization::OptimizationError;
-use crate::util::input::StringOrNumberRange;
 use crate::util::Result;
+use crate::util::input::StringOrNumberRange;
 use crate::{adapters::FeatureCollectionChunkMerger, engine::SingleVectorSource};
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    ColumnSelection, FeatureDataType, FeatureDataValue, Geometry, SpatialResolution,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
+    BoundingBox2D, ColumnSelection, FeatureDataType, FeatureDataValue, Geometry, SpatialResolution,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use serde::{Deserialize, Serialize};
@@ -144,7 +144,7 @@ where
     G: Geometry + ArrowTyped + Sync + Send + 'static,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -309,7 +309,7 @@ mod tests {
             panic!();
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

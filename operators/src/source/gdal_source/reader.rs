@@ -7,11 +7,11 @@ use geoengine_datatypes::raster::{
 /// The Workflow is as follows:
 /// 1. The `gdal_read_window` is the window in the pixel space of the dataset that should be read.
 /// 2. The `read_window_bounds` is the area in the target pixel space where the data should be placed.
-///     2.1 The data read in step one is read to the width and height of the `read_window_bounds`.
-///     2.2 if `flip_y` is true the data is flipped in the y direction. And should be unflipped after reading.
+///    2.1 The data read in step one is read to the width and height of the `read_window_bounds`.
+///    2.2 if `flip_y` is true the data is flipped in the y direction. And should be unflipped after reading.
 /// 3. The `bounds_of_target` is the area in the target pixel space where the data should be placed.
-///     3.1 The `read_window_bounds` might be offset from the `bounds_of_target` or might have a different size.
-///         Then, the data needs to be placed in the target pixel space accordingly. Other parts of the target pixel space should be filled with nodata.
+///    3.1 The `read_window_bounds` might be offset from the `bounds_of_target` or might have a different size.
+///    Then, the data needs to be placed in the target pixel space accordingly. Other parts of the target pixel space should be filled with nodata.
 #[allow(dead_code)]
 #[derive(Copy, Clone, Debug, PartialEq)]
 pub struct GdalReadAdvise {
@@ -135,7 +135,7 @@ impl ReaderState {
                 bounds_of_target: tile.grid_bounds,
                 flip_y,
             });
-        };
+        }
 
         // we need to crop the window to the intersection of the tiling based bounds and the dataset bounds
         let crop_tl =

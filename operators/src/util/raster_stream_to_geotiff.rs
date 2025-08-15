@@ -21,12 +21,12 @@ use geoengine_datatypes::raster::{
     TilingSpecification, TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryInto;
 use std::path::Path;
 use std::path::PathBuf;
+use tracing::debug;
 
 use super::{abortable_query_execution, spawn_blocking};
 
@@ -131,7 +131,7 @@ where
         geo_transform: initial_tile_info.global_geo_transform,
     };
     let num_tiles_per_timestep = strat
-        .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_query().grid_bounds())
+        .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_bounds())
         .number_of_elements();
     let num_timesteps = tiles.len() / num_tiles_per_timestep;
 
@@ -140,15 +140,13 @@ where
 
     let coordinate_of_ul_query_pixel = strat
         .geo_transform
-        .grid_idx_to_pixel_upper_left_coordinate_2d(
-            query_rect.spatial_query().grid_bounds().min_index(),
-        );
+        .grid_idx_to_pixel_upper_left_coordinate_2d(query_rect.spatial_bounds().min_index());
     let output_geo_transform =
         GeoTransform::new(coordinate_of_ul_query_pixel, x_pixel_size, y_pixel_size);
-    let out_pixel_bounds = query_rect.spatial_query().grid_bounds();
+    let out_pixel_bounds = query_rect.spatial_bounds();
 
     let uncompressed_byte_size =
-        query_rect.spatial_query.grid_bounds().number_of_elements() * std::mem::size_of::<T>();
+        query_rect.spatial_bounds().number_of_elements() * std::mem::size_of::<T>();
 
     let use_big_tiff =
         gdal_tiff_options.force_big_tiff || uncompressed_byte_size >= BIG_TIFF_BYTE_THRESHOLD;
@@ -175,14 +173,14 @@ where
         None
     };
 
-    gdal_config_options
+    let option_vars = gdal_config_options
         .as_deref()
         .map(TemporaryGdalThreadLocalConfigOptions::new);
 
     let mut dataset = driver.create_with_band_type_with_options::<T, _>(
         &file_path,
-        query_rect.spatial_query().grid_bounds().axis_size_x(),
-        query_rect.spatial_query().grid_bounds().axis_size_y(),
+        query_rect.spatial_bounds().axis_size_x(),
+        query_rect.spatial_bounds().axis_size_y(),
         num_timesteps,
         &options,
     )?;
@@ -194,7 +192,9 @@ where
         if let Some(no_data) = gdal_tiff_metadata.no_data_value {
             band.set_no_data_value(Some(no_data))?;
         } else {
-            band.create_mask_band(false)?;
+            // only allowed option for internal masks
+            band.create_mask_band(true)?;
+            break;
         }
     }
 
@@ -206,6 +206,8 @@ where
         use_big_tiff,
         _type: Default::default(),
     };
+
+    drop(option_vars);
 
     Ok((initial_tile_time, file_path, dataset, writer))
 }
@@ -324,7 +326,7 @@ where
 {
     // TODO: support multi band geotiffs
     ensure!(
-        query_rect.attributes.count() == 1,
+        query_rect.attributes().is_single() || processor.result_descriptor().bands.is_single(),
         crate::error::OperationDoesNotSupportMultiBandQueriesYet {
             operation: "raster_stream_to_geotiff"
         }
@@ -511,16 +513,14 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         let file_path = file_path.join("raster.tiff");
         let intermediate_file_path = file_path.with_extension(INTERMEDIATE_FILE_SUFFIX);
 
-        let width = query_rect.spatial_query().grid_bounds().axis_size_x();
-        let height = query_rect.spatial_query().grid_bounds().axis_size_y();
+        let width = query_rect.spatial_bounds().axis_size_x();
+        let height = query_rect.spatial_bounds().axis_size_y();
 
-        let output_pixel_grid_bounds = query_rect.spatial_query().grid_bounds();
+        let output_pixel_grid_bounds = query_rect.spatial_bounds();
 
         let out_geo_transform_origin = tiling_strategy
             .geo_transform
-            .grid_idx_to_pixel_upper_left_coordinate_2d(
-                query_rect.spatial_query().grid_bounds().min_index(),
-            );
+            .grid_idx_to_pixel_upper_left_coordinate_2d(query_rect.spatial_bounds().min_index());
 
         let output_geo_transform = GeoTransform::new(
             out_geo_transform_origin,
@@ -681,7 +681,7 @@ impl<P: Pixel + GdalType> GdalDatasetHolder<P> {
         if self
             .intermediate_dataset
             .as_ref()
-            .map_or(true, |x| x.time_interval != time_interval)
+            .is_none_or(|x| x.time_interval != time_interval)
         {
             if let Some(intermediate_dataset) = self.intermediate_dataset.take() {
                 self.dataset_writer.finish_dataset(intermediate_dataset)?;
@@ -806,10 +806,9 @@ impl<P: Pixel + GdalType> GdalDatasetWriter<P> {
         // No-data masks are described by the rasterio docs as:
         // "One is the the valid data mask from GDAL, an unsigned byte array with the same number of rows and columns as the dataset in which non-zero elements (typically 255) indicate that the corresponding data elements are valid. Other elements are invalid, or nodata elements."
 
-        let mask_grid_gdal_values =
-            masked_grid
-                .validity_mask
-                .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
+        let mask_grid_gdal_values = masked_grid
+            .validity_mask
+            .map_elements(|is_valid| if is_valid { 255_u8 } else { 0 }); // TODO: investigate if we can transmute the vec of bool to u8.
         let mut mask_buffer = Buffer::new(window_size, mask_grid_gdal_values.data);
 
         let mut mask_band = raster_band.open_mask_band()?;
@@ -959,26 +958,28 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
-    use crate::engine::{ChunkByteSize, RasterResultDescriptor};
+    use crate::engine::{MockExecutionContext, RasterResultDescriptor};
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
-    use crate::{
-        engine::MockQueryContext, source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data,
-    };
+    use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
     use geoengine_datatypes::primitives::{
         BandSelection, CacheHint, DateTime, Duration, TimeInterval,
     };
     use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType};
+    use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_datatypes::util::{
+        ImageFormat, assert_image_equals, assert_image_equals_with_format,
+    };
 
     use super::*;
 
     #[tokio::test]
     async fn geotiff_with_no_data_from_stream() {
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
+
         let metadata = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
@@ -992,7 +993,7 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -1018,7 +1019,6 @@ mod tests {
         //    "../test_data/raster/geotiff_from_stream_compressed.tiff",
         // );
 
-        // FIXME: this will fail since we no longer use scaling sources which causes this to write a subset of the data not a scaled version of all data
         assert_eq!(
             include_bytes!("../../../test_data/raster/geotiff_from_stream_compressed.tiff")
                 as &[u8],
@@ -1028,10 +1028,9 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_with_mask_from_stream() {
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
 
@@ -1046,7 +1045,7 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -1067,20 +1066,17 @@ mod tests {
         .await
         .unwrap();
 
-        assert_eq!(
-            include_bytes!(
-                "../../../test_data/raster/geotiff_with_mask_from_stream_compressed.tiff"
-            ) as &[u8],
-            bytes.as_slice()
+        assert_image_equals(
+            test_data!("raster/geotiff_with_mask_from_stream_compressed.tiff"),
+            &bytes,
         );
     }
 
     #[tokio::test]
     async fn geotiff_big_tiff_from_stream() {
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
 
@@ -1095,7 +1091,7 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -1121,19 +1117,18 @@ mod tests {
         //    "../test_data/raster/geotiff_big_tiff_from_stream_compressed.tiff",
         // );
 
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/geotiff_big_tiff_from_stream_compressed.tiff")
-                as &[u8],
-            bytes.as_slice()
+        assert_image_equals_with_format(
+            test_data!("raster/geotiff_big_tiff_from_stream_compressed.tiff"),
+            &bytes,
+            ImageFormat::Tiff,
         );
     }
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_big_tiff_from_stream() {
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
 
@@ -1148,7 +1143,7 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -1170,15 +1165,14 @@ mod tests {
         .unwrap();
 
         // geoengine_datatypes::util::test::save_test_bytes(
-        //    &bytes,
-        //    "../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff",
-        //);
+        //     &bytes,
+        //     "../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff",
+        // );
 
-        assert_eq!(
-            include_bytes!(
-                "../../../test_data/raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff"
-            ) as &[u8],
-            bytes.as_slice()
+        assert_image_equals_with_format(
+            test_data!("raster/cloud_optimized_geotiff_big_tiff_from_stream_compressed.tiff"),
+            &bytes,
+            ImageFormat::Tiff,
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1186,10 +1180,9 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_from_stream() {
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
 
@@ -1204,7 +1197,7 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -1230,11 +1223,9 @@ mod tests {
         //     "../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff",
         // );
 
-        assert_eq!(
-            include_bytes!(
-                "../../../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff"
-            ) as &[u8],
-            bytes.as_slice()
+        assert_image_equals(
+            test_data!("raster/cloud_optimized_geotiff_from_stream_compressed.tiff"),
+            &bytes,
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1242,10 +1233,9 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_multiple_timesteps_from_stream() {
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
 
@@ -1260,7 +1250,7 @@ mod tests {
 
         let mut bytes = raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
                 BandSelection::first(),
@@ -1294,17 +1284,19 @@ mod tests {
         //     );
         // }
 
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_0_from_stream_compressed.tiff") as &[u8],
-            bytes.pop().expect("bytes should have length 3").as_slice()
+        assert_image_equals(
+            test_data!("raster/cloud_optimized_geotiff_timestep_0_from_stream_compressed.tiff"),
+            bytes.pop().expect("bytes should have length 3").as_slice(),
         );
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_1_from_stream_compressed.tiff") as &[u8],
-            bytes.pop().expect("bytes should have length 3").as_slice()
+
+        assert_image_equals(
+            test_data!("raster/cloud_optimized_geotiff_timestep_1_from_stream_compressed.tiff"),
+            bytes.pop().expect("bytes should have length 3").as_slice(),
         );
-        assert_eq!(
-            include_bytes!("../../../test_data/raster/cloud_optimized_geotiff_timestep_2_from_stream_compressed.tiff") as &[u8],
-            bytes.pop().expect("bytes should have length 3").as_slice()
+
+        assert_image_equals(
+            test_data!("raster/cloud_optimized_geotiff_timestep_2_from_stream_compressed.tiff"),
+            bytes.pop().expect("bytes should have length 3").as_slice(),
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1312,10 +1304,9 @@ mod tests {
 
     #[tokio::test]
     async fn cloud_optimized_geotiff_multiple_timesteps_from_stream_wrong_request() {
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
 
@@ -1330,7 +1321,7 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 7_776_000_000).unwrap(),
                 BandSelection::first(),
@@ -1355,10 +1346,9 @@ mod tests {
 
     #[tokio::test]
     async fn geotiff_from_stream_limit() {
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
 
@@ -1373,7 +1363,7 @@ mod tests {
 
         let bytes = single_timestep_raster_stream_to_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-800, -100], [-201, 499]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -1443,10 +1433,9 @@ mod tests {
             },
         ];
 
-        let ctx = MockQueryContext::new(
-            ChunkByteSize::test_default(),
-            TilingSpecification::new([600, 600].into()),
-        );
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
 
         let result_descriptor = RasterResultDescriptor::with_datatype_and_num_bands(
             RasterDataType::U8,
@@ -1464,7 +1453,7 @@ mod tests {
         }
         .boxed();
 
-        let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rectangle = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, -1], [0, 1]).unwrap(),
             query_time,
             BandSelection::first(),
@@ -1564,7 +1553,8 @@ mod tests {
 
     #[tokio::test]
     async fn multi_band_geotriff() {
-        let ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::test_default();
+        let ctx = exe_ctx.mock_query_context_test_default();
 
         let metadata = create_ndvi_meta_data();
 
@@ -1581,7 +1571,7 @@ mod tests {
 
         let (mut bytes, _) = raster_stream_to_multiband_geotiff_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap(),
                 // 1.1.2014 - 1.4.2014
                 TimeInterval::new(1_388_534_400_000, 1_396_306_800_000).unwrap(),

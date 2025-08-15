@@ -1,13 +1,13 @@
 use crate::error::{Result, UnexpectedDatabaseVersionDuringMigration};
 use async_trait::async_trait;
-use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
-use log::info;
+use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
 use snafu::ensure;
 use tokio_postgres::{
+    Socket, Transaction,
     error::SqlState,
     tls::{MakeTlsConnect, TlsConnect},
-    Socket, Transaction,
 };
+use tracing::info;
 
 pub type DatabaseVersion = String;
 
@@ -129,7 +129,7 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     let pre_migration_version = determine_current_database_version(connection).await?;
-    info!("Current database version: {:?}", pre_migration_version);
+    info!("Current database version: {pre_migration_version:?}");
 
     // start with the first migration after the current version
     let applicable_migrations = migrations
@@ -195,8 +195,8 @@ mod tests {
         config::get_config_element,
         contexts::PostgresDb,
         contexts::{
-            migrations::{all_migrations, CurrentSchemaMigration, Migration0015LogQuota},
             SessionId,
+            migrations::{CurrentSchemaMigration, Migration0015LogQuota, all_migrations},
         },
         permissions::RoleId,
         projects::{ProjectDb, ProjectListOptions},
@@ -204,11 +204,12 @@ mod tests {
         util::postgres::DatabaseConnectionConfig,
         workflows::{registry::WorkflowRegistry, workflow::WorkflowId},
     };
-    use bb8_postgres::{bb8::Pool, PostgresConnectionManager};
+    use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
     use geoengine_datatypes::{primitives::DateTime, test_data};
     use tokio_postgres::NoTls;
 
     #[tokio::test]
+    #[serial_test::parallel]
     async fn it_migrates() -> Result<()> {
         struct TestMigration;
 
@@ -285,6 +286,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::parallel]
     async fn it_performs_all_migrations() -> Result<()> {
         let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
@@ -300,6 +302,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial_test::parallel]
     async fn it_uses_the_current_schema_if_the_database_is_empty() -> Result<()> {
         let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
@@ -320,6 +323,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 1)]
+    #[serial_test::parallel]
     async fn it_migrates_data() -> Result<()> {
         // This test creates the initial schema and fills it with test data.
         // Then, it migrates the database to the newest version.

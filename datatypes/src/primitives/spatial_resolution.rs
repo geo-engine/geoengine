@@ -2,7 +2,7 @@ use std::{convert::TryFrom, ops::Add, ops::Div, ops::Mul, ops::Sub};
 
 use crate::primitives::error;
 use crate::util::Result;
-use float_cmp::{approx_eq, ApproxEq, F64Margin};
+use float_cmp::{ApproxEq, F64Margin, approx_eq};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;

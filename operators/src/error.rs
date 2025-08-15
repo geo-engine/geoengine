@@ -441,7 +441,9 @@ pub enum Error {
         b: SpatialGridDescriptor,
     },
 
-    #[snafu(display("Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."))]
+    #[snafu(display(
+        "Input stream {stream_index} is not temporally aligned. Expected {expected:?}, found {found:?}."
+    ))]
     InputStreamsMustBeTemporallyAligned {
         stream_index: usize,
         expected: TimeInterval,
@@ -471,7 +473,11 @@ pub enum Error {
         found: u32,
     },
 
-    #[snafu(display("The raster inputs must have the same spatial reference and datatype, but they have the SRS's [{}] and datatypes {:?}.", join(spatial_references, ", "), datatypes))]
+    #[snafu(display(
+        "The raster inputs must have the same spatial reference and datatype, but they have the SRS's [{}] and datatypes {:?}.",
+        join(spatial_references, ", "),
+        datatypes
+    ))]
     RasterInputsMustHaveSameSpatialReferenceAndDatatype {
         datatypes: Vec<RasterDataType>,
         spatial_references: Vec<SpatialReferenceOption>,

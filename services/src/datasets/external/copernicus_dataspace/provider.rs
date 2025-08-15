@@ -12,6 +12,7 @@ use crate::{
         listing::LayerCollectionId,
     },
     projects::RasterSymbology,
+    util::sentinel_2_utm_zones::UtmZone,
     workflows::workflow::Workflow,
 };
 use async_trait::async_trait;
@@ -32,21 +33,21 @@ use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use strum::{EnumIter, IntoEnumIterator};
 
+use super::{
+    ids::{
+        CopernicusDataId, CopernicusDataspaceLayerCollectionId, CopernicusDataspaceLayerId,
+        Sentinel2LayerCollectionId, Sentinel2LayerId, Sentinel2Product, Sentinel2ProductBand,
+    },
+    sentinel2::Sentinel2Metadata,
+};
+use crate::api::model::services::SECRET_REPLACEMENT;
+use crate::layers::external::TypedDataProviderDefinition;
 use crate::{
     contexts::GeoEngineDb,
     layers::{
         external::{DataProvider, DataProviderDefinition},
         listing::{LayerCollectionProvider, ProviderCapabilities, SearchCapabilities},
     },
-};
-
-use super::{
-    ids::{
-        CopernicusDataId, CopernicusDataspaceLayerCollectionId, CopernicusDataspaceLayerId,
-        Sentinel2LayerCollectionId, Sentinel2LayerId, Sentinel2Product, Sentinel2ProductBand,
-        UtmZone,
-    },
-    sentinel2::Sentinel2Metadata,
 };
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq)]
@@ -95,6 +96,22 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for CopernicusDataspaceDataProvid
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(mut new) => {
+                if new.s3_secret_key == SECRET_REPLACEMENT {
+                    new.s3_secret_key.clone_from(&self.s3_secret_key);
+                }
+                // TODO Also hide access key?
+                TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 
@@ -145,6 +162,7 @@ impl CopernicusDataspaceDataProvider {
             items: Datasets::iter()
                 .map(|item| {
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: LayerCollectionId(format!("datasets/{item}")),
@@ -184,6 +202,7 @@ impl CopernicusDataspaceDataProvider {
             items: Sentinel2Product::iter()
                 .map(|product| {
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: CopernicusDataspaceLayerCollectionId::Sentinel2(
@@ -213,6 +232,7 @@ impl CopernicusDataspaceDataProvider {
             items: UtmZone::zones()
                 .map(|zone| {
                     CollectionItem::Collection(LayerCollectionListing {
+                        r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: self.id,
                             collection_id: CopernicusDataspaceLayerCollectionId::Sentinel2(
@@ -247,6 +267,7 @@ impl CopernicusDataspaceDataProvider {
                 .product_bands()
                 .map(|product_band| {
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: self.id,
                             layer_id: CopernicusDataspaceLayerId::Sentinel2(Sentinel2LayerId {
@@ -295,6 +316,7 @@ impl CopernicusDataspaceDataProvider {
                 ),
             },
             symbology: Some(crate::projects::Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
@@ -443,10 +465,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {

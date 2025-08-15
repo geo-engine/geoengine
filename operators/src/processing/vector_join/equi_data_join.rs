@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use float_cmp::approx_eq;
-use futures::stream::{self, BoxStream};
 use futures::StreamExt;
+use futures::stream::{self, BoxStream};
 
 use geoengine_datatypes::collections::{
     BuilderProvider, DataCollection, FeatureCollection, FeatureCollectionBuilder,
@@ -11,8 +11,7 @@ use geoengine_datatypes::collections::{
     GeometryRandomAccess,
 };
 use geoengine_datatypes::primitives::{
-    ColumnSelection, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
-    VectorSpatialQueryRectangle,
+    BoundingBox2D, ColumnSelection, FeatureDataRef, Geometry, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 
@@ -356,7 +355,7 @@ where
     FeatureCollectionRowBuilder<G>: GeoFeatureCollectionRowBuilder<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -449,7 +448,7 @@ mod tests {
         let left_processor = left.query_processor().unwrap().multi_point().unwrap();
         let right_processor = right.query_processor().unwrap().data().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((f64::MIN, f64::MIN).into(), (f64::MAX, f64::MAX).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

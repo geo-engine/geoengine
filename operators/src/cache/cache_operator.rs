@@ -12,7 +12,7 @@ use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
-use futures::{ready, Stream, StreamExt, TryStreamExt};
+use futures::{Stream, StreamExt, TryStreamExt, ready};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
     Geometry, QueryAttributeSelection, QueryRectangle, VectorQueryRectangle,
@@ -23,7 +23,7 @@ use geoengine_datatypes::util::helpers::ge_report;
 use pin_project::{pin_project, pinned_drop};
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedSender, unbounded_channel};
 
 /// A cache operator that caches the results of its source operator
 pub struct InitializedCacheOperator<S> {
@@ -175,7 +175,7 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
 struct CacheQueryProcessor<P, E, Q, U, R>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialQuery = Q, Selection = U, ResultDescription = R>,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U, ResultDescription = R>,
 {
     processor: P,
     cache_key: CanonicOperatorName,
@@ -184,7 +184,7 @@ where
 impl<P, E, Q, U, R> CacheQueryProcessor<P, E, Q, U, R>
 where
     E: CacheElement + Send + Sync + 'static,
-    P: QueryProcessor<Output = E, SpatialQuery = Q, Selection = U, ResultDescription = R> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = Q, Selection = U, ResultDescription = R> + Sized,
 {
     pub fn new(processor: P, cache_key: CanonicOperatorName) -> Self {
         CacheQueryProcessor {
@@ -197,7 +197,7 @@ where
 #[async_trait]
 impl<P, E, S, U, R> QueryProcessor for CacheQueryProcessor<P, E, S, U, R>
 where
-    P: QueryProcessor<Output = E, SpatialQuery = S, Selection = U, ResultDescription = R> + Sized,
+    P: QueryProcessor<Output = E, SpatialBounds = S, Selection = U, ResultDescription = R> + Sized,
     S: Clone + Send + Sync + 'static,
     U: QueryAttributeSelection,
     E: CacheElement<Query = QueryRectangle<S, U>>
@@ -211,13 +211,13 @@ where
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = U>,
 {
     type Output = E;
-    type SpatialQuery = S;
+    type SpatialBounds = S;
     type Selection = U;
     type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialQuery, Self::Selection>,
+        query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let shared_cache = ctx
@@ -228,7 +228,7 @@ where
 
         if let Ok(Some(cache_result)) = cache_result {
             // cache hit
-            log::debug!("cache hit for operator {}", self.cache_key);
+            tracing::debug!("cache hit for operator {}", self.cache_key);
 
             let wrapped_result_steam =
                 E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query.clone());
@@ -237,13 +237,13 @@ where
         }
 
         // cache miss
-        log::debug!("cache miss for operator {}", self.cache_key);
+        tracing::debug!("cache miss for operator {}", self.cache_key);
         let source_stream = self.processor.query(query.clone(), ctx).await?;
 
         let query_id = shared_cache.insert_query(&self.cache_key, &query).await;
 
         if let Err(e) = query_id {
-            log::debug!("could not insert query into cache: {}", e);
+            tracing::debug!("could not insert query into cache: {e}");
             return Ok(source_stream);
         }
 
@@ -261,27 +261,20 @@ where
                         let result = tile_cache
                             .insert_query_element(&cache_key, &query_id, tile)
                             .await;
-                        log::trace!(
-                            "inserted tile into cache for cache key {} and query id {}. result: {:?}",
-                            cache_key,
-                            query_id,
-                            result
+                        tracing::trace!(
+                            "inserted tile into cache for cache key {cache_key} and query id {query_id}. result: {result:?}"
                         );
                     }
                     SourceStreamEvent::Abort => {
                         tile_cache.abort_query(&cache_key, &query_id).await;
-                        log::debug!(
-                            "aborted cache insertion for cache key {} and query id {}",
-                            cache_key,
-                            query_id
+                        tracing::debug!(
+                            "aborted cache insertion for cache key {cache_key} and query id {query_id}"
                         );
                     }
                     SourceStreamEvent::Finished => {
                         let result = tile_cache.finish_query(&cache_key, &query_id).await;
-                        log::debug!(
-                            "finished cache insertion for cache key {} and query id {}, result: {:?}",
-                            cache_key,query_id,
-                            result
+                        tracing::debug!(
+                            "finished cache insertion for cache key {cache_key} and query id {query_id}, result: {result:?}"
                         );
                     }
                 }
@@ -344,13 +337,13 @@ where
                     .stream_event_sender
                     .send(SourceStreamEvent::Element(element.clone()));
                 if let Err(e) = r {
-                    log::warn!("could not send tile to cache: {}", ge_report(e));
+                    tracing::warn!("could not send tile to cache: {}", ge_report(e));
                 }
             } else {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Abort);
                 if let Err(e) = r {
-                    log::warn!("could not send abort to cache: {}", ge_report(e));
+                    tracing::warn!("could not send abort to cache: {}", ge_report(e));
                 }
             }
         } else {
@@ -358,15 +351,15 @@ where
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Abort);
                 if let Err(e) = r {
-                    log::warn!("could not send abort to cache: {}", ge_report(e));
+                    tracing::warn!("could not send abort to cache: {}", ge_report(e));
                 }
             } else {
                 // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
                 let r = this.stream_event_sender.send(SourceStreamEvent::Finished);
                 if let Err(e) = r {
-                    log::warn!("could not send finished to cache: {}", ge_report(e));
+                    tracing::warn!("could not send finished to cache: {}", ge_report(e));
                 }
-                log::debug!("stream finished, mark cache entry as finished.");
+                tracing::debug!("stream finished, mark cache entry as finished.");
             }
             *this.finished = true;
         }
@@ -387,7 +380,7 @@ where
             // ignore the result. The receiver shold never drop prematurely, but if it does we don't want to crash
             let r = self.stream_event_sender.send(SourceStreamEvent::Abort);
             if let Err(e) = r {
-                log::debug!("could not send abort to cache: {}", e.to_string());
+                tracing::debug!("could not send abort to cache: {e}");
             }
         }
     }
@@ -497,7 +490,7 @@ mod tests {
 
         let stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::first(),
@@ -518,7 +511,7 @@ mod tests {
 
         let stream_from_cache = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::first(),
@@ -598,7 +591,7 @@ mod tests {
         // query the first two bands
         let stream = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::new(vec![0, 1]).unwrap(),
@@ -632,7 +625,7 @@ mod tests {
         // now query only the second band
         let stream_from_cache = processor
             .query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
                     TimeInterval::default(),
                     BandSelection::new_single(1),

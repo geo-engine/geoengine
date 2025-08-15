@@ -4,15 +4,13 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryStreamExt};
+use futures::{StreamExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
-    primitives::{
-        BandSelection, CacheHint, RasterQueryRectangle, RasterSpatialQueryRectangle, TimeInterval,
-    },
+    primitives::{BandSelection, CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{
-        ConvertDataType, FromIndexFnParallel, GeoTransform, GridIdx2D, GridIndexAccess,
-        GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess, MapElementsParallel, Pixel,
-        RasterTile2D,
+        ConvertDataType, FromIndexFnParallel, GeoTransform, GridBoundingBox2D, GridIdx2D,
+        GridIndexAccess, GridOrEmpty, GridOrEmpty2D, GridShape2D, GridShapeAccess,
+        MapElementsParallel, Pixel, RasterTile2D,
     },
 };
 use geoengine_expression::LinkedExpression;
@@ -62,7 +60,7 @@ where
     Tuple: ExpressionTupleProcessor<TO>,
 {
     type Output = RasterTile2D<TO>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -72,11 +70,7 @@ where
         ctx: &'b dyn QueryContext,
     ) -> Result<BoxStream<'b, Result<Self::Output>>> {
         // rewrite query to request all input bands from the source. They are all combined in the single output band by means of the expression.
-        let source_query = RasterQueryRectangle {
-            spatial_query: query.spatial_query,
-            time_interval: query.time_interval,
-            attributes: BandSelection::first_n(Tuple::num_bands()),
-        };
+        let source_query = query.select_attributes(BandSelection::first_n(Tuple::num_bands()));
 
         let stream =
             self.sources
@@ -96,7 +90,7 @@ where
                     ) = Tuple::metadata(&rasters);
 
                     let program = self.program.clone();
-                    let map_no_data = self.map_no_data;
+                    let map_no_data: bool = self.map_no_data;
 
                     let out = crate::util::spawn_blocking_with_thread_pool(
                         ctx.thread_pool().clone(),
@@ -256,7 +250,7 @@ where
         let stream = self.raster.query(query, ctx).await?.chunks(2).map(|chunk| {
             if chunk.len() != 2 {
                 // if there are not exactly two tiles, it should mean the last tile was an error and the chunker ended prematurely
-                if let Some(Err(e)) = chunk.into_iter().last() {
+                if let Some(Err(e)) = chunk.into_iter().next_back() {
                     return Err(e);
                 }
                 // if there is no error, the source did not produce all bands, which likely means a bug in an operator
@@ -337,7 +331,19 @@ where
         let grid_shape = rasters.0.grid_shape();
         let out = GridOrEmpty::from_index_fn_parallel(&grid_shape, map_fn);
 
-        Result::Ok(out)
+        let out_or_empty = match out {
+            GridOrEmpty::Empty(t) => GridOrEmpty::Empty(t),
+            GridOrEmpty::Grid(t) => {
+                if t.validity_mask.data.iter().all(|&t| !t) {
+                    tracing::trace!("Converting empty expression output to EmptyGrid");
+                    GridOrEmpty::new_empty_shape(t.grid_shape())
+                } else {
+                    GridOrEmpty::Grid(t)
+                }
+            }
+        };
+
+        Result::Ok(out_or_empty)
     }
 
     fn num_bands() -> u32 {

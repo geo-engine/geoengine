@@ -7,10 +7,10 @@ use crate::engine::{
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::gdal_source::reader::ReaderState;
+use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::input::float_option_with_nan;
 use crate::util::retry::retry;
-use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -21,54 +21,53 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-use float_cmp::{approx_eq, ApproxEq};
-use futures::{
-    stream::{self, BoxStream, StreamExt},
-    Stream,
-};
+use float_cmp::{ApproxEq, approx_eq};
 use futures::{Future, TryStreamExt};
+use futures::{
+    Stream,
+    stream::{self, BoxStream, StreamExt},
+};
 use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
-use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{find_next_best_overview_level, BandSelection, CacheHint};
-use geoengine_datatypes::primitives::{
-    Coordinate2D, DateTimeParseFormat, RasterQueryRectangle, TimeInstance,
-};
-use geoengine_datatypes::primitives::{RasterSpatialQueryRectangle, SpatialResolution};
-use geoengine_datatypes::raster::TileInformation;
-use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid, GeoTransform, GridOrEmpty, GridOrEmpty2D, GridShapeAccess,
-    MapElements, MaskedGrid, NoDataValueGrid, Pixel, RasterDataType, RasterProperties,
-    RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
-    TilingStrategy,
-};
-use geoengine_datatypes::raster::{GridIntersection, SpatialGridDefinition};
-use geoengine_datatypes::util::test::TestDefault;
+use geoengine_datatypes::primitives::{SpatialResolution, find_next_best_overview_level};
 use geoengine_datatypes::{
-    primitives::TimeInterval,
-    raster::{Grid, GridBlit, GridBoundingBox2D, GridSize, TilingSpecification},
+    dataset::NamedData,
+    primitives::{
+        BandSelection, CacheHint, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
+        TimeInstance, TimeInterval,
+    },
+    raster::{
+        ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D,
+        GridIntersection, GridOrEmpty, GridOrEmpty2D, GridShapeAccess, GridSize, MapElements,
+        MaskedGrid, NoDataValueGrid, Pixel, RasterDataType, RasterProperties,
+        RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
+        SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
+    },
+    util::test::TestDefault,
 };
 use itertools::Itertools;
 pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use log::debug;
-use num::{integer::div_ceil, integer::div_floor, FromPrimitive};
+use num::FromPrimitive;
+use num::integer::{div_ceil, div_floor};
 use postgres_types::{FromSql, ToSql};
 use reader::{
     GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties, OverviewReaderState,
 };
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, ResultExt};
+use snafu::{ResultExt, ensure};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
+use tracing::debug;
+
 mod db_types;
 mod error;
 mod loading_info;
@@ -79,31 +78,6 @@ static GDAL_RETRY_MAX_BACKOFF_MS: u64 = 60 * 60 * 1000;
 static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 /// Parameters for the GDAL Source Operator
-///
-/// # Examples
-///
-/// ```rust
-/// use serde_json::{Result, Value};
-/// use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-/// use geoengine_datatypes::dataset::{NamedData};
-/// use geoengine_datatypes::util::Identifier;
-///
-/// let json_string = r#"
-///     {
-///         "type": "GdalSource",
-///         "params": {
-///             "data": "ns:dataset"
-///         }
-///     }"#;
-///
-/// let operator: GdalSource = serde_json::from_str(json_string).unwrap();
-///
-/// assert_eq!(operator, GdalSource {
-///     params: GdalSourceParameters {
-///         data: NamedData::with_namespaced_name("ns", "dataset"),
-///     },
-/// });
-/// ```
 #[derive(Debug, PartialEq, Eq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceParameters {
@@ -417,8 +391,10 @@ impl GdalRasterLoader {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
             Some(ds) => {
                 debug!(
-                    "Loading tile {:?}, from {:?}, band: {}",
-                    &tile_information, ds.file_path, ds.rasterband_channel
+                    "Loading tile {:?}, from {}, band: {}",
+                    &tile_information,
+                    ds.file_path.display(),
+                    ds.rasterband_channel
                 );
                 let gdal_read_advise: Option<GdalReadAdvise> = reader_mode
                     .tiling_to_dataset_read_advise(
@@ -506,14 +482,14 @@ impl GdalRasterLoader {
             };
             let elapsed = start.elapsed();
             debug!(
-                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {:?}",
+                "error opening dataset: {:?} -> returning error = {}, took: {:?}, file: {}",
                 error,
                 err_result.is_err(),
                 elapsed,
-                dataset_params.file_path
+                dataset_params.file_path.display()
             );
             return err_result;
-        };
+        }
 
         let dataset = dataset_result.expect("checked");
 
@@ -550,7 +526,7 @@ impl GdalRasterLoader {
         let properties = read_raster_properties(&dataset, dataset_params, &rasterband);
 
         let elapsed = start.elapsed();
-        debug!("data loaded -> returning data grid, took {:?}", elapsed);
+        debug!("data loaded -> returning data grid, took {elapsed:?}");
 
         Ok(Some(GridAndProperties {
             grid: result_grid,
@@ -562,14 +538,14 @@ impl GdalRasterLoader {
     /// A stream of futures producing `RasterTile2D` for a single slice in time
     ///
     fn temporal_slice_tile_future_stream<T: Pixel + GdalType + FromPrimitive>(
-        query: &RasterQueryRectangle,
+        spatial_query: GridBoundingBox2D,
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
         reader_mode: GdalReaderMode,
-    ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> {
+    ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
         stream::iter(
             tiling_strategy
-                .tile_information_iterator_from_grid_bounds(query.spatial_query().grid_bounds())
+                .tile_information_iterator_from_grid_bounds(spatial_query)
                 .map(move |tile| {
                     GdalRasterLoader::load_tile_async(
                         info.params.clone(),
@@ -587,14 +563,14 @@ impl GdalRasterLoader {
         S: Stream<Item = Result<GdalLoadingInfoTemporalSlice>>,
     >(
         loading_info_stream: S,
-        query: RasterQueryRectangle,
+        spatial_query: GridBoundingBox2D,
         tiling_strategy: TilingStrategy,
         reader_mode: GdalReaderMode,
-    ) -> impl Stream<Item = Result<RasterTile2D<T>>> {
+    ) -> impl Stream<Item = Result<RasterTile2D<T>>> + use<S, T> {
         loading_info_stream
             .map_ok(move |info| {
                 GdalRasterLoader::temporal_slice_tile_future_stream(
-                    &query,
+                    spatial_query,
                     info,
                     tiling_strategy,
                     reader_mode,
@@ -634,7 +610,7 @@ where
     P: Pixel + gdal::raster::GdalType + FromPrimitive,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -644,16 +620,14 @@ where
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<BoxStream<Result<Self::Output>>> {
         ensure!(
-            query.attributes.as_slice() == [0],
+            query.attributes().as_slice() == [0],
             crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
         );
-
         tracing::debug!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
             P::TYPE,
             &query
         );
-
         // this is the result descriptor of the operator. It already incorporates the overview level AND shifts the origin to the tiling origin
         let result_descriptor = self.result_descriptor();
 
@@ -683,7 +657,7 @@ where
 
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
 
-        let query_pixel_bounds = query.spatial_query().grid_bounds();
+        let query_pixel_bounds = query.spatial_bounds();
 
         let mut empty = false;
 
@@ -739,29 +713,33 @@ where
         ) {
             (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
             (None, None) => {
-                log::warn!("The provider did not provide a time range that covers the query. Falling back to query time range. ");
-                FillerTimeBounds::new(query.time_interval.start(), query.time_interval.end())
+                tracing::debug!(
+                    "The provider did not provide a time range that covers the query. Falling back to query time range. "
+                );
+                FillerTimeBounds::new(query.time_interval().start(), query.time_interval().end())
             }
             (Some(start), None) => {
-                log::warn!("The provider did only provide a time range start that covers the query. Falling back to query time end. ");
-                FillerTimeBounds::new(start, query.time_interval.end())
+                tracing::debug!(
+                    "The provider did only provide a time range start that covers the query. Falling back to query time end. "
+                );
+                FillerTimeBounds::new(start, query.time_interval().end())
             }
             (None, Some(end)) => {
-                log::warn!("The provider did only provide a time range end that covers the query. Falling back to query time start. ");
-                FillerTimeBounds::new(query.time_interval.start(), end)
+                tracing::debug!(
+                    "The provider did only provide a time range end that covers the query. Falling back to query time start. "
+                );
+                FillerTimeBounds::new(query.time_interval().start(), end)
             }
         };
 
-        let query_time = query.time_interval;
+        let query_time = query.time_interval();
         let skipping_loading_info = loading_info
             .info
             .filter_ok(move |s: &GdalLoadingInfoTemporalSlice| s.time.intersects(&query_time)); // Check that the time slice intersects the query time
 
-        let source_stream = stream::iter(skipping_loading_info);
-
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
-            source_stream,
-            query.clone(),
+            stream::iter(skipping_loading_info),
+            query.spatial_bounds(),
             tiling_strategy,
             reader_mode,
         );
@@ -770,11 +748,11 @@ where
         let filled_stream = SparseTilesFillAdapter::new(
             source_stream,
             tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(query_pixel_bounds),
-            query.attributes.count(),
+            query.attributes().count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-            query.time_interval,
+            query.time_interval(),
             time_bounds,
         );
         Ok(filled_stream.boxed())
@@ -796,7 +774,7 @@ fn overview_level_spatial_grid(
     overview_level: u32,
 ) -> Option<SpatialGridDefinition> {
     if overview_level > 0 {
-        debug!("Using overview level {}", overview_level);
+        debug!("Using overview level {overview_level}");
         let geo_transform = GeoTransform::new(
             source_spatial_grid.geo_transform.origin_coordinate,
             source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
@@ -845,16 +823,28 @@ impl RasterOperator for GdalSource {
 
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
 
-        // generate a result descriptor with the overview level
-        let op = InitializedGdalSourceOperator::initialize_with_overview_level(
-            CanonicOperatorName::from(&self),
-            path,
-            self.params.data,
-            meta_data,
-            meta_data_result_descriptor,
-            context.tiling_specification(),
-            self.params.overview_level.unwrap_or(0),
-        );
+        let op_name = CanonicOperatorName::from(&self);
+        let op = if self.params.overview_level.is_none() {
+            InitializedGdalSourceOperator::initialize_original_resolution(
+                op_name,
+                path,
+                self.params.data,
+                meta_data,
+                meta_data_result_descriptor,
+                context.tiling_specification(),
+            )
+        } else {
+            // generate a result descriptor with the overview level
+            InitializedGdalSourceOperator::initialize_with_overview_level(
+                op_name,
+                path,
+                self.params.data,
+                meta_data,
+                meta_data_result_descriptor,
+                context.tiling_specification(),
+                self.params.overview_level.unwrap_or(0),
+            )
+        };
 
         Ok(op.boxed())
     }
@@ -876,6 +866,26 @@ pub struct InitializedGdalSourceOperator {
 }
 
 impl InitializedGdalSourceOperator {
+    pub fn initialize_original_resolution(
+        name: CanonicOperatorName,
+        path: WorkflowOperatorPath,
+        data_name: NamedData,
+        meta_data: GdalMetaData,
+        result_descriptor: RasterResultDescriptor,
+        tiling_specification: TilingSpecification,
+    ) -> Self {
+        InitializedGdalSourceOperator {
+            name,
+            path,
+            data_name,
+            produced_result_descriptor: result_descriptor,
+            meta_data,
+            tiling_specification,
+            overview_level: 0,
+            original_resolution_spatial_grid: None,
+        }
+    }
+
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
         path: WorkflowOperatorPath,
@@ -894,7 +904,7 @@ impl InitializedGdalSourceOperator {
             overview_level_spatial_grid(source_resolution_spatial_grid, overview_level)
         {
             let ovr_res = RasterResultDescriptor {
-                spatial_grid: SpatialGridDescriptor::Source(ovr_spatial_grid),
+                spatial_grid: SpatialGridDescriptor::new_source(ovr_spatial_grid),
                 ..result_descriptor
             };
             (ovr_res, Some(source_resolution_spatial_grid))
@@ -958,12 +968,12 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::U64 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::U64,
-                })?
+                })?;
             }
             RasterDataType::I8 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::I8,
-                })?
+                })?;
             }
             RasterDataType::I16 => TypedRasterQueryProcessor::I16(
                 GdalSourceProcessor {
@@ -990,7 +1000,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
             RasterDataType::I64 => {
                 return Err(GdalSourceError::UnsupportedRasterType {
                     raster_type: RasterDataType::I64,
-                })?
+                })?;
             }
             RasterDataType::F32 => TypedRasterQueryProcessor::F32(
                 GdalSourceProcessor {
@@ -1281,10 +1291,10 @@ fn properties_from_gdal_metadata<'a, I, M>(
 fn properties_from_band(properties: &mut RasterProperties, gdal_dataset: &GdalRasterBand) {
     if let Some(scale) = gdal_dataset.scale() {
         properties.set_scale(scale);
-    };
+    }
     if let Some(offset) = gdal_dataset.offset() {
         properties.set_offset(offset);
-    };
+    }
 
     // ignore if there is no description
     if let Ok(description) = gdal_dataset.description() {
@@ -1297,13 +1307,11 @@ mod tests {
     use super::*;
     use crate::engine::{MockExecutionContext, MockQueryContext};
     use crate::test_data;
-    use crate::util::gdal::add_ndvi_dataset;
     use crate::util::Result;
+    use crate::util::gdal::add_ndvi_dataset;
     use float_cmp::assert_approx_eq;
     use geoengine_datatypes::hashmap;
-    use geoengine_datatypes::primitives::{
-        AxisAlignedRectangle, SpatialGridQueryRectangle, SpatialPartition2D, TimeInstance,
-    };
+    use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
     use geoengine_datatypes::raster::{BoundedGrid, GridShape2D, SpatialGridDefinition};
     use geoengine_datatypes::raster::{
         EmptyGrid2D, GridBounds, GridIdx2D, TilesEqualIgnoringCacheHint,
@@ -1311,7 +1319,7 @@ mod tests {
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::util::gdal::hide_gdal_errors;
     use httptest::matchers::request;
-    use httptest::{responders, Expectation, Server};
+    use httptest::{Expectation, Server, responders};
     use reader::{GdalReadAdvise, GdalReadWindow};
 
     fn tile_information_with_partition_and_shape(
@@ -1335,7 +1343,7 @@ mod tests {
         exe_ctx: &MockExecutionContext,
         query_ctx: &MockQueryContext,
         name: NamedData,
-        spatial_query: SpatialGridQueryRectangle,
+        spatial_query: GridBoundingBox2D,
         time_interval: TimeInterval,
     ) -> Vec<Result<RasterTile2D<u8>>> {
         let op = GdalSource {
@@ -1401,6 +1409,26 @@ mod tests {
         };
 
         GdalRasterLoader::load_tile_data::<u8>(&dataset_params, gdal_read_advice)
+    }
+
+    #[test]
+    fn it_deserializes() {
+        let json_string = r#"
+            {
+                "type": "GdalSource",
+                "params": {
+                    "data": "ns:dataset"
+                }
+            }"#;
+
+        let operator: GdalSource = serde_json::from_str(json_string).unwrap();
+
+        assert_eq!(
+            operator,
+            GdalSource {
+                params: GdalSourceParameters::new(NamedData::with_namespaced_name("ns", "dataset")),
+            }
+        );
     }
 
     #[test]
@@ -1740,11 +1768,9 @@ mod tests {
     #[tokio::test]
     async fn test_query_single_time_slice() {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
 
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_388_534_400_001); // 2014-01-01
 
@@ -1782,12 +1808,10 @@ mod tests {
     #[tokio::test]
     async fn test_query_multi_time_slices() {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
 
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_393_632_000_000); // 2014-01-01 - 2014-03-01
 
@@ -1810,12 +1834,10 @@ mod tests {
     #[tokio::test]
     async fn test_query_before_data() {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
         let time_interval = TimeInterval::new_unchecked(1_380_585_600_000, 1_380_585_600_000); // 2013-10-01 - 2013-10-01
 
         let c = query_gdal_source(&exe_ctx, &query_ctx, id, spatial_query, time_interval).await;
@@ -1832,12 +1854,10 @@ mod tests {
     #[tokio::test]
     async fn test_query_after_data() {
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
         let time_interval = TimeInterval::new_unchecked(1_420_074_000_000, 1_420_074_000_000); // 2015-01-01 - 2015-01-01
 
         let c = query_gdal_source(&exe_ctx, &query_ctx, id, spatial_query, time_interval).await;
@@ -1856,12 +1876,10 @@ mod tests {
         hide_gdal_errors();
 
         let mut exe_ctx = MockExecutionContext::test_default();
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
         let id = add_ndvi_dataset(&mut exe_ctx);
 
-        let spatial_query = SpatialGridQueryRectangle::new(
-            GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap(),
-        );
+        let spatial_query = GridBoundingBox2D::new([-256, -256], [255, 255]).unwrap();
         let time_interval = TimeInterval::new_unchecked(1_385_856_000_000, 1_388_534_400_000); // 2013-12-01 - 2014-01-01
 
         let c = query_gdal_source(&exe_ctx, &query_ctx, id, spatial_query, time_interval).await;
@@ -2073,6 +2091,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(clippy::too_many_lines)]
     fn read_up_side_down_raster() {
         let up_side_down_params = GdalDatasetParameters {
             file_path: test_data!(

@@ -1,4 +1,7 @@
+use super::storage::LayerProviderDb;
+use crate::contexts::GeoEngineDb;
 use crate::datasets::storage::{DatasetDb, DatasetDefinition};
+use crate::layers::external::DataProviderDefinition;
 use crate::layers::storage::LayerDb;
 use crate::{
     error::Result,
@@ -12,7 +15,6 @@ use crate::{
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::util::helpers::ge_report;
-use log::{error, info, warn};
 use std::{
     collections::HashMap,
     ffi::OsStr,
@@ -20,9 +22,8 @@ use std::{
     io::BufReader,
     path::PathBuf,
 };
+use tracing::{error, info, warn};
 use uuid::Uuid;
-
-use super::storage::LayerProviderDb;
 
 pub const UNSORTED_COLLECTION_ID: Uuid = Uuid::from_u128(0xffb2_dd9e_f5ad_427c_b7f1_c9a0_c7a0_ae3f);
 
@@ -72,16 +73,14 @@ pub async fn add_layers_from_directory<L: LayerDb + PermissionDb>(db: &mut L, fi
         match entry {
             Ok(entry) if entry.path().extension() == Some(OsStr::new("json")) => {
                 match add_layer_from_dir_entry(db, &entry).await {
-                    Ok(()) => info!("Added layer from directory entry: {:?}", entry),
-                    Err(e) => warn!(
-                        "Skipped adding layer from directory entry: {:?} error: {}",
-                        entry,
-                        e.to_string()
-                    ),
+                    Ok(()) => info!("Added layer from directory entry: {entry:?}"),
+                    Err(e) => {
+                        warn!("Skipped adding layer from directory entry: {entry:?} error: {e}");
+                    }
                 }
             }
             _ => {
-                warn!("Skipped adding layer from directory entry: {:?}", entry);
+                warn!("Skipped adding layer from directory entry: {entry:?}");
             }
         }
     }
@@ -154,18 +153,13 @@ pub async fn add_layer_collections_from_directory<
                     Ok(def) => collection_defs.push(def),
                     Err(e) => {
                         warn!(
-                            "Skipped adding layer collection from directory entry: {:?} error: {}",
-                            entry,
-                            e.to_string()
+                            "Skipped adding layer collection from directory entry: {entry:?} error: {e}"
                         );
                     }
                 }
             }
             _ => {
-                warn!(
-                    "Skipped adding layer collection from directory entry: {:?}",
-                    entry
-                );
+                warn!("Skipped adding layer collection from directory entry: {entry:?}");
             }
         }
     }
@@ -189,7 +183,7 @@ pub async fn add_layer_collections_from_directory<
                 collection_children.insert(def.id, def.collections);
             }
             Err(e) => {
-                warn!("Skipped adding layer collection to db: {}", e);
+                warn!("Skipped adding layer collection to db: {e}");
             }
         }
     }
@@ -199,28 +193,44 @@ pub async fn add_layer_collections_from_directory<
             let op = db.add_collection_to_parent(&child, &parent).await;
 
             if let Err(e) = op {
-                warn!("Skipped adding child collection to db: {}", e);
+                warn!("Skipped adding child collection to db: {e}");
             }
         }
     }
 }
 
-pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_path: PathBuf) {
-    async fn add_provider_definition_from_dir_entry<D: LayerProviderDb>(
+pub async fn add_providers_from_directory<D: LayerProviderDb + PermissionDb + GeoEngineDb>(
+    db: &mut D,
+    base_path: PathBuf,
+) {
+    async fn add_provider_definition_from_dir_entry<
+        D: LayerProviderDb + PermissionDb + GeoEngineDb,
+    >(
         db: &mut D,
         entry: &DirEntry,
     ) -> Result<()> {
         let def: TypedDataProviderDefinition =
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
-        db.add_layer_provider(def).await?; // TODO: add as system user
+        db.add_layer_provider(def.clone()).await?;
+
+        let id = <TypedDataProviderDefinition as DataProviderDefinition<D>>::id(&def);
+
+        // share with users
+        db.add_permission(Role::registered_user_role_id(), id, Permission::Read)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+        db.add_permission(Role::anonymous_role_id(), id, Permission::Read)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
         Ok(())
     }
 
     let Ok(dir) = fs::read_dir(&base_path) else {
         error!(
-            "Skipped adding providers from directory `{:?}` because it can't be read",
-            base_path
+            "Skipped adding providers from directory `{}` because it can't be read",
+            base_path.display()
         );
         return;
     };
@@ -232,18 +242,18 @@ pub async fn add_providers_from_directory<D: LayerProviderDb>(db: &mut D, base_p
                     && entry.path().extension().is_some_and(|ext| ext == "json") =>
             {
                 match add_provider_definition_from_dir_entry(db, &entry).await {
-                    Ok(()) => info!("Added provider from file `{:?}`", entry.path()),
+                    Ok(()) => info!("Added provider from file `{}`", entry.path().display()),
                     Err(e) => {
                         warn!(
-                            "Skipped adding provider from file `{:?}` error: `{:?}`",
-                            entry.path(),
+                            "Skipped adding provider from file `{}` error: `{:?}`",
+                            entry.path().display(),
                             e
                         );
                     }
                 }
             }
             Err(e) => {
-                warn!("Skipped adding provider from directory entry `{:?}`", e);
+                warn!("Skipped adding provider from directory entry `{e:?}`");
             }
             _ => {
                 // ignore directories, etc.
@@ -298,7 +308,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
                 );
             }
         } else {
-            warn!("Skipped adding dataset from directory entry: {:?}", entry);
+            warn!("Skipped adding dataset from directory entry: {entry:?}");
         }
     }
 }

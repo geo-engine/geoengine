@@ -1,18 +1,5 @@
 use std::{borrow::Cow, collections::HashMap, str::FromStr};
 
-use async_trait::async_trait;
-use geoengine_datatypes::{
-    dataset::{DataId, LayerId},
-    primitives::{RasterQueryRectangle, VectorQueryRectangle},
-};
-use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
-    mock::MockDatasetDataSourceLoadingInfo,
-    source::{GdalLoadingInfo, OgrSourceDataset},
-};
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
-
 use crate::{
     contexts::GeoEngineDb,
     datasets::listing::DatasetProvider,
@@ -31,6 +18,18 @@ use crate::{
     util::operators::source_operator_from_dataset,
     workflows::workflow::Workflow,
 };
+use async_trait::async_trait;
+use geoengine_datatypes::{
+    dataset::{DataId, LayerId},
+    primitives::{RasterQueryRectangle, VectorQueryRectangle},
+};
+use geoengine_operators::{
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    mock::MockDatasetDataSourceLoadingInfo,
+    source::{GdalLoadingInfo, OgrSourceDataset},
+};
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
 
 use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
 
@@ -119,6 +118,7 @@ where
             .take(limit as usize)
             .map(|c| {
                 CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: self.id,
                         collection_id: LayerCollectionId(
@@ -195,6 +195,7 @@ where
             .iter()
             .map(|d| {
                 CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: LayerId(d.id.to_string()),
@@ -371,10 +372,10 @@ where
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -454,7 +455,7 @@ mod tests {
     use crate::{
         contexts::SessionContext,
         contexts::{PostgresContext, PostgresDb, PostgresSessionContext},
-        datasets::{storage::DatasetStore, AddDataset},
+        datasets::{AddDataset, storage::DatasetStore},
         ge_context,
         layers::storage::LayerProviderDb,
     };
@@ -578,18 +579,20 @@ mod tests {
             vec!["GdalDataset"]
         );
 
-        assert!(provider
-            .search(
-                &layer_collection_id_root,
-                SearchParameters {
-                    search_string: "Gdal".to_string(),
-                    search_type: SearchType::Prefix,
-                    offset: 0,
-                    limit: 10,
-                },
-            )
-            .await
-            .is_err());
+        assert!(
+            provider
+                .search(
+                    &layer_collection_id_root,
+                    SearchParameters {
+                        search_string: "Gdal".to_string(),
+                        search_type: SearchType::Prefix,
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await
+                .is_err()
+        );
     }
 
     #[ge_context::test(user = "admin")]
@@ -678,18 +681,20 @@ mod tests {
             vec!["GdalDataset"]
         );
 
-        assert!(provider
-            .autocomplete_search(
-                &layer_collection_id_root,
-                SearchParameters {
-                    search_string: "Gdal".to_string(),
-                    search_type: SearchType::Prefix,
-                    offset: 0,
-                    limit: 10,
-                },
-            )
-            .await
-            .is_err());
+        assert!(
+            provider
+                .autocomplete_search(
+                    &layer_collection_id_root,
+                    SearchParameters {
+                        search_string: "Gdal".to_string(),
+                        search_type: SearchType::Prefix,
+                        offset: 0,
+                        limit: 10,
+                    },
+                )
+                .await
+                .is_err()
+        );
     }
 
     async fn add_two_datasets(db: &PostgresDb<NoTls>) {

@@ -50,18 +50,20 @@
         "end": "+262142-12-31T23:59:59.999+00:00"
       },
       "spatialGrid": {
-        "type": "source",
-        "geoTransform": {
-          "originCoordinate": {
-            "x": -180.0,
-            "y": 90.0
+        "state": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize":0.1,
+            "yPixelSize":-0.1
           },
-          "xPixelSize":0.1,
-          "yPixelSize":-0.1
-        },
-        "gridBounds": {
-          "min": [0, 0],
-          "max": [1799, 3599]
+          "gridBounds": {
+            "min": [0, 0],
+            "max": [1799, 3599]
+          }
         }
       },
       "bands": [

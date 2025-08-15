@@ -3,18 +3,18 @@
 
 use super::{AttributeFilter, CsvHeader, FeaturesProvider, FormatSpecifics, OgrSourceDataset};
 use crate::error::{self};
-use crate::util::gdal::gdal_open_dataset_ex;
 use crate::util::Result;
+use crate::util::gdal::gdal_open_dataset_ex;
 use gdal::vector::sql::Dialect;
 use gdal::vector::{Feature, LayerAccess};
 use gdal::{Dataset, DatasetOptions, GdalOpenFlags};
-use geoengine_datatypes::primitives::{SpatialBounded, VectorQueryRectangle};
-use log::debug;
+use geoengine_datatypes::primitives::VectorQueryRectangle;
 use ouroboros::self_referencing;
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::ffi::OsStr;
 use std::iter::FusedIterator;
+use tracing::debug;
 
 /// An iterator over features from a OGR dataset.
 /// This iterator contains the dataset and one of its layers.
@@ -137,11 +137,12 @@ impl OgrDatasetIterator {
         let time_filter = if dataset_information.force_ogr_time_filter {
             debug!(
                 "using time filter {:?} for layer {:?}",
-                query_rectangle.time_interval, &dataset_information.layer_name
+                query_rectangle.time_interval(),
+                &dataset_information.layer_name
             );
             FeaturesProvider::create_time_filter_string(
                 dataset_information.time.clone(),
-                query_rectangle.time_interval,
+                query_rectangle.time_interval(),
                 &dataset.driver().short_name(),
             )
         } else {
@@ -199,10 +200,11 @@ impl OgrDatasetIterator {
         if use_ogr_spatial_filter {
             debug!(
                 "using spatial filter {:?} for layer {:?}",
-                query_rectangle.spatial_query, &dataset_information.layer_name
+                query_rectangle.spatial_bounds(),
+                &dataset_information.layer_name
             );
             // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-            features_provider.set_spatial_filter(&query_rectangle.spatial_query().spatial_bounds());
+            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds());
         }
 
         Ok((features_provider, time_filter.is_some()))

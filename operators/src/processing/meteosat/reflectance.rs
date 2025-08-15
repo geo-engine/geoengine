@@ -8,20 +8,21 @@ use crate::engine::{
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
+use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use async_trait::async_trait;
 use num_traits::AsPrimitive;
 use rayon::ThreadPool;
-use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 use crate::error::Error;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement,
-    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution,
+    RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{
-    GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    GridBoundingBox2D, GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -89,7 +90,7 @@ impl RasterOperator for Reflectance {
                     return Err(Error::InvalidMeasurement {
                         expected: "radiance".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Classification(ClassificationMeasurement {
                     measurement: m,
@@ -98,13 +99,13 @@ impl RasterOperator for Reflectance {
                     return Err(Error::InvalidMeasurement {
                         expected: "radiance".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Unitless => {
                     return Err(Error::InvalidMeasurement {
                         expected: "radiance".into(),
                         found: "unitless".into(),
-                    })
+                    });
                 }
                 // OK Case
                 Measurement::Continuous(ContinuousMeasurement {
@@ -310,14 +311,14 @@ fn calculate_esd(timestamp: &DateTime) -> f64 {
 impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<PixelOut>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<PixelOut>,
+            SpatialBounds = GridBoundingBox2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -348,7 +349,7 @@ mod tests {
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterTile2D, TilingSpecification,
     };
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     async fn process_mock(
         params: ReflectanceParams,
@@ -629,7 +630,7 @@ mod tests {
             false,
             Some(Measurement::Classification(ClassificationMeasurement {
                 measurement: "invalid".into(),
-                classes: HashMap::new(),
+                classes: BTreeMap::new(),
             })),
         )
         .await;

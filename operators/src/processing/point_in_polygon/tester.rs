@@ -135,7 +135,7 @@ impl<'a> PointInPolygonTester<'a> {
     fn precalculate_multi_polygon_bounds(
         polygon_bounds: &[Vec<BoundingBox2D>],
     ) -> Vec<BoundingBox2D> {
-        let res = polygon_bounds
+        polygon_bounds
             .iter()
             .map(|polygons| {
                 polygons
@@ -144,8 +144,7 @@ impl<'a> PointInPolygonTester<'a> {
                     .reduce(|acc, poly| acc.union(&poly))
                     .expect("all polygones in a collection must be valid")
             })
-            .collect::<Vec<BoundingBox2D>>();
-        res
+            .collect::<Vec<BoundingBox2D>>()
     }
 
     fn ring_contains_coordinate(
@@ -353,36 +352,38 @@ mod tests {
     #[test]
     fn point_in_polygon_tester() {
         let collection = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![
-                vec![vec![
-                    Coordinate2D::new(20., 20.),
-                    Coordinate2D::new(30., 20.),
-                    Coordinate2D::new(30., 30.),
-                    Coordinate2D::new(20., 30.),
-                    Coordinate2D::new(20., 20.),
-                ]],
-                vec![
+            vec![
+                MultiPolygon::new(vec![
+                    vec![vec![
+                        Coordinate2D::new(20., 20.),
+                        Coordinate2D::new(30., 20.),
+                        Coordinate2D::new(30., 30.),
+                        Coordinate2D::new(20., 30.),
+                        Coordinate2D::new(20., 20.),
+                    ]],
                     vec![
-                        Coordinate2D::new(0., 0.),
-                        Coordinate2D::new(10., 0.),
-                        Coordinate2D::new(10., 10.),
-                        Coordinate2D::new(0., 10.),
-                        Coordinate2D::new(0., 0.),
+                        vec![
+                            Coordinate2D::new(0., 0.),
+                            Coordinate2D::new(10., 0.),
+                            Coordinate2D::new(10., 10.),
+                            Coordinate2D::new(0., 10.),
+                            Coordinate2D::new(0., 0.),
+                        ],
+                        vec![
+                            Coordinate2D::new(1., 5.),
+                            Coordinate2D::new(3., 3.),
+                            Coordinate2D::new(5., 3.),
+                            Coordinate2D::new(6., 5.),
+                            Coordinate2D::new(7., 1.5),
+                            Coordinate2D::new(4., 0.),
+                            Coordinate2D::new(2., 1.),
+                            Coordinate2D::new(1., 3.),
+                            Coordinate2D::new(1., 5.),
+                        ],
                     ],
-                    vec![
-                        Coordinate2D::new(1., 5.),
-                        Coordinate2D::new(3., 3.),
-                        Coordinate2D::new(5., 3.),
-                        Coordinate2D::new(6., 5.),
-                        Coordinate2D::new(7., 1.5),
-                        Coordinate2D::new(4., 0.),
-                        Coordinate2D::new(2., 1.),
-                        Coordinate2D::new(1., 3.),
-                        Coordinate2D::new(1., 5.),
-                    ],
-                ],
-            ])
-            .unwrap()],
+                ])
+                .unwrap(),
+            ],
             vec![Default::default(); 1],
             Default::default(),
             CacheHint::default(),
@@ -402,8 +403,10 @@ mod tests {
         assert!(
             tester.any_polygon_contains_coordinate(&Coordinate2D::new(4., 5.), &Default::default())
         );
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(4., 2.), &Default::default()),);
+        assert!(
+            !tester
+                .any_polygon_contains_coordinate(&Coordinate2D::new(4., 2.), &Default::default()),
+        );
 
         assert_eq!(
             tester.multi_polygons_containing_coordinate(

@@ -93,7 +93,7 @@ impl Channel {
 
         let s1 = 42164.0 - sn * cosxcosy;
         let s2 = sn * sinx * cosy;
-        let s3 = -1.0 * sn * siny;
+        let s3 = -sn * siny;
         let sxy = (s1.powi(2) + s2.powi(2)).sqrt();
 
         //
@@ -598,17 +598,21 @@ mod tests {
 
     #[tokio::test]
     async fn get_channel_ok() {
-        assert!(Satellite::satellite_by_msg_id(1)
-            .unwrap()
-            .channel(0)
-            .is_ok());
+        assert!(
+            Satellite::satellite_by_msg_id(1)
+                .unwrap()
+                .channel(0)
+                .is_ok()
+        );
     }
 
     #[tokio::test]
     async fn get_channel_fail() {
-        assert!(Satellite::satellite_by_msg_id(1)
-            .unwrap()
-            .channel(42)
-            .is_err());
+        assert!(
+            Satellite::satellite_by_msg_id(1)
+                .unwrap()
+                .channel(42)
+                .is_err()
+        );
     }
 }

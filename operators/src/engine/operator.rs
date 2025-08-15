@@ -8,10 +8,10 @@ use async_trait::async_trait;
 use geoengine_datatypes::{dataset::NamedData, primitives::SpatialResolution, util::ByteSize};
 
 use super::{
-    query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
     CloneablePlotOperator, CloneableRasterOperator, CloneableVectorOperator, CreateSpan,
     ExecutionContext, PlotResultDescriptor, RasterResultDescriptor, TypedPlotQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
+    query_processor::{TypedRasterQueryProcessor, TypedVectorQueryProcessor},
 };
 
 pub trait OperatorData {

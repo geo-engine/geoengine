@@ -6,11 +6,11 @@ use crate::engine::{
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::{stream::BoxStream, StreamExt, TryFutureExt, TryStreamExt};
+use futures::{StreamExt, TryFutureExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::{
-    primitives::{BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle},
-    raster::{ConvertDataType, Pixel, RasterDataType, RasterTile2D},
+    primitives::{BandSelection, RasterQueryRectangle},
+    raster::{ConvertDataType, GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D},
 };
 use serde::{Deserialize, Serialize};
 
@@ -155,7 +155,7 @@ where
     Q: RasterQueryProcessor<RasterType = PIn>,
 {
     type Output = RasterTile2D<POut>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -264,7 +264,7 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new_with_grid_bounds(
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new(
             GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
             TimeInterval::default(),
             BandSelection::first(),

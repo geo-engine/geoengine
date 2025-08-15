@@ -226,7 +226,7 @@ mod tests {
     #[test]
     fn test_cache_stream_inner_raster() {
         let data = Arc::new(create_test_raster_data());
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             GridBoundingBox2D::new([4, 4], [15, 15]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn test_cache_stream_inner_vector() {
         let data = Arc::new(create_test_vecor_data());
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
             TimeInterval::new_unchecked(0, 10),
             ColumnSelection::all(),

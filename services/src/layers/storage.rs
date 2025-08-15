@@ -6,7 +6,9 @@ use crate::error::Result;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use serde::{Deserialize, Serialize};
+use utoipa::IntoParams;
 use uuid::Uuid;
+use validator::Validate;
 
 pub const INTERNAL_PROVIDER_ID: DataProviderId =
     DataProviderId::from_u128(0xce5e_84db_cbf9_48a2_9a32_d4b7_cc56_ea74);
@@ -109,7 +111,8 @@ pub struct LayerProviderListing {
     pub name: String,
     pub priority: i16,
 }
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, IntoParams, Validate)]
+#[into_params(parameter_in = Query)]
 // TODO: validate user input
 pub struct LayerProviderListingOptions {
     pub offset: u32,
@@ -129,6 +132,19 @@ pub trait LayerProviderDb: Send + Sync + 'static {
     ) -> Result<Vec<LayerProviderListing>>;
 
     async fn load_layer_provider(&self, id: DataProviderId) -> Result<Box<dyn DataProvider>>;
+
+    async fn get_layer_provider_definition(
+        &self,
+        id: DataProviderId,
+    ) -> Result<TypedDataProviderDefinition>;
+
+    async fn update_layer_provider_definition(
+        &self,
+        id: DataProviderId,
+        provider: TypedDataProviderDefinition,
+    ) -> Result<()>;
+
+    async fn delete_layer_provider(&self, id: DataProviderId) -> Result<()>;
 
     // TODO: share/remove/update layer providers
 }

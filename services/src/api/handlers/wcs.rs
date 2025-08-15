@@ -1,15 +1,15 @@
-use crate::api::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
-use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::api::handlers::spatial_references::spatial_reference_specification;
+use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
 use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::config;
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
+use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
@@ -20,12 +20,12 @@ use geoengine_operators::engine::{
     ExecutionContext, InitializedRasterOperator, WorkflowOperatorPath,
 };
 use geoengine_operators::util::raster_stream_to_geotiff::{
-    raster_stream_to_multiband_geotiff_bytes, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+    GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
 };
-use log::info;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use tracing::info;
 use url::Url;
 use uuid::Uuid;
 
@@ -91,7 +91,7 @@ async fn wcs_capabilities_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let workflow = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     // TODO: workflow bounding box
     // TODO: host schema file(?)
@@ -183,7 +183,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let endpoint = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     let identifiers = WorkflowId::from_str(&request.identifiers)?;
 
@@ -219,31 +219,23 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
-    let bounds = spatial_grid_descriptor.spatial_partition();
-
-    let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) =
-        match spatial_reference_specification(spatial_reference.into())?
+    let spatial_reference_spec = spatial_reference_specification(spatial_reference.into())?;
+    let spatial_ref_axis_order =
+        spatial_reference_spec
             .axis_order
             .ok_or(Error::AxisOrderingNotKnownForSrs {
                 srs_string: spatial_reference.srs_string(),
-            })? {
-            AxisOrder::EastNorth => (
-                bounds.lower_left().x,
-                bounds.lower_left().y,
-                bounds.upper_right().x,
-                bounds.upper_right().y,
-            ),
-            AxisOrder::NorthEast => (
-                bounds.lower_left().y,
-                bounds.lower_left().x,
-                bounds.upper_right().y,
-                bounds.upper_right().x,
-            ),
-        };
+            })?;
+    let bounds = spatial_grid_descriptor.spatial_partition();
 
-    let GridShape2D {
-        shape_array: [raster_size_y, raster_size_x],
-    } = spatial_grid_descriptor.grid_shape();
+    let [bbox_ll_0, bbox_ll_1] =
+        spatial_ref_axis_order.xy_to_native_order([bounds.lower_left().x, bounds.lower_left().y]);
+    let [bbox_ur_0, bbox_ur_1] =
+        spatial_ref_axis_order.xy_to_native_order([bounds.upper_right().x, bounds.upper_right().y]);
+
+    let GridShape2D { shape_array } = spatial_grid_descriptor.grid_shape();
+
+    let [raster_size_0, raster_size_1] = spatial_ref_axis_order.xy_to_native_order(shape_array);
 
     let SpatialResolution {
         x: pixel_size_x,
@@ -271,7 +263,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
                     </ows:BoundingBox>
                     <ows:BoundingBox crs="urn:ogc:def:crs:OGC:1.3:CRS:imageCRS" dimensions="2">
                         <ows:LowerCorner>0 0</ows:LowerCorner>
-                        <ows:UpperCorner>{raster_size_x} {raster_size_y}</ows:UpperCorner>
+                        <ows:UpperCorner>{raster_size_0} {raster_size_1}</ows:UpperCorner>
                     </ows:BoundingBox>
                     <wcs:GridCRS>
                         <wcs:GridBaseCRS>urn:ogc:def:crs:{srs_authority}::{srs_code}</wcs:GridBaseCRS>
@@ -340,7 +332,7 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
 ) -> Result<HttpResponse> {
     let endpoint = workflow.into_inner();
 
-    info!("{:?}", request);
+    info!("{request:?}");
 
     let identifier = WorkflowId::from_str(&request.identifier)?;
 
@@ -410,10 +402,10 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         .tiling_spatial_grid_definition()
         .spatial_bounds_to_compatible_spatial_grid(request_partition);
 
-    let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+    let query_rect = RasterQueryRectangle::new(
         query_tiling_pixel_grid.grid_bounds(),
         request_time,
-        BandSelection::first(),
+        BandSelection::first(), // TODO: support multi bands in API and set the selection here
     );
 
     let processor = wrapped.initialized_operator.query_processor()?;
@@ -483,6 +475,9 @@ mod tests {
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::raster::GridShape2D;
     use geoengine_datatypes::raster::TilingSpecification;
+    use geoengine_datatypes::test_data;
+    use geoengine_datatypes::util::ImageFormat;
+    use geoengine_datatypes::util::assert_image_equals_with_format;
     use tokio_postgres::NoTls;
 
     fn tiling_spec() -> TilingSpecification {
@@ -688,10 +683,10 @@ mod tests {
         let res = send_test_request(req, app_ctx).await;
 
         assert_eq!(res.status(), 200, "{:?}", res.response());
-        assert_eq!(
-            include_bytes!("../../../../test_data/raster/geotiff_from_stream_compressed.tiff")
-                as &[u8],
-            test::read_body(res).await.as_ref()
+        assert_image_equals_with_format(
+            test_data!("raster/geotiff_from_stream_compressed.tiff"),
+            test::read_body(res).await.as_ref(),
+            ImageFormat::Tiff,
         );
     }
 

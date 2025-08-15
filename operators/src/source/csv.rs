@@ -1,28 +1,3 @@
-use std::path::PathBuf;
-use std::pin::Pin;
-use std::sync::{Arc, Mutex};
-use std::{fs::File, sync::atomic::AtomicBool};
-
-use csv::{Position, Reader, StringRecord};
-use futures::stream::BoxStream;
-use futures::task::{Context, Poll};
-use futures::{Stream, StreamExt};
-use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{
-    ColumnSelection, SpatialBounded, SpatialResolution, VectorQueryRectangle,
-    VectorSpatialQueryRectangle,
-};
-use serde::{Deserialize, Serialize};
-use snafu::{ensure, OptionExt, ResultExt};
-
-use geoengine_datatypes::collections::{
-    BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
-};
-use geoengine_datatypes::{
-    primitives::{BoundingBox2D, Coordinate2D, TimeInterval},
-    spatial_reference::SpatialReference,
-};
-
 use crate::engine::{
     CanonicOperatorName, InitializedVectorOperator, OperatorData, OperatorName, QueryContext,
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
@@ -31,44 +6,32 @@ use crate::engine::{
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::optimization::OptimizationError;
-use crate::util::{safe_lock_mutex, Result};
+use crate::util::{Result, safe_lock_mutex};
 use async_trait::async_trait;
+use csv::{Position, Reader, StringRecord};
+use futures::stream::BoxStream;
+use futures::task::{Context, Poll};
+use futures::{Stream, StreamExt};
+use geoengine_datatypes::collections::{
+    BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
+};
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::SpatialResolution;
+use geoengine_datatypes::{
+    primitives::{
+        BoundingBox2D, ColumnSelection, Coordinate2D, TimeInterval, VectorQueryRectangle,
+    },
+    spatial_reference::SpatialReference,
+};
+use serde::{Deserialize, Serialize};
+use snafu::{OptionExt, ResultExt, ensure};
+use std::path::PathBuf;
+use std::pin::Pin;
 use std::sync::atomic::Ordering;
+use std::sync::{Arc, Mutex};
+use std::{fs::File, sync::atomic::AtomicBool};
 
 /// Parameters for the CSV Source Operator
-///
-/// # Examples
-///
-/// ```rust
-/// use serde_json::{Result, Value};
-/// use geoengine_operators::source::{CsvSourceParameters, CsvSource};
-/// use geoengine_operators::source::{CsvGeometrySpecification, CsvTimeSpecification};
-///
-/// let json_string = r#"
-///     {
-///         "type": "CsvSource",
-///         "params": {
-///             "filePath": "/foo/bar.csv",
-///             "fieldSeparator": ",",
-///             "geometry": {
-///                 "type": "xy",
-///                 "x": "x",
-///                 "y": "y"
-///             }
-///         }
-///     }"#;
-///
-/// let operator: CsvSource = serde_json::from_str(json_string).unwrap();
-///
-/// assert_eq!(operator, CsvSource {
-///     params: CsvSourceParameters {
-///         file_path: "/foo/bar.csv".into(),
-///         field_separator: ',',
-///         geometry: CsvGeometrySpecification::XY { x: "x".into(), y: "y".into() },
-///         time: CsvTimeSpecification::None,
-///     },
-/// });
-/// ```
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct CsvSourceParameters {
@@ -421,7 +384,7 @@ struct CsvSourceProcessor {
 #[async_trait]
 impl QueryProcessor for CsvSourceProcessor {
     type Output = MultiPointCollection;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -431,12 +394,7 @@ impl QueryProcessor for CsvSourceProcessor {
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         // TODO: properly handle chunk_size
-        Ok(CsvSourceStream::new(
-            self.params.clone(),
-            query.spatial_query().spatial_bounds(),
-            10,
-        )?
-        .boxed())
+        Ok(CsvSourceStream::new(self.params.clone(), query.spatial_bounds(), 10)?.boxed())
     }
 
     fn result_descriptor(&self) -> &VectorResultDescriptor {
@@ -460,13 +418,46 @@ struct ParsedRow {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::MockQueryContext;
+    use crate::engine::MockExecutionContext;
     use geoengine_datatypes::{
         collections::{FeatureCollectionInfos, ToGeoJson},
-        raster::TilingSpecification,
         util::test::TestDefault,
     };
     use std::io::{Seek, SeekFrom, Write};
+
+    #[test]
+    fn it_deserializes() {
+        let json_string = r#"
+            {
+                "type": "CsvSource",
+                "params": {
+                    "filePath": "/foo/bar.csv",
+                    "fieldSeparator": ",",
+                    "geometry": {
+                        "type": "xy",
+                        "x": "x",
+                        "y": "y"
+                    }
+                }
+            }"#;
+
+        let operator: CsvSource = serde_json::from_str(json_string).unwrap();
+
+        assert_eq!(
+            operator,
+            CsvSource {
+                params: CsvSourceParameters {
+                    file_path: "/foo/bar.csv".into(),
+                    field_separator: ',',
+                    geometry: CsvGeometrySpecification::XY {
+                        x: "x".into(),
+                        y: "y".into()
+                    },
+                    time: CsvTimeSpecification::None,
+                },
+            }
+        );
+    }
 
     #[tokio::test]
     async fn read_points() {
@@ -609,12 +600,13 @@ x,y
             },
         };
 
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked(Coordinate2D::new(0., 0.), Coordinate2D::new(3., 3.)),
             TimeInterval::new_unchecked(0, 1),
             ColumnSelection::all(),
         );
-        let ctx = MockQueryContext::new((10 * 8 * 2).into(), TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context((10 * 8 * 2).into());
 
         let r: Vec<Result<MultiPointCollection>> =
             p.query(query, &ctx).await.unwrap().collect().await;
@@ -622,7 +614,8 @@ x,y
         assert_eq!(r.len(), 1);
 
         assert_eq!(
-            r[0].as_ref().unwrap().to_geo_json(),
+            serde_json::from_str::<serde_json::Value>(&r[0].as_ref().unwrap().to_geo_json())
+                .unwrap(),
             serde_json::json!({
                 "type": "FeatureCollection",
                 "features": [{
@@ -651,7 +644,6 @@ x,y
                     }
                 }]
             })
-            .to_string()
         );
     }
 

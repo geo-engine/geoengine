@@ -1,8 +1,9 @@
+use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::{Provenance, ProvenanceOutput};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
@@ -14,9 +15,9 @@ use crate::layers::listing::{
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::{Pool, PooledConnection};
 use bb8_postgres::tokio_postgres::NoTls;
-use bb8_postgres::PostgresConnectionManager;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
@@ -79,6 +80,21 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioAbcdDataProviderDefiniti
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(mut new) => {
+                if new.db_config.password == SECRET_REPLACEMENT {
+                    new.db_config.password.clone_from(&self.db_config.password);
+                }
+                TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 
@@ -275,6 +291,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             .into_iter()
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
                         layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
@@ -411,6 +428,7 @@ impl LayerCollectionProvider for GfbioAbcdDataProvider {
             .into_iter()
             .map(|row| {
                 CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
                         layer_id: LayerId(row.get::<usize, i32>(0).to_string()),
@@ -628,10 +646,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -645,6 +663,7 @@ mod tests {
     use crate::config;
     use crate::contexts::{PostgresContext, PostgresSessionContext, SessionContext};
     use crate::layers::layer::ProviderLayerCollectionId;
+    use crate::util::tests::MockQueryContext;
     use crate::{ge_context, test_data};
     use bb8_postgres::bb8::ManageConnection;
     use futures::StreamExt;
@@ -652,9 +671,8 @@ mod tests {
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::primitives::{BoundingBox2D, FeatureData, MultiPoint, TimeInterval};
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::QueryProcessor;
-    use geoengine_operators::{engine::MockQueryContext, source::OgrSourceProcessor};
+    use geoengine_operators::source::OgrSourceProcessor;
     use rand::RngCore;
     use std::{fs::File, io::Read, path::PathBuf};
     use tokio_postgres::Config;
@@ -676,7 +694,7 @@ mod tests {
             .read_to_string(&mut sql)
             .unwrap();
 
-        let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
+        let schema = format!("geoengine_test_{}", rand::rng().next_u64());
 
         conn.batch_execute(&format!(
             "CREATE SCHEMA {schema};
@@ -756,6 +774,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("1".to_string()),
@@ -765,6 +784,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("2".to_string()),
@@ -832,6 +852,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("1".to_string()),
@@ -841,6 +862,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("2".to_string()),
@@ -881,6 +903,7 @@ mod tests {
                 name: "GFBio".to_string(),
                 description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
                         layer_id: LayerId("2".to_string()),
@@ -976,6 +999,7 @@ mod tests {
                 description: "GFBio".to_string(),
                 items: vec![
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("1".to_string()),
@@ -985,6 +1009,7 @@ mod tests {
                         properties: vec![],
                     }),
                     CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
                         id: ProviderLayerId {
                             provider_id: GFBIO_PROVIDER_ID,
                             layer_id: LayerId("2".to_string()),
@@ -1025,6 +1050,7 @@ mod tests {
                 name: "GFBio".to_string(),
                 description: "GFBio".to_string(),
                 items: vec![CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: GFBIO_PROVIDER_ID,
                         layer_id: LayerId("2".to_string()),
@@ -1268,7 +1294,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -1444,12 +1470,12 @@ mod tests {
                     bbox: None,
             },meta, vec![]);
 
-            let query_rectangle = VectorQueryRectangle::with_bounds(
+            let query_rectangle = VectorQueryRectangle::new(
                 BoundingBox2D::new((0., -90.).into(), (180., 90.).into()).unwrap(),
                 TimeInterval::default(),
                 ColumnSelection::all(),
             );
-            let ctx = MockQueryContext::test_default();
+            let ctx = ctx.mock_query_context().unwrap();
 
             let result: Vec<_> = processor
                 .query(query_rectangle, &ctx)

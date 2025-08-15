@@ -1,15 +1,18 @@
 use std::path::PathBuf;
 
-use crate::datasets::external::copernicus_dataspace::stac::{
-    load_stac_items, resolve_datetime_duplicates,
+use crate::{
+    datasets::external::copernicus_dataspace::stac::{
+        StacQueryRectangle, load_stac_items, resolve_datetime_duplicates,
+    },
+    util::sentinel_2_utm_zones::UtmZone,
 };
 use gdal::{DatasetOptions, GdalOpenFlags};
 use geoengine_datatypes::{
     primitives::{
-        AxisAlignedRectangle, CacheTtlSeconds, ColumnSelection, DateTime, RasterQueryRectangle,
-        TimeInstance, TimeInterval, VectorQueryRectangle,
+        AxisAlignedRectangle, CacheTtlSeconds, DateTime, RasterQueryRectangle, TimeInstance,
+        TimeInterval,
     },
-    raster::{GeoTransform, GridShape2D, SpatialGridDefinition, TilingSpecification},
+    raster::{GeoTransform, SpatialGridDefinition},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use geoengine_operators::{
@@ -19,8 +22,8 @@ use geoengine_operators::{
         GdalLoadingInfoTemporalSliceIterator,
     },
     util::{
-        gdal::{gdal_open_dataset_ex, gdal_parameters_from_dataset},
         TemporaryGdalThreadLocalConfigOptions,
+        gdal::{gdal_open_dataset_ex, gdal_parameters_from_dataset},
     },
 };
 
@@ -29,7 +32,7 @@ use snafu::{ResultExt, Snafu};
 use url::Url;
 
 use super::{
-    ids::{Sentinel2Band, Sentinel2ProductBand, UtmZone},
+    ids::{Sentinel2Band, Sentinel2ProductBand},
     stac::{CopernicusStacError, StacItemExt},
 };
 
@@ -85,7 +88,7 @@ pub struct Sentinel2Metadata {
 impl Sentinel2Metadata {
     async fn crate_loading_info(
         &self,
-        query: VectorQueryRectangle, // TODO: here the name is misleading :(
+        query: StacQueryRectangle, // TODO: here the name is misleading :(
     ) -> Result<GdalLoadingInfo, CopernicusSentinel2Error> {
         let mut stac_items = load_stac_items(
             Url::parse(&self.stac_url).context(CannotParseStacUrl)?,
@@ -242,28 +245,27 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
         &self,
         query: RasterQueryRectangle,
     ) -> geoengine_operators::util::Result<GdalLoadingInfo> {
-        let utm_extent = self
-            .zone
-            .native_extent()
-            .expect("UTM zone must have bounds"); // TODO throw an error here
+        let utm_extent = self.zone.native_extent();
         let px_size = self.product_band.resolution_meters() as f64;
         let geo_transform = GeoTransform::new(utm_extent.upper_left(), px_size, -px_size);
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
-        // FIXME: get tiling_spec!
-        let tiling_specification = TilingSpecification::new(GridShape2D::new_2d(512, 512));
+        // TODO: maybe get tiling_specification from self/ctx?
+        let tiling_specification = crate::config::get_config_element::<
+            crate::config::TilingSpecification,
+        >()
+        .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+            source: Box::new(e),
+        })?;
 
         let spatial_bounds = SpatialGridDescriptor::new_source(spatial_grid)
-            .tiling_grid_definition(tiling_specification)
+            .tiling_grid_definition(tiling_specification.into())
             .tiling_geo_transform()
-            .grid_to_spatial_bounds(&query.spatial_query.grid_bounds());
+            .grid_to_spatial_bounds(&query.spatial_bounds());
 
-        let spatial_bounds_query = VectorQueryRectangle::with_bounds(
-            spatial_bounds.as_bbox(),
-            query.time_interval,
-            ColumnSelection::all(),
-        );
+        let spatial_bounds_query =
+            StacQueryRectangle::new(spatial_bounds.as_bbox(), query.time_interval(), ());
 
         self.crate_loading_info(spatial_bounds_query)
             .await
@@ -273,10 +275,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
     }
 
     async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
-        let utm_extent = self
-            .zone
-            .native_extent()
-            .expect("UTM zone must have bounds"); // TODO throw an error here
+        let utm_extent = self.zone.native_extent();
         let px_size = self.product_band.resolution_meters() as f64;
         let geo_transform = GeoTransform::new(utm_extent.upper_left(), px_size, -px_size);
         let grid_bounds = geo_transform.spatial_to_grid_bounds(&utm_extent);
@@ -317,17 +316,19 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::datasets::external::copernicus_dataspace::ids::{L2ABand, UtmZoneDirection};
+    use crate::{
+        datasets::external::copernicus_dataspace::ids::L2ABand,
+        util::sentinel_2_utm_zones::UtmZoneDirection,
+    };
     use geoengine_datatypes::{
         primitives::{Coordinate2D, DateTime, SpatialPartition2D},
         test_data,
     };
     use geoengine_operators::source::{FileNotFoundHandling, GdalDatasetGeoTransform};
     use httptest::{
-        all_of,
+        Expectation, Server, all_of,
         matchers::{contains, request, url_decoded},
         responders::status_code,
-        Expectation, Server,
     };
     use std::env;
 
@@ -468,12 +469,12 @@ mod tests {
              .unwrap();
 
         add_partial_responses(
-             &mock_server,
-             "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2",
-             &[(0, 16383)],
-             132_214_802,
-             b02_jp2_head_body,
-         );
+            &mock_server,
+            "/eodata/Sentinel-2/MSI/L2A_N0500/2020/07/03/S2A_MSIL2A_20200703T103031_N0500_R108_T32UMB_20230321T201840.SAFE/GRANULE/L2A_T32UMB_A026274_20200703T103027/IMG_DATA/R10m/T32UMB_20200703T103031_B02_10m.jp2",
+            &[(0, 16383)],
+            132_214_802,
+            b02_jp2_head_body,
+        );
 
         // B08
         let b08_jp2_head_body = tokio::fs::read(test_data!(
@@ -508,7 +509,7 @@ mod tests {
 
         // time=2020-07-01T12%3A00%3A00.000Z/2020-07-03T12%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=256&HEIGHT=256&CRS=EPSG%3A32632&BBOX=482500%2C5627500%2C483500%2C5628500
         let loading_info = metadata
-            .crate_loading_info(VectorQueryRectangle::with_bounds(
+            .crate_loading_info(StacQueryRectangle::new(
                 SpatialPartition2D::new_unchecked(
                     (482_500., 5_627_500.).into(),
                     (483_500., 5_628_500.).into(),
@@ -518,7 +519,7 @@ mod tests {
                     DateTime::parse_from_rfc3339("2020-07-01T12:00:00.000Z").unwrap(),
                     DateTime::parse_from_rfc3339("2020-07-03T12:00:00.000Z").unwrap(),
                 ),
-                ColumnSelection::all(),
+                (),
             ))
             .await
             .unwrap();

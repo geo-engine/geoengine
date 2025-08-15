@@ -1,10 +1,10 @@
 use super::SpatialBounded;
 use crate::collections::VectorDataType;
 use crate::error::Error;
-use crate::primitives::{error, BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry};
+use crate::primitives::{BoundingBox2D, GeometryRef, PrimitivesError, TypedGeometry, error};
 use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
+use crate::util::arrow::{ArrowTyped, downcast_array, padded_buffer_size};
 use arrow::array::{BooleanArray, FixedSizeListArray, Float64Array};
 use arrow::error::ArrowError;
 use fallible_iterator::FallibleIterator;
@@ -362,13 +362,19 @@ impl MultiPointAccess for MultiPointRef<'_> {
 impl ToWkt<f64> for MultiPointRef<'_> {
     fn to_wkt(&self) -> Wkt<f64> {
         let points = self.points();
-        let mut multi_point = wkt::types::MultiPoint(Vec::with_capacity(points.len()));
+        let mut multi_point = Vec::with_capacity(points.len());
 
         for point in points {
-            multi_point.0.push(wkt::types::Point(Some(point.into())));
+            multi_point.push(wkt::types::Point::new(
+                Some(point.into()),
+                wkt::types::Dimension::XY,
+            ));
         }
 
-        Wkt::MultiPoint(multi_point)
+        Wkt::MultiPoint(wkt::types::MultiPoint::new(
+            multi_point,
+            wkt::types::Dimension::XY,
+        ))
     }
 }
 
@@ -468,7 +474,9 @@ mod tests {
 
         assert!(MultiPoint::new(vec![(0.5, 0.5).into()])?.intersects_bbox(&bbox));
         assert!(MultiPoint::new(vec![(1.0, 1.0).into()])?.intersects_bbox(&bbox));
-        assert!(MultiPoint::new(vec![(0.5, 0.5).into(), (1.5, 1.5).into()])?.intersects_bbox(&bbox));
+        assert!(
+            MultiPoint::new(vec![(0.5, 0.5).into(), (1.5, 1.5).into()])?.intersects_bbox(&bbox)
+        );
         assert!(!MultiPoint::new(vec![(1.1, 1.1).into()])?.intersects_bbox(&bbox));
         assert!(
             !MultiPoint::new(vec![(-0.1, -0.1).into(), (1.1, 1.1).into()])?.intersects_bbox(&bbox)

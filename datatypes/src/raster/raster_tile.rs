@@ -1,12 +1,12 @@
 use super::masked_grid::MaskedGrid;
 use super::{
-    grid_or_empty::GridOrEmpty, GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D,
-    GridIndexAccess, GridShape, GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster,
-    TileInformation,
-};
-use super::{
     BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,
     SpatialGridDefinition,
+};
+use super::{
+    GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D, GridIndexAccess, GridShape,
+    GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster, TileInformation,
+    grid_or_empty::GridOrEmpty,
 };
 use crate::primitives::CacheHint;
 use crate::primitives::{
@@ -17,6 +17,7 @@ use crate::raster::Pixel;
 use crate::util::{ByteSize, Result};
 use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
+use std::fmt::Write;
 
 /// A `RasterTile` is a `BaseTile` of raster data where the data is represented by `GridOrEmpty`.
 pub type RasterTile<D, T> = BaseTile<GridOrEmpty<D, T>>;
@@ -537,7 +538,7 @@ pub fn display_raster_tile_2d<P: Pixel + std::fmt::Debug>(
                         .last_mut()
                         .expect("it shouldn't be empty since it was populated before the loop");
 
-                    str_ref.push_str(&format!("{value:max_digits$}"));
+                    let _ = write!(str_ref, "{value:max_digits$}");
 
                     let is_new_line = (i + 1) % grid.grid_shape().axis_size_x() == 0;
                     if is_new_line && i < last_value_index {

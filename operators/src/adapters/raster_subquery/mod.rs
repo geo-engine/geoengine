@@ -6,5 +6,5 @@ pub use raster_subquery_adapter::{
 };
 
 pub use raster_subquery_reprojection::{
-    fold_by_coordinate_lookup_future, TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
+    TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
 };

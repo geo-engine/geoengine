@@ -1,12 +1,12 @@
 use self::database::NetCdfDatabaseListingConfig;
 use self::loading::{
-    create_layer, create_layer_collection_from_parts, LayerCollectionIdFn, LayerCollectionParts,
+    LayerCollectionIdFn, LayerCollectionParts, create_layer, create_layer_collection_from_parts,
 };
 use self::metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata};
 use self::overviews::create_overviews;
-use self::overviews::{remove_overviews, OverviewCreationOptions};
+use self::overviews::{OverviewCreationOptions, remove_overviews};
 use crate::contexts::GeoEngineDb;
-use crate::datasets::external::netcdfcf::loading::{create_loading_info, ParamModification};
+use crate::datasets::external::netcdfcf::loading::{ParamModification, create_loading_info};
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error;
 use crate::layers::external::DataProvider;
@@ -46,18 +46,18 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::sync::Arc;
+use tracing::debug;
 use walkdir::{DirEntry, WalkDir};
 
 pub use self::database::NetCdfCfProviderDb;
 pub use self::ebvportal_provider::{
-    EbvPortalDataProvider, EbvPortalDataProviderDefinition, EBV_PROVIDER_ID,
+    EBV_PROVIDER_ID, EbvPortalDataProvider, EbvPortalDataProviderDefinition,
 };
 pub use self::error::NetCdfCf4DProviderError;
 pub use self::overviews::OverviewGeneration;
@@ -374,7 +374,7 @@ pub fn build_netcdf_tree(
     let time_coverage = TimeCoverage::from_dimension(&root_group)?;
 
     let colorizer = load_colorizer(&path).or_else(|error| {
-        debug!("Use fallback colorizer: {:?}", error);
+        debug!("Use fallback colorizer: {error:?}");
         fallback_colorizer()
     })?;
 
@@ -455,6 +455,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
         .boxed_context(error::UnexpectedExecution)?
     }
 
+    #[allow(clippy::too_many_lines)]
     fn meta_data_from_netcdf(
         base_path: &Path,
         dataset_id: &NetCdfCf4DDatasetId,
@@ -466,9 +467,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
         const TIME_DIMENSION_INDEX: usize = 1;
 
         let dataset = gdal_netcdf_open(Some(base_path), Path::new(&dataset_id.file_name))?;
-
         let root_group = dataset.root_group().context(error::GdalMd)?;
-
         let time_coverage = TimeCoverage::from_dimension(&root_group)?;
 
         let geo_transform = {
@@ -556,7 +555,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
                 "band".into(),
                 derive_measurement(data_array.unit()),
             )])
-            .unwrap(),
+            .expect("must work since derive_measurement can't fail"),
         };
 
         let dimensions_time = dimensions
@@ -596,17 +595,16 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
             if !path.is_file() {
                 continue;
             }
-            if path.extension().map_or(true, |extension| extension != "nc") {
+            if path.extension().is_none_or(|extension| extension != "nc") {
                 continue;
             }
 
-            match path.strip_prefix(&self.data) {
-                Ok(path) => files.push(path.to_owned()),
-                Err(_) => {
-                    // we can safely ignore it since it must be a file in the provider path
-                    continue;
-                }
+            let Ok(path) = path.strip_prefix(&self.data) else {
+                // we can safely ignore it since it must be a file in the provider path
+                continue;
             };
+
+            files.push(path.to_owned());
         }
 
         Ok(files)
@@ -1013,7 +1011,7 @@ impl TryFrom<NetCdfLayerCollectionId> for LayerCollectionId {
                 netcdf_group_to_layer_collection_id(&path, &groups)
             }
             NetCdfLayerCollectionId::Entity { .. } => {
-                return Err(crate::error::Error::InvalidLayerCollectionId)
+                return Err(crate::error::Error::InvalidLayerCollectionId);
             }
         })
     }
@@ -1090,6 +1088,7 @@ async fn listing_from_dir(
 
         if entry.path().is_dir() {
             items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id,
                     collection_id: NetCdfLayerCollectionId::Path {
@@ -1122,6 +1121,7 @@ async fn listing_from_dir(
             .await??;
 
             items.push(CollectionItem::Collection(LayerCollectionListing {
+                r#type: Default::default(),
                 id: ProviderLayerCollectionId {
                     provider_id,
                     collection_id: NetCdfLayerCollectionId::Path {
@@ -1503,10 +1503,10 @@ impl<D: GeoEngineDb>
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -1590,7 +1590,8 @@ mod tests {
     use geoengine_datatypes::dataset::ExternalDataId;
     use geoengine_datatypes::plots::{PlotData, PlotMetaData};
     use geoengine_datatypes::primitives::{
-        BandSelection, BoundingBox2D, PlotQueryRectangle, PlotSeriesSelection,
+        BandSelection, BoundingBox2D, Coordinate2D, PlotQueryRectangle, PlotSeriesSelection,
+        SpatialResolution,
     };
     use geoengine_datatypes::raster::RenameBands;
     use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D};
@@ -1602,7 +1603,8 @@ mod tests {
         MultipleRasterSources, RasterBandDescriptors, RasterOperator, SingleRasterSource,
     };
     use geoengine_operators::processing::{
-        RasterStacker, RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams,
+        Interpolation, InterpolationMethod, InterpolationParams, RasterStacker,
+        RasterStackerParams, RasterTypeConversion, RasterTypeConversionParams,
     };
     use geoengine_operators::source::{
         FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
@@ -1735,7 +1737,7 @@ mod tests {
                 name: "NetCdfCfDataProvider".to_string(),
                 description: "NetCdfCfProviderDefinition".to_string(),
                 items: vec![
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("Biodiversity".to_string())
@@ -1744,7 +1746,7 @@ mod tests {
                         description: String::new(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("dataset_irr_ts.nc".to_string())
@@ -1753,7 +1755,7 @@ mod tests {
                         description: "Fake description of test dataset with metric and irregular timestep definition.".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("dataset_m.nc".to_string())
@@ -1762,7 +1764,7 @@ mod tests {
                         description: "CFake description of test dataset with metric.".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("dataset_sm.nc".to_string())
@@ -1771,7 +1773,7 @@ mod tests {
                         description: "Fake description of test dataset with metric and scenario.".to_string(),
                         properties: Default::default(),
                     }),
-                    CollectionItem::Collection(LayerCollectionListing {
+                    CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                         id: ProviderLayerCollectionId {
                             provider_id: NETCDF_CF_PROVIDER_ID,
                             collection_id: LayerCollectionId("dataset_esri.nc".to_string())
@@ -1823,7 +1825,7 @@ mod tests {
                 },
                 name: "Test dataset metric".to_string(),
                 description: "CFake description of test dataset with metric.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_m.nc/metric_1".to_string())
@@ -1831,7 +1833,7 @@ mod tests {
                     name: "Random metric 1".to_string(),
                     description: "Randomly created data" .to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_m.nc/metric_2".to_string())
@@ -1882,7 +1884,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario".to_string(),
                 description: "Fake description of test dataset with metric and scenario.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
@@ -1890,7 +1892,7 @@ mod tests {
                     name: "Sustainability".to_string(),
                     description: "SSP1-RCP2.6" .to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
@@ -1898,7 +1900,7 @@ mod tests {
                     name: "Middle of the Road ".to_string(),
                     description: "SSP2-RCP4.5".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
@@ -1906,7 +1908,7 @@ mod tests {
                     name: "Regional Rivalry".to_string(), 
                     description: "SSP3-RCP6.0".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
@@ -1914,7 +1916,7 @@ mod tests {
                     name: "Inequality".to_string(),
                     description: "SSP4-RCP6.0".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string())
@@ -1976,7 +1978,7 @@ mod tests {
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+            .loading_info(RasterQueryRectangle::new(
                 GridBoundingBox2D::new([0, 0], [9, 9]).unwrap(),
                 TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
                 BandSelection::first(),
@@ -2000,10 +2002,11 @@ mod tests {
         )
         .into();
 
+        let expected_time = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         assert_eq!(
             loading_info_parts[0],
             GdalLoadingInfoTemporalSlice {
-                time: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
+                time: TimeInterval::new_unchecked(expected_time, expected_time + 1),
                 params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 4,
@@ -2110,7 +2113,7 @@ mod tests {
         );
 
         let loading_info = metadata
-            .loading_info(RasterQueryRectangle::new_with_grid_bounds(
+            .loading_info(RasterQueryRectangle::new(
                 GridBoundingBox2D::new([0, 0], [9, 9]).unwrap(), // Fixme: adapt to tiling bounds
                 TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
                 BandSelection::first(),
@@ -2129,10 +2132,11 @@ mod tests {
             .path()
             .join("dataset_sm.nc/scenario_5/metric_2/1/2000-01-01T00:00:00.000Z.tiff");
 
+        let expected_time = TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0));
         assert_eq!(
             loading_info_parts[0],
             GdalLoadingInfoTemporalSlice {
-                time: TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)).into(),
+                time: TimeInterval::new_unchecked(expected_time, expected_time + 1),
                 params: Some(GdalDatasetParameters {
                     file_path,
                     rasterband_channel: 1,
@@ -2204,7 +2208,7 @@ mod tests {
                 },
                 name: "Test dataset metric and scenario".to_string(),
                 description: "Fake description of test dataset with metric and scenario.".to_string(),
-                items: vec![CollectionItem::Collection(LayerCollectionListing {
+                items: vec![CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_1".to_string())
@@ -2212,7 +2216,7 @@ mod tests {
                     name: "Sustainability".to_string(),
                     description: "SSP1-RCP2.6" .to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_2".to_string())
@@ -2220,7 +2224,7 @@ mod tests {
                     name: "Middle of the Road ".to_string(),
                     description: "SSP2-RCP4.5".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_3".to_string())
@@ -2228,7 +2232,7 @@ mod tests {
                     name: "Regional Rivalry".to_string(),
                     description: "SSP3-RCP6.0".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_4".to_string())
@@ -2236,7 +2240,7 @@ mod tests {
                     name: "Inequality".to_string(),
                     description: "SSP4-RCP6.0".to_string(),
                     properties: Default::default(),
-                }), CollectionItem::Collection(LayerCollectionListing {
+                }), CollectionItem::Collection(LayerCollectionListing { r#type: Default::default(),
                     id: ProviderLayerCollectionId {
                         provider_id: NETCDF_CF_PROVIDER_ID,
                         collection_id: LayerCollectionId("dataset_sm.nc/scenario_5".to_string())
@@ -2278,10 +2282,10 @@ mod tests {
             },
             sources: Expression {
                 params: ExpressionParams {
-                    expression: "A".to_string(),
+                    expression: "if A is NODATA {NODATA} else {A}".to_string(), // FIXME: was "A" because nodata pixels would be skipped. --> The landcover pixels overlapping are NODATA, but why?
                     output_type: RasterDataType::F64,
                     output_band: None,
-                    map_no_data: false,
+                    map_no_data: true,
                 },
                 sources: SingleRasterSource {
                     raster: RasterStacker {
@@ -2290,21 +2294,30 @@ mod tests {
                         },
                         sources: MultipleRasterSources {
                             rasters: vec![
-                                GdalSource {
-                                    params: GdalSourceParameters {
-                                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
-                                            EBV_PROVIDER_ID.to_string(),
-                                            serde_json::json!({
-                                                "fileName": "dataset_irr_ts.nc",
-                                                "groupNames": ["metric_1"],
-                                                "entity": 0
-                                            })
-                                            .to_string(),
-                                        ),
-                                        overview_level: None,
+                                Interpolation{
+                                    params: InterpolationParams {
+                                        interpolation: InterpolationMethod::NearestNeighbor,
+                                        output_resolution: geoengine_operators::processing::InterpolationResolution::Resolution(SpatialResolution::new_unchecked(0.1, 0.1)), // The test data has a resolution of 1.0!
+                                        output_origin_reference: Some(Coordinate2D::new(0.0, 0.0)),
                                     },
-                                }
-                                .boxed(),
+                                    sources: SingleRasterSource {
+                                        raster: GdalSource {
+                                            params: GdalSourceParameters {
+                                                data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                                                    EBV_PROVIDER_ID.to_string(),
+                                                    serde_json::json!({
+                                                        "fileName": "dataset_irr_ts.nc",
+                                                        "groupNames": ["metric_1"],
+                                                        "entity": 0
+                                                    })
+                                                    .to_string(),
+                                                ),
+                                                overview_level: None,
+                                            },
+                                        }
+                                        .boxed(),
+                                    }
+                                }.boxed(),
                                 RasterTypeConversion {
                                     params: RasterTypeConversionParams {
                                         output_data_type: RasterDataType::I16,
@@ -2347,7 +2360,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new(
                         (46.478_278_849, 40.584_655_660_000_1).into(),
                         (87.323_796_021_000_1, 55.434_550_273).into(),
@@ -2366,7 +2379,7 @@ mod tests {
             .unwrap();
 
         assert_eq!(result, PlotData {
-            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.342800000000004},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.54399999999997}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
+            vega_string: "{\"$schema\":\"https://vega.github.io/schema/vega-lite/v4.17.0.json\",\"data\":{\"values\":[{\"x\":\"2015-01-01T00:00:00+00:00\",\"y\":46.68000000000007},{\"x\":\"2055-01-01T00:00:00+00:00\",\"y\":43.72000000000009}]},\"description\":\"Area Plot\",\"encoding\":{\"x\":{\"field\":\"x\",\"title\":\"Time\",\"type\":\"temporal\"},\"y\":{\"field\":\"y\",\"title\":\"\",\"type\":\"quantitative\"}},\"mark\":{\"line\":true,\"point\":true,\"type\":\"line\"}}".to_string(),
             metadata: PlotMetaData::None,
         });
     }
@@ -2699,7 +2712,7 @@ mod tests {
 
         assert_eq!(
             provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
-            "[2.0,25093.0]"
+            "[1.0,98.0]"
         );
 
         // manipulate a field in the metadata
@@ -2741,7 +2754,7 @@ mod tests {
 
         assert_eq!(
             provider.load_layer(&layer_id).await.unwrap().metadata["dataRange"],
-            "[2.0,25093.0]"
+            "[1.0,98.0]"
         );
 
         // forcefully remove file to test error handling

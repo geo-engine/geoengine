@@ -242,7 +242,7 @@ where
 
 #[cfg(test)]
 mod tests {
-    use serde::de::{value::StringDeserializer, IntoDeserializer};
+    use serde::de::{IntoDeserializer, value::StringDeserializer};
 
     use crate::api::model::datatypes::SpatialReferenceAuthority;
 

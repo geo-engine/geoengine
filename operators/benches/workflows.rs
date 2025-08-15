@@ -15,7 +15,10 @@ use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, TilingStrategy,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_operators::engine::SingleRasterOrVectorSource;
 use geoengine_operators::engine::SpatialGridDescriptor;
+use geoengine_operators::processing::Reprojection;
+use geoengine_operators::processing::ReprojectionParams;
 use std::hint::black_box;
 use std::time::{Duration, Instant};
 
@@ -273,20 +276,8 @@ where
     serializer.serialize_u128(duration.as_millis())
 }
 
+#[allow(clippy::needless_pass_by_value)] // must match signature
 fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
-    let _tiling_origin = Coordinate2D::new(0., 0.);
-
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
-        GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
-        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        BandSelection::first(),
-    );
-    let tiling_spec = TilingSpecification::new([512, 512].into());
-
-    let _qrects = [("World in 36000x18000 pixels", qrect)];
-    let _tiling_specs = [tiling_spec];
-
-    #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
         tiling_spec: TilingSpecification,
         query_rect: RasterQueryRectangle,
@@ -296,7 +287,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds());
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
 
         let mock_data = tile_iter
             .enumerate()
@@ -307,7 +298,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_rect.time_interval,
+                    query_rect.time_interval(),
                     tile_info,
                     0,
                     data.into(),
@@ -325,7 +316,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                     None,
                     SpatialGridDescriptor::source_from_parts(
                         tileing_strategy.geo_transform,
-                        query_rect.spatial_query().grid_bounds(),
+                        query_rect.spatial_bounds(),
                     ),
                     RasterBandDescriptors::new_single_band(),
                 ),
@@ -334,7 +325,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
         .boxed()
     }
 
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-18000, -9000], [17999, 8999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
@@ -358,25 +349,8 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
     .run_all_benchmarks(bench_collector);
 }
 
+#[allow(clippy::too_many_lines)]
 fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCollector) {
-    let _tiling_origin = Coordinate2D::new(0., 0.);
-
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
-        GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
-        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        BandSelection::first(),
-    );
-
-    let _qrects = [("World in 72000x36000 pixels", qrect)];
-    let _tiling_specs = [
-        TilingSpecification::new([512, 512].into()),
-        TilingSpecification::new([1024, 1024].into()),
-        TilingSpecification::new([2048, 2048].into()),
-        TilingSpecification::new([4096, 4096].into()),
-        TilingSpecification::new([9000, 9000].into()),
-        TilingSpecification::new([18000, 18000].into()),
-    ];
-
     #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
         tiling_spec: TilingSpecification,
@@ -387,7 +361,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds());
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
 
         let mock_data = tile_iter
             .enumerate()
@@ -398,7 +372,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_rect.time_interval,
+                    query_rect.time_interval(),
                     tile_info,
                     0,
                     data.into(),
@@ -416,7 +390,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                     None,
                     SpatialGridDescriptor::source_from_parts(
                         tileing_strategy.geo_transform,
-                        query_rect.spatial_query().grid_bounds(),
+                        query_rect.spatial_bounds(),
                     ),
                     RasterBandDescriptors::new_single_band(),
                 ),
@@ -448,7 +422,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
         .boxed()
     }
 
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-18000, -9000], [17999, 8999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
@@ -478,27 +452,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
     .run_all_benchmarks(bench_collector);
 }
 
-/*
-
 fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut BenchmarkCollector) {
-    let tiling_origin = Coordinate2D::new(0., 0.);
-
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
-        GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
-        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        BandSelection::first(),
-    );
-
-    let qrects = vec![("World in 36000x18000 pixels", qrect)];
-    let tiling_specs = vec![
-        TilingSpecification::new([512, 512].into()),
-        TilingSpecification::new([1024, 1024].into()),
-        TilingSpecification::new([2048, 2048].into()),
-        TilingSpecification::new([4096, 4096].into()),
-        TilingSpecification::new([9000, 9000].into()),
-        TilingSpecification::new([18000, 18000].into()),
-    ];
-
     #[allow(clippy::needless_pass_by_value)] // must match signature
     fn operator_builder(
         tiling_spec: TilingSpecification,
@@ -509,7 +463,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds());
+            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -519,7 +473,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                 )
                 .unwrap();
                 RasterTile2D::new_with_tile_info(
-                    query_rect.time_interval,
+                    query_rect.time_interval(),
                     tile_info,
                     0,
                     data.into(),
@@ -535,8 +489,10 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                     RasterDataType::U8,
                     SpatialReference::epsg_4326().into(),
                     None,
-                    tileing_strategy.geo_transform,
-                    query_rect.spatial_query().grid_bounds(),
+                    SpatialGridDescriptor::source_from_parts(
+                        tileing_strategy.geo_transform,
+                        query_rect.spatial_bounds(),
+                    ),
                     RasterBandDescriptors::new_single_band(),
                 ),
             },
@@ -545,28 +501,28 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
         Reprojection {
             params: ReprojectionParams {
                 target_spatial_reference: SpatialReference::epsg_4326(),
-                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+                derive_out_spec:
+                    geoengine_operators::processing::DeriveOutRasterSpecsSource::ProjectionBounds,
             },
             sources: SingleRasterOrVectorSource::from(mock_raster_operator.boxed()),
         }
         .boxed()
     }
 
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: SpatialResolution::new(0.01, 0.01).unwrap(),
-        attributes: BandSelection::first(),
-    };
+    let qrect = RasterQueryRectangle::new(
+        GridBoundingBox2D::new([-18000, -9000], [17999, 8999]).unwrap(), // TODO: should be output bounds?
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        BandSelection::first(),
+    );
 
     let qrects = vec![("World in 36000x18000 pixels", qrect)];
     let tiling_specs = vec![
-        TilingSpecification::new((0., 0.).into(), [512, 512].into()),
-        TilingSpecification::new((0., 0.).into(), [1024, 1024].into()),
-        TilingSpecification::new((0., 0.).into(), [2048, 2048].into()),
-        TilingSpecification::new((0., 0.).into(), [4096, 4096].into()),
-        TilingSpecification::new((0., 0.).into(), [9000, 9000].into()),
-        TilingSpecification::new((0., 0.).into(), [18000, 18000].into()),
+        TilingSpecification::new([512, 512].into()),
+        TilingSpecification::new([1024, 1024].into()),
+        TilingSpecification::new([2048, 2048].into()),
+        TilingSpecification::new([4096, 4096].into()),
+        TilingSpecification::new([9000, 9000].into()),
+        TilingSpecification::new([18000, 18000].into()),
     ];
 
     WorkflowMultiBenchmark::new(
@@ -583,6 +539,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
     .run_all_benchmarks(bench_collector);
 }
 
+/*
 fn bench_mock_source_operator_with_4326_to_3857_reprojection(
     bench_collector: &mut BenchmarkCollector,
 ) {
@@ -613,7 +570,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
         );
 
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_query().grid_bounds());
+            .tile_information_iterator_from_grid_bounds(query_rect.grid_bounds());
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -639,7 +596,7 @@ fn bench_mock_source_operator_with_4326_to_3857_reprojection(
                     SpatialReference::epsg_4326().into(),
                     None,
                     tileing_strategy.geo_transform,
-                    query_rect.spatial_query().grid_bounds(),
+                    query_rect.grid_bounds(),
                     RasterBandDescriptors::new_single_band(),
                 ),
             },
@@ -960,12 +917,12 @@ fn bench_gdal_source_operator_with_4326_to_3857_reprojection(
 */
 
 fn main() {
-    /*
     let mut bench_collector = BenchmarkCollector::default();
 
     bench_mock_source_operator(&mut bench_collector);
     bench_mock_source_operator_with_expression(&mut bench_collector);
     bench_mock_source_operator_with_identity_reprojection(&mut bench_collector);
+    /*
     bench_mock_source_operator_with_4326_to_3857_reprojection(&mut bench_collector);
     bench_gdal_source_operator_tile_size(&mut bench_collector);
     bench_gdal_source_operator_with_expression_tile_size(&mut bench_collector);

@@ -1,4 +1,4 @@
-use crate::raster::{masked_grid::MaskedGrid, BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize};
+use crate::raster::{BaseTile, EmptyGrid, Grid, GridOrEmpty, GridSize, masked_grid::MaskedGrid};
 use num_traits::AsPrimitive;
 use rayon::iter::{IndexedParallelIterator, IntoParallelIterator, ParallelIterator};
 

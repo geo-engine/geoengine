@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 use utoipa::{ToResponse, ToSchema};
 
-use crate::machine_learning::name::MlModelName;
+use crate::api::model::datatypes::MlModelName;
 
 #[derive(Debug, Serialize, Deserialize, Clone, ToResponse, ToSchema)]
 #[serde(rename_all = "camelCase")]

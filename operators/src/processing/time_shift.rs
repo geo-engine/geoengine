@@ -10,8 +10,8 @@ use crate::optimization::OptimizationError;
 use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
@@ -489,10 +489,13 @@ where
         query: VectorQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::VectorType>>> {
-        let (time_interval, state) = self.shift.shift(query.time_interval)?;
+        let (time_interval, state) = self.shift.shift(query.time_interval())?;
 
-        let query =
-            VectorQueryRectangle::new(query.spatial_query, time_interval, ColumnSelection::all());
+        let query = VectorQueryRectangle::new(
+            query.spatial_bounds(),
+            time_interval,
+            ColumnSelection::all(),
+        );
         let stream = self.processor.vector_query(query, ctx).await?;
 
         let stream = stream.then(move |collection| async move {
@@ -536,8 +539,8 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
-        let (time_interval, state) = self.shift.shift(query.time_interval)?;
-        let query = RasterQueryRectangle::new(query.spatial_query, time_interval, query.attributes); // TODO: use grid bounds?
+        let (time_interval, state) = self.shift.shift(query.time_interval())?;
+        let query = query.select_time_interval(time_interval);
         let stream = self.processor.raster_query(query, ctx).await?;
 
         let stream = stream.map(move |raster| {
@@ -563,8 +566,8 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            SingleRasterSource, SpatialGridDescriptor,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, SingleRasterSource,
+            SpatialGridDescriptor,
         },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
@@ -686,7 +689,7 @@ mod tests {
     #[tokio::test]
     async fn test_absolute_vector_shift() {
         let execution_context = MockExecutionContext::test_default();
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -738,7 +741,7 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2009, 1, 1, 0, 0, 0),
@@ -761,11 +764,13 @@ mod tests {
 
         let expected = MultiPointCollection::from_data(
             MultiPoint::many(vec![(0., 0.)]).unwrap(),
-            vec![TimeInterval::new(
-                DateTime::new_utc(2009, 1, 1, 0, 0, 0),
-                DateTime::new_utc_with_millis(2013, 8, 1, 23, 59, 59, 999),
-            )
-            .unwrap()],
+            vec![
+                TimeInterval::new(
+                    DateTime::new_utc(2009, 1, 1, 0, 0, 0),
+                    DateTime::new_utc_with_millis(2013, 8, 1, 23, 59, 59, 999),
+                )
+                .unwrap(),
+            ],
             Default::default(),
             CacheHint::default(),
         )
@@ -777,7 +782,7 @@ mod tests {
     #[tokio::test]
     async fn test_relative_vector_shift() {
         let execution_context = MockExecutionContext::test_default();
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -826,7 +831,7 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
@@ -995,7 +1000,7 @@ mod tests {
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1008,7 +1013,7 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
@@ -1168,7 +1173,7 @@ mod tests {
         };
 
         let execution_context = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let query_processor = RasterOperator::boxed(time_shift)
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1181,7 +1186,7 @@ mod tests {
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2010, 1, 1, 0, 0, 0),
@@ -1267,11 +1272,11 @@ mod tests {
             .get_f64()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(), // Note: this is not the actual bounding box of the NDVI dataset. The pixel size is 0.1!
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
                     BandSelection::first(),
@@ -1325,11 +1330,11 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let mut stream = query_processor
             .raster_query(
-                RasterQueryRectangle::new_with_grid_bounds(
+                RasterQueryRectangle::new(
                     GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(), // Note: this is not the actual bounding box of the NDVI dataset. The pixel size is 0.1!
                     TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
                     BandSelection::first(),

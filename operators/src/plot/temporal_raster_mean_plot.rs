@@ -5,11 +5,11 @@ use crate::engine::{
     TypedPlotQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
-use crate::util::math::average_floor;
 use crate::util::Result;
+use crate::util::math::average_floor;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::plots::{AreaLineChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
     BandSelection, Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
@@ -161,11 +161,11 @@ impl<P: Pixel> PlotQueryProcessor for MeanRasterPixelValuesOverTimeQueryProcesso
     ) -> Result<Self::OutputFormat> {
         let rd = self.raster.result_descriptor();
 
-        let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+        let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
             &query,
+            BandSelection::first(),
             rd.tiling_grid_definition(ctx.tiling_specification())
                 .tiling_geo_transform(),
-            BandSelection::first(),
         );
 
         let means = Self::calculate_means(
@@ -304,7 +304,7 @@ mod tests {
         raster::{Grid2D, RasterDataType, TileInformation},
         util::test::TestDefault,
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
 
     #[test]
     fn serialization() {
@@ -362,11 +362,13 @@ mod tests {
             },
             sources: SingleRasterSource {
                 raster: generate_mock_raster_source(
-                    vec![TimeInterval::new(
-                        TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
-                        TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
-                    )
-                    .unwrap()],
+                    vec![
+                        TimeInterval::new(
+                            TimeInstance::from(DateTime::new_utc(1990, 1, 1, 0, 0, 0)),
+                            TimeInstance::from(DateTime::new_utc(2000, 1, 1, 0, 0, 0)),
+                        )
+                        .unwrap(),
+                    ],
                     vec![vec![1, 2, 3, 4, 5, 6]],
                 ),
             },
@@ -386,7 +388,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -528,7 +530,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),

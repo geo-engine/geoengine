@@ -8,7 +8,7 @@ use crate::util::parsing::parse_spatial_resolution;
 use crate::util::server::connection_closed;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use actix_web::{web, FromRequest, HttpRequest, Responder};
+use actix_web::{FromRequest, HttpRequest, Responder, web};
 use base64::Engine;
 use geoengine_datatypes::operations::reproject::reproject_spatial_query;
 use geoengine_datatypes::plots::PlotOutputFormat;
@@ -130,22 +130,20 @@ async fn get_plot_handler<C: ApplicationContext>(
     let request_spatial_ref: SpatialReference =
         params.crs.ok_or(error::Error::MissingSpatialReference)?;
 
-    let query_rect = PlotQueryRectangle::with_bounds(
-        params.bbox,
-        params.time.into(),
-        PlotSeriesSelection::all(),
-    );
+    let query_rect =
+        PlotQueryRectangle::new(params.bbox, params.time.into(), PlotSeriesSelection::all());
 
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
         Some(query_rect)
     } else {
         let repr_spatial_query = reproject_spatial_query(
-            query_rect.spatial_query(),
+            query_rect.spatial_bounds(),
             workflow_spatial_ref,
             request_spatial_ref,
         )?;
-        repr_spatial_query
-            .map(|r| PlotQueryRectangle::new(r, query_rect.time_interval, query_rect.attributes))
+        repr_spatial_query.map(|r| {
+            PlotQueryRectangle::new(r, query_rect.time_interval(), *query_rect.attributes())
+        })
     };
 
     let Some(query_rect) = query_rect else {
@@ -203,6 +201,7 @@ async fn get_plot_handler<C: ApplicationContext>(
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct WrappedPlotOutput {
+    #[schema(value_type = crate::api::model::datatypes::PlotOutputFormat)]
     output_format: PlotOutputFormat,
     plot_type: &'static str,
     #[schema(value_type = Object)]
@@ -222,7 +221,7 @@ mod tests {
     use crate::workflows::workflow::Workflow;
     use actix_web;
     use actix_web::dev::ServiceResponse;
-    use actix_web::http::{header, Method};
+    use actix_web::http::{Method, header};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::DateTime;
@@ -240,7 +239,7 @@ mod tests {
     use geoengine_operators::plot::{
         Histogram, HistogramBounds, HistogramBuckets, HistogramParams, Statistics, StatisticsParams,
     };
-    use serde_json::{json, Value};
+    use serde_json::{Value, json};
     use tokio_postgres::NoTls;
 
     fn example_raster_source() -> Box<dyn RasterOperator> {

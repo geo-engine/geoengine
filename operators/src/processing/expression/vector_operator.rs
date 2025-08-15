@@ -1,6 +1,6 @@
 use super::{
-    canonicalize_name, error::vector as error, get_expression_dependencies, AsExpressionGeo,
-    FromExpressionGeo, VectorExpressionError,
+    AsExpressionGeo, FromExpressionGeo, VectorExpressionError, canonicalize_name,
+    error::vector as error, get_expression_dependencies,
 };
 use crate::{
     engine::{
@@ -13,8 +13,8 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
     FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry, Measurement,
     MultiLineString, MultiPoint, MultiPolygon, SpatialResolution, VectorQueryRectangle,
@@ -29,8 +29,8 @@ use geoengine_datatypes::{
     primitives::NoGeometry,
 };
 use geoengine_expression::{
-    is_allowed_variable_name, DataType, ExpressionParser, LinkedExpression,
-    Parameter as ExpressionParameter,
+    DataType, ExpressionParser, LinkedExpression, Parameter as ExpressionParameter,
+    is_allowed_variable_name,
 };
 use rayon::iter::{
     FromParallelIterator, IndexedParallelIterator, IntoParallelIterator, ParallelIterator,
@@ -245,7 +245,7 @@ fn check_output_column_validity(output_column: &OutputColumn) -> Result<(), Vect
                 })?;
             }
         }
-    };
+    }
 
     Ok(())
 }
@@ -721,7 +721,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor},
+        engine::{ChunkByteSize, MockExecutionContext, QueryProcessor},
         mock::MockFeatureCollectionSource,
     };
     use geoengine_datatypes::{
@@ -730,7 +730,6 @@ mod tests {
             MultiPolygonCollection,
         },
         primitives::{BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, TimeInterval},
-        raster::TilingSpecification,
         util::test::TestDefault,
     };
 
@@ -813,7 +812,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -901,7 +900,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -991,7 +990,7 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
                 TimeInterval::default(),
                 ColumnSelection::all(),
@@ -1073,7 +1072,7 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
                 TimeInterval::default(),
                 ColumnSelection::all(),
@@ -1169,7 +1168,7 @@ mod tests {
                     .boxed()
                     .into(),
             },
-            VectorQueryRectangle::with_bounds(
+            VectorQueryRectangle::new(
                 BoundingBox2D::new(
                     (0., 0.).into(),
                     (NUMBER_OF_ROWS as f64, NUMBER_OF_ROWS as f64).into(),
@@ -1215,7 +1214,8 @@ mod tests {
         let query_processor: Box<dyn VectorQueryProcessor<VectorType = C>> =
             operator.query_processor().unwrap().try_into().unwrap();
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 

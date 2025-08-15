@@ -100,7 +100,7 @@ where
             pixel_bounds.x_max() + margin_x,
         )?;
 
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             larger_bounds,
             TimeInterval::new_instant(start_time)?,
             band_idx.into(),
@@ -286,7 +286,7 @@ fn create_enlarged_tile<P: Pixel, A: AggregateFunction>(
 
     NeighborhoodAggregateAccu::new(
         grid,
-        query_rect.time_interval,
+        query_rect.time_interval(),
         CacheHint::max_duration(),
         0,
         tile_info,
@@ -346,8 +346,8 @@ mod tests {
     use crate::{
         engine::MockExecutionContext,
         processing::neighborhood_aggregate::{
-            aggregate::{StandardDeviation, Sum},
             NeighborhoodParams,
+            aggregate::{StandardDeviation, Sum},
         },
     };
     use geoengine_datatypes::{
@@ -380,7 +380,7 @@ mod tests {
             .next()
             .unwrap();
 
-        let qrect = RasterQueryRectangle::new_with_grid_bounds(
+        let qrect = RasterQueryRectangle::new(
             tile_info.global_pixel_bounds(),
             TimeInstance::from_millis(0).unwrap().into(),
             BandSelection::first(),
@@ -393,7 +393,7 @@ mod tests {
         );
 
         let tile_query_rectangle = aggregator
-            .tile_query_rectangle(tile_info, qrect.clone(), qrect.time_interval.start(), 0)
+            .tile_query_rectangle(tile_info, qrect.clone(), qrect.time_interval().start(), 0)
             .unwrap()
             .unwrap();
 
@@ -403,7 +403,7 @@ mod tests {
         );
 
         assert_eq!(
-            tile_query_rectangle.spatial_query().grid_bounds(),
+            tile_query_rectangle.spatial_bounds(),
             GridBoundingBox2D::new([-514, -2], [1, 513]).unwrap()
         );
 

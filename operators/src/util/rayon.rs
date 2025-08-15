@@ -11,16 +11,17 @@ use rayon::{ThreadPool, ThreadPoolBuilder};
 /// Panics if building the global thread pool does not fail.
 ///
 fn rayon_destroy_global_thread_pool() {
-    assert!(rayon::ThreadPoolBuilder::new()
-        .num_threads(1)
-        .spawn_handler(|_thread| {
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                "Do not spawn rayon global pool on purpose",
-            ))
-        })
-        .build_global()
-        .is_err());
+    assert!(
+        rayon::ThreadPoolBuilder::new()
+            .num_threads(1)
+            .spawn_handler(|_thread| {
+                Err(std::io::Error::other(
+                    "Do not spawn rayon global pool on purpose",
+                ))
+            })
+            .build_global()
+            .is_err()
+    );
 }
 
 /// Create a rayon thread pool with the given number of threads.

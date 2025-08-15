@@ -10,13 +10,13 @@ use crate::processing::raster_vector_join::create_feature_aggregator;
 use crate::util::Result;
 use crate::{adapters::RasterStreamExt, error::Error};
 use async_trait::async_trait;
-use futures::stream::{once as once_stream, BoxStream};
+use futures::stream::{BoxStream, once as once_stream};
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, ColumnSelection, FeatureDataType, Geometry, RasterQueryRectangle,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
+    BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureDataType, Geometry,
+    RasterQueryRectangle, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridIdx2D, GridIndexAccess, RasterTile2D,
@@ -96,7 +96,7 @@ where
         ignore_no_data: bool,
     ) -> Result<BoxStream<'a, Result<FeatureCollection<G>>>> {
         if collection.is_empty() {
-            log::debug!(
+            tracing::debug!(
                 "input collection is empty, returning empty collection, skipping raster query"
             );
 
@@ -109,16 +109,16 @@ where
 
         let bbox = collection
             .bbox()
-            .and_then(|bbox| bbox.intersection(&query.spatial_query.spatial_bounds));
+            .and_then(|bbox| bbox.intersection(&query.spatial_bounds()));
 
         let time = collection
             .time_bounds()
-            .and_then(|time| time.intersect(&query.time_interval));
+            .and_then(|time| time.intersect(&query.time_interval()));
 
         // TODO: also intersect with raster spatial / time bounds
 
         let (Some(spatial_bounds), Some(time_interval)) = (bbox, time) else {
-            log::debug!(
+            tracing::debug!(
                 "spatial or temporal intersection is empty, returning the same collection, skipping raster query"
             );
 
@@ -136,7 +136,7 @@ where
             .tiling_geo_transform()
             .bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
 
-        let query = RasterQueryRectangle::new_with_grid_bounds(
+        let query = RasterQueryRectangle::new(
             pixel_bounds,
             time_interval,
             BandSelection::first_n(column_names.len() as u32),
@@ -331,7 +331,7 @@ where
                     .map(|feature_index| covered_pixels.covered_pixels(feature_index, raster))
                     .collect::<Vec<_>>(),
             );
-        };
+        }
 
         for (feature_index, feature_pixels) in state
             .feature_pixels
@@ -389,7 +389,7 @@ where
     FeatureCollection<G>: GeometryCollection + PixelCoverCreator<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -402,7 +402,7 @@ where
 
         // TODO: adjust raster bands to the vector attribute selection in the query once we support it
         for raster_input in &self.raster_inputs {
-            log::debug!(
+            tracing::debug!(
                 "processing raster for new columns {:?}",
                 raster_input.column_names
             );
@@ -525,7 +525,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     time_instant,
                     ColumnSelection::all(),
@@ -542,22 +542,24 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    vec![(-13.95, 20.05)],
-                    vec![(-14.05, 20.05)],
-                    vec![(-13.95, 19.95)],
-                    vec![(-14.05, 19.95)],
-                    vec![(-13.95, 19.95), (-14.05, 19.95)],
-                ])
-                .unwrap(),
-                &[time_instant; 5],
-                // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55, 51]))],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        vec![(-13.95, 20.05)],
+                        vec![(-14.05, 20.05)],
+                        vec![(-13.95, 19.95)],
+                        vec![(-14.05, 19.95)],
+                        vec![(-13.95, 19.95), (-14.05, 19.95)],
+                    ])
+                    .unwrap(),
+                    &[time_instant; 5],
+                    // these values are taken from loading the tiff in QGIS
+                    &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55, 51]))],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -629,7 +631,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
@@ -650,21 +652,24 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
-                .unwrap(),
-                &[TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(); 4],
-                // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    &[TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap();
+                        4],
+                    // these values are taken from loading the tiff in QGIS
+                    &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -744,7 +749,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(),
                     ColumnSelection::all(),
@@ -761,25 +766,27 @@ mod tests {
 
         let result = result.remove(0);
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
-                .unwrap(),
-                &[TimeInterval::new(
-                    DateTime::new_utc(2014, 1, 1, 0, 0, 0),
-                    DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    &[TimeInterval::new(
+                        DateTime::new_utc(2014, 1, 1, 0, 0, 0),
+                        DateTime::new_utc(2014, 2, 1, 0, 0, 0),
+                    )
+                    .unwrap(); 4],
+                    // these values are taken from loading the tiff in QGIS
+                    &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
                 )
-                .unwrap(); 4],
-                // these values are taken from loading the tiff in QGIS
-                &[("ndvi", FeatureData::Int(vec![54, 55, 51, 55]))],
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[allow(clippy::too_many_lines)]
@@ -859,7 +866,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
@@ -890,28 +897,30 @@ mod tests {
             DateTime::new_utc(2014, 3, 1, 0, 0, 0),
         )
         .unwrap();
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
-                .unwrap(),
-                &[t1, t1, t1, t1, t2, t2, t2, t2],
-                // these values are taken from loading the tiff in QGIS
-                &[(
-                    "ndvi",
-                    FeatureData::Int(vec![54, 55, 51, 55, 52, 55, 50, 53])
-                )],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    &[t1, t1, t1, t1, t2, t2, t2, t2],
+                    // these values are taken from loading the tiff in QGIS
+                    &[(
+                        "ndvi",
+                        FeatureData::Int(vec![54, 55, 51, 55, 52, 55, 50, 53])
+                    )],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1055,7 +1064,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),
@@ -1075,28 +1084,30 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &MultiPoint::many(vec![
-                    vec![(0.0, 0.0), (2.0, 0.0)],
-                    vec![(1.0, 0.0), (3.0, 0.0)],
-                    vec![(0.0, 0.0), (2.0, 0.0)],
-                    vec![(1.0, 0.0), (3.0, 0.0)],
-                ])
-                .unwrap(),
-                &[t1, t1, t2, t2],
-                &[(
-                    "ndvi",
-                    FeatureData::Float(vec![
-                        (6. + 60.) / 2.,
-                        (5. + 50.) / 2.,
-                        (1. + 10.) / 2.,
-                        (2. + 20.) / 2.
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &MultiPoint::many(vec![
+                        vec![(0.0, 0.0), (2.0, 0.0)],
+                        vec![(1.0, 0.0), (3.0, 0.0)],
+                        vec![(0.0, 0.0), (2.0, 0.0)],
+                        vec![(1.0, 0.0), (3.0, 0.0)],
                     ])
-                )],
+                    .unwrap(),
+                    &[t1, t1, t2, t2],
+                    &[(
+                        "ndvi",
+                        FeatureData::Float(vec![
+                            f64::midpoint(6., 60.),
+                            f64::midpoint(5., 50.),
+                            f64::midpoint(1., 10.),
+                            f64::midpoint(2., 20.)
+                        ])
+                    )],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1220,13 +1231,15 @@ mod tests {
             .unwrap();
 
         let polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.5, -0.5).into(),
-                (4., -1.).into(),
-                (0.5, -2.5).into(),
-                (0.5, -0.5).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.5, -0.5).into(),
+                    (4., -1.).into(),
+                    (0.5, -2.5).into(),
+                    (0.5, -0.5).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::default(); 1],
             Default::default(),
             CacheHint::default(),
@@ -1271,7 +1284,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),
@@ -1291,35 +1304,37 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPolygonCollection::from_slices(
-                &[
-                    MultiPolygon::new(vec![vec![vec![
-                        (0.5, -0.5).into(),
-                        (4., -1.).into(),
-                        (0.5, -2.5).into(),
-                        (0.5, -0.5).into(),
-                    ]]])
-                    .unwrap(),
-                    MultiPolygon::new(vec![vec![vec![
-                        (0.5, -0.5).into(),
-                        (4., -1.).into(),
-                        (0.5, -2.5).into(),
-                        (0.5, -0.5).into(),
-                    ]]])
-                    .unwrap()
-                ],
-                &[t1, t2],
-                &[(
-                    "ndvi",
-                    FeatureData::Float(vec![
-                        (3. + 1. + 40. + 30. + 400.) / 5.,
-                        (4. + 6. + 30. + 40. + 300.) / 5.
-                    ])
-                )],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPolygonCollection::from_slices(
+                    &[
+                        MultiPolygon::new(vec![vec![vec![
+                            (0.5, -0.5).into(),
+                            (4., -1.).into(),
+                            (0.5, -2.5).into(),
+                            (0.5, -0.5).into(),
+                        ]]])
+                        .unwrap(),
+                        MultiPolygon::new(vec![vec![vec![
+                            (0.5, -0.5).into(),
+                            (4., -1.).into(),
+                            (0.5, -2.5).into(),
+                            (0.5, -0.5).into(),
+                        ]]])
+                        .unwrap()
+                    ],
+                    &[t1, t2],
+                    &[(
+                        "ndvi",
+                        FeatureData::Float(vec![
+                            (3. + 1. + 40. + 30. + 400.) / 5.,
+                            (4. + 6. + 30. + 40. + 300.) / 5.
+                        ])
+                    )],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1532,13 +1547,15 @@ mod tests {
             .unwrap();
 
         let polygons = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.5, -0.5).into(),
-                (4., -1.).into(),
-                (0.5, -2.5).into(),
-                (0.5, -0.5).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.5, -0.5).into(),
+                    (4., -1.).into(),
+                    (0.5, -2.5).into(),
+                    (0.5, -0.5).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::default(); 1],
             Default::default(),
             CacheHint::default(),
@@ -1583,7 +1600,7 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
                     TimeInterval::new_unchecked(0, 20),
                     ColumnSelection::all(),
@@ -1603,43 +1620,45 @@ mod tests {
         let t1 = TimeInterval::new(0, 10).unwrap();
         let t2 = TimeInterval::new(10, 20).unwrap();
 
-        assert!(result.chunks_equal_ignoring_cache_hint(
-            &MultiPolygonCollection::from_slices(
-                &[
-                    MultiPolygon::new(vec![vec![vec![
-                        (0.5, -0.5).into(),
-                        (4., -1.).into(),
-                        (0.5, -2.5).into(),
-                        (0.5, -0.5).into(),
-                    ]]])
-                    .unwrap(),
-                    MultiPolygon::new(vec![vec![vec![
-                        (0.5, -0.5).into(),
-                        (4., -1.).into(),
-                        (0.5, -2.5).into(),
-                        (0.5, -0.5).into(),
-                    ]]])
-                    .unwrap()
-                ],
-                &[t1, t2],
-                &[
-                    (
-                        "foo",
-                        FeatureData::Float(vec![
-                            (3. + 1. + 40. + 30. + 400.) / 5.,
-                            (4. + 6. + 30. + 40. + 300.) / 5.
-                        ])
-                    ),
-                    (
-                        "foo_1",
-                        FeatureData::Float(vec![
-                            (251. + 249. + 140. + 130. + 410.) / 5.,
-                            (44. + 66. + 300. + 400. + 301.) / 5.
-                        ])
-                    )
-                ],
+        assert!(
+            result.chunks_equal_ignoring_cache_hint(
+                &MultiPolygonCollection::from_slices(
+                    &[
+                        MultiPolygon::new(vec![vec![vec![
+                            (0.5, -0.5).into(),
+                            (4., -1.).into(),
+                            (0.5, -2.5).into(),
+                            (0.5, -0.5).into(),
+                        ]]])
+                        .unwrap(),
+                        MultiPolygon::new(vec![vec![vec![
+                            (0.5, -0.5).into(),
+                            (4., -1.).into(),
+                            (0.5, -2.5).into(),
+                            (0.5, -0.5).into(),
+                        ]]])
+                        .unwrap()
+                    ],
+                    &[t1, t2],
+                    &[
+                        (
+                            "foo",
+                            FeatureData::Float(vec![
+                                (3. + 1. + 40. + 30. + 400.) / 5.,
+                                (4. + 6. + 30. + 40. + 300.) / 5.
+                            ])
+                        ),
+                        (
+                            "foo_1",
+                            FeatureData::Float(vec![
+                                (251. + 249. + 140. + 130. + 410.) / 5.,
+                                (44. + 66. + 300. + 400. + 301.) / 5.
+                            ])
+                        )
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 }

@@ -12,12 +12,12 @@ use band_extractor::BandExtractor;
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
 pub use raster_stacker::{RasterStackerAdapter, RasterStackerSource};
 pub use raster_subquery::{
-    fold_by_coordinate_lookup_future, FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter,
-    SubQueryTileAggregator, TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
+    FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
+    TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
 };
 pub use raster_time::{QueryWrapper, Queryable, RasterArrayTimeAdapter, RasterTimeAdapter};
 pub use simple_raster_stacker::{
-    stack_individual_aligned_raster_bands, SimpleRasterStackerAdapter, SimpleRasterStackerSource,
+    SimpleRasterStackerAdapter, SimpleRasterStackerSource, stack_individual_aligned_raster_bands,
 };
 pub use sparse_tiles_fill_adapter::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
@@ -27,7 +27,7 @@ pub use stream_statistics_adapter::StreamStatisticsAdapter;
 
 use self::raster_time_substream::RasterTimeMultiFold;
 use crate::util::Result;
-use futures::{stream::Fuse, Future, Stream, StreamExt};
+use futures::{Future, Stream, StreamExt, stream::Fuse};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     primitives::Geometry,

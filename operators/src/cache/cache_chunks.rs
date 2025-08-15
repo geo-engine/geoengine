@@ -18,7 +18,7 @@ use geoengine_datatypes::{
         GeometryCollection, IntoGeometryIterator,
     },
     primitives::{Geometry, MultiLineString, MultiPoint, MultiPolygon, NoGeometry},
-    util::{arrow::ArrowTyped, ByteSize},
+    util::{ByteSize, arrow::ArrowTyped},
 };
 use std::collections::HashMap;
 use std::io::Cursor;
@@ -179,12 +179,12 @@ where
         // If the chunk has no time bounds it must be empty so we can skip the temporal check and return true.
         let temporal_hit = self
             .time_interval
-            .map_or(true, |tb| tb.intersects(&query.time_interval));
+            .is_none_or(|tb| tb.intersects(&query.time_interval()));
 
         // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
-        let spatial_hit = self.spatial_bounds.map_or(true, |sb| {
-            sb.intersects_bbox(&query.spatial_query.spatial_bounds)
-        });
+        let spatial_hit = self
+            .spatial_bounds
+            .is_none_or(|sb| sb.intersects_bbox(&query.spatial_bounds()));
 
         temporal_hit && spatial_hit
     }
@@ -258,7 +258,7 @@ impl CacheElementSpatialBounds for FeatureCollection<NoGeometry> {
         let time_filter_bools = self
             .time_intervals()
             .iter()
-            .map(|t| t.intersects(&query_rect.time_interval))
+            .map(|t| t.intersects(&query_rect.time_interval()))
             .collect::<Vec<bool>>();
         self.filter(time_filter_bools)
             .map_err(|_err| CacheError::CouldNotFilterResults)
@@ -281,18 +281,16 @@ macro_rules! impl_cache_result_check {
                 &self,
                 query_rect: &VectorQueryRectangle,
             ) -> Result<Self, CacheError> {
-                let query_spatial_query = query_rect.spatial_query();
-
                 let geoms_filter_bools = self.geometries().map(|g| {
                     g.bbox()
-                        .map(|bbox| bbox.intersects_bbox(&query_spatial_query.spatial_bounds))
+                        .map(|bbox| bbox.intersects_bbox(&query_rect.spatial_bounds()))
                         .unwrap_or(false)
                 });
 
                 let time_filter_bools = self
                     .time_intervals()
                     .iter()
-                    .map(|t| t.intersects(&query_rect.time_interval));
+                    .map(|t| t.intersects(&query_rect.time_interval()));
 
                 let filter_bools = geoms_filter_bools
                     .zip(time_filter_bools)
@@ -320,10 +318,10 @@ impl<G> CacheElement for FeatureCollection<G>
 where
     G: Geometry + ArrowTyped + 'static,
     CompressedFeatureCollection<G>: CacheBackendElementExt<
-        Query = VectorQueryRectangle,
-        LandingZoneContainer = LandingZoneQueryFeatures,
-        CacheContainer = CachedFeatures,
-    >,
+            Query = VectorQueryRectangle,
+            LandingZoneContainer = LandingZoneQueryFeatures,
+            CacheContainer = CachedFeatures,
+        >,
     FeatureCollection<G>: ByteSize + CacheElementSpatialBounds,
 {
     type StoredCacheElement = CompressedFeatureCollection<G>;
@@ -563,7 +561,7 @@ mod tests {
     #[test]
     fn landing_zone_to_cache_entry() {
         let cols = create_test_collection();
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -585,7 +583,7 @@ mod tests {
         let cols = create_test_collection();
 
         // elemtes are all fully contained
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((0., 0.).into(), (12., 12.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -596,7 +594,7 @@ mod tests {
         }
 
         // first element is not contained
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -607,7 +605,7 @@ mod tests {
         }
 
         // all elements are not contained
-        let query = VectorQueryRectangle::with_bounds(
+        let query = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((13., 13.).into(), (26., 26.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -621,7 +619,7 @@ mod tests {
     fn cache_entry_matches() {
         let cols = create_test_collection();
 
-        let cache_entry_bounds = VectorQueryRectangle::with_bounds(
+        let cache_entry_bounds = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((1., 1.).into(), (11., 11.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -637,7 +635,7 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained
-        let query2 = VectorQueryRectangle::with_bounds(
+        let query2 = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
             Default::default(),
             ColumnSelection::all(),
@@ -645,7 +643,7 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query2));
 
         // query is exceeds cached bounds
-        let query3 = VectorQueryRectangle::with_bounds(
+        let query3 = VectorQueryRectangle::new(
             BoundingBox2D::new_unchecked((0., 0.).into(), (8., 8.).into()),
             Default::default(),
             ColumnSelection::all(),

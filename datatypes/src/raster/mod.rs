@@ -5,8 +5,8 @@ pub use self::data_type::{
 pub use self::empty_grid::{EmptyGrid, EmptyGrid1D, EmptyGrid2D, EmptyGrid3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid::{
-    grid_idx_iter_2d, Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D,
-    GridShape3D,
+    Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D, GridShape3D,
+    grid_idx_iter_2d,
 };
 pub use self::grid_bounds::{
     GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D, GridBoundingBoxExt,
@@ -24,8 +24,8 @@ pub use self::operations::{
     interpolation::NearestNeighbor,
 };
 pub use self::raster_tile::{
-    display_raster_tile_2d, BaseTile, MaterializedRasterTile, MaterializedRasterTile2D,
-    MaterializedRasterTile3D, RasterTile, RasterTile2D, RasterTile3D, TilesEqualIgnoringCacheHint,
+    BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,
+    RasterTile, RasterTile2D, RasterTile3D, TilesEqualIgnoringCacheHint, display_raster_tile_2d,
 };
 pub use self::tiling::{TileInformation, TilingSpecification, TilingStrategy};
 pub use self::typed_raster_conversion::TypedRasterConversion;
@@ -45,6 +45,7 @@ pub use operations::checked_scaling::{
 pub use operations::from_index_fn::{FromIndexFn, FromIndexFnParallel};
 pub use operations::map_elements::{MapElements, MapElementsParallel};
 pub use operations::map_indexed_elements::{MapIndexedElements, MapIndexedElementsParallel};
+pub use operations::sample_points::SamplePoints;
 pub use operations::update_elements::{UpdateElements, UpdateElementsParallel};
 pub use operations::update_indexed_elements::{
     UpdateIndexedElements, UpdateIndexedElementsParallel,

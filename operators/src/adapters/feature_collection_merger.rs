@@ -1,7 +1,7 @@
 use crate::util::Result;
+use futures::Stream;
 use futures::ready;
 use futures::stream::FusedStream;
-use futures::Stream;
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
@@ -140,8 +140,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, WorkflowOperatorPath,
+        MockExecutionContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator,
+        WorkflowOperatorPath,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
@@ -152,7 +152,6 @@ mod tests {
         BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
-    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
@@ -180,15 +179,13 @@ mod tests {
             unreachable!();
         };
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
             Default::default(),
             ColumnSelection::all(),
         );
-        let cx = MockQueryContext::new(
-            (std::mem::size_of::<Coordinate2D>() * 2).into(),
-            TilingSpecification::test_default(),
-        );
+        let ecx = MockExecutionContext::test_default();
+        let cx = ecx.mock_query_context((std::mem::size_of::<Coordinate2D>() * 2).into());
 
         let number_of_source_chunks = processor
             .query(qrect.clone(), &cx)
@@ -220,25 +217,29 @@ mod tests {
 
         assert_eq!(collections.len(), 2);
 
-        assert!(collections[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_data(
-                MultiPoint::many(coordinates[0..6].to_vec()).unwrap(),
-                vec![TimeInterval::default(); 6],
-                Default::default(),
-                CacheHint::default()
+        assert!(
+            collections[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_data(
+                    MultiPoint::many(coordinates[0..6].to_vec()).unwrap(),
+                    vec![TimeInterval::default(); 6],
+                    Default::default(),
+                    CacheHint::default()
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
 
-        assert!(collections[1].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_data(
-                MultiPoint::many(coordinates[6..10].to_vec()).unwrap(),
-                vec![TimeInterval::default(); 4],
-                Default::default(),
-                CacheHint::default()
+        assert!(
+            collections[1].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_data(
+                    MultiPoint::many(coordinates[6..10].to_vec()).unwrap(),
+                    vec![TimeInterval::default(); 4],
+                    Default::default(),
+                    CacheHint::default()
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -256,12 +257,13 @@ mod tests {
             unreachable!();
         };
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
             Default::default(),
             ColumnSelection::all(),
         );
-        let cx = MockQueryContext::new((0).into(), TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let cx = ecx.mock_query_context((0).into());
 
         let collections =
             FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).await.unwrap().fuse(), 0)
@@ -302,31 +304,35 @@ mod tests {
             .await;
 
         assert_eq!(merged_collections.len(), 3);
-        assert!(merged_collections[0]
-            .as_ref()
-            .unwrap()
-            .chunks_equal_ignoring_cache_hint(
-                &MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
-                    vec![TimeInterval::new(0, 1).unwrap()],
-                    Default::default(),
-                    CacheHint::default()
-                )
+        assert!(
+            merged_collections[0]
+                .as_ref()
                 .unwrap()
-            ));
+                .chunks_equal_ignoring_cache_hint(
+                    &MultiPointCollection::from_data(
+                        MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
+                        vec![TimeInterval::new(0, 1).unwrap()],
+                        Default::default(),
+                        CacheHint::default()
+                    )
+                    .unwrap()
+                )
+        );
         assert!(merged_collections[1].is_err());
-        assert!(merged_collections[2]
-            .as_ref()
-            .unwrap()
-            .chunks_equal_ignoring_cache_hint(
-                &MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
-                    vec![TimeInterval::new(0, 1).unwrap()],
-                    Default::default(),
-                    CacheHint::default()
-                )
+        assert!(
+            merged_collections[2]
+                .as_ref()
                 .unwrap()
-            ));
+                .chunks_equal_ignoring_cache_hint(
+                    &MultiPointCollection::from_data(
+                        MultiPoint::many(vec![(1.0, 1.1)]).unwrap(),
+                        vec![TimeInterval::new(0, 1).unwrap()],
+                        Default::default(),
+                        CacheHint::default()
+                    )
+                    .unwrap()
+                )
+        );
     }
 
     #[tokio::test(flavor = "current_thread")]
@@ -370,17 +376,19 @@ mod tests {
             .await;
 
         assert_eq!(merged_collections.len(), 1);
-        assert!(merged_collections[0]
-            .as_ref()
-            .unwrap()
-            .chunks_equal_ignoring_cache_hint(
-                &MultiPointCollection::from_data(
-                    MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
-                    vec![TimeInterval::new(0, 1).unwrap(); 2],
-                    Default::default(),
-                    CacheHint::default()
-                )
+        assert!(
+            merged_collections[0]
+                .as_ref()
                 .unwrap()
-            ));
+                .chunks_equal_ignoring_cache_hint(
+                    &MultiPointCollection::from_data(
+                        MultiPoint::many(vec![(0.0, 0.1), (1.0, 1.1)]).unwrap(),
+                        vec![TimeInterval::new(0, 1).unwrap(); 2],
+                        Default::default(),
+                        CacheHint::default()
+                    )
+                    .unwrap()
+                )
+        );
     }
 }

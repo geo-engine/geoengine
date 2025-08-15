@@ -1,7 +1,7 @@
 [package]
 name = "geoengine-expression-deps"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 
 [lib]
 path = "lib.rs"
@@ -14,5 +14,5 @@ proc-macro = false
 harness = false
 
 [dependencies]
-geo = "0.29.3"
-geo-types = "0.7.15" # important for compatibility when linking
+geo = "0.30.0"
+geo-types = "0.7.16" # important for compatibility when linking

@@ -1,4 +1,4 @@
-use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
+use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
 use serde::{Deserialize, Serialize};
 use tokio_postgres::Config;
 
@@ -27,8 +27,8 @@ impl DatabaseConnectionConfig {
 
     pub fn ogr_pg_config(&self) -> String {
         format!(
-            "PG:host={} port={} dbname={} user={} password={}",
-            self.host, self.port, self.database, self.user, self.password
+            "PG:host={} port={} dbname={} user={} password={} active_schema={}",
+            self.host, self.port, self.database, self.user, self.password, self.schema
         )
     }
 }

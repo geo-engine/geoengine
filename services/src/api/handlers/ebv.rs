@@ -6,25 +6,25 @@ use super::tasks::TaskResponse;
 use crate::api::model::datatypes::ResamplingMethod;
 use crate::contexts::ApplicationContext;
 use crate::datasets::external::netcdfcf::{
-    error, EbvPortalDataProvider, NetCdfCf4DProviderError, OverviewGeneration, EBV_PROVIDER_ID,
-    NETCDF_CF_PROVIDER_ID,
+    EBV_PROVIDER_ID, EbvPortalDataProvider, NETCDF_CF_PROVIDER_ID, NetCdfCf4DProviderError,
+    OverviewGeneration, error,
 };
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
-use crate::util::apidoc::{OpenApiServerInfo, TransformSchemasWithTag};
+use crate::util::apidoc::OpenApiServerInfo;
 use crate::{contexts::SessionContext, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
-    web::{self, ServiceConfig},
     FromRequest, Responder,
+    web::{self, ServiceConfig},
 };
 use futures::channel::oneshot;
 use futures::lock::Mutex;
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use log::debug;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
+use tracing::debug;
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
 use utoipa::{IntoParams, Modify, OpenApi, ToSchema};
 
@@ -50,7 +50,7 @@ pub const EBV_REMOVE_OVERVIEW_TASK_TYPE: &str = "ebv-remove-overview";
             ResamplingMethod
         ),
     ),
-    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &TransformSchemasWithTag)
+    modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo)
 )]
 pub struct ApiDoc;
 
@@ -299,18 +299,20 @@ impl<C: SessionContext> Task<C::TaskContext> for EbvMultiOverviewTask<C> {
                         status.error.push(file);
                     }
                     TaskStatus::Failed { error, .. } => {
-                        debug!("{:?}", error);
+                        debug!("{error:?}");
 
                         status.error.push(file);
                     }
                     TaskStatus::Running(_) => {
                         // must not happen, since we used the callback
-                        debug!("Ran into task status that must not happend: running/aborted after finish");
+                        debug!(
+                            "Ran into task status that must not happend: running/aborted after finish"
+                        );
                     }
                 }
             } else {
                 // TODO: can we ignore this?
-            };
+            }
 
             // TODO: grab finished pct from subtasks
             Self::update_pct(
@@ -362,7 +364,7 @@ struct CreateOverviewParams {
 
 #[derive(Debug, Deserialize, IntoParams)]
 #[into_params(names("path"))]
-struct EbvPath(PathBuf);
+struct EbvPath(#[param(value_type = String)] PathBuf);
 
 /// Creates overview for a single NetCDF file
 #[utoipa::path(
@@ -674,7 +676,7 @@ mod tests {
         util::server::{configure_extractors, render_404, render_405},
         util::tests::read_body_string,
     };
-    use actix_web::{dev::ServiceResponse, http, http::header, middleware, test, web, App};
+    use actix_web::{App, dev::ServiceResponse, http, http::header, middleware, test, web};
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::gdal::hide_gdal_errors;
@@ -687,7 +689,7 @@ mod tests {
         app_ctx: PostgresContext<NoTls>,
     ) -> ServiceResponse {
         let app = test::init_service({
-            let app = App::new()
+            App::new()
                 .app_data(web::Data::new(app_ctx))
                 .wrap(
                     middleware::ErrorHandlers::default()
@@ -696,9 +698,7 @@ mod tests {
                 )
                 .wrap(middleware::NormalizePath::trim())
                 .configure(configure_extractors)
-                .service(web::scope("/ebv").configure(init_ebv_routes::<PostgresContext<NoTls>>()));
-
-            app
+                .service(web::scope("/ebv").configure(init_ebv_routes::<PostgresContext<NoTls>>()))
         })
         .await;
         test::call_service(&app, req.to_request())
@@ -791,11 +791,12 @@ mod tests {
 
         assert!(is_empty(overview_folder.path()));
 
-        assert!(!ctx
-            .db()
-            .overviews_exist(provider_id, "dataset_m.nc")
-            .await
-            .unwrap());
+        assert!(
+            !ctx.db()
+                .overviews_exist(provider_id, "dataset_m.nc")
+                .await
+                .unwrap()
+        );
     }
 
     #[ge_context::test]

@@ -1,8 +1,14 @@
-pub use self::error::ArunaProviderError;
+use std::collections::HashMap;
+use std::fmt::Debug;
+use std::marker::PhantomData;
+use std::path::PathBuf;
+use std::str::FromStr;
+
+use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::external::aruna::metadata::{DataType, GEMetadata, RasterInfo, VectorInfo};
 use crate::datasets::listing::ProvenanceOutput;
-use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
@@ -48,16 +54,14 @@ use geoengine_operators::source::{
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-use std::collections::HashMap;
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::path::PathBuf;
-use std::str::FromStr;
 use tonic::codegen::InterceptedService;
 use tonic::metadata::{AsciiMetadataKey, AsciiMetadataValue};
 use tonic::service::Interceptor;
 use tonic::transport::{Channel, Endpoint};
 use tonic::{Request, Status};
+
+pub use self::error::ArunaProviderError;
+
 pub mod error;
 pub mod metadata;
 
@@ -104,6 +108,21 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for ArunaDataProviderDefinition {
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::ArunaDataProviderDefinition(mut new) => {
+                if new.api_token == SECRET_REPLACEMENT {
+                    new.api_token.clone_from(&self.api_token);
+                }
+                TypedDataProviderDefinition::ArunaDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 
@@ -510,9 +529,7 @@ impl ArunaDataProvider {
         info: &RasterInfo,
     ) -> geoengine_operators::util::Result<RasterResultDescriptor> {
         let shape = GridShape2D::new_2d(info.width, info.height).bounding_box();
-
-        let geo_transform = GeoTransform::try_from(info.geo_transform) // TODO: convert into tiling based bounds?
-            .expect("GeoTransform should be valid"); // TODO: check if that can be false
+        let geo_transform = GeoTransform::try_from(info.geo_transform)?;
 
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
@@ -662,10 +679,10 @@ impl
     ) -> geoengine_operators::util::Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)
@@ -832,6 +849,7 @@ impl LayerCollectionProvider for ArunaDataProvider {
             .into_iter()
             .map(|col| {
                 CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: self.id,
                         layer_id: LayerId(col.id),
@@ -929,8 +947,8 @@ impl ExpiringDownloadLink for OgrSourceDataset {
             std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
                 format!(
-                    "Could not parse original path as string {:?}",
-                    &self.file_name
+                    "Could not parse original path as string {}",
+                    self.file_name.display()
                 ),
             )
         })?;
@@ -979,7 +997,7 @@ impl ExpiringDownloadLink for GdalLoadingInfo {
                                     .as_ref()
                                     .replace(URL_REPLACEMENT, url.as_str()),
                             );
-                        };
+                        }
                         new_part
                     })
                     .collect::<std::vec::Vec<_>>();
@@ -1056,8 +1074,8 @@ mod tests {
     use std::str::FromStr;
     use std::task::Poll;
 
-    use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationDirection;
     use aruna_rust_api::api::storage::models::v2::Relation as ArunaRelationStruct;
+    use aruna_rust_api::api::storage::models::v2::relation::Relation as ArunaRelationDirection;
     use aruna_rust_api::api::storage::models::v2::{
         DataClass, Dataset, InternalRelation, InternalRelationVariant, KeyValue, KeyValueVariant,
         Object, Project, RelationDirection, ResourceVariant, Status,
@@ -1069,14 +1087,14 @@ mod tests {
     };
     use futures::StreamExt;
     use httptest::responders::status_code;
-    use httptest::{responders, Expectation, Server};
-    use serde_json::{json, Value};
+    use httptest::{Expectation, Server, responders};
+    use serde_json::{Value, json};
     use tokio::fs::File;
     use tokio::io::AsyncReadExt;
-    use tonic::codegen::http::Request;
-    use tonic::codegen::{http, Body, Service};
-    use tonic::transport::server::Router;
     use tonic::Code;
+    use tonic::codegen::http::Request;
+    use tonic::codegen::{Body, Service, http};
+    use tonic::transport::server::Router;
 
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
@@ -1085,7 +1103,7 @@ mod tests {
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
+        MetaData, MetaDataProvider, MockExecutionContext, QueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
@@ -2429,9 +2447,9 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let ctx = MockQueryContext::test_default();
+        let ctx = context.mock_query_context_test_default();
 
-        let qr = VectorQueryRectangle::with_bounds(
+        let qr = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

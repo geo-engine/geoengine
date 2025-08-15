@@ -1,60 +1,61 @@
 mod dataset_iterator;
 
+use self::dataset_iterator::OgrDatasetIterator;
+use crate::{
+    adapters::FeatureCollectionStreamExt,
+    engine::{
+        CanonicOperatorName, InitializedVectorOperator, MetaData, OperatorData, OperatorName,
+        QueryContext, QueryProcessor, SourceOperator, TypedVectorQueryProcessor, VectorOperator,
+        VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
+    },
+    error::{self, Error},
+    util::{Result, input::StringOrNumberRange, safe_lock_mutex},
+};
+use async_trait::async_trait;
+use futures::FutureExt;
 use futures::future::{BoxFuture, Future};
 use futures::stream::{BoxStream, FusedStream};
 use futures::task::Context;
-use futures::FutureExt;
-use futures::{ready, Stream, StreamExt};
-use gdal::vector::sql::ResultSet;
-use gdal::vector::{Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType};
-use geoengine_datatypes::collections::{
-    BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
-    FeatureCollectionModifications, FeatureCollectionRowBuilder, GeoFeatureCollectionRowBuilder,
-    VectorDataType,
-};
-use geoengine_datatypes::primitives::CacheTtlSeconds;
-use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
-    FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
-    NoGeometry, SpatialBounded, TimeInstance, TimeInterval, TimeStep, TypedGeometry,
-    VectorQueryRectangle, VectorSpatialQueryRectangle,
-};
-use geoengine_datatypes::util::arrow::ArrowTyped;
-use log::debug;
-use postgres_protocol::escape::{escape_identifier, escape_literal};
-use serde::{Deserialize, Serialize};
-use std::collections::{HashMap, HashSet};
-use std::fmt::Debug;
-use std::marker::PhantomData;
-use std::ops::{Add, DerefMut};
-use std::path::PathBuf;
-use std::pin::Pin;
-use std::str::FromStr;
-use std::sync::Arc;
-use std::task::Poll;
-use tokio::sync::Mutex;
-
-use self::dataset_iterator::OgrDatasetIterator;
-use crate::adapters::FeatureCollectionStreamExt;
-use crate::engine::{
-    CanonicOperatorName, OperatorData, OperatorName, QueryProcessor, WorkflowOperatorPath,
-};
-use crate::error::Error;
-use crate::util::input::StringOrNumberRange;
-use crate::util::Result;
-use crate::{
-    engine::{
-        InitializedVectorOperator, MetaData, QueryContext, SourceOperator,
-        TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
+use futures::{Stream, StreamExt, ready};
+use gdal::{
+    errors::GdalError,
+    vector::{
+        Feature, FieldValue, Layer, LayerAccess, LayerCaps, OGRwkbGeometryType, sql::ResultSet,
     },
-    error,
 };
-use async_trait::async_trait;
-use gdal::errors::GdalError;
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::ColumnSelection;
+use geoengine_datatypes::util::arrow::ArrowTyped;
+use geoengine_datatypes::{
+    collections::{
+        BuilderProvider, FeatureCollection, FeatureCollectionBuilder, FeatureCollectionInfos,
+        FeatureCollectionModifications, FeatureCollectionRowBuilder,
+        GeoFeatureCollectionRowBuilder, VectorDataType,
+    },
+    primitives::{
+        AxisAlignedRectangle, BoundingBox2D, Coordinate2D, DateTime, DateTimeParseFormat,
+        FeatureDataType, FeatureDataValue, Geometry, MultiLineString, MultiPoint, MultiPolygon,
+        NoGeometry, TimeInstance, TimeInterval, TimeStep, TypedGeometry, VectorQueryRectangle,
+    },
+};
 use pin_project::pin_project;
+use postgres_protocol::escape::{escape_identifier, escape_literal};
 use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+use std::{
+    collections::{HashMap, HashSet},
+    fmt::Debug,
+    marker::PhantomData,
+    ops::{Add, DerefMut},
+    path::PathBuf,
+    pin::Pin,
+    str::FromStr,
+    sync::Arc,
+    task::Poll,
+};
+use tokio::sync::Mutex;
+use tracing::debug;
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -551,7 +552,7 @@ where
     FeatureCollectionRowBuilder<G>: FeatureCollectionBuilderGeometryHandler<G>,
 {
     type Output = FeatureCollection<G>;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -576,7 +577,7 @@ where
     }
 }
 
-type TimeExtractorType = Box<dyn Fn(&Feature) -> Result<TimeInterval> + Send + Sync + 'static>;
+type TimeExtractorType = Box<dyn FnMut(&Feature) -> Result<TimeInterval> + Send + Sync + 'static>;
 
 #[pin_project(project = OgrSourceStreamProjection)]
 pub struct OgrSourceStream<G>
@@ -587,7 +588,7 @@ where
     dataset_iterator: Arc<Mutex<OgrDatasetIterator>>,
     data_types: Arc<HashMap<String, FeatureDataType>>,
     feature_collection_builder: FeatureCollectionBuilder<G>,
-    time_extractor: Arc<TimeExtractorType>,
+    time_extractor: Arc<std::sync::Mutex<TimeExtractorType>>,
     time_attribute_parser:
         Arc<Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync + 'static>>,
     query_rectangle: VectorQueryRectangle,
@@ -638,7 +639,7 @@ impl FeaturesProvider<'_> {
             FeaturesProvider::ResultSet(r) => {
                 r.deref_mut().set_attribute_filter(attribute_query)?;
             }
-        };
+        }
 
         Ok(())
     }
@@ -795,7 +796,6 @@ impl FeaturesProvider<'_> {
                     "{attribute} = {start}",
                     attribute = attribute,
                     start = escape_literal(s.start()),
-
                 )
             }
             #[allow(clippy::float_cmp)]
@@ -808,7 +808,6 @@ impl FeaturesProvider<'_> {
                 "CAST({attribute} as bigint) = {start}",
                 attribute = attribute,
                 start = n.start(),
-
             ),
             StringOrNumberRange::String(s) => {
                 format!(
@@ -867,7 +866,7 @@ where
                 data_types: Arc::new(data_types),
                 feature_collection_builder,
                 query_rectangle,
-                time_extractor: Arc::new(time_extractor),
+                time_extractor: Arc::new(std::sync::Mutex::new(time_extractor)),
                 time_attribute_parser: Arc::new(time_attribute_parser),
                 chunk_byte_size,
                 future: None,
@@ -885,7 +884,7 @@ where
         feature_collection_builder: FeatureCollectionBuilder<G>,
         data_types: Arc<HashMap<String, FeatureDataType>>,
         query_rectangle: VectorQueryRectangle,
-        time_extractor: Arc<TimeExtractorType>,
+        time_extractor: Arc<std::sync::Mutex<TimeExtractorType>>,
         time_attribute_parser: Arc<Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync>>,
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
@@ -898,12 +897,12 @@ where
                 &dataset_information,
                 &data_types,
                 &query_rectangle,
-                time_extractor.as_ref(),
+                safe_lock_mutex(&time_extractor).as_mut(),
                 time_attribute_parser.as_ref(),
                 chunk_byte_size,
             );
 
-            let batch_result = if let Some(rename) = dataset_information
+            if let Some(rename) = dataset_information
                 .columns
                 .as_ref()
                 .and_then(|c| c.rename.as_ref())
@@ -912,9 +911,7 @@ where
                 batch_result.and_then(|c| c.rename_columns(names.as_slice()).map_err(Into::into))
             } else {
                 batch_result
-            };
-
-            batch_result
+            }
         })
         .await?
     }
@@ -922,7 +919,7 @@ where
     fn create_time_parser(
         time_format: OgrSourceTimeFormat,
     ) -> Box<dyn Fn(FieldValue) -> Result<TimeInstance> + Send + Sync> {
-        debug!("{:?}", time_format);
+        debug!("{time_format:?}");
 
         match time_format {
             OgrSourceTimeFormat::Auto => Box::new(move |field: FieldValue| match field {
@@ -993,8 +990,12 @@ where
             } => {
                 let time_start_parser = Self::create_time_parser(start_format);
 
+                let mut field_index = None;
                 Box::new(move |feature: &Feature| {
-                    let field_value = feature.field(&start_field)?;
+                    let field_index =
+                        get_or_insert_field_index(&mut field_index, feature, &start_field)?;
+
+                    let field_value = feature.field(field_index)?;
                     if let Some(field_value) = field_value {
                         let time_start = time_start_parser(field_value)?;
                         TimeInterval::new(time_start, (time_start + duration)?).map_err(Into::into)
@@ -1013,9 +1014,17 @@ where
                 let time_start_parser = Self::create_time_parser(start_format);
                 let time_end_parser = Self::create_time_parser(end_format);
 
+                let mut start_field_index = None;
+                let mut end_field_index = None;
+
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature.field(&start_field)?;
-                    let end_field_value = feature.field(&end_field)?;
+                    let start_field_index =
+                        get_or_insert_field_index(&mut start_field_index, feature, &start_field)?;
+                    let end_field_index =
+                        get_or_insert_field_index(&mut end_field_index, feature, &end_field)?;
+
+                    let start_field_value = feature.field(start_field_index)?;
+                    let end_field_value = feature.field(end_field_index)?;
 
                     if let (Some(start_field_value), Some(end_field_value)) =
                         (start_field_value, end_field_value)
@@ -1037,9 +1046,20 @@ where
             } => {
                 let time_start_parser = Self::create_time_parser(start_format);
 
+                let mut start_field_index = None;
+                let mut duration_field_index = None;
+
                 Box::new(move |feature: &Feature| {
-                    let start_field_value = feature.field(&start_field)?;
-                    let duration_field_value = feature.field(&duration_field)?;
+                    let start_field_index =
+                        get_or_insert_field_index(&mut start_field_index, feature, &start_field)?;
+                    let duration_field_index = get_or_insert_field_index(
+                        &mut duration_field_index,
+                        feature,
+                        &duration_field,
+                    )?;
+
+                    let start_field_value = feature.field(start_field_index)?;
+                    let duration_field_value = feature.field(duration_field_index)?;
 
                     if let (Some(start_field_value), Some(duration_field_value)) =
                         (start_field_value, duration_field_value)
@@ -1118,7 +1138,7 @@ where
         dataset_information: &OgrSourceDataset,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
-        time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval>,
+        time_extractor: &mut dyn FnMut(&Feature) -> Result<TimeInterval>,
         time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         chunk_byte_size: usize,
     ) -> Result<FeatureCollection<G>> {
@@ -1273,7 +1293,7 @@ where
         default_geometry: &Option<G>,
         data_types: &HashMap<String, FeatureDataType>,
         query_rectangle: &VectorQueryRectangle,
-        time_extractor: &dyn Fn(&Feature) -> Result<TimeInterval, Error>,
+        time_extractor: &mut dyn FnMut(&Feature) -> Result<TimeInterval, Error>,
         time_attribute_parser: &dyn Fn(FieldValue) -> Result<TimeInstance>,
         builder: &mut FeatureCollectionRowBuilder<G>,
         feature: &Feature,
@@ -1283,7 +1303,8 @@ where
         let time_interval = time_extractor(feature)?;
 
         // filter out data items not in the query time interval
-        if !was_time_filtered_by_ogr && !time_interval.intersects(&query_rectangle.time_interval) {
+        if !was_time_filtered_by_ogr && !time_interval.intersects(&query_rectangle.time_interval())
+        {
             return Ok(());
         }
 
@@ -1298,7 +1319,7 @@ where
                 None => {
                     return Err(Error::Gdal {
                         source: GdalError::InvalidFieldIndex { method_name, index },
-                    })
+                    });
                 }
             },
             Err(e) => return Err(e),
@@ -1306,7 +1327,7 @@ where
 
         // filter out geometries that are not contained in the query's bounding box
         if !was_spatial_filtered_by_ogr
-            && !geometry.intersects_bbox(&query_rectangle.spatial_query().spatial_bounds())
+            && !geometry.intersects_bbox(&query_rectangle.spatial_bounds())
         {
             return Ok(());
         }
@@ -1314,8 +1335,14 @@ where
         builder.push_generic_geometry(geometry);
         builder.push_time_interval(time_interval);
 
+        let mut field_indices = HashMap::with_capacity(data_types.len());
+
         for (column, data_type) in data_types {
-            let field = feature.field(column);
+            let field_index = field_indices
+                .entry(column.as_str())
+                .or_insert_with(|| feature.field_index(column));
+
+            let field = field_index.clone().and_then(|i| feature.field(i));
             let value =
                 Self::convert_field_value(*data_type, field, time_attribute_parser, error_spec)?;
             builder.push_data(column, value)?;
@@ -1325,6 +1352,20 @@ where
 
         Ok(())
     }
+}
+
+fn get_or_insert_field_index(
+    field_index: &mut Option<usize>,
+    feature: &Feature,
+    field_name: &str,
+) -> Result<usize> {
+    if let Some(i) = field_index {
+        return Ok(*i);
+    }
+
+    let i = feature.field_index(field_name)?;
+    *field_index = Some(i);
+    Ok(i)
 }
 
 impl<G> Stream for OgrSourceStream<G>
@@ -1440,8 +1481,9 @@ impl TryFromOgrGeometry for MultiPoint {
 impl TryFromOgrGeometry for MultiLineString {
     fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
-            geometry
-                .get_point_vec()
+            let mut point_vec = Vec::with_capacity(geometry.geometry_count());
+            geometry.get_points(&mut point_vec);
+            point_vec
                 .into_iter()
                 .map(|(x, y, _z)| Coordinate2D::new(x, y))
                 .collect()
@@ -1469,8 +1511,9 @@ impl TryFromOgrGeometry for MultiLineString {
 impl TryFromOgrGeometry for MultiPolygon {
     fn try_from(geometry: Result<&gdal::vector::Geometry>) -> Result<Self> {
         fn coordinates(geometry: &gdal::vector::Geometry) -> Vec<Coordinate2D> {
-            geometry
-                .get_point_vec()
+            let mut point_vec = Vec::with_capacity(geometry.geometry_count());
+            geometry.get_points(&mut point_vec);
+            point_vec
                 .into_iter()
                 .map(|(x, y, _z)| Coordinate2D::new(x, y))
                 .collect()
@@ -1967,9 +2010,7 @@ mod db_types {
 mod tests {
     use super::*;
 
-    use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, StaticMetaData, VectorColumnInfo,
-    };
+    use crate::engine::{ChunkByteSize, MockExecutionContext, StaticMetaData, VectorColumnInfo};
     use crate::source::ogr_source::FormatSpecifics::Csv;
     use crate::test_data;
     use futures::{StreamExt, TryStreamExt};
@@ -1982,10 +2023,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         BoundingBox2D, FeatureData, Measurement, TimeGranularity,
     };
-    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::util::test::TestDefault;
     use serde_json::json;
 
     #[test]
@@ -2164,16 +2204,16 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -2219,16 +2259,16 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into()).unwrap(),
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await;
 
@@ -2268,16 +2308,16 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (5., 5.).into()).unwrap(),
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -2322,16 +2362,16 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (5., 5.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -2411,7 +2451,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2510,7 +2550,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2612,7 +2652,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2765,7 +2805,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((1.85, 50.88).into(), (4.82, 52.95).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -2939,7 +2979,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180.0, -90.0).into(), (180.0, 90.0).into())?,
                     Default::default(),
                     ColumnSelection::all(),
@@ -4121,16 +4161,16 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -4243,16 +4283,16 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<MultiPoint>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 2.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -4456,11 +4496,7 @@ mod tests {
         let context1 = exe_ctx.mock_query_context(ChunkByteSize::MIN);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context1,
             )
             .await
@@ -4490,11 +4526,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1_650).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -4607,11 +4639,7 @@ mod tests {
         let context = exe_ctx.mock_query_context(ChunkByteSize::MIN);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -4696,11 +4724,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -4816,11 +4840,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -4943,11 +4963,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5068,11 +5084,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5193,11 +5205,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5314,11 +5322,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5448,11 +5452,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5568,11 +5568,7 @@ mod tests {
         let context = exe_ctx.mock_query_context((1024 * 1024).into());
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
-                    query_bbox,
-                    Default::default(),
-                    ColumnSelection::all(),
-                ),
+                VectorQueryRectangle::new(query_bbox, Default::default(), ColumnSelection::all()),
                 &context,
             )
             .await
@@ -5678,16 +5674,16 @@ mod tests {
 
         let query_processor = OgrSourceProcessor::<NoGeometry>::new(rd, Box::new(info), vec![]);
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -5808,16 +5804,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -5927,16 +5923,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6046,16 +6042,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6169,16 +6165,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6291,16 +6287,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6428,16 +6424,16 @@ mod tests {
             ],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6547,16 +6543,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6658,16 +6654,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6755,16 +6751,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6849,16 +6845,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -6943,16 +6939,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -7037,16 +7033,16 @@ mod tests {
             }],
         );
 
-        let context =
-            MockQueryContext::new(ChunkByteSize::MAX, TilingSpecification::test_default());
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
         let query = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((0., 0.).into(), (1., 1.).into())?,
                     Default::default(),
                     ColumnSelection::all(),
                 ),
-                &context,
+                &ctx,
             )
             .await
             .unwrap();
@@ -7066,12 +7062,14 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn creates_time_filter_string() -> Result<()> {
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::None, // Unsupported time type
-            TimeInterval::new_instant(0)?,
-            "PostgreSQL"
-        )
-        .is_none());
+        assert!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::None, // Unsupported time type
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .is_none()
+        );
 
         assert_eq!(
             FeaturesProvider::create_time_filter_string(
@@ -7131,32 +7129,36 @@ mod tests {
                 .to_string()
         );
 
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::Start {
-                start_field: "start".to_string(),
-                start_format: Default::default(),
-                duration: OgrSourceDurationSpec::Value(TimeStep {
-                    // Unsupported duration spec
-                    granularity: TimeGranularity::Millis,
-                    step: 10
-                }),
-            },
-            TimeInterval::new_instant(0)?,
-            "PostgreSQL"
-        )
-        .is_none());
+        assert!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Value(TimeStep {
+                        // Unsupported duration spec
+                        granularity: TimeGranularity::Millis,
+                        step: 10
+                    }),
+                },
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .is_none()
+        );
 
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::StartDuration {
-                // Unsupported time type
-                start_field: "start".to_string(),
-                start_format: Default::default(),
-                duration_field: "duration".to_string(),
-            },
-            TimeInterval::new_instant(0)?,
-            "PostgreSQL"
-        )
-        .is_none());
+        assert!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::StartDuration {
+                    // Unsupported time type
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration_field: "duration".to_string(),
+                },
+                TimeInterval::new_instant(0)?,
+                "PostgreSQL"
+            )
+            .is_none()
+        );
 
         assert_eq!(
             FeaturesProvider::create_time_filter_string(
@@ -7204,40 +7206,46 @@ mod tests {
             r#""start" < '+262142-12-31T23:59:59.999Z'"#.to_string()
         );
 
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::Start {
-                start_field: "start".to_string(),
-                start_format: Default::default(),
-                duration: OgrSourceDurationSpec::Infinite,
-            },
-            TimeInterval::new_unchecked(-210_895_056_000_001, 8_210_266_876_799_999), // Exceeds Postgres range lower bound
-            "PostgreSQL"
-        )
-        .is_none());
-
-        assert!(std::panic::catch_unwind(|| {
+        assert!(
             FeaturesProvider::create_time_filter_string(
                 OgrSourceDatasetTimeType::Start {
                     start_field: "start".to_string(),
                     start_format: Default::default(),
                     duration: OgrSourceDurationSpec::Infinite,
                 },
-                TimeInterval::new_unchecked(-210_895_056_000_000, 8_210_266_876_800_000), // Exceeds Postgres range upper bound (limited by TimeInstance upper bound, panics)
-                "PostgreSQL",
+                TimeInterval::new_unchecked(-210_895_056_000_001, 8_210_266_876_799_999), // Exceeds Postgres range lower bound
+                "PostgreSQL"
             )
-        })
-        .is_err());
+            .is_none()
+        );
 
-        assert!(FeaturesProvider::create_time_filter_string(
-            OgrSourceDatasetTimeType::Start {
-                start_field: "start".to_string(),
-                start_format: Default::default(),
-                duration: OgrSourceDurationSpec::Infinite,
-            },
-            TimeInterval::new_instant(0)?,
-            "Unsupported driver"
-        )
-        .is_none());
+        assert!(
+            std::panic::catch_unwind(|| {
+                FeaturesProvider::create_time_filter_string(
+                    OgrSourceDatasetTimeType::Start {
+                        start_field: "start".to_string(),
+                        start_format: Default::default(),
+                        duration: OgrSourceDurationSpec::Infinite,
+                    },
+                    TimeInterval::new_unchecked(-210_895_056_000_000, 8_210_266_876_800_000), // Exceeds Postgres range upper bound (limited by TimeInstance upper bound, panics)
+                    "PostgreSQL",
+                )
+            })
+            .is_err()
+        );
+
+        assert!(
+            FeaturesProvider::create_time_filter_string(
+                OgrSourceDatasetTimeType::Start {
+                    start_field: "start".to_string(),
+                    start_format: Default::default(),
+                    duration: OgrSourceDurationSpec::Infinite,
+                },
+                TimeInterval::new_instant(0)?,
+                "Unsupported driver"
+            )
+            .is_none()
+        );
 
         Ok(())
     }

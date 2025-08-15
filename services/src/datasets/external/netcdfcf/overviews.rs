@@ -1,21 +1,21 @@
 use super::{
-    build_netcdf_tree, database::InProgressFlag, error, gdal_netcdf_open, metadata::DataRange,
-    NetCdfCf4DProviderError, NetCdfCfProviderDb, NetCdfOverview, TimeCoverage,
+    NetCdfCf4DProviderError, NetCdfCfProviderDb, NetCdfOverview, TimeCoverage, build_netcdf_tree,
+    database::InProgressFlag, error, gdal_netcdf_open, metadata::DataRange,
 };
 use crate::{
     config::get_config_element,
-    datasets::external::netcdfcf::loading::{create_loading_info, ParamModification},
+    datasets::external::netcdfcf::loading::{ParamModification, create_loading_info},
     tasks::{TaskContext, TaskStatusInfo},
     util::path_with_base_path,
 };
 use gdal::{
+    Dataset,
     cpl::CslStringList,
     errors::GdalError,
     programs::raster::{
-        multi_dim_translate, MultiDimTranslateDestination, MultiDimTranslateOptions,
+        MultiDimTranslateDestination, MultiDimTranslateOptions, multi_dim_translate,
     },
     raster::{Group, RasterCreationOptions},
-    Dataset,
 };
 use geoengine_datatypes::{
     dataset::DataProviderId, error::BoxedResultExt, primitives::TimeInstance,
@@ -28,7 +28,6 @@ use geoengine_operators::{
     source::GdalMetaDataList,
     util::gdal::{gdal_parameters_from_dataset, raster_descriptor_from_dataset_and_sref},
 };
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::{
@@ -37,6 +36,7 @@ use std::{
     sync::Arc,
 };
 use tokio::fs;
+use tracing::debug;
 
 type Result<T, E = NetCdfCf4DProviderError> = std::result::Result<T, E>;
 
@@ -173,22 +173,22 @@ trait NetCdfVisitor {
         let mut options = CslStringList::new();
         options
             .set_name_value("SHOW_ZERO_DIM", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("SHOW_COORDINATES", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("SHOW_INDEXING", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("SHOW_BOUNDS", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("SHOW_TIME", "NO")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
             .set_name_value("GROUP_BY", "SAME_DIMENSION")
-            .unwrap_or_else(|e| debug!("{}", e));
+            .unwrap_or_else(|e| debug!("{e}"));
         options
     }
 }
@@ -763,8 +763,8 @@ pub async fn remove_overviews<D: NetCdfCfProviderDb + 'static + std::fmt::Debug>
 mod tests {
     use super::*;
     use crate::contexts::{PostgresDb, PostgresSessionContext};
-    use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::datasets::external::netcdfcf::NETCDF_CF_PROVIDER_ID;
+    use crate::datasets::external::netcdfcf::database::NetCdfCfProviderDb;
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
@@ -819,6 +819,8 @@ mod tests {
         )
         .unwrap();
 
+        let expected_time_1: TimeInstance = DateTime::new_utc(2020, 1, 1, 0, 0, 0).into();
+        let expected_time_2: TimeInstance = DateTime::new_utc(2020, 2, 1, 0, 0, 0).into();
         assert_eq!(
             loading_info,
             GdalMetaDataList {
@@ -834,11 +836,7 @@ mod tests {
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2020, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2020, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_1, expected_time_1 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: Path::new("foo/2020-01-01T00:00:00.000Z.tiff").into(),
                             rasterband_channel: 1,
@@ -860,11 +858,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2020, 2, 1, 0, 0, 0),
-                            DateTime::new_utc(2020, 2, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: Path::new("foo/2020-02-01T00:00:00.000Z.tiff").into(),
                             rasterband_channel: 1,
@@ -919,15 +913,21 @@ mod tests {
 
         for metric in ["metric_1", "metric_2"] {
             for entity in 0..3 {
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2000-01-01T00:00:00.000Z.tiff"))
-                    .exists());
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2001-01-01T00:00:00.000Z.tiff"))
-                    .exists());
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2002-01-01T00:00:00.000Z.tiff"))
-                    .exists());
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2000-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2001-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2002-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
             }
         }
     }
@@ -962,15 +962,21 @@ mod tests {
 
         for metric in ["metric_1", "metric_2"] {
             for entity in 0..3 {
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/1900-01-01T00:00:00.000Z.tiff"))
-                    .exists());
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2015-01-01T00:00:00.000Z.tiff"))
-                    .exists());
-                assert!(dataset_folder
-                    .join(format!("{metric}/{entity}/2055-01-01T00:00:00.000Z.tiff"))
-                    .exists());
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/1900-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2015-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
+                assert!(
+                    dataset_folder
+                        .join(format!("{metric}/{entity}/2055-01-01T00:00:00.000Z.tiff"))
+                        .exists()
+                );
             }
         }
 
@@ -984,6 +990,11 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+
+        let expected_time_1: TimeInstance = DateTime::new_utc(1900, 1, 1, 0, 0, 0).into();
+        let expected_time_2: TimeInstance = DateTime::new_utc(2015, 1, 1, 0, 0, 0).into();
+        let expected_time_3: TimeInstance = DateTime::new_utc(2055, 1, 1, 0, 0, 0).into();
+
         pretty_assertions::assert_eq!(
             sample_loading_info,
             GdalMetaDataList {
@@ -999,11 +1010,7 @@ mod tests {
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(1900, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(1900, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_1, expected_time_1 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/1900-01-01T00:00:00.000Z.tiff"),
@@ -1026,11 +1033,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2015, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2015, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/2015-01-01T00:00:00.000Z.tiff"),
@@ -1053,11 +1056,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2055, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2055, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_3, expected_time_3 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/2055-01-01T00:00:00.000Z.tiff"),
@@ -1098,13 +1097,14 @@ mod tests {
 
         let db = Arc::new(ctx.db());
 
-        assert!(!db
-            .overviews_exist(
+        assert!(
+            !db.overviews_exist(
                 NETCDF_CF_PROVIDER_ID,
                 dataset_path.to_string_lossy().as_ref()
             )
             .await
-            .unwrap());
+            .unwrap()
+        );
 
         create_overviews(
             NopTaskContext,
@@ -1135,12 +1135,13 @@ mod tests {
 
         assert!(is_empty(overview_folder.path()));
 
-        assert!(!db
-            .overviews_exist(
+        assert!(
+            !db.overviews_exist(
                 NETCDF_CF_PROVIDER_ID,
                 dataset_path.to_string_lossy().as_ref()
             )
             .await
-            .unwrap());
+            .unwrap()
+        );
     }
 }

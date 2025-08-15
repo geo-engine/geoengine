@@ -12,9 +12,9 @@ use geoengine_datatypes::{
     },
     util::test::TestDefault,
 };
-use geoengine_operators::engine::RasterResultDescriptor;
+use geoengine_operators::engine::{MockExecutionContext, RasterResultDescriptor};
 use geoengine_operators::{
-    engine::{ChunkByteSize, MockQueryContext, RasterQueryProcessor},
+    engine::{ChunkByteSize, RasterQueryProcessor},
     mock::MockRasterSourceProcessor,
     source::{GdalMetaDataRegular, GdalSourceProcessor},
     util::gdal::create_ndvi_meta_data,
@@ -36,6 +36,7 @@ fn setup_gdal_source(
     }
 }
 
+#[allow(clippy::too_many_lines)]
 fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProcessor<u8> {
     let grid: GridOrEmpty2D<u8> = Grid2D::new(
         tiling_spec.tile_size_in_pixels,
@@ -157,8 +158,8 @@ fn bench_raster_processor<
     run_time: &tokio::runtime::Runtime,
 ) {
     for tiling_spec in list_of_tiling_specs {
-        let ctx =
-            MockQueryContext::with_chunk_size_and_thread_count(ChunkByteSize::MAX, *tiling_spec, 8);
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec_and_thread_count(*tiling_spec, 8);
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let operator = (tile_producing_operator_builderr)(*tiling_spec);
 
@@ -199,7 +200,7 @@ fn bench_no_data_tiles() {
     let qrects = vec![
         (
             "1 tile",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-60, 0], [-1, 59]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -207,7 +208,7 @@ fn bench_no_data_tiles() {
         ),
         (
             "2 tiles",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-50, 0], [9, 59]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -215,7 +216,7 @@ fn bench_no_data_tiles() {
         ),
         (
             "4 tiles",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-55, -5], [9, 54]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -223,7 +224,7 @@ fn bench_no_data_tiles() {
         ),
         (
             "2 tiles, 2 no-data tiles",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-120, 130], [59, 189]).unwrap(),
                 TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -231,7 +232,7 @@ fn bench_no_data_tiles() {
         ),
         (
             "empty tiles",
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-50, -5], [-9, 54]).unwrap(),
                 TimeInterval::new(1_000_000_000_000, 1_000_000_000_000 + 1000).unwrap(),
                 BandSelection::first(),
@@ -262,7 +263,7 @@ fn bench_no_data_tiles() {
 fn bench_tile_size() {
     let qrects = vec![(
         "World in 36000x18000 pixels",
-        RasterQueryRectangle::new_with_grid_bounds(
+        RasterQueryRectangle::new(
             GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
             TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
             BandSelection::first(),
@@ -295,7 +296,9 @@ fn bench_tile_size() {
 }
 
 fn main() {
-    println!("Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) ");
+    println!(
+        "Bench_name, query_name, tilesize_x, tilesize_y, query_time (ns), tiles_produced, pixels_produced, stream_collect_time (ns) "
+    );
 
     bench_no_data_tiles();
     bench_tile_size();

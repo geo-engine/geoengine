@@ -2,17 +2,17 @@
 
 use super::postgres::DatabaseConnectionConfig;
 use crate::api::model::responses::ErrorResponse;
-use crate::config::{get_config_element, Postgres};
+use crate::config::{Postgres, get_config_element};
 use crate::contexts::ApplicationContext;
 use crate::contexts::GeoEngineDb;
 use crate::contexts::PostgresContext;
+use crate::datasets::AddDataset;
+use crate::datasets::DatasetIdAndName;
+use crate::datasets::DatasetName;
 use crate::datasets::listing::Provenance;
 use crate::datasets::storage::DatasetStore;
 use crate::datasets::upload::UploadId;
 use crate::datasets::upload::UploadRootPath;
-use crate::datasets::AddDataset;
-use crate::datasets::DatasetIdAndName;
-use crate::datasets::DatasetName;
 use crate::permissions::Permission;
 use crate::permissions::PermissionDb;
 use crate::permissions::Role;
@@ -21,9 +21,9 @@ use crate::projects::{
     Symbology, UpdateProject,
 };
 use crate::users::OidcManager;
+use crate::util::Identifier;
 use crate::util::middleware::OutputRequestId;
 use crate::util::server::{configure_extractors, render_404, render_405};
-use crate::util::Identifier;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
@@ -38,10 +38,10 @@ use crate::{
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{
-    http, http::header, http::Method, middleware, test, web, App, HttpResponse, Responder,
+    App, HttpResponse, Responder, http, http::Method, http::header, middleware, test, web,
 };
-use bb8_postgres::bb8::ManageConnection;
 use bb8_postgres::PostgresConnectionManager;
+use bb8_postgres::bb8::ManageConnection;
 use flexi_logger::Logger;
 use futures_util::Future;
 use geoengine_datatypes::dataset::DatasetId;
@@ -90,6 +90,7 @@ use tokio::sync::OwnedSemaphorePermit;
 use tokio::sync::RwLock;
 use tokio::sync::Semaphore;
 use tokio_postgres::NoTls;
+use tracing::debug;
 use tracing_actix_web::TracingLogger;
 use uuid::Uuid;
 
@@ -119,6 +120,7 @@ pub fn update_project_helper(project: ProjectId) -> UpdateProject {
             name: "L1".to_string(),
             visibility: Default::default(),
             symbology: Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0,
@@ -246,6 +248,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
             source_operator: "GdalSource".to_string(),
             tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
             symbology: Some(Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
                 opacity: 1.0,
                 raster_colorizer: RasterColorizer::SingleBand {
                     band: 0, band_colorizer: Colorizer::palette(
@@ -436,29 +439,35 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
     // rewrite metadata to use the correct file path
     def.meta_data = match def.meta_data {
         MetaDataDefinition::GdalStatic(mut meta_data) => {
-            meta_data.params.file_path = test_data!(meta_data
-                .params
-                .file_path
-                .strip_prefix("test_data/")
-                .unwrap())
+            meta_data.params.file_path = test_data!(
+                meta_data
+                    .params
+                    .file_path
+                    .strip_prefix("test_data/")
+                    .unwrap()
+            )
             .into();
             MetaDataDefinition::GdalStatic(meta_data)
         }
         MetaDataDefinition::GdalMetaDataRegular(mut meta_data) => {
-            meta_data.params.file_path = test_data!(meta_data
-                .params
-                .file_path
-                .strip_prefix("test_data/")
-                .unwrap())
+            meta_data.params.file_path = test_data!(
+                meta_data
+                    .params
+                    .file_path
+                    .strip_prefix("test_data/")
+                    .unwrap()
+            )
             .into();
             MetaDataDefinition::GdalMetaDataRegular(meta_data)
         }
         MetaDataDefinition::OgrMetaData(mut meta_data) => {
-            meta_data.loading_info.file_name = test_data!(meta_data
-                .loading_info
-                .file_name
-                .strip_prefix("test_data/")
-                .unwrap())
+            meta_data.loading_info.file_name = test_data!(
+                meta_data
+                    .loading_info
+                    .file_name
+                    .strip_prefix("test_data/")
+                    .unwrap()
+            )
             .into();
             MetaDataDefinition::OgrMetaData(meta_data)
         }
@@ -539,12 +548,20 @@ async fn dummy_handler() -> impl Responder {
     HttpResponse::Ok().body("Hey there!")
 }
 
-pub async fn send_test_request(
-    req: test::TestRequest,
+pub fn create_test_app(
     app_ctx: PostgresContext<NoTls>,
-) -> ServiceResponse {
-    #[allow(unused_mut)]
-    let mut app = App::new()
+) -> App<
+    impl actix_web::dev::ServiceFactory<
+        actix_web::dev::ServiceRequest,
+        Config = (),
+        Response = ServiceResponse<
+            tracing_actix_web::StreamSpan<actix_web::body::EitherBody<actix_web::body::BoxBody>>,
+        >,
+        Error = actix_web::Error,
+        InitError = (),
+    >,
+> {
+    App::new()
         .app_data(web::Data::new(app_ctx))
         .wrap(OutputRequestId)
         .wrap(
@@ -571,7 +588,15 @@ pub async fn send_test_request(
         .configure(handlers::wms::init_wms_routes::<PostgresContext<NoTls>>)
         .configure(handlers::workflows::init_workflow_routes::<PostgresContext<NoTls>>)
         .configure(handlers::machine_learning::init_ml_routes::<PostgresContext<NoTls>>)
-        .service(dummy_handler);
+        .service(dummy_handler)
+}
+
+pub async fn send_test_request(
+    req: test::TestRequest,
+    app_ctx: PostgresContext<NoTls>,
+) -> ServiceResponse {
+    #[allow(unused_mut)]
+    let mut app = create_test_app(app_ctx);
 
     let app = test::init_service(app).await;
     test::call_service(&app, req.to_request())
@@ -690,7 +715,8 @@ pub(crate) async fn setup_db() -> (OwnedSemaphorePermit, DatabaseConnectionConfi
         .unwrap();
 
     let mut db_config = get_config_element::<Postgres>().unwrap();
-    db_config.schema = format!("geoengine_test_{}", rand::thread_rng().next_u64()); // generate random temp schema
+    db_config.schema = format!("geoengine_test_{}", rand::rng().next_u64()); // generate random temp schema
+    debug!("Creating schema {}", db_config.schema);
 
     let db_config = DatabaseConnectionConfig {
         host: db_config.host,
@@ -1051,7 +1077,7 @@ pub(crate) mod mock_oidc {
     use chrono::{Duration, Utc};
     use httptest::matchers::{matches, request};
     use httptest::responders::status_code;
-    use httptest::{all_of, Expectation, Server};
+    use httptest::{Expectation, Server, all_of};
     use oauth2::basic::BasicTokenType;
     use oauth2::{
         AccessToken, AuthUrl, EmptyExtraTokenFields, RefreshToken, Scope, StandardTokenResponse,

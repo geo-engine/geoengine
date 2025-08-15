@@ -35,7 +35,8 @@ pub use wrapper::PointInPolygonTesterWithCollection;
 /// The point in polygon filter requires two inputs in the following order:
 /// 1. a `MultiPointCollection` source
 /// 2. a `MultiPolygonCollection` source
-///     Then, it filters the `MultiPolygonCollection`s so that only those features are retained that are in any polygon.
+///
+/// Then, it filters the `MultiPolygonCollection`s so that only those features are retained that are in any polygon.
 pub type PointInPolygonFilter = Operator<PointInPolygonFilterParams, PointInPolygonFilterSource>;
 
 impl OperatorName for PointInPolygonFilter {
@@ -409,21 +410,23 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::engine::{ChunkByteSize, MockExecutionContext, MockQueryContext};
+    use crate::engine::{ChunkByteSize, MockExecutionContext};
     use crate::error::Error;
     use crate::mock::MockFeatureCollectionSource;
 
     #[test]
     fn point_in_polygon_boundary_conditions() {
         let collection = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.0, 0.0).into(),
-                (10.0, 0.0).into(),
-                (10.0, 10.0).into(),
-                (0.0, 10.0).into(),
-                (0.0, 0.0).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.0, 0.0).into(),
+                    (10.0, 0.0).into(),
+                    (10.0, 10.0).into(),
+                    (0.0, 10.0).into(),
+                    (0.0, 0.0).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![Default::default(); 1],
             Default::default(),
             CacheHint::default(),
@@ -447,26 +450,60 @@ mod tests {
             &Default::default()
         ),);
 
-        assert!(tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(9.9, 9.9), &Default::default()),);
-        assert!(tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(10.0, 9.9), &Default::default()),);
-        assert!(tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(9.9, 10.0), &Default::default()),);
+        assert!(
+            tester
+                .any_polygon_contains_coordinate(&Coordinate2D::new(9.9, 9.9), &Default::default()),
+        );
+        assert!(
+            tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(10.0, 9.9),
+                &Default::default()
+            ),
+        );
+        assert!(
+            tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(9.9, 10.0),
+                &Default::default()
+            ),
+        );
 
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(-0.1, -0.1), &Default::default()),);
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(0.0, -0.1), &Default::default()),);
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(-0.1, 0.0), &Default::default()),);
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(-0.1, -0.1),
+                &Default::default()
+            ),
+        );
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(0.0, -0.1),
+                &Default::default()
+            ),
+        );
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(-0.1, 0.0),
+                &Default::default()
+            ),
+        );
 
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(10.1, 10.1), &Default::default()),);
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(10.1, 9.9), &Default::default()),);
-        assert!(!tester
-            .any_polygon_contains_coordinate(&Coordinate2D::new(9.9, 10.1), &Default::default()),);
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(10.1, 10.1),
+                &Default::default()
+            ),
+        );
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(10.1, 9.9),
+                &Default::default()
+            ),
+        );
+        assert!(
+            !tester.any_polygon_contains_coordinate(
+                &Coordinate2D::new(9.9, 10.1),
+                &Default::default()
+            ),
+        );
     }
 
     #[tokio::test]
@@ -510,7 +547,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -566,7 +603,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -633,7 +670,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -721,7 +758,7 @@ mod tests {
 
         let query_processor = operator.query_processor()?.multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -766,6 +803,7 @@ mod tests {
 
     #[tokio::test]
     async fn empty_points() {
+        let exe_ctx: MockExecutionContext = MockExecutionContext::test_default();
         let point_collection = MultiPointCollection::from_data(
             vec![],
             vec![],
@@ -775,14 +813,16 @@ mod tests {
         .unwrap();
 
         let polygon_collection = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.0, 0.0).into(),
-                (10.0, 0.0).into(),
-                (10.0, 10.0).into(),
-                (0.0, 10.0).into(),
-                (0.0, 0.0).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.0, 0.0).into(),
+                    (10.0, 0.0).into(),
+                    (10.0, 10.0).into(),
+                    (0.0, 10.0).into(),
+                    (0.0, 0.0).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::default()],
             Default::default(),
             CacheHint::default(),
@@ -804,7 +844,7 @@ mod tests {
         .await
         .unwrap();
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((-10., -10.).into(), (10., 10.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -812,7 +852,7 @@ mod tests {
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = exe_ctx.mock_query_context_test_default();
 
         let query = query_processor
             .query(query_rectangle, &query_context)
@@ -839,14 +879,16 @@ mod tests {
         .unwrap();
 
         let polygon_collection = MultiPolygonCollection::from_data(
-            vec![MultiPolygon::new(vec![vec![vec![
-                (0.0, 0.0).into(),
-                (10.0, 0.0).into(),
-                (10.0, 10.0).into(),
-                (0.0, 10.0).into(),
-                (0.0, 0.0).into(),
-            ]]])
-            .unwrap()],
+            vec![
+                MultiPolygon::new(vec![vec![vec![
+                    (0.0, 0.0).into(),
+                    (10.0, 0.0).into(),
+                    (10.0, 10.0).into(),
+                    (0.0, 10.0).into(),
+                    (0.0, 0.0).into(),
+                ]]])
+                .unwrap(),
+            ],
             vec![TimeInterval::default()],
             Default::default(),
             CacheHint::default(),

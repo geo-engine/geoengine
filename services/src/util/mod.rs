@@ -18,9 +18,12 @@ pub mod openapi_visitors;
 pub mod operators;
 pub mod parsing;
 pub mod postgres;
+pub mod sentinel_2_utm_zones;
 pub mod server;
 // TODO: refactor to be gated by `#[cfg(test)]`
 pub mod tests;
+#[cfg(test)]
+pub mod websocket_tests;
 pub mod workflows;
 
 /// Serde deserializer <https://docs.rs/serde_qs/0.6.0/serde_qs/index.html#flatten-workaround>

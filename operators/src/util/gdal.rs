@@ -35,6 +35,7 @@ use std::{
     path::{Path, PathBuf},
     str::FromStr,
 };
+use tracing::warn;
 
 // TODO: move test helper somewhere else?
 pub fn create_ndvi_meta_data() -> GdalMetaDataRegular {
@@ -191,11 +192,7 @@ pub fn add_ndvi_dataset_cropped_to_valid_webmercator_bounds(
 ) -> NamedData {
     let id: DataId = DatasetId::new().into();
     let name = NamedData::with_system_name("ndvi_crop_y_85");
-    ctx.add_meta_data(
-        id,
-        name.clone(),
-        Box::new(create_ndvi_meta_data_cropped_to_valid_webmercator_bounds()),
-    );
+    ctx.add_meta_data(id, name.clone(), Box::new(create_ndvi_meta_data()));
     name
 }
 
@@ -283,8 +280,8 @@ pub fn add_ndvi_downscaled_3x_dataset(ctx: &mut MockExecutionContext) -> NamedDa
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn create_ports_meta_data(
-) -> StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle> {
+pub fn create_ports_meta_data()
+-> StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle> {
     StaticMetaData {
         loading_info: OgrSourceDataset {
             file_name: test_data!("vector/data/ne_10m_ports/ne_10m_ports.shp").into(),
@@ -523,6 +520,6 @@ pub fn register_gdal_drivers_from_list<S: BuildHasher>(mut drivers: HashSet<Stri
         let mut drivers: Vec<String> = drivers.into_iter().collect();
         drivers.sort();
         let remaining_drivers = drivers.into_iter().join(", ");
-        log::warn!("Could not register drivers: {remaining_drivers}");
+        warn!("Could not register drivers: {remaining_drivers}");
     }
 }

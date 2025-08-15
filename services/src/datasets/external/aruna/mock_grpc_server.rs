@@ -8,10 +8,10 @@ use std::hash::Hash;
 use std::marker::PhantomData;
 use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::Arc;
-use tonic::codec::ProstCodec;
-use tonic::codegen::{http, Body, BoxFuture};
-use tonic::transport::server::Router;
 use tonic::Code;
+use tonic::codec::ProstCodec;
+use tonic::codegen::{Body, BoxFuture, http};
+use tonic::transport::server::Router;
 
 pub type InfallibleHttpResponseFuture =
     tonic::codegen::BoxFuture<http::Response<tonic::body::BoxBody>, Infallible>;
@@ -43,8 +43,8 @@ impl MockGRPCServer {
 
     fn find_open_port(num_tries: u16) -> Option<u16> {
         for _ in 0..num_tries {
-            let mut rng = rand::thread_rng();
-            let port: u16 = rng.gen_range(50000..60000);
+            let mut rng = rand::rng();
+            let port: u16 = rng.random_range(50000..60000);
             let address: SocketAddr = format!("[::1]:{port}").parse().unwrap();
             if TcpListener::bind(address).is_ok() {
                 return Some(port);
@@ -94,11 +94,11 @@ where
 }
 
 impl<
-        Key: Clone + Eq + Hash + Send + 'static,
-        RequestMessage: Message + Default + Clone + 'static,
-        ResponseMessage: Message + Clone + 'static,
-        F: FnMut(RequestMessage) -> Key + Clone + Send + 'static,
-    > MapResponseService<Key, RequestMessage, ResponseMessage, F>
+    Key: Clone + Eq + Hash + Send + 'static,
+    RequestMessage: Message + Default + Clone + 'static,
+    ResponseMessage: Message + Clone + 'static,
+    F: FnMut(RequestMessage) -> Key + Clone + Send + 'static,
+> MapResponseService<Key, RequestMessage, ResponseMessage, F>
 {
     pub fn new(item: HashMap<Key, ResponseMessage>, key_func: F) -> Self {
         MapResponseService {

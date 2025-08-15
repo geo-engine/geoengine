@@ -1,8 +1,8 @@
 use float_cmp::approx_eq;
 
 use crate::raster::{
-    grid_idx_iter_2d, EmptyGrid, GeoTransform, Grid, GridIndexAccess, GridOrEmpty, GridSize,
-    MaskedGrid, RasterTile2D,
+    EmptyGrid, GeoTransform, Grid, GridIndexAccess, GridOrEmpty, GridSize, MaskedGrid,
+    RasterTile2D, grid_idx_iter_2d,
 };
 use std::panic;
 

@@ -30,7 +30,7 @@ use snafu::{ResultExt, Snafu};
 use std::collections::HashMap;
 use std::sync::Arc;
 use url::{ParseError, Url};
-use utoipa::{ToResponse, ToSchema};
+use utoipa::ToSchema;
 
 type Result<T, E = OidcError> = std::result::Result<T, E>;
 
@@ -217,7 +217,7 @@ struct PendingRequest {
     code_verifier: PkceCodeVerifier,
 }
 
-#[derive(Serialize, Deserialize, ToResponse, ToSchema)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct AuthCodeRequestURL {
     url: Url,
 }
@@ -635,6 +635,7 @@ impl OidcRequestClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::users::OidcError::IllegalRequestToken;
     use crate::users::oidc::OidcError::{
         IllegalProvider, LoginFailed, ProviderDiscovery, ResponseFieldError, TokenExchangeError,
     };
@@ -642,10 +643,9 @@ mod tests {
         AuthCodeResponse, DefaultClient, DefaultJsonWebKeySet, DefaultProviderMetadata,
         OidcRequestDb,
     };
-    use crate::users::OidcError::IllegalRequestToken;
     use crate::util::tests::mock_oidc::{
-        mock_jwks, mock_provider_metadata, mock_token_response, MockTokenConfig, SINGLE_NONCE,
-        SINGLE_STATE,
+        MockTokenConfig, SINGLE_NONCE, SINGLE_STATE, mock_jwks, mock_provider_metadata,
+        mock_token_response,
     };
     use httptest::matchers::request;
     use httptest::responders::status_code;

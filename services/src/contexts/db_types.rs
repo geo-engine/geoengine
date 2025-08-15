@@ -2,6 +2,8 @@ use crate::{
     datasets::{
         dataset_listing_provider::DatasetLayerListingProviderDefinition,
         external::{
+            CopernicusDataspaceDataProviderDefinition, GdalRetries,
+            SentinelS2L2ACogsProviderDefinition, StacApiRetries, WildliveDataConnectorDefinition,
             aruna::ArunaDataProviderDefinition,
             edr::{EdrDataProviderDefinition, EdrVectorSpec},
             gbif::GbifDataProviderDefinition,
@@ -9,8 +11,6 @@ use crate::{
             gfbio_collections::GfbioCollectionsDataProviderDefinition,
             netcdfcf::{EbvPortalDataProviderDefinition, NetCdfCfDataProviderDefinition},
             pangaea::PangaeaDataProviderDefinition,
-            CopernicusDataspaceDataProviderDefinition, GdalRetries,
-            SentinelS2L2ACogsProviderDefinition, StacApiRetries,
         },
         listing::Provenance,
         storage::MetaDataDefinition,
@@ -19,14 +19,15 @@ use crate::{
     layers::external::TypedDataProviderDefinition,
     projects::{
         ColorParam, DerivedColor, DerivedNumber, LineSymbology, NumberParam, PointSymbology,
-        PolygonSymbology, RasterSymbology, Symbology,
+        PolygonSymbology, RasterSymbology, StaticColor, StaticNumber, StrokeParam, Symbology,
+        TextSymbology,
     },
     util::postgres::DatabaseConnectionConfig,
 };
 use geoengine_datatypes::{
     dataset::DataProviderId,
     delegate_from_to_sql,
-    operations::image::{Colorizer, RgbaColor},
+    operations::image::{Colorizer, RasterColorizer, RgbaColor},
     primitives::{CacheTtlSeconds, VectorQueryRectangle},
     util::StringPair,
 };
@@ -51,7 +52,7 @@ pub struct ColorParamDbType {
 impl From<&ColorParam> for ColorParamDbType {
     fn from(value: &ColorParam) -> Self {
         match value {
-            ColorParam::Static { color } => Self {
+            ColorParam::Static(StaticColor { color, .. }) => Self {
                 color: Some(*color),
                 attribute: None,
                 colorizer: None,
@@ -59,6 +60,7 @@ impl From<&ColorParam> for ColorParamDbType {
             ColorParam::Derived(DerivedColor {
                 attribute,
                 colorizer,
+                ..
             }) => Self {
                 color: None,
                 attribute: Some(attribute.clone()),
@@ -77,12 +79,16 @@ impl TryFrom<ColorParamDbType> for ColorParam {
                 color: Some(color),
                 attribute: None,
                 colorizer: None,
-            } => Ok(Self::Static { color }),
+            } => Ok(Self::Static(StaticColor {
+                r#type: Default::default(),
+                color,
+            })),
             ColorParamDbType {
                 color: None,
                 attribute: Some(attribute),
                 colorizer: Some(colorizer),
             } => Ok(Self::Derived(DerivedColor {
+                r#type: Default::default(),
                 attribute,
                 colorizer,
             })),
@@ -103,7 +109,7 @@ pub struct NumberParamDbType {
 impl From<&NumberParam> for NumberParamDbType {
     fn from(value: &NumberParam) -> Self {
         match value {
-            NumberParam::Static { value } => Self {
+            NumberParam::Static(StaticNumber { value, .. }) => Self {
                 value: Some(*value as i64),
                 attribute: None,
                 factor: None,
@@ -113,6 +119,7 @@ impl From<&NumberParam> for NumberParamDbType {
                 attribute,
                 factor,
                 default_value,
+                ..
             }) => Self {
                 value: None,
                 attribute: Some(attribute.clone()),
@@ -133,15 +140,17 @@ impl TryFrom<NumberParamDbType> for NumberParam {
                 attribute: None,
                 factor: None,
                 default_value: None,
-            } => Ok(Self::Static {
+            } => Ok(Self::Static(StaticNumber {
+                r#type: Default::default(),
                 value: value as usize,
-            }),
+            })),
             NumberParamDbType {
                 value: None,
                 attribute: Some(attribute),
                 factor: Some(factor),
                 default_value: Some(default_value),
             } => Ok(Self::Derived(DerivedNumber {
+                r#type: Default::default(),
                 attribute,
                 factor,
                 default_value,
@@ -222,6 +231,133 @@ impl TryFrom<SymbologyDbType> for Symbology {
             } => Ok(Self::Polygon(polygon)),
             _ => Err(Error::UnexpectedInvalidDbTypeConversion),
         }
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "RasterSymbology")]
+pub struct RasterSymbologyDbType {
+    opacity: f64,
+    raster_colorizer: RasterColorizer,
+}
+
+impl From<&RasterSymbology> for RasterSymbologyDbType {
+    fn from(symbology: &RasterSymbology) -> Self {
+        Self {
+            opacity: symbology.opacity,
+            raster_colorizer: symbology.raster_colorizer.clone(),
+        }
+    }
+}
+
+impl TryFrom<RasterSymbologyDbType> for RasterSymbology {
+    type Error = Error;
+
+    fn try_from(symbology: RasterSymbologyDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            opacity: symbology.opacity,
+            raster_colorizer: symbology.raster_colorizer.clone(),
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "PointSymbology")]
+pub struct PointSymbologyDbType {
+    radius: NumberParam,
+    fill_color: ColorParam,
+    stroke: StrokeParam,
+    text: Option<TextSymbology>,
+}
+
+impl From<&PointSymbology> for PointSymbologyDbType {
+    fn from(symbology: &PointSymbology) -> Self {
+        Self {
+            radius: symbology.radius.clone(),
+            fill_color: symbology.fill_color.clone(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+        }
+    }
+}
+
+impl TryFrom<PointSymbologyDbType> for PointSymbology {
+    type Error = Error;
+
+    fn try_from(symbology: PointSymbologyDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            radius: symbology.radius.clone(),
+            fill_color: symbology.fill_color.clone(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "LineSymbology")]
+pub struct LineSymbologyDbType {
+    stroke: StrokeParam,
+    text: Option<TextSymbology>,
+    auto_simplified: bool,
+}
+
+impl From<&LineSymbology> for LineSymbologyDbType {
+    fn from(symbology: &LineSymbology) -> Self {
+        Self {
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+            auto_simplified: symbology.auto_simplified,
+        }
+    }
+}
+
+impl TryFrom<LineSymbologyDbType> for LineSymbology {
+    type Error = Error;
+
+    fn try_from(symbology: LineSymbologyDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+            auto_simplified: symbology.auto_simplified,
+        })
+    }
+}
+
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "PolygonSymbology")]
+pub struct PolygonSymbologyDbType {
+    fill_color: ColorParam,
+    stroke: StrokeParam,
+    text: Option<TextSymbology>,
+    auto_simplified: bool,
+}
+
+impl From<&PolygonSymbology> for PolygonSymbologyDbType {
+    fn from(symbology: &PolygonSymbology) -> Self {
+        Self {
+            fill_color: symbology.fill_color.clone(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+            auto_simplified: symbology.auto_simplified,
+        }
+    }
+}
+
+impl TryFrom<PolygonSymbologyDbType> for PolygonSymbology {
+    type Error = Error;
+
+    fn try_from(symbology: PolygonSymbologyDbType) -> Result<Self, Self::Error> {
+        Ok(Self {
+            r#type: Default::default(),
+            fill_color: symbology.fill_color.clone(),
+            stroke: symbology.stroke.clone(),
+            text: symbology.text.clone(),
+            auto_simplified: symbology.auto_simplified,
+        })
     }
 }
 
@@ -767,6 +903,7 @@ pub struct TypedDataProviderDefinitionDbType {
     edr_data_provider_definition: Option<EdrDataProviderDefinition>,
     copernicus_dataspace_provider_definition: Option<CopernicusDataspaceDataProviderDefinition>,
     sentinel_s2_l2_a_cogs_provider_definition: Option<SentinelS2L2ACogsProviderDefinition>,
+    wildlive_data_connector_definition: Option<WildliveDataConnectorDefinition>,
 }
 
 #[allow(clippy::too_many_lines)]
@@ -786,6 +923,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                     edr_data_provider_definition: None,
                     copernicus_dataspace_provider_definition: None,
                     sentinel_s2_l2_a_cogs_provider_definition: None,
+                    wildlive_data_connector_definition: None,
                 }
             }
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
@@ -802,6 +940,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::GbifDataProviderDefinition(data_provider_definition) => {
                 Self {
@@ -816,6 +955,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                     edr_data_provider_definition: None,
                     copernicus_dataspace_provider_definition: None,
                     sentinel_s2_l2_a_cogs_provider_definition: None,
+                    wildlive_data_connector_definition: None,
                 }
             }
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
@@ -832,6 +972,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
                 data_provider_definition,
@@ -847,6 +988,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
                 data_provider_definition,
@@ -862,6 +1004,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
                 data_provider_definition,
@@ -877,6 +1020,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(
                 data_provider_definition,
@@ -892,6 +1036,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::EdrDataProviderDefinition(data_provider_definition) => {
                 Self {
@@ -906,6 +1051,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                     edr_data_provider_definition: Some(data_provider_definition.clone()),
                     copernicus_dataspace_provider_definition: None,
                     sentinel_s2_l2_a_cogs_provider_definition: None,
+                    wildlive_data_connector_definition: None,
                 }
             }
             TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
@@ -922,6 +1068,7 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: Some(data_provider_definition.clone()),
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             },
             TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
                 data_provider_definition,
@@ -937,6 +1084,23 @@ impl From<&TypedDataProviderDefinition> for TypedDataProviderDefinitionDbType {
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: Some(data_provider_definition.clone()),
+                wildlive_data_connector_definition: None,
+            },
+            TypedDataProviderDefinition::WildliveDataConnectorDefinition(
+                data_provider_definition,
+            ) => Self {
+                aruna_data_provider_definition: None,
+                dataset_layer_listing_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+                edr_data_provider_definition: None,
+                copernicus_dataspace_provider_definition: None,
+                sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: Some(data_provider_definition.clone()),
             },
         }
     }
@@ -960,6 +1124,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::ArunaDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -975,6 +1140,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
                     data_provider_definition,
@@ -992,6 +1158,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::GbifDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1007,6 +1174,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(
                     data_provider_definition,
@@ -1024,6 +1192,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(
                     data_provider_definition,
@@ -1041,6 +1210,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::EbvPortalDataProviderDefinition(
                     data_provider_definition,
@@ -1058,6 +1228,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1073,6 +1244,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::PangaeaDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1088,6 +1260,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: Some(data_provider_definition),
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(TypedDataProviderDefinition::EdrDataProviderDefinition(
                 data_provider_definition,
             )),
@@ -1103,6 +1276,7 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: Some(data_provider_definition),
                 sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(
                     data_provider_definition,
@@ -1120,8 +1294,27 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
                 edr_data_provider_definition: None,
                 copernicus_dataspace_provider_definition: None,
                 sentinel_s2_l2_a_cogs_provider_definition: Some(data_provider_definition),
+                wildlive_data_connector_definition: None,
             } => Ok(
                 TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(
+                    data_provider_definition,
+                ),
+            ),
+            TypedDataProviderDefinitionDbType {
+                aruna_data_provider_definition: None,
+                dataset_layer_listing_provider_definition: None,
+                gbif_data_provider_definition: None,
+                gfbio_abcd_data_provider_definition: None,
+                gfbio_collections_data_provider_definition: None,
+                ebv_portal_data_provider_definition: None,
+                net_cdf_cf_data_provider_definition: None,
+                pangaea_data_provider_definition: None,
+                edr_data_provider_definition: None,
+                copernicus_dataspace_provider_definition: None,
+                sentinel_s2_l2_a_cogs_provider_definition: None,
+                wildlive_data_connector_definition: Some(data_provider_definition),
+            } => Ok(
+                TypedDataProviderDefinition::WildliveDataConnectorDefinition(
                     data_provider_definition,
                 ),
             ),
@@ -1163,20 +1356,20 @@ delegate_from_to_sql!(
     CopernicusDataspaceDataProviderDefinition,
     CopernicusDataspaceDataProviderDefinitionDbType
 );
+delegate_from_to_sql!(RasterSymbology, RasterSymbologyDbType);
+delegate_from_to_sql!(PointSymbology, PointSymbologyDbType);
+delegate_from_to_sql!(LineSymbology, LineSymbologyDbType);
+delegate_from_to_sql!(PolygonSymbology, PolygonSymbologyDbType);
 
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        dataset::DataProviderId,
-        primitives::{CacheTtlSeconds, SpatialPartition2D},
-        util::Identifier,
+        dataset::DataProviderId, primitives::CacheTtlSeconds, util::Identifier,
     };
 
     use super::*;
     use crate::{
-        datasets::external::{
-            SentinelS2L2ACogsProviderDefinition, StacBand, StacQueryBuffer, StacZone,
-        },
+        datasets::external::{SentinelS2L2ACogsProviderDefinition, StacQueryBuffer},
         layers::external::TypedDataProviderDefinition,
         util::{postgres::assert_sql_type, tests::with_temp_context},
     };
@@ -1209,32 +1402,6 @@ mod tests {
 
             assert_sql_type(
                 &pool,
-                "StacBand",
-                [StacBand {
-                    name: "band".to_owned(),
-                    no_data_value: Some(133.7),
-                    data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                    pixel_size: 10.0,
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
-                "StacZone",
-                [StacZone {
-                    name: "zone".to_owned(),
-                    epsg: 4326,
-                    global_native_bounds: SpatialPartition2D::new_unchecked(
-                        (-180., 90.).into(),
-                        (180., -90.).into(),
-                    ),
-                }],
-            )
-            .await;
-
-            assert_sql_type(
-                &pool,
                 "SentinelS2L2ACogsProviderDefinition",
                 [SentinelS2L2ACogsProviderDefinition {
                     name: "foo".to_owned(),
@@ -1242,20 +1409,6 @@ mod tests {
                     description: "A provider".to_owned(),
                     priority: Some(1),
                     api_url: "http://api.url".to_owned(),
-                    bands: vec![StacBand {
-                        name: "band".to_owned(),
-                        no_data_value: Some(133.7),
-                        data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                        pixel_size: 10.0,
-                    }],
-                    zones: vec![StacZone {
-                        name: "zone".to_owned(),
-                        epsg: 4326,
-                        global_native_bounds: SpatialPartition2D::new_unchecked(
-                            (-180., 90.).into(),
-                            (180., -90.).into(),
-                        ),
-                    }],
                     stac_api_retries: StacApiRetries {
                         number_of_retries: 3,
                         initial_delay_ms: 4,
@@ -1314,20 +1467,6 @@ mod tests {
                             priority: Some(3),
                             id: DataProviderId::new(),
                             api_url: "http://api.url".to_owned(),
-                            bands: vec![StacBand {
-                                name: "band".to_owned(),
-                                no_data_value: Some(133.7),
-                                data_type: geoengine_datatypes::raster::RasterDataType::F32,
-                                pixel_size: 10.,
-                            }],
-                            zones: vec![StacZone {
-                                name: "zone".to_owned(),
-                                epsg: 4326,
-                                global_native_bounds: SpatialPartition2D::new_unchecked(
-                                    (-180., 90.).into(),
-                                    (180., -90.).into(),
-                                ),
-                            }],
                             stac_api_retries: StacApiRetries {
                                 number_of_retries: 3,
                                 initial_delay_ms: 4,

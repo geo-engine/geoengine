@@ -10,8 +10,6 @@ password = "geoengine"
 raster_data_root_path = "../test_data/raster" # relative to sub crate directory for tests
 
 [raster.tiling_specification]
-origin_coordinate_x = 0.0
-origin_coordinate_y = 0.0
 tile_shape_pixels_x = 512
 tile_shape_pixels_y = 512
 

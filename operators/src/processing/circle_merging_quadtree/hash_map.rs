@@ -45,7 +45,7 @@ where
                 }
             }
             Bucket::Multi(entries) => entries.push(entry),
-        };
+        }
     }
 }
 
@@ -304,8 +304,8 @@ where
 
 #[cfg(test)]
 mod tests {
-    use rand::prelude::SliceRandom;
     use rand::SeedableRng;
+    use rand::prelude::SliceRandom;
 
     use super::*;
 
@@ -372,7 +372,7 @@ mod tests {
             match map.entry(i) {
                 ValueRef::Vacant(_) => panic!("key not found: {i}"),
                 ValueRef::Occupied(_) => (), // okay
-            };
+            }
         }
     }
 

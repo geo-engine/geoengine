@@ -81,7 +81,13 @@ where
             5.0,
         ];
         // Initialize marker increment
-        let increment = [0.0, quantile / 2.0, quantile, (1.0 + quantile) / 2.0, 1.0];
+        let increment = [
+            0.0,
+            quantile / 2.0,
+            quantile,
+            f64::midpoint(1.0, quantile),
+            1.0,
+        ];
 
         // Initialize marker values
         let mut markers = [0.0; 5];
@@ -281,12 +287,12 @@ impl<T: AsPrimitive<f64>> SafePSquareQuantileEstimator<T> {
             return Err(StatisticsError::Initialization {
                 reason: "The desired quantile must be in the interval (0,1)".into(),
             });
-        };
+        }
         if !f64::is_finite(initial_sample.as_()) {
             return Err(StatisticsError::Initialization {
                 reason: "The initial sample must be finite".into(),
             });
-        };
+        }
 
         Ok(Self::Values {
             quantile,
@@ -311,7 +317,7 @@ impl<T: AsPrimitive<f64>> SafePSquareQuantileEstimator<T> {
                 if num_samples.is_even() {
                     let upper = samples[position(*num_samples, *quantile)].as_();
                     let lower = samples[position(*num_samples - 1, *quantile)].as_();
-                    (upper + lower) / 2.0
+                    f64::midpoint(upper, lower)
                 } else {
                     samples[position(*num_samples, *quantile)].as_()
                 }
@@ -741,7 +747,7 @@ mod tests {
             data.push(v);
         }
 
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         data.shuffle(&mut rng);
 
         let estimator = PSquareQuantileEstimator::new(0.5, data.as_slice()).unwrap();

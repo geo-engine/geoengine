@@ -9,10 +9,10 @@ use crate::processing::{
     InterpolationMethod, InterpolationParams, InterpolationResolution, Reprojection,
     ReprojectionParams,
 };
-use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
+use crate::util::input::RasterOrVectorOperator;
 use geoengine_datatypes::primitives::{
-    find_next_best_overview_level_resolution, Coordinate2D, SpatialResolution,
+    Coordinate2D, SpatialResolution, find_next_best_overview_level_resolution,
 };
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -61,10 +61,8 @@ impl WrapWithProjectionAndResample {
         let res = if target_sref == result_sref {
             self
         } else {
-            log::debug!(
-                "Target srs: {}, workflow srs: {} --> injecting reprojection",
-                target_sref,
-                result_sref
+            tracing::debug!(
+                "Target srs: {target_sref}, workflow srs: {result_sref} --> injecting reprojection"
             );
 
             let reprojection_params = ReprojectionParams {
@@ -144,10 +142,8 @@ impl WrapWithProjectionAndResample {
             && target_spatial_grid.spatial_resolution().y <= rd_resolution.y
         //TODO: we should allow to use the "interpolation" as long as the fraction is > 0.5. This would require to keep 4 tiles which seems to be fine. The edge case of resampling with same resolution should also use the interpolation since bilieaner woudl make sense here?
         {
-            log::debug!(
-                "Target res: {:?}, workflow res: {:?} --> injecting interpolation",
-                target_spatial_resolution,
-                rd_resolution
+            tracing::debug!(
+                "Target res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting interpolation"
             );
             /*
             let interpolation_method = if self
@@ -189,10 +185,8 @@ impl WrapWithProjectionAndResample {
         } else {
             // Query resolution is larger than workflow => compute on overview level and append downsampling to increase resolution
 
-            log::debug!(
-                "Query res: {:?}, workflow res: {:?} --> optimize workflow and push-down downsampling",
-                target_spatial_resolution,
-                rd_resolution
+            tracing::debug!(
+                "Query res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> optimize workflow and push-down downsampling"
             );
 
             let snapped_resolution = find_next_best_overview_level_resolution(

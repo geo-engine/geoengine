@@ -7,20 +7,21 @@ use crate::engine::{
 use crate::error::Error;
 use crate::optimization::OptimizationError;
 use crate::util::Result;
+use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
-    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution,
+    RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{
-    MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    GridBoundingBox2D, MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 
 // Output type is always f32
 type PixelOut = f32;
@@ -81,7 +82,7 @@ impl RasterOperator for Temperature {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Classification(ClassificationMeasurement {
                     measurement: m,
@@ -90,13 +91,13 @@ impl RasterOperator for Temperature {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Unitless => {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: "unitless".into(),
-                    })
+                    });
                 }
                 // OK Case
                 Measurement::Continuous(ContinuousMeasurement {
@@ -306,15 +307,15 @@ fn create_lookup_table(channel: &Channel, offset: f64, slope: f64, _pool: &Threa
 impl<Q, P> QueryProcessor for TemperatureProcessor<Q, P>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialBounds = GridBoundingBox2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -342,7 +343,7 @@ mod tests {
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, MaskedGrid2D, TilingSpecification};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // #[tokio::test]
     // async fn test_msg_raster() {
@@ -426,7 +427,9 @@ mod tests {
             &MaskedGrid2D::new(
                 Grid2D::new(
                     [3, 2].into(),
-                    vec![300.341_43, 318.617_65, 330.365_14, 339.233_64, 346.443_94, 0.,],
+                    vec![
+                        300.341_43, 318.617_65, 330.365_14, 339.233_64, 346.443_94, 0.,
+                    ],
                 )
                 .unwrap(),
                 Grid2D::new([3, 2].into(), vec![true, true, true, true, true, false,],).unwrap(),
@@ -769,7 +772,7 @@ mod tests {
                     None,
                     Some(Measurement::Classification(ClassificationMeasurement {
                         measurement: "invalid".into(),
-                        classes: HashMap::new(),
+                        classes: BTreeMap::new(),
                     })),
                 );
 

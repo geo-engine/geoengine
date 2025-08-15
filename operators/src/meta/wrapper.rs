@@ -8,11 +8,11 @@ use crate::engine::{
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
-use futures::stream::BoxStream;
 use futures::StreamExt;
+use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle, SpatialResolution};
 use std::sync::atomic::{AtomicUsize, Ordering};
-use tracing::{span, Level};
+use tracing::{Level, span};
 
 // A wrapper around an initialized operator that adds statistics and quota tracking
 pub struct InitializedOperatorWrapper<S> {
@@ -253,21 +253,21 @@ where
 #[async_trait]
 impl<Q, T, S, A, R> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
-    Q: QueryProcessor<Output = T, SpatialQuery = S, Selection = A, ResultDescription = R>,
-    S: std::fmt::Debug + Send + Sync + 'static + Clone + Copy,
+    Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = A, ResultDescription = R>,
+    S: std::fmt::Display + Send + Sync + 'static + Clone + Copy,
     A: QueryAttributeSelection + 'static,
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = A>
         + 'static,
     T: Send,
 {
     type Output = T;
-    type SpatialQuery = S;
+    type SpatialBounds = S;
     type Selection = A;
     type ResultDescription = R;
 
     async fn _query<'a>(
         &'a self,
-        query: QueryRectangle<Self::SpatialQuery, Self::Selection>,
+        query: QueryRectangle<Self::SpatialBounds, Self::Selection>,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let qc = self.next_query_count();
@@ -302,12 +302,12 @@ where
 
         let _enter = span.enter();
 
-        let spbox = query.spatial_query;
-        let time = query.time_interval;
+        let spbox = query.spatial_bounds();
+        let time = query.time_interval();
         tracing::trace!(
             event = %"query_start",
             path = %self.path,
-            bbox = %format!("{:?}", spbox), // FIXME: better format then debug here
+            bbox = %format!("{}", spbox),
             time = %format!("[{},{}]",
                 time.start().inner(),
                 time.end().inner()

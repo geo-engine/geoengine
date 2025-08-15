@@ -13,10 +13,11 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, Measurement,
-    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution,
+    RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{
-    MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    GridBoundingBox2D, MapElementsParallel, Pixel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
@@ -84,7 +85,7 @@ impl RasterOperator for Radiance {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Classification(ClassificationMeasurement {
                     measurement: m,
@@ -93,13 +94,13 @@ impl RasterOperator for Radiance {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: m.clone(),
-                    })
+                    });
                 }
                 Measurement::Unitless => {
                     return Err(Error::InvalidMeasurement {
                         expected: "raw".into(),
                         found: "unitless".into(),
-                    })
+                    });
                 }
                 // OK Case
                 Measurement::Continuous(ContinuousMeasurement {
@@ -262,15 +263,15 @@ where
 impl<Q, P> QueryProcessor for RadianceProcessor<Q, P>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialBounds = GridBoundingBox2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -298,7 +299,7 @@ mod tests {
         ClassificationMeasurement, ContinuousMeasurement, Measurement,
     };
     use geoengine_datatypes::raster::{EmptyGrid2D, Grid2D, MaskedGrid2D, TilingSpecification};
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     // #[tokio::test]
     // async fn test_msg_raster() {
@@ -531,7 +532,7 @@ mod tests {
                     None,
                     Some(Measurement::Classification(ClassificationMeasurement {
                         measurement: "invalid".into(),
-                        classes: HashMap::new(),
+                        classes: BTreeMap::new(),
                     })),
                 );
 

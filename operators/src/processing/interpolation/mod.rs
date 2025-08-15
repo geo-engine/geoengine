@@ -20,8 +20,7 @@ use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialResolution, TimeInstance,
-    TimeInterval,
+    RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::{
     Bilinear, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
@@ -30,7 +29,7 @@ use geoengine_datatypes::raster::{
 };
 use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
-use snafu::{ensure, Snafu};
+use snafu::{Snafu, ensure};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -347,16 +346,16 @@ where
 impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialBounds = GridBoundingBox2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
     I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -382,11 +381,15 @@ where
         let tiling_strategy: geoengine_datatypes::raster::TilingStrategy =
             tiling_grid_definition.generate_data_tiling_strategy();
 
+        let input_geo_transform = in_spatial_grid
+            .tiling_grid_definition(ctx.tiling_specification())
+            .tiling_geo_transform();
+
+        let output_geo_transform = tiling_grid_definition.tiling_geo_transform();
+
         let sub_query = InterpolationSubQuery::<_, P, I> {
-            input_geo_transform: in_spatial_grid
-                .tiling_grid_definition(ctx.tiling_specification())
-                .tiling_geo_transform(),
-            output_geo_transform: tiling_grid_definition.tiling_geo_transform(),
+            input_geo_transform,
+            output_geo_transform,
             fold_fn: fold_future,
             tiling_specification: self.tiling_specification,
             phantom: PhantomData,
@@ -479,7 +482,7 @@ where
         )
         .expect("max bounds must be larger then min bounds already");
 
-        Ok(Some(RasterQueryRectangle::new_with_grid_bounds(
+        Ok(Some(RasterQueryRectangle::new(
             enlarged_input_pixel_bounds,
             TimeInterval::new_instant(start_time)?,
             BandSelection::new_single(band_idx),
@@ -577,11 +580,11 @@ pub fn create_accu<T: Pixel, I: InterpolationAlgorithm<GridBoundingBox2D, T>>(
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     _tiling_specification: TilingSpecification,
-) -> impl Future<Output = Result<InterpolationAccu<T, I>>> {
+) -> impl Future<Output = Result<InterpolationAccu<T, I>>> + use<T, I> {
     let query_rect = query_rect.clone();
 
     // create an accumulator as a single tile that fits all the input tiles
-    let time_interval = query_rect.time_interval;
+    let time_interval = query_rect.time_interval();
 
     crate::util::spawn_blocking(move || {
         let tile_pixel_bounds = tile_info.global_pixel_bounds();
@@ -668,8 +671,8 @@ mod tests {
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
-            RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor, SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -714,7 +717,7 @@ mod tests {
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-4, 0], [-1, 7]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
@@ -875,12 +878,12 @@ mod tests {
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let result_stream = processor.query(query_rect, &query_ctx).await?;
 
@@ -929,7 +932,7 @@ mod tests {
 
         let processor = operator.query_processor()?.get_i8().unwrap();
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-4, 0], [-1, 7]).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             [0, 1].try_into().unwrap(),

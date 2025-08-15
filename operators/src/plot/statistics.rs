@@ -8,18 +8,17 @@ use crate::engine::{
 use crate::error;
 use crate::error::Error;
 use crate::optimization::OptimizationError;
+use crate::util::Result;
 use crate::util::input::MultiRasterOrVectorOperator;
 use crate::util::number_statistics::NumberStatistics;
 use crate::util::statistics::{SafePSquareQuantileEstimator, StatisticsError};
-use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::select_all;
 use futures::{FutureExt, StreamExt, TryFutureExt, TryStreamExt};
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::primitives::{
-    partitions_extent, time_interval_extent, AxisAlignedRectangle, BandSelection, BoundingBox2D,
-    ColumnSelection, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
-    VectorQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
+    RasterQueryRectangle, SpatialResolution, partitions_extent, time_interval_extent,
 };
 use geoengine_datatypes::raster::ConvertDataTypeParallel;
 use geoengine_datatypes::raster::{GridOrEmpty, GridSize};
@@ -354,11 +353,7 @@ impl PlotQueryProcessor for StatisticsVectorQueryProcessor {
             })
             .collect();
 
-        let query = VectorQueryRectangle::new(
-            query.spatial_query,
-            query.time_interval,
-            ColumnSelection::all(),
-        );
+        let query = query.select_attributes(ColumnSelection::all());
 
         call_on_generic_vector_processor!(&self.vector, processor => {
             let mut query = processor.query(query, ctx).await?;
@@ -415,11 +410,11 @@ impl PlotQueryProcessor for StatisticsRasterQueryProcessor {
         for (i, raster_processor) in self.rasters.iter().enumerate() {
             let rd = raster_processor.result_descriptor();
 
-            let raster_query_rect = RasterQueryRectangle::with_spatial_query_and_geo_transform(
+            let raster_query_rect = RasterQueryRectangle::from_bounds_and_geo_transform(
                 &query,
+                BandSelection::first(),
                 rd.tiling_grid_definition(ctx.tiling_specification())
                     .tiling_geo_transform(),
-                BandSelection::first(),
             );
 
             queries.push(
@@ -678,7 +673,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -746,7 +741,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -850,7 +845,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -962,7 +957,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -1080,8 +1075,8 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -1111,8 +1106,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1134,7 +1130,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -1176,8 +1172,8 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -1207,8 +1203,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1230,7 +1227,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -1264,8 +1261,8 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -1295,8 +1292,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1318,7 +1316,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -1411,7 +1409,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -1448,8 +1446,8 @@ mod tests {
             tile_size_in_pixels,
         };
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -1479,8 +1477,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let statistics = Statistics {
             params: StatisticsParams {
@@ -1502,7 +1501,7 @@ mod tests {
 
         let result = processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),

@@ -3,13 +3,12 @@ use super::{
     TaskListOptions, TaskManager, TaskStatus, TaskStatusInfo, TaskStatusWithId,
 };
 use crate::{contexts::Db, error::Result};
-use futures::channel::oneshot;
 use futures::StreamExt;
+use futures::channel::oneshot;
 use geoengine_datatypes::{
     error::ErrorSource,
-    util::{helpers::ge_report, Identifier},
+    util::{Identifier, helpers::ge_report},
 };
-use log::warn;
 use std::{
     collections::{HashMap, HashSet, VecDeque},
     sync::Arc,
@@ -18,6 +17,7 @@ use tokio::{
     sync::{RwLock, RwLockWriteGuard},
     task::JoinHandle,
 };
+use tracing::warn;
 
 type SharedTask = Arc<Box<dyn Task<SimpleTaskManagerContext>>>;
 
@@ -301,7 +301,7 @@ fn run_task(
             Err(err) => {
                 let err = Arc::from(err);
 
-                log::error!(
+                tracing::error!(
                     "Task {} failed with: {}",
                     task_id,
                     ge_report(Arc::clone(&err))
@@ -318,7 +318,7 @@ fn run_task(
 
                 clean_up_phase(task_manager.clone(), task_handle, &mut update_lock, task_id);
             }
-        };
+        }
 
         // TODO: move this into clean-up?
         if let Some(notify) = notify {
@@ -412,7 +412,7 @@ fn clean_up_phase(
         match result {
             Ok(()) => set_status_to_clean_up_completed(&task_handle.status).await,
             Err(err) => set_status_to_clean_up_failed(&task_handle.status, err).await,
-        };
+        }
 
         remove_unique_key(&task_handle, &mut update_lock.unique_tasks);
     });

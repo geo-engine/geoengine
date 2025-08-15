@@ -4,7 +4,7 @@ use std::{cmp::max, convert::TryInto, ops::Add};
 use serde::{Deserialize, Serialize};
 
 use postgres_types::{FromSql, ToSql};
-use snafu::{ensure, OptionExt};
+use snafu::{OptionExt, ensure};
 
 use crate::error::{self, Error};
 use crate::primitives::TimeInstance;

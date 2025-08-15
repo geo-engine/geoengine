@@ -13,7 +13,41 @@ pub fn assert_image_equals(expected: &Path, found: &[u8]) {
         image::load_from_memory(&left_buf).expect("Failed to make image from `expected` path");
     let right = image::load_from_memory(found).expect("Failed to make image from `found` bytes");
 
-    assert_eq!(left, right, "Images differ: {expected:?}");
+    assert_eq!(left, right, "Images differ: {}", expected.display());
+}
+
+/// Compare two images
+///
+/// # Panics
+/// - if the `expected` image cannot be loaded
+/// - if the `found` bytes cannot be loaded as an image
+/// - if the images differ
+///
+pub fn assert_image_equals_with_format(expected: &Path, found: &[u8], format: ImageFormat) {
+    let left_buf = std::fs::read(expected).expect("Failed to read `expected` path");
+    let left = image::load_from_memory_with_format(&left_buf, format.into())
+        .expect("Failed to make image from `expected` path");
+    let right = image::load_from_memory_with_format(found, format.into())
+        .expect("Failed to make image from `found` bytes");
+
+    assert_eq!(left, right, "Images differ: {}", expected.display());
+}
+
+/// Image format
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+
+pub enum ImageFormat {
+    Png,
+    Tiff,
+}
+
+impl From<ImageFormat> for image::ImageFormat {
+    fn from(format: ImageFormat) -> Self {
+        match format {
+            ImageFormat::Png => image::ImageFormat::Png,
+            ImageFormat::Tiff => image::ImageFormat::Tiff,
+        }
+    }
 }
 
 #[cfg(test)]

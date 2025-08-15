@@ -19,12 +19,12 @@ use crate::users::UserSession;
 use crate::users::{AuthCodeRequestURL, AuthCodeResponse, RoleDb, UserCredentials};
 use crate::util::extractors::ValidatedJson;
 use actix_web::FromRequest;
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{HttpResponse, Responder, web};
 use geoengine_datatypes::error::BoxedResultExt;
 use serde::Deserialize;
 use serde::Serialize;
-use snafu::ensure;
 use snafu::ResultExt;
+use snafu::ensure;
 use utoipa::IntoParams;
 use utoipa::ToSchema;
 use uuid::Uuid;
@@ -883,7 +883,7 @@ pub(crate) async fn get_role_descriptions<C: ApplicationContext<Session = UserSe
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::datatypes::RasterColorizer;
+    use crate::api::model::datatypes::{RasterColorizer, SingleBandRasterColorizer};
     use crate::api::model::responses::ErrorResponse;
     use crate::config::Oidc;
     use crate::contexts::PostgresContext;
@@ -892,8 +892,8 @@ mod tests {
     use crate::permissions::Role;
     use crate::users::{AuthCodeRequestURL, OidcManager, UserAuth, UserId};
     use crate::util::tests::mock_oidc::{
-        mock_refresh_server, mock_token_response, mock_valid_provider_discovery,
-        MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE,
+        MockRefreshServerConfig, MockTokenConfig, SINGLE_STATE, mock_refresh_server,
+        mock_token_response, mock_valid_provider_discovery,
     };
     use crate::util::tests::{
         admin_login, create_project_helper2, create_session_helper, register_ndvi_workflow_helper,
@@ -901,7 +901,7 @@ mod tests {
     use crate::util::tests::{check_allowed_http_methods, read_body_string, send_test_request};
     use actix_http::header::CONTENT_TYPE;
     use actix_web::dev::ServiceResponse;
-    use actix_web::{http::header, http::Method, test};
+    use actix_web::{http::Method, http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use core::time::Duration;
     use geoengine_datatypes::operations::image::{Colorizer, RgbaColor};
@@ -1936,10 +1936,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),

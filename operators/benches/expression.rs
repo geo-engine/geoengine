@@ -9,12 +9,12 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
-        SingleRasterSource, WorkflowOperatorPath,
+        MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
+        WorkflowOperatorPath,
     },
     processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
     source::{GdalSource, GdalSourceParameters},
-    util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
+    util::{Result, gdal::add_ndvi_dataset, number_statistics::NumberStatistics},
 };
 use serde::Serialize;
 
@@ -65,7 +65,7 @@ async fn main() {
     const RUNS: usize = 5;
 
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let ndvi_source = ndvi_source(&mut execution_context);
 
@@ -81,7 +81,7 @@ async fn main() {
         .unwrap();
 
     // World in 36000x18000 pixels",
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-9000, -18000], [8999, 17999]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),

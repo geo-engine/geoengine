@@ -3,11 +3,11 @@ use crate::{
     primitives::{
         AxisAlignedRectangle, BoundingBox2D, Coordinate2D, Line, MultiLineString,
         MultiLineStringAccess, MultiLineStringRef, MultiPoint, MultiPointAccess, MultiPointRef,
-        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialQueryRectangle,
-        SpatialResolution,
+        MultiPolygon, MultiPolygonAccess, MultiPolygonRef, SpatialBounded, SpatialResolution,
     },
     raster::{
-        BoundedGrid, GeoTransform, GridBounds, GridIdx, GridShape, GridSize, SpatialGridDefinition,
+        BoundedGrid, GeoTransform, GridBoundingBox, GridBounds, GridIdx, GridIdx2D, GridShape,
+        GridSize, SamplePoints, SpatialGridDefinition,
     },
     spatial_reference::SpatialReference,
     util::Result,
@@ -25,7 +25,7 @@ pub trait CoordinateProjection {
 
     /// project a set of coords
     fn project_coordinates<A: AsRef<[Coordinate2D]>>(&self, coords: A)
-        -> Result<Vec<Coordinate2D>>;
+    -> Result<Vec<Coordinate2D>>;
 
     fn source_srs(&self) -> SpatialReference;
 
@@ -41,7 +41,7 @@ pub struct CoordinateProjector {
 impl CoordinateProjection for CoordinateProjector {
     fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
         let p = Proj::new_known_crs(&from.proj_string()?, &to.proj_string()?, None)
-            .ok_or(error::Error::NoCoordinateProjector { from, to })?;
+            .map_err(|_| error::Error::NoCoordinateProjector { from, to })?;
         Ok(CoordinateProjector { from, to, p })
     }
 
@@ -403,6 +403,8 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
     spatial_grid: &SpatialGridDefinition,
     projector: &P,
 ) -> Result<Option<A>> {
+    const SAMPLE_POINT_STEPS: usize = 2;
+
     // First, try to reproject the bounds:
     let full_bounds: std::result::Result<BoundingBox2D, error::Error> = spatial_grid
         .spatial_partition()
@@ -418,22 +420,34 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
     }
 
     // Second, create a grid of coordinates project that and use the valid bounds.
-
-    // TODO: test if we can also use a "Haus vom Nikolaus" and get the same results.
-    let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge(); // TODO: need to add one pixel at lower right.
-
+    // To do this, we generate a `SpatialGridDefinition` ...
+    let sample_bounds = SpatialGridDefinition::new(
+        spatial_grid.geo_transform,
+        GridBoundingBox::new_unchecked(
+            spatial_grid.grid_bounds.min_index(),
+            spatial_grid.grid_bounds.max_index() + GridIdx2D::new_y_x(1, 1),
+        ),
+    );
+    // Then the the obvious way to generate sample points is to use all the pixels in the grid like this:
+    // let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge();
+    // However, this creates a lot of redundant points == work.
+    // The better way, also employed by GDAL is to use a "Haus vom Nikolaus" strategy which is done below:
+    let mut coord_grid_sample = sample_bounds.sample_outline(SAMPLE_POINT_STEPS);
+    coord_grid_sample.append(&mut sample_bounds.sample_diagonals(SAMPLE_POINT_STEPS));
+    coord_grid_sample.append(&mut sample_bounds.sample_cross(SAMPLE_POINT_STEPS));
+    // Then, we try to reproject the sample coordinates and gather all the valid coordinates.
     let proj_outline_coordinates: Vec<Coordinate2D> =
-        project_coordinates_fail_tolerant(&coord_grid.data, projector)
+        project_coordinates_fail_tolerant(&coord_grid_sample, projector)
             .into_iter()
             .flatten()
             .collect();
-
+    // TODO: we need a way to indicate that the operator might produce no data, e.g. if no points are valid after reprojection.
     if proj_outline_coordinates.is_empty() {
         return Ok(None);
     }
-
+    // Then, the maximum bounding box is generated from the valid coordinates.
     let out = MultiPoint::new(proj_outline_coordinates)?.spatial_bounds();
-
+    // Finally, the requested bound type is returned.
     Some(A::from_min_max(out.lower_left(), out.upper_right())).transpose()
 }
 
@@ -495,7 +509,7 @@ pub fn suggest_output_spatial_grid_like_gdal<P: CoordinateProjection>(
     // if the input grid is anchored at the upper left idx then we don't have to move the origin of the geo transform
     if spatial_grid.grid_bounds.min_index() == GridIdx([0, 0]) {
         return Ok(SpatialGridDefinition::new(geo_transform, grid_bounds));
-    };
+    }
 
     let proj_origin = spatial_grid
         .geo_transform()
@@ -601,14 +615,14 @@ pub fn project_coordinates_fail_tolerant<P: CoordinateProjection>(
 /// this method performs the transformation of a query rectangle in `target` projection
 /// to a new query rectangle with coordinates in the `source` projection
 pub fn reproject_spatial_query<S: AxisAlignedRectangle>(
-    query: SpatialQueryRectangle<S>,
+    spatial_bounds: S,
     source: SpatialReference,
     target: SpatialReference,
-) -> Result<Option<SpatialQueryRectangle<S>>> {
+) -> Result<Option<S>> {
     let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
-    let target_bbox_clipped = query.spatial_bounds.reproject_clipped(&proj_to_from)?;
+    let target_bbox_clipped = spatial_bounds.reproject_clipped(&proj_to_from)?;
 
-    Ok(target_bbox_clipped.map(|b| SpatialQueryRectangle::new(b)))
+    Ok(target_bbox_clipped)
 }
 
 /// Reproject a bounding box to the `target` projection and return the input and output bounding box
@@ -658,8 +672,8 @@ mod tests {
     use crate::primitives::{BoundingBox2D, SpatialPartition2D};
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
-        COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
-        MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+        COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
+        MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
     };
     use float_cmp::approx_eq;
 

@@ -13,11 +13,11 @@ use wkt::{ToWkt, Wkt};
 use crate::collections::VectorDataType;
 use crate::error::Error;
 use crate::primitives::{
-    error, BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, TypedGeometry,
+    BoundingBox2D, GeometryRef, MultiPoint, PrimitivesError, TypedGeometry, error,
 };
 use crate::primitives::{Coordinate2D, Geometry};
-use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
+use crate::util::arrow::{ArrowTyped, downcast_array, padded_buffer_size};
 
 /// A trait that allows a common access to lines of `MultiLineString`s and its references
 pub trait MultiLineStringAccess {
@@ -419,20 +419,25 @@ impl<'g> MultiLineStringAccess for MultiLineStringRef<'g> {
 impl ToWkt<f64> for MultiLineStringRef<'_> {
     fn to_wkt(&self) -> Wkt<f64> {
         let line_strings = self.lines();
-        let mut multi_line_string =
-            wkt::types::MultiLineString(Vec::with_capacity(line_strings.len()));
+        let mut multi_line_string = Vec::with_capacity(line_strings.len());
 
         for line_string in line_strings {
-            let mut line_strings = wkt::types::LineString(Vec::with_capacity(line_string.len()));
+            let mut line_strings = Vec::with_capacity(line_string.len());
 
             for coord in *line_string {
-                line_strings.0.push(coord.into());
+                line_strings.push(coord.into());
             }
 
-            multi_line_string.0.push(line_strings);
+            multi_line_string.push(wkt::types::LineString::new(
+                line_strings,
+                wkt::types::Dimension::XY,
+            ));
         }
 
-        Wkt::MultiLineString(multi_line_string)
+        Wkt::MultiLineString(wkt::types::MultiLineString::new(
+            multi_line_string,
+            wkt::types::Dimension::XY,
+        ))
     }
 }
 

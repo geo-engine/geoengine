@@ -1,24 +1,28 @@
 use super::listing::LayerCollectionId;
-use crate::config::{get_config_element, LayerService};
+use crate::config::{LayerService, get_config_element};
 use crate::{projects::Symbology, workflows::workflow::Workflow};
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
+use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
 use std::borrow::Cow;
 use std::collections::HashMap;
-use utoipa::openapi::{ArrayBuilder, ObjectBuilder, SchemaType};
-use utoipa::{IntoParams, ToSchema};
+use utoipa::openapi::ArrayBuilder;
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 use validator::{Validate, ValidationError};
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderLayerId {
+    #[schema(value_type = crate::api::model::datatypes::DataProviderId)]
     pub provider_id: DataProviderId,
+    #[schema(value_type = crate::api::model::datatypes::LayerId)]
     pub layer_id: LayerId,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ProviderLayerCollectionId {
+    #[schema(value_type = crate::api::model::datatypes::DataProviderId)]
     pub provider_id: DataProviderId,
     pub collection_id: LayerCollectionId,
 }
@@ -38,6 +42,7 @@ pub struct Layer {
     pub metadata: HashMap<String, String>,
 }
 
+#[type_tag(value = "layer")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 pub struct LayerListing {
     pub id: ProviderLayerId,
@@ -142,16 +147,16 @@ impl From<&Property> for [String; 2] {
 }
 
 // manual implementation because utoipa doesn't support tuples for now
-impl<'a> ToSchema<'a> for Property {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "Property",
-            ArrayBuilder::new()
-                .items(ObjectBuilder::new().schema_type(SchemaType::String))
-                .min_items(Some(2))
-                .max_items(Some(2))
-                .into(),
-        )
+impl ToSchema for Property {}
+
+impl PartialSchema for Property {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{ObjectBuilder, SchemaType, Type};
+        ArrayBuilder::new()
+            .items(ObjectBuilder::new().schema_type(SchemaType::Type(Type::String)))
+            .min_items(Some(2))
+            .max_items(Some(2))
+            .into()
     }
 }
 
@@ -235,6 +240,7 @@ mod psql {
     }
 }
 
+#[type_tag(value = "collection")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct LayerCollectionListing {
@@ -246,7 +252,8 @@ pub struct LayerCollectionListing {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
-#[serde(tag = "type", rename_all = "camelCase")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum CollectionItem {
     Collection(LayerCollectionListing),
     Layer(LayerListing),

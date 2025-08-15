@@ -7,12 +7,12 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::str::FromStr;
-use utoipa::openapi::{ObjectBuilder, SchemaType};
-use utoipa::ToSchema;
+use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
+use utoipa::{PartialSchema, ToSchema};
 
 use super::wcs::request::WcsBoundingbox;
 use super::wfs::request::WfsResolution;
-use crate::api::handlers::spatial_references::{spatial_reference_specification, AxisOrder};
+use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result};
 use crate::workflows::workflow::WorkflowId;
@@ -22,14 +22,15 @@ pub struct OgcBoundingBox {
     values: [f64; 4],
 }
 
-impl<'a> ToSchema<'a> for OgcBoundingBox {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        (
-            "OgcBoundingBox",
-            ObjectBuilder::new().schema_type(SchemaType::String).into(),
-        )
+impl PartialSchema for OgcBoundingBox {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        ObjectBuilder::new()
+            .schema_type(SchemaType::Type(utoipa::openapi::Type::String))
+            .into()
     }
 }
+
+impl ToSchema for OgcBoundingBox {}
 
 impl OgcBoundingBox {
     pub fn new(a: f64, b: f64, c: f64, d: f64) -> Self {
@@ -150,6 +151,10 @@ where
     if s.is_empty() {
         return Ok(None);
     }
+    // don't fail on python queries where undefined resolution is not removed
+    if s == "None" {
+        return Ok(None);
+    }
 
     let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
 
@@ -183,7 +188,7 @@ where
         _ => {
             return Err(D::Error::custom(format!(
                 "cannot parse bbox from string: {s}"
-            )))
+            )));
         }
     };
 
@@ -322,8 +327,8 @@ impl Guard for OgcRequestGuard<'_> {
 #[cfg(test)]
 mod tests {
     use crate::api::model::datatypes::SpatialReferenceAuthority;
-    use serde::de::value::StringDeserializer;
     use serde::de::IntoDeserializer;
+    use serde::de::value::StringDeserializer;
 
     use super::*;
 

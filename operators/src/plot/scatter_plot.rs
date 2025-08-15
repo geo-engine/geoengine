@@ -15,7 +15,7 @@ use crate::error::Error;
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use geoengine_datatypes::primitives::{
-    ColumnSelection, Coordinate2D, PlotQueryRectangle, SpatialResolution, VectorQueryRectangle,
+    ColumnSelection, Coordinate2D, PlotQueryRectangle, SpatialResolution,
 };
 
 pub const SCATTERPLOT_OPERATOR_NAME: &str = "ScatterPlot";
@@ -175,11 +175,7 @@ impl PlotQueryProcessor for ScatterPlotQueryProcessor {
         let mut collector =
             CollectorKind::Values(Collector::new(self.column_x.clone(), self.column_y.clone()));
 
-        let query = VectorQueryRectangle::new(
-            query.spatial_query,
-            query.time_interval,
-            ColumnSelection::all(),
-        );
+        let query = query.select_attributes(ColumnSelection::all());
 
         call_on_generic_vector_processor!(&self.input, processor => {
             let mut query = processor.query(query, ctx).await?;
@@ -280,13 +276,13 @@ impl CollectorKind {
 
     fn add_batch(&mut self, values: impl Iterator<Item = Coordinate2D>) -> Result<()> {
         match self {
-            Self::Values(ref mut c) => {
+            Self::Values(c) => {
                 c.add_batch(values);
                 if c.element_count() > COLLECTOR_TO_HISTOGRAM_THRESHOLD {
                     *self = Self::Histogram(Self::histogram_from_collector(c)?);
                 }
             }
-            Self::Histogram(ref mut h) => {
+            Self::Histogram(h) => {
                 h.update_batch(values);
             }
         }
@@ -402,7 +398,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -422,8 +418,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_with_nulls_and_nan() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 7],
                 &[
@@ -453,8 +449,9 @@ mod tests {
                     ),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -478,7 +475,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -628,8 +625,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_single_feature() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 1],
                 &[
@@ -637,8 +634,9 @@ mod tests {
                     ("bar", FeatureData::Int(vec![1])),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -662,7 +660,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -680,8 +678,8 @@ mod tests {
 
     #[tokio::test]
     async fn vector_data_empty() {
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[] as &[TimeInterval],
                 &[
@@ -689,8 +687,9 @@ mod tests {
                     ("bar", FeatureData::Int(vec![])),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -714,7 +713,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -734,8 +733,8 @@ mod tests {
         let mut values = vec![1; 700];
         values.push(2);
 
-        let vector_source =
-            MockFeatureCollectionSource::multiple(vec![DataCollection::from_slices(
+        let vector_source = MockFeatureCollectionSource::multiple(vec![
+            DataCollection::from_slices(
                 &[] as &[NoGeometry],
                 &[TimeInterval::default(); 701],
                 &[
@@ -743,8 +742,9 @@ mod tests {
                     ("bar", FeatureData::Int(values.clone())),
                 ],
             )
-            .unwrap()])
-            .boxed();
+            .unwrap(),
+        ])
+        .boxed();
 
         let box_plot = ScatterPlot {
             params: ScatterPlotParams {
@@ -768,7 +768,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -848,7 +848,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),

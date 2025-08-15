@@ -2,7 +2,7 @@ use crate::api::model::datatypes::{
     RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
-use crate::api::ogc::util::{ogc_endpoint_url, OgcProtocol, OgcRequestGuard};
+use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
 use crate::api::ogc::wms::request::{
     GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
 };
@@ -10,10 +10,10 @@ use crate::config;
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::{self, Error, Result};
-use crate::util::server::{connection_closed, not_implemented_handler, CacheControlHeader};
+use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
-use actix_web::{web, FromRequest, HttpRequest, HttpResponse};
+use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, CacheHint, SpatialResolution,
 };
@@ -271,15 +271,6 @@ async fn wms_map_handler<C: ApplicationContext>(
                 .map(Duration::from_secs),
         );
 
-        // TODO: use a default spatial reference if it is not set?
-        let request_spatial_ref: SpatialReference =
-            request.crs.ok_or(error::Error::MissingSpatialReference)?;
-
-        let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
-        let x_request_res = request_bounds.size_x() / f64::from(request.width);
-        let y_request_res = request_bounds.size_y() / f64::from(request.height);
-        let request_resolution = SpatialResolution::new(x_request_res.abs(), y_request_res.abs())?;
-
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 
         let ctx = app_ctx.session_context(session);
@@ -300,17 +291,20 @@ async fn wms_map_handler<C: ApplicationContext>(
             .initialize(workflow_operator_path_root, &execution_context)
             .await?;
 
-        /*
-        let request_geo_transform = GeoTransform::new(
-            request_bounds.upper_left(),
-            request_resolution.x,
-            -request_resolution.y,
-        );
+        // Use the datasets crs as default spatial reference if none is requested
+        let result_desc_crs_option = initialized
+            .result_descriptor()
+            .spatial_reference
+            .as_option();
+        let request_spatial_ref: SpatialReference = request
+            .crs
+            .or(result_desc_crs_option.map(Into::into))
+            .ok_or(error::Error::MissingSpatialReference)?;
 
-        let tiling_based_origin = request_geo_transform
-            .nearest_pixel_edge_coordinate(tiling_spec.tiling_origin_reference());
-
-        */
+        let request_bounds: SpatialPartition2D = request.bbox.bounds(request_spatial_ref)?;
+        let x_request_res = request_bounds.size_x() / f64::from(request.width);
+        let y_request_res = request_bounds.size_y() / f64::from(request.height);
+        let request_resolution = SpatialResolution::new(x_request_res.abs(), y_request_res.abs())?;
 
         let wrapped =
             geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
@@ -318,7 +312,7 @@ async fn wms_map_handler<C: ApplicationContext>(
                 initialized,
             )
             .wrap_with_projection_and_resample(
-                None, // Some(tiling_based_origin),
+                None, // this needs to be `None`` to avoid moving the data origin to a png pixel origin. Since the WMS requests are not consistent with their origins using them distortes the results more then it helps.
                 Some(request_resolution),
                 request_spatial_ref.into(),
                 tiling_spec,
@@ -349,7 +343,7 @@ async fn wms_map_handler<C: ApplicationContext>(
             },
         );
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
             request.time.unwrap_or_else(default_time_from_config).into(),
             attributes,
@@ -467,18 +461,20 @@ fn default_time_from_config() -> TimeInterval {
 mod tests {
 
     use super::*;
+    use crate::api::model::datatypes::MultiBandRasterColorizer;
+    use crate::api::model::datatypes::SingleBandRasterColorizer;
     use crate::api::model::responses::ErrorResponse;
     use crate::contexts::PostgresContext;
     use crate::contexts::Session;
+    use crate::datasets::DatasetName;
     use crate::datasets::listing::DatasetProvider;
     use crate::datasets::storage::DatasetStore;
-    use crate::datasets::DatasetName;
     use crate::ge_context;
     use crate::users::UserAuth;
-    use crate::util::tests::{admin_login, register_ndvi_workflow_helper};
     use crate::util::tests::{
-        check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper_with_cache_ttl,
-        register_ne2_multiband_workflow, send_test_request,
+        admin_login, check_allowed_http_methods, read_body_string, register_ndvi_workflow_helper,
+        register_ndvi_workflow_helper_with_cache_ttl, register_ne2_multiband_workflow,
+        send_test_request,
     };
     use actix_http::header::{self, CONTENT_TYPE};
     use actix_web::dev::ServiceResponse;
@@ -634,7 +630,7 @@ mod tests {
 
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle::new_with_grid_bounds(
+            RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(-900, 899, -1800, 1799).unwrap(),
                 geoengine_datatypes::primitives::TimeInterval::new(
                     1_388_534_400_000,
@@ -803,10 +799,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -855,7 +852,8 @@ mod tests {
 
         let (_, id) = register_ne2_multiband_workflow(&app_ctx).await;
 
-        let raster_colorizer = RasterColorizer::MultiBand {
+        let raster_colorizer = RasterColorizer::MultiBand(MultiBandRasterColorizer {
+            r#type: Default::default(),
             red_band: 2,
             red_min: 0.,
             red_max: 255.,
@@ -869,7 +867,7 @@ mod tests {
             blue_max: 255.,
             blue_scale: 1.0,
             no_data_color: RgbaColor::transparent().into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -877,8 +875,8 @@ mod tests {
             ("version", "1.3.0"),
             ("layers", &id.to_string()),
             ("bbox", "-90,-180,90,180"),
-            ("width", "3600"), // TODO: use smaller area
-            ("height", "1800"),
+            ("width", "600"),
+            ("height", "300"),
             ("crs", "EPSG:4326"),
             (
                 "styles",
@@ -920,7 +918,8 @@ mod tests {
 
         let (_, id) = register_ne2_multiband_workflow(&app_ctx).await;
 
-        let raster_colorizer = RasterColorizer::MultiBand {
+        let raster_colorizer = RasterColorizer::MultiBand(MultiBandRasterColorizer {
+            r#type: Default::default(),
             red_band: 1,
             red_min: 0.,
             red_max: 255.,
@@ -934,7 +933,7 @@ mod tests {
             blue_max: 255.,
             blue_scale: 1.0,
             no_data_color: RgbaColor::transparent().into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -942,8 +941,8 @@ mod tests {
             ("version", "1.3.0"),
             ("layers", &id.to_string()),
             ("bbox", "-90,-180,90,180"),
-            ("width", "3600"),
-            ("height", "1800"),
+            ("width", "600"),
+            ("height", "300"),
             ("crs", "EPSG:4326"),
             (
                 "styles",
@@ -998,10 +997,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -1058,10 +1058,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -1129,10 +1130,11 @@ mod tests {
         )
         .unwrap();
 
-        let raster_colorizer = RasterColorizer::SingleBand {
+        let raster_colorizer = RasterColorizer::SingleBand(SingleBandRasterColorizer {
+            r#type: Default::default(),
             band: 0,
             band_colorizer: colorizer.into(),
-        };
+        });
 
         let params = &[
             ("request", "GetMap"),
@@ -1209,7 +1211,7 @@ mod tests {
         let (_, id) =
             register_ndvi_workflow_helper_with_cache_ttl(&app_ctx, CacheTtlSeconds::new(60)).await;
 
-        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=3600&height=1800&crs=EPSG:4326&bbox=-90.0,-180.0,90.0,180.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let req = actix_web::test::TestRequest::get().uri(&format!("/wms/{id}?service=WMS&version=1.3.0&request=GetMap&layers={id}&styles=&width=360&height=180&crs=EPSG:4326&bbox=-9.0,-18.0,9.0,18.0&format=image/png&transparent=FALSE&bgcolor=0xFFFFFF&exceptions=application/json&time=2014-04-01T12%3A00%3A00.000%2B00%3A00", id = id.to_string())).append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let response = send_test_request(req, app_ctx).await;
 
         assert_eq!(

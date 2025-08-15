@@ -1,16 +1,16 @@
 use std::collections::{HashMap, HashSet};
 
 use async_trait::async_trait;
-use futures::stream::{BoxStream, FuturesUnordered};
 use futures::StreamExt;
+use futures::stream::{BoxStream, FuturesUnordered};
 use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
-use geoengine_datatypes::primitives::{CacheHint, ColumnSelection, SpatialResolution};
 use geoengine_datatypes::primitives::{
-    Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint, MultiPointAccess,
-    SpatialBounded, VectorQueryRectangle, VectorSpatialQueryRectangle,
+    BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
+    MultiPointAccess, SpatialBounded, SpatialResolution, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -36,9 +36,8 @@ use super::quadtree::CircleMergingQuadtree;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct VisualPointClusteringParams {
-    pub min_radius_px: f64,
-    pub delta_px: f64,
-    pub radius_model_scale: Option<f64>, // TODO: discuss if this should be a parameter
+    pub min_radius: f64,
+    pub delta: f64,
     radius_column: String,
     count_column: String,
     column_aggregates: HashMap<String, AttributeAggregateDef>,
@@ -69,17 +68,17 @@ impl VectorOperator for VisualPointClustering {
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(
-            self.params.min_radius_px > 0.0,
+            self.params.min_radius > 0.0,
             error::InputMustBeGreaterThanZero {
                 scope: "VisualPointClustering",
-                name: "min_radius_px"
+                name: "min_radius"
             }
         );
         ensure!(
-            self.params.delta_px >= 0.0,
+            self.params.delta >= 0.0,
             error::InputMustBeZeroOrPositive {
                 scope: "VisualPointClustering",
-                name: "delta_px"
+                name: "delta"
             }
         );
         ensure!(!self.params.radius_column.is_empty(), error::EmptyInput);
@@ -88,19 +87,9 @@ impl VectorOperator for VisualPointClustering {
             error::DuplicateOutputColumns
         );
 
-        let radius_model_scale = self.params.radius_model_scale.unwrap_or(1.0);
-
-        ensure!(
-            radius_model_scale > 0.0,
-            error::InputMustBeGreaterThanZero {
-                scope: "VisualPointClustering",
-                name: "radius_model_scale"
-            }
-        );
-
         let name = CanonicOperatorName::from(&self);
 
-        let radius_model = LogScaledRadius::new(self.params.min_radius_px, self.params.delta_px)?;
+        let radius_model = LogScaledRadius::new(self.params.min_radius, self.params.delta)?;
 
         let initialized_sources = self
             .sources
@@ -163,7 +152,7 @@ impl VectorOperator for VisualPointClustering {
                     return Err(Error::InvalidType {
                         expected: "not null".to_string(),
                         found: "null".to_string(),
-                    })
+                    });
                 }
             };
 
@@ -198,7 +187,6 @@ impl VectorOperator for VisualPointClustering {
             },
             vector_source,
             radius_model,
-            radius_model_scale,
             radius_column: self.params.radius_column,
             count_column: self.params.count_column,
             attribute_mapping: self.params.column_aggregates,
@@ -216,7 +204,6 @@ pub struct InitializedVisualPointClustering {
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     radius_model: LogScaledRadius,
-    radius_model_scale: f64,
     radius_column: String,
     count_column: String,
     attribute_mapping: HashMap<String, AttributeAggregateDef>,
@@ -230,7 +217,6 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
                     VisualPointClusteringProcessor::new(
                         source,
                         self.radius_model,
-                        self.radius_model_scale,
                         self.radius_column.clone(),
                         self.count_column.clone(),
                         self.result_descriptor.clone(),
@@ -287,7 +273,6 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
 pub struct VisualPointClusteringProcessor {
     source: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
     radius_model: LogScaledRadius,
-    radius_model_scale: f64,
     radius_column: String,
     count_column: String,
     result_descriptor: VectorResultDescriptor,
@@ -298,7 +283,6 @@ impl VisualPointClusteringProcessor {
     fn new(
         source: Box<dyn VectorQueryProcessor<VectorType = MultiPointCollection>>,
         radius_model: LogScaledRadius,
-        radius_model_scale: f64,
         radius_column: String,
         count_column: String,
         result_descriptor: VectorResultDescriptor,
@@ -307,7 +291,6 @@ impl VisualPointClusteringProcessor {
         Self {
             source,
             radius_model,
-            radius_model_scale,
             radius_column,
             count_column,
             result_descriptor,
@@ -319,7 +302,6 @@ impl VisualPointClusteringProcessor {
         circles_of_points: impl Iterator<Item = CircleOfPoints>,
         radius_column: &str,
         count_column: &str,
-        resolution: f64,
         columns: &HashMap<String, FeatureDataType>,
         cache_hint: CacheHint,
     ) -> Result<MultiPointCollection> {
@@ -340,7 +322,7 @@ impl VisualPointClusteringProcessor {
 
             builder.push_data(
                 radius_column,
-                FeatureDataValue::Float(circle_of_points.circle.radius() / resolution),
+                FeatureDataValue::Float(circle_of_points.circle.radius()),
             )?;
             builder.push_data(
                 count_column,
@@ -362,7 +344,7 @@ impl VisualPointClusteringProcessor {
                     AttributeAggregate::Null => {
                         builder.push_null(&column)?;
                     }
-                };
+                }
             }
 
             builder.finish_row();
@@ -394,6 +376,10 @@ impl VisualPointClusteringProcessor {
                 FeatureDataValue::Text(value) | FeatureDataValue::NullableText(Some(value)),
                 AttributeAggregateType::StringSample,
             ) => AttributeAggregate::StringSample(StringSampler::from_value(value)),
+            (
+                FeatureDataValue::DateTime(value) | FeatureDataValue::NullableDateTime(Some(value)),
+                AttributeAggregateType::StringSample,
+            ) => AttributeAggregate::StringSample(StringSampler::from_value(value.to_string())),
             _ => AttributeAggregate::Null,
         }
     }
@@ -408,7 +394,7 @@ struct GridFoldState {
 #[async_trait]
 impl QueryProcessor for VisualPointClusteringProcessor {
     type Output = MultiPointCollection;
-    type SpatialQuery = VectorSpatialQueryRectangle;
+    type SpatialBounds = BoundingBox2D;
     type Selection = ColumnSelection;
     type ResultDescription = VectorResultDescriptor;
 
@@ -425,12 +411,10 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             .iter()
             .map(|(name, column_info)| (name.clone(), column_info.data_type))
             .collect();
-        let scaled_radius_model = self
-            .radius_model
-            .with_scaled_radii(self.radius_model_scale)?;
+        let scaled_radius_model = self.radius_model;
 
         let initial_grid_fold_state = Result::<GridFoldState>::Ok(GridFoldState {
-            grid: Grid::new(query.spatial_query.spatial_bounds(), scaled_radius_model),
+            grid: Grid::new(query.spatial_bounds().spatial_bounds(), scaled_radius_model),
             column_mapping: self.attribute_mapping.clone(),
             cache_hint: CacheHint::max_duration(),
         });
@@ -504,7 +488,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             } = grid?;
 
             let mut cmq = CircleMergingQuadtree::new(
-                query.spatial_query.spatial_bounds(),
+                query.spatial_bounds().spatial_bounds(),
                 *grid.radius_model(),
                 1,
             );
@@ -518,7 +502,6 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 cmq.into_iter(),
                 &self.radius_column,
                 &self.count_column,
-                self.radius_model_scale,
                 &column_schema,
                 cache_hint,
             )
@@ -538,14 +521,10 @@ mod tests {
     use geoengine_datatypes::primitives::BoundingBox2D;
     use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::FeatureData;
-    use geoengine_datatypes::primitives::SpatialResolution;
     use geoengine_datatypes::primitives::TimeInterval;
     use geoengine_datatypes::util::test::TestDefault;
 
-    use crate::{
-        engine::{MockExecutionContext, MockQueryContext},
-        mock::MockFeatureCollectionSource,
-    };
+    use crate::{engine::MockExecutionContext, mock::MockFeatureCollectionSource};
 
     use super::*;
 
@@ -562,14 +541,10 @@ mod tests {
         )
         .unwrap();
 
-        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
-        let radius_model_scale = resolution.x.max(resolution.y);
-
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                radius_model_scale: Some(radius_model_scale),
+                min_radius: 8.,
+                delta: 1.,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: Default::default(),
@@ -593,9 +568,9 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -606,20 +581,22 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
-                &[TimeInterval::default(); 2],
-                &[
-                    ("count", FeatureData::Int(vec![9, 1])),
-                    (
-                        "radius",
-                        FeatureData::Float(vec![10.197_224_577_336_218, 8.])
-                    )
-                ],
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
+                    &[TimeInterval::default(); 2],
+                    &[
+                        ("count", FeatureData::Int(vec![9, 1])),
+                        (
+                            "radius",
+                            FeatureData::Float(vec![10.197_224_577_336_22, 8.])
+                        )
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -637,14 +614,10 @@ mod tests {
         )
         .unwrap();
 
-        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
-        let radius_model_scale = resolution.x.max(resolution.y);
-
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                radius_model_scale: Some(radius_model_scale),
+                min_radius: 8.,
+                delta: 1.,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -678,9 +651,9 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -691,21 +664,23 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
-                &[TimeInterval::default(); 2],
-                &[
-                    ("count", FeatureData::Int(vec![9, 1])),
-                    (
-                        "radius",
-                        FeatureData::Float(vec![10.197_224_577_336_218, 8.])
-                    ),
-                    ("bar", FeatureData::Float(vec![5., 10.]))
-                ],
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
+                    &[TimeInterval::default(); 2],
+                    &[
+                        ("count", FeatureData::Int(vec![9, 1])),
+                        (
+                            "radius",
+                            FeatureData::Float(vec![10.197_224_577_336_22, 8.])
+                        ),
+                        ("bar", FeatureData::Float(vec![5., 10.]))
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -723,14 +698,10 @@ mod tests {
         )
         .unwrap();
 
-        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
-        let radius_model_scale = resolution.x.max(resolution.y);
-
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                radius_model_scale: Some(radius_model_scale),
+                min_radius: 8.,
+                delta: 1.,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -764,9 +735,9 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -777,21 +748,23 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &[(0.0, 0.1), (50.0, 50.1)],
-                &[TimeInterval::default(); 2],
-                &[
-                    ("count", FeatureData::Int(vec![2, 2])),
-                    (
-                        "radius",
-                        FeatureData::Float(vec![8.693_147_180_559_945, 8.693_147_180_559_945])
-                    ),
-                    ("foo", FeatureData::NullableFloat(vec![Some(1.), None]))
-                ],
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &[(0.0, 0.1), (50.0, 50.1)],
+                    &[TimeInterval::default(); 2],
+                    &[
+                        ("count", FeatureData::Int(vec![2, 2])),
+                        (
+                            "radius",
+                            FeatureData::Float(vec![8.693_147_180_559_945, 8.693_147_180_559_945])
+                        ),
+                        ("foo", FeatureData::NullableFloat(vec![Some(1.), None]))
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -817,14 +790,10 @@ mod tests {
         )
         .unwrap();
 
-        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
-        let radius_model_scale = resolution.x.max(resolution.y);
-
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                radius_model_scale: Some(radius_model_scale),
+                min_radius: 8.,
+                delta: 1.,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -858,9 +827,9 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),
@@ -871,32 +840,34 @@ mod tests {
         let result: Vec<MultiPointCollection> = query.map(Result::unwrap).collect().await;
 
         assert_eq!(result.len(), 1);
-        assert!(result[0].chunks_equal_ignoring_cache_hint(
-            &MultiPointCollection::from_slices(
-                &[(0.0, 0.1), (50.0, 50.1), (25.0, 25.1)],
-                &[TimeInterval::default(); 3],
-                &[
-                    ("count", FeatureData::Int(vec![2, 2, 2])),
-                    (
-                        "radius",
-                        FeatureData::Float(vec![
-                            8.693_147_180_559_945,
-                            8.693_147_180_559_945,
-                            8.693_147_180_559_945
-                        ])
-                    ),
-                    (
-                        "text",
-                        FeatureData::NullableText(vec![
-                            Some("foo, bar".to_string()),
-                            Some("foo".to_string()),
-                            None
-                        ])
-                    )
-                ],
+        assert!(
+            result[0].chunks_equal_ignoring_cache_hint(
+                &MultiPointCollection::from_slices(
+                    &[(0.0, 0.1), (50.0, 50.1), (25.0, 25.1)],
+                    &[TimeInterval::default(); 3],
+                    &[
+                        ("count", FeatureData::Int(vec![2, 2, 2])),
+                        (
+                            "radius",
+                            FeatureData::Float(vec![
+                                8.693_147_180_559_945,
+                                8.693_147_180_559_945,
+                                8.693_147_180_559_945
+                            ])
+                        ),
+                        (
+                            "text",
+                            FeatureData::NullableText(vec![
+                                Some("foo, bar".to_string()),
+                                Some("foo".to_string()),
+                                None
+                            ])
+                        )
+                    ],
+                )
+                .unwrap()
             )
-            .unwrap()
-        ));
+        );
     }
 
     #[tokio::test]
@@ -922,18 +893,14 @@ mod tests {
         )
         .unwrap();
 
-        let resolution = SpatialResolution::new(0.1, 0.1).unwrap();
-        let radius_model_scale = resolution.x.max(resolution.y);
-
         let cache_hint = CacheHint::seconds(1234);
 
         input.cache_hint = cache_hint;
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius_px: 8.,
-                delta_px: 1.,
-                radius_model_scale: Some(radius_model_scale),
+                min_radius: 8.,
+                delta: 1.,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -967,9 +934,9 @@ mod tests {
             .multi_point()
             .unwrap();
 
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
-        let qrect = VectorQueryRectangle::with_bounds(
+        let qrect = VectorQueryRectangle::new(
             BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

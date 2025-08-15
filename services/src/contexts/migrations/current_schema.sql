@@ -51,6 +51,31 @@ CREATE TYPE "TimeStep" AS (
     step OID
 );
 
+CREATE TYPE "GridBoundingBox2D" AS (
+    y_min bigint,
+    y_max bigint,
+    x_min bigint,
+    x_max bigint
+);
+
+CREATE TYPE "GeoTransform" AS (
+    origin_coordinate "Coordinate2D",
+    x_pixel_size double precision,
+    y_pixel_size double precision
+);
+
+CREATE TYPE "SpatialGridDefinition" AS (
+    geo_transform "GeoTransform",
+    grid_bounds "GridBoundingBox2D"
+);
+
+CREATE TYPE "SpatialGridDescriptorState" AS ENUM ('Source', 'Merged');
+
+CREATE TYPE "SpatialGridDescriptor" AS (
+    "state" "SpatialGridDescriptorState",
+    spatial_grid "SpatialGridDefinition"
+);
+
 CREATE TYPE "DatasetName" AS (namespace text, name text);
 
 CREATE TYPE "Provenance" AS (
@@ -249,41 +274,13 @@ CREATE TYPE "RasterBandDescriptor" AS (
     measurement "Measurement"
 );
 
-CREATE TYPE "GridBoundingBox2D" AS (
-    y_min bigint,
-    y_max bigint,
-    x_min bigint,
-    x_max bigint
-);
-
-CREATE TYPE "GeoTransform" AS (
-    origin_coordinate "Coordinate2D",
-    x_pixel_size double precision,
-    y_pixel_size double precision
-);
-
-CREATE TYPE "SpatialGridDefinition" as (
-    geo_transform "GeoTransform",
-    grid_bounds "GridBoundingBox2D"
-);
-
-CREATE TYPE "SpatialGridDescriptorState" as ENUM (
-    'Source',
-    'Merged'
-);
-
-CREATE TYPE "SpatialGridDescriptor" aS (
-    "state" "SpatialGridDescriptorState",
-    spatial_grid "SpatialGridDefinition"
-);
-
 CREATE TYPE "RasterResultDescriptor" AS (
     data_type "RasterDataType",
     -- SpatialReferenceOption
     spatial_reference "SpatialReference",
     "time" "TimeInterval",
-    spatial_grid "SpatialGridDescriptor",
-    bands "RasterBandDescriptor" []
+    bands "RasterBandDescriptor" [],
+    spatial_grid "SpatialGridDescriptor"
 );
 
 CREATE TYPE "VectorResultDescriptor" AS (
@@ -792,19 +789,6 @@ CREATE TYPE "DatasetLayerListingProviderDefinition" AS (
     priority smallint
 );
 
-CREATE TYPE "StacBand" AS (
-    "name" text,
-    no_data_value double precision,
-    data_type "RasterDataType",
-    pixel_size double precision
-);
-
-CREATE TYPE "StacZone" AS (
-    "name" text,
-    epsg oid,
-    global_native_bounds "SpatialPartition2D"
-    );
-
 CREATE TYPE "StacApiRetries" AS (
     number_of_retries bigint,
     initial_delay_ms bigint,
@@ -824,8 +808,6 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     "name" text,
     id uuid,
     api_url text,
-    bands "StacBand" [],
-    zones "StacZone" [],
     stac_api_retries "StacApiRetries",
     gdal_retries "GdalRetries",
     cache_ttl int,
@@ -846,6 +828,14 @@ CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
     gdal_config "StringPair" []
 );
 
+CREATE TYPE "WildliveDataConnectorDefinition" AS (
+    id uuid,
+    "name" text,
+    description text,
+    api_key text,
+    priority smallint
+);
+
 CREATE TYPE "DataProviderDefinition" AS (
     -- one of
     aruna_data_provider_definition "ArunaDataProviderDefinition",
@@ -862,7 +852,8 @@ CREATE TYPE "DataProviderDefinition" AS (
     sentinel_s2_l2_a_cogs_provider_definition
     "SentinelS2L2ACogsProviderDefinition",
     copernicus_dataspace_provider_definition
-    "CopernicusDataspaceDataProviderDefinition"
+    "CopernicusDataspaceDataProviderDefinition",
+    wildlive_data_connector_definition "WildliveDataConnectorDefinition"
 );
 
 CREATE TABLE layer_providers (
@@ -964,11 +955,85 @@ CREATE TABLE ebv_provider_loading_infos (
     ) ON DELETE CASCADE DEFERRABLE
 );
 
+CREATE TABLE wildlive_projects (
+    provider_id uuid NOT NULL,
+    cache_date date NOT NULL,
+    project_id text NOT NULL,
+    name text NOT NULL,
+    description text NOT NULL,
+    geom public.GEOMETRY (POLYGON) NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, cache_date, project_id) DEFERRABLE
+);
+
+CREATE TABLE wildlive_stations (
+    provider_id uuid NOT NULL,
+    cache_date date NOT NULL,
+    station_id text NOT NULL,
+    project_id text NOT NULL,
+    name text NOT NULL,
+    description text NOT NULL,
+    location text NOT NULL,
+    geom public.GEOMETRY (POINT) NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (provider_id, cache_date, project_id, station_id) DEFERRABLE
+);
+
+CREATE TABLE wildlive_captures (
+    provider_id uuid NOT NULL,
+    cache_date date NOT NULL,
+    image_object_id text NOT NULL,
+    project_id text NOT NULL,
+    station_setup_id text NOT NULL,
+    capture_time_stamp timestamp with time zone NOT NULL,
+    accepted_name_usage_id text NOT NULL,
+    vernacular_name text NOT NULL,
+    scientific_name text NOT NULL,
+    content_url text NOT NULL,
+    geom public.GEOMETRY (POINT) NOT NULL,
+
+    -- TODO: check if we need it
+    PRIMARY KEY (
+        provider_id, cache_date, project_id, image_object_id
+    ) DEFERRABLE
+);
+
+CREATE TYPE "MlTensorShape3D" AS (
+    x OID,
+    y OID,
+    bands OID
+);
+
+
+CREATE TYPE "MlModelInputNoDataHandlingVariant" AS ENUM (
+    'EncodedNoData',
+    'SkipIfNoData'
+);
+
+CREATE TYPE "MlModelInputNoDataHandling" AS (
+    variant "MlModelInputNoDataHandlingVariant",
+    no_data_value real
+);
+
+CREATE TYPE "MlModelOutputNoDataHandlingVariant" AS ENUM (
+    'EncodedNoData',
+    'NanIsNoData'
+);
+
+CREATE TYPE "MlModelOutputNoDataHandling" AS (
+    variant "MlModelOutputNoDataHandlingVariant",
+    no_data_value real
+);
+
 CREATE TYPE "MlModelMetadata" AS (
-    file_name text,
     input_type "RasterDataType",
-    num_input_bands OID,
-    output_type "RasterDataType"
+    output_type "RasterDataType",
+    input_shape "MlTensorShape3D",
+    output_shape "MlTensorShape3D",
+    input_no_data_handling "MlModelInputNoDataHandling",
+    output_no_data_handling "MlModelOutputNoDataHandling"
 );
 
 CREATE TYPE "MlModelName" AS (namespace text, name text);
@@ -979,7 +1044,8 @@ CREATE TABLE ml_models ( -- noqa:
     display_name text NOT NULL,
     description text NOT NULL,
     upload uuid REFERENCES uploads (id) ON DELETE CASCADE NOT NULL,
-    metadata "MlModelMetadata"
+    metadata "MlModelMetadata",
+    file_name text
 );
 
 -- TODO: distinguish between roles that are (correspond to) users
@@ -1074,6 +1140,7 @@ CREATE TABLE permissions (
     ) ON DELETE CASCADE,
     project_id uuid REFERENCES projects (id) ON DELETE CASCADE,
     ml_model_id uuid REFERENCES ml_models (id) ON DELETE CASCADE,
+    provider_id uuid REFERENCES layer_providers (id) ON DELETE CASCADE
     CHECK (
         (
             (dataset_id IS NOT NULL)::integer
@@ -1081,6 +1148,7 @@ CREATE TABLE permissions (
             + (layer_collection_id IS NOT NULL)::integer
             + (project_id IS NOT NULL)::integer
             + (ml_model_id IS NOT NULL)::integer
+            + (provider_id IS NOT NULL)::integer
         ) = 1
     )
 );
@@ -1153,6 +1221,17 @@ SELECT
 FROM user_roles AS r
 INNER JOIN permissions AS p ON (
     r.role_id = p.role_id AND p.layer_id IS NOT NULL
+);
+
+CREATE VIEW user_permitted_providers
+AS
+SELECT
+    r.user_id,
+    p.provider_id,
+    p.permission
+FROM user_roles AS r
+INNER JOIN permissions AS p ON (
+    r.role_id = p.role_id AND p.provider_id IS NOT NULL
 );
 
 CREATE TABLE oidc_session_tokens (

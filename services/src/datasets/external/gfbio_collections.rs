@@ -1,10 +1,11 @@
 use super::gfbio_abcd::GfbioAbcdDataProvider;
 use super::pangaea::{PangaeaDataProvider, PangaeaMetaData};
+use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Error::ProviderDoesNotSupportBrowsing;
 use crate::error::{Error, Result};
-use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use crate::layers::layer::{
     CollectionItem, Layer, LayerCollection, LayerCollectionListOptions, LayerListing,
     ProviderLayerCollectionId, ProviderLayerId,
@@ -15,9 +16,9 @@ use crate::layers::listing::{
 use crate::util::postgres::DatabaseConnectionConfig;
 use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
+use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::Pool;
 use bb8_postgres::tokio_postgres::NoTls;
-use bb8_postgres::PostgresConnectionManager;
 use futures::future::join_all;
 use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
@@ -38,7 +39,7 @@ use geoengine_operators::{
     mock::MockDatasetDataSourceLoadingInfo,
     source::{GdalLoadingInfo, OgrSourceDataset},
 };
-use reqwest::{header, Client};
+use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::fmt;
@@ -95,6 +96,27 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioCollectionsDataProviderD
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    where
+        Self: Sized,
+    {
+        match new {
+            TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(mut new) => {
+                if new.abcd_db_config.password == SECRET_REPLACEMENT {
+                    new.abcd_db_config
+                        .password
+                        .clone_from(&self.abcd_db_config.password);
+                }
+                if new.collection_api_auth_token == SECRET_REPLACEMENT {
+                    new.collection_api_auth_token
+                        .clone_from(&self.collection_api_auth_token);
+                }
+                TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(new)
+            }
+            _ => new,
+        }
     }
 }
 
@@ -385,6 +407,7 @@ impl GfbioCollectionsDataProvider {
         };
 
         Ok(CollectionItem::Layer(LayerListing {
+            r#type: Default::default(),
             id: ProviderLayerId {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                 layer_id: GfBioCollectionId::AbcdLayer {
@@ -409,6 +432,7 @@ impl GfbioCollectionsDataProvider {
         };
 
         CollectionItem::Layer(LayerListing {
+            r#type: Default::default(),
             id: ProviderLayerId {
                 provider_id: GFBIO_COLLECTIONS_PROVIDER_ID,
                 layer_id: GfBioCollectionId::PangaeaLayer {
@@ -744,10 +768,10 @@ impl
     ) -> Result<
         Box<
             dyn MetaData<
-                MockDatasetDataSourceLoadingInfo,
-                VectorResultDescriptor,
-                VectorQueryRectangle,
-            >,
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
         >,
         geoengine_operators::error::Error,
     > {
@@ -823,10 +847,9 @@ mod tests {
         test_data,
     };
     use httptest::{
-        all_of,
+        Expectation, Server, all_of,
         matchers::{contains, lowercase, request},
         responders::status_code,
-        Expectation, Server,
     };
     use rand::RngCore;
     use std::{fs::File, io::Read, path::PathBuf};
@@ -849,7 +872,7 @@ mod tests {
             .read_to_string(&mut sql)
             .unwrap();
 
-        let schema = format!("geoengine_test_{}", rand::thread_rng().next_u64());
+        let schema = format!("geoengine_test_{}", rand::rng().next_u64());
 
         // basic schema
         conn.batch_execute(&format!(
@@ -981,7 +1004,7 @@ mod tests {
             assert_eq!(
             collection.items,
             vec![
-                CollectionItem::Layer(LayerListing {
+                CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0602".to_string())
@@ -990,7 +1013,7 @@ mod tests {
                     description: String::new(),
                     properties: vec![("status".to_string(), "ok".to_string()).into()]
                     }),
-                CollectionItem::Layer(LayerListing {
+                CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/abcd/urn:gfbio.org:abcd:3_259_402:ZFMK+Sc0612".to_string())
@@ -999,7 +1022,7 @@ mod tests {
                     description: String::new(),
                     properties: vec![("status".to_string(), "ok".to_string()).into()]
                     }),
-                CollectionItem::Layer(LayerListing {
+                CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747054".to_string())
@@ -1008,7 +1031,7 @@ mod tests {
                     description: String::new(),
                     properties: vec![("status".to_string(), "ok".to_string()).into()]
                     }),
-                CollectionItem::Layer(LayerListing {
+                CollectionItem::Layer(LayerListing { r#type: Default::default(),
                     id: ProviderLayerId {
                         provider_id: DataProviderId::from_str("f64e2d5b-3b80-476a-83f5-c330956b2909").unwrap(),
                         layer_id: LayerId("collections/63cf68e4-6e11-469d-8f35-af83ee6586dc/pangaea/oai:pangaea.de:doi:10.1594__PANGAEA.747056".to_string()) 
@@ -1119,7 +1142,7 @@ mod tests {
             }
 
             let mut loading_info = meta
-                .loading_info(VectorQueryRectangle::with_bounds(
+                .loading_info(VectorQueryRectangle::new(
                     BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
                     TimeInterval::default(),
                     ColumnSelection::all(),

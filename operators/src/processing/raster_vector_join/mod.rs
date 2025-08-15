@@ -538,7 +538,7 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -615,7 +615,7 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -638,10 +638,10 @@ mod tests {
         assert_eq!(
             data.as_ref(),
             &[
-                (54. + 52.) / 2.,
-                (55. + 55.) / 2.,
-                (51. + 50.) / 2.,
-                (55. + 53.) / 2.,
+                f64::midpoint(54., 52.),
+                f64::midpoint(55., 55.),
+                f64::midpoint(51., 50.),
+                f64::midpoint(55., 53.),
             ]
         );
     }
@@ -695,7 +695,7 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle::with_bounds(
+                VectorQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     ColumnSelection::all(),
@@ -722,19 +722,21 @@ mod tests {
     #[tokio::test]
     async fn it_checks_sref() {
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
-            vec![MultiPointCollection::from_data(
-                MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
+            vec![
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    vec![TimeInterval::default(); 4],
+                    Default::default(),
+                    CacheHint::default(),
+                )
                 .unwrap(),
-                vec![TimeInterval::default(); 4],
-                Default::default(),
-                CacheHint::default(),
-            )
-            .unwrap()],
+            ],
             SpatialReference::from_str("EPSG:3857").unwrap(),
         )
         .boxed();
@@ -772,19 +774,21 @@ mod tests {
     #[allow(clippy::too_many_lines)]
     async fn it_includes_bands_in_result_descriptor() {
         let point_source = MockFeatureCollectionSource::with_collections_and_sref(
-            vec![MultiPointCollection::from_data(
-                MultiPoint::many(vec![
-                    (-13.95, 20.05),
-                    (-14.05, 20.05),
-                    (-13.95, 19.95),
-                    (-14.05, 19.95),
-                ])
+            vec![
+                MultiPointCollection::from_data(
+                    MultiPoint::many(vec![
+                        (-13.95, 20.05),
+                        (-14.05, 20.05),
+                        (-13.95, 19.95),
+                        (-14.05, 19.95),
+                    ])
+                    .unwrap(),
+                    vec![TimeInterval::default(); 4],
+                    Default::default(),
+                    CacheHint::default(),
+                )
                 .unwrap(),
-                vec![TimeInterval::default(); 4],
-                Default::default(),
-                CacheHint::default(),
-            )
-            .unwrap()],
+            ],
             SpatialReference::from_str("EPSG:4326").unwrap(),
         )
         .boxed();

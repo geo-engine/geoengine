@@ -1,5 +1,5 @@
 use geoengine_datatypes::{error::ErrorSource, primitives::SpatialResolution};
-use snafu::{ensure, Snafu};
+use snafu::{Snafu, ensure};
 
 use crate::engine::InitializedRasterOperator;
 
@@ -67,7 +67,7 @@ mod tests {
         raster::{RasterDataType, RenameBands},
         spatial_reference::{SpatialReference, SpatialReferenceAuthority},
         test_data,
-        util::{test::TestDefault, Identifier},
+        util::{Identifier, test::TestDefault},
     };
 
     use crate::{
@@ -934,6 +934,7 @@ mod tests {
             params: RasterizationParams {
                 spatial_resolution: SpatialResolution::new_unchecked(0.1, 0.1),
                 origin_coordinate: (0., 0.).into(),
+                density_params: None,
             },
             sources: SingleVectorSource { vector: source },
         }
@@ -957,31 +958,32 @@ mod tests {
             .unwrap();
 
         let json = serde_json::to_value(&rasterization_optimized).unwrap();
-
+        println!("{}", serde_json::to_string_pretty(&json).unwrap());
         assert_eq!(
             json,
             serde_json::json!({
-                "params": {
-                    "originCoordinate": {
-                        "x": 0.0,
-                        "y": 0.0
-                    },
-                    "spatialResolution": {
-                        "x": 0.8,
-                        "y": 0.8
-                    }
+              "params": {
+                "densityParams": null,
+                "originCoordinate": {
+                  "x": 0.0,
+                  "y": 0.0
                 },
-                "sources": {
-                    "vector": {
-                        "params": {
-                            "attributeFilters": null,
-                            "attributeProjection": null,
-                            "data": "ne_10m_ports"
-                        },
-                        "type": "OgrSource"
-                    }
-                },
-                "type": "Rasterization"
+                "spatialResolution": {
+                  "x": 0.8,
+                  "y": 0.8
+                }
+              },
+              "sources": {
+                "vector": {
+                  "params": {
+                    "attributeFilters": null,
+                    "attributeProjection": null,
+                    "data": "ne_10m_ports"
+                  },
+                  "type": "OgrSource"
+                }
+              },
+              "type": "Rasterization"
             })
         );
 
@@ -1138,10 +1140,12 @@ mod tests {
             })
         );
 
-        assert!(raster_vector_join_optimized
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .is_ok());
+        assert!(
+            raster_vector_join_optimized
+                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_ok()
+        );
 
         // check case where output is finer than input
         let raster_vector_join_optimized = raster_vector_join_initialized
@@ -1271,6 +1275,7 @@ mod tests {
                                 params: RasterizationParams {
                                     spatial_resolution: SpatialResolution::new_unchecked(0.3, 0.3),
                                     origin_coordinate: (0., 0.).into(),
+                                    density_params: None,
                                 },
                                 sources: SingleVectorSource {
                                     vector: ColumnRangeFilter {
@@ -1398,6 +1403,7 @@ mod tests {
                                 },
                                 {
                                     "params": {
+                                        "densityParams": null,
                                         "originCoordinate": {
                                             "x": 0.0,
                                             "y": 0.0

@@ -1,4 +1,4 @@
-use crate::util::arrow::{padded_buffer_size, ArrowTyped};
+use crate::util::arrow::{ArrowTyped, padded_buffer_size};
 use arrow::array::{ArrayBuilder, BooleanArray, Float64Array, Float64Builder};
 use arrow::datatypes::{DataType, Field};
 use arrow::error::ArrowError;
@@ -13,6 +13,7 @@ use std::{
     ops::{Add, Div, Mul, Sub},
     slice,
 };
+use wkt::{ToWkt, Wkt};
 
 #[derive(
     Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSql, FromSql,
@@ -356,6 +357,20 @@ impl From<&Coordinate2D> for wkt::types::Coord<f64> {
             z: None,
             m: None,
         }
+    }
+}
+
+impl ToWkt<f64> for Coordinate2D {
+    fn to_wkt(&self) -> Wkt<f64> {
+        Wkt::Point(wkt::types::Point::new(
+            Some(wkt::types::Coord {
+                x: self.x,
+                y: self.y,
+                z: None,
+                m: None,
+            }),
+            wkt::types::Dimension::XY,
+        ))
     }
 }
 

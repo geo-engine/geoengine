@@ -1,7 +1,7 @@
 use super::error::{ExpressionParserError, ExpressionSemanticError};
 use crate::functions::Function;
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote, ToTokens};
+use quote::{ToTokens, format_ident, quote};
 use std::{collections::BTreeSet, fmt::Debug, hash::Hash};
 
 type Result<T, E = ExpressionParserError> = std::result::Result<T, E>;
@@ -50,7 +50,7 @@ impl ExpressionAst {
             Ok(code) => prettyplease::unparse(&code),
             Err(e) => {
                 // fallback to unformatted code
-                log::error!("Cannot parse expression: {e}");
+                tracing::error!("Cannot parse expression: {e}");
                 self.code()
             }
         }
@@ -84,7 +84,7 @@ impl ToTokens for ExpressionAst {
         let dtype = self.out_type;
 
         tokens.extend(quote! {
-            #[no_mangle]
+            #[unsafe(no_mangle)]
             pub extern "Rust" fn #fn_name (#(#params),*) -> Option<#dtype> {
                 #content
             }

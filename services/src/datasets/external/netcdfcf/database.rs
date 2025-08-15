@@ -1,19 +1,18 @@
 use super::{
-    determine_data_range_and_colorizer, error,
+    NetCdfCf4DDatasetId, NetCdfCf4DProviderError, NetCdfEntity, NetCdfGroup, NetCdfOverview,
+    Result, determine_data_range_and_colorizer, error,
     loading::{
-        create_layer, create_layer_collection_from_parts, LayerCollectionIdFn, LayerCollectionParts,
+        LayerCollectionIdFn, LayerCollectionParts, create_layer, create_layer_collection_from_parts,
     },
     metadata::{Creator, DataRange, NetCdfGroupMetadata, NetCdfOverviewMetadata},
     overviews::LoadingInfoMetadata,
-    NetCdfCf4DDatasetId, NetCdfCf4DProviderError, NetCdfEntity, NetCdfGroup, NetCdfOverview,
-    Result,
 };
 use crate::layers::{
     layer::{Layer, LayerCollection, LayerCollectionListOptions, ProviderLayerId},
     listing::LayerCollectionId,
 };
 use async_trait::async_trait;
-use bb8_postgres::{bb8::PooledConnection, PostgresConnectionManager};
+use bb8_postgres::{PostgresConnectionManager, bb8::PooledConnection};
 use geoengine_datatypes::{
     dataset::{DataProviderId, LayerId},
     error::BoxedResultExt,
@@ -23,8 +22,8 @@ use geoengine_operators::source::GdalMetaDataList;
 use snafu::ResultExt;
 use std::sync::Arc;
 use tokio_postgres::{
-    tls::{MakeTlsConnect, TlsConnect},
     Socket, Transaction,
+    tls::{MakeTlsConnect, TlsConnect},
 };
 
 #[async_trait]
@@ -349,7 +348,7 @@ pub(crate) async fn store_overview_metadata(
     loading_infos: Vec<LoadingInfoMetadata>,
 ) -> Result<()> {
     if remove_overviews(&transaction, provider_id, &metadata.file_name).await? {
-        log::debug!(
+        tracing::debug!(
             "Removed {file_name} from the database before re-inserting the metadata",
             file_name = metadata.file_name
         );
@@ -633,7 +632,7 @@ async fn entities(
     file_name: &str,
     offset: u32,
     limit: u32,
-) -> Result<impl Iterator<Item = NetCdfEntity>> {
+) -> Result<impl Iterator<Item = NetCdfEntity> + use<>> {
     let entities = transaction
         .query(
             "
@@ -1165,7 +1164,7 @@ impl<D: NetCdfCfProviderDb + 'static + std::fmt::Debug> Drop for InProgressFlag<
             let result = db.unlock_overview(provider_id, &file_name).await;
 
             if let Err(e) = result {
-                log::error!("Cannot remove in-progress flag: {}", e);
+                tracing::error!("Cannot remove in-progress flag: {e}");
             }
         });
     }

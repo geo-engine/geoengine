@@ -8,15 +8,15 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
-        SingleRasterSource, WorkflowOperatorPath,
+        MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
+        WorkflowOperatorPath,
     },
     processing::{
         Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
         TemporalRasterAggregationParameters,
     },
     source::{GdalSource, GdalSourceParameters},
-    util::{gdal::add_ndvi_dataset, number_statistics::NumberStatistics, Result},
+    util::{Result, gdal::add_ndvi_dataset, number_statistics::NumberStatistics},
 };
 use serde::Serialize;
 
@@ -56,7 +56,7 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
 
 async fn one_band_at_a_time(runs: usize, bands: u32) {
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let ndvi_source = ndvi_source(&mut execution_context);
 
@@ -71,7 +71,7 @@ async fn one_band_at_a_time(runs: usize, bands: u32) {
         .get_u64()
         .unwrap();
 
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         BandSelection::first(),
@@ -113,7 +113,7 @@ async fn one_band_at_a_time(runs: usize, bands: u32) {
 
 async fn all_bands_at_once(runs: usize, bands: u32) {
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let stacker = RasterStacker {
         params: RasterStackerParams {
@@ -138,7 +138,7 @@ async fn all_bands_at_once(runs: usize, bands: u32) {
         .get_u64()
         .unwrap();
 
-    let qrect = RasterQueryRectangle::new_with_grid_bounds(
+    let qrect = RasterQueryRectangle::new(
         GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
         TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
         (0..bands).collect::<Vec<_>>().try_into().unwrap(),

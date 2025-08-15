@@ -4,7 +4,7 @@ use crate::{
     raster::RasterDataType,
     spatial_reference::SpatialReference,
 };
-use snafu::{prelude::*, AsErrorSource, ErrorCompat, IntoError};
+use snafu::{AsErrorSource, ErrorCompat, IntoError, prelude::*};
 use std::{any::Any, convert::Infallible, path::PathBuf, sync::Arc};
 use strum::IntoStaticStr;
 

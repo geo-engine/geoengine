@@ -42,8 +42,8 @@ use geoengine_operators::{
     },
     source::{GdalSource, GdalSourceParameters, OgrSource, OgrSourceParameters},
     util::{
-        gdal::{add_ndvi_dataset, add_ports_dataset},
         Result,
+        gdal::{add_ndvi_dataset, add_ports_dataset},
     },
 };
 use std::{
@@ -111,7 +111,7 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                 },
             }
             .boxed(),
-            query_rectangle: RasterQueryRectangle::new_with_grid_bounds(
+            query_rectangle: RasterQueryRectangle::new(
                 GridBoundingBox2D::new([-1800, -900], [1799, 899]).unwrap(),
                 TimeInterval::default(),
                 BandSelection::first(),
@@ -136,14 +136,16 @@ fn setup_benchmarks(exe_ctx: &mut StatisticsWrappingMockExecutionContext) -> Vec
                         },
                     }
                     .boxed(),
-                    rasters: vec![GdalSource {
-                        params: GdalSourceParameters::new(ndvi_id),
-                    }
-                    .boxed()],
+                    rasters: vec![
+                        GdalSource {
+                            params: GdalSourceParameters::new(ndvi_id),
+                        }
+                        .boxed(),
+                    ],
                 },
             }
             .boxed(),
-            query_rectangle: VectorQueryRectangle::with_bounds(
+            query_rectangle: VectorQueryRectangle::new(
                 BoundingBox2D::new_unchecked([-180., -90.].into(), [180., 90.].into()),
                 TimeInterval::default(),
                 ColumnSelection::all(),

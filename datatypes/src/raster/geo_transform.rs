@@ -1,14 +1,13 @@
+use super::{GeoTransformAccess, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D};
 use crate::{
     primitives::{
         AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialPartition2D, SpatialResolution,
     },
     util::test::TestDefault,
 };
-use float_cmp::{approx_eq, ApproxEq, F64Margin};
+use float_cmp::{ApproxEq, F64Margin, approx_eq};
 use postgres_types::{FromSql, ToSql};
-use serde::{de, Deserialize, Deserializer, Serialize};
-
-use super::{GeoTransformAccess, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D};
+use serde::{Deserialize, Deserializer, Serialize, de};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];

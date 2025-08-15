@@ -2,17 +2,19 @@ use std::sync::Arc;
 
 use super::tasks::TaskResponse;
 
-use crate::api::model::datatypes::{DataProviderId, LayerId};
+use crate::api::model::datatypes::LayerId;
 use crate::api::model::responses::IdResponse;
+use crate::api::model::services::LayerProviderListing;
+use crate::api::model::services::TypedDataProviderDefinition;
 use crate::config::get_config_element;
 use crate::contexts::ApplicationContext;
 use crate::datasets::{
-    schedule_raster_dataset_from_workflow_task, RasterDatasetFromWorkflowParams,
+    RasterDatasetFromWorkflowParams, schedule_raster_dataset_from_workflow_task,
 };
-use crate::error::Error::{LayerResultDescriptorMissingFields, NotImplemented};
+use crate::error::Error::NotImplemented;
 use crate::error::Result;
 use crate::layers::layer::{
-    AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListing,
+    AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     ProviderLayerCollectionId, UpdateLayer, UpdateLayerCollection,
 };
 use crate::layers::listing::{
@@ -24,9 +26,8 @@ use crate::util::workflows::validate_workflow;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{contexts::SessionContext, layers::layer::LayerCollectionListOptions};
-use actix_web::{web, FromRequest, HttpResponse, Responder};
-use geoengine_datatypes::primitives::{BandSelection, SpatialGridQueryRectangle};
-use geoengine_operators::engine::{ExecutionContext, WorkflowOperatorPath};
+use actix_web::{FromRequest, HttpResponse, Responder, web};
+use geoengine_datatypes::dataset::DataProviderId;
 
 use serde::{Deserialize, Serialize};
 use utoipa::IntoParams;
@@ -113,6 +114,17 @@ where
                     )
                     .route("", web::put().to(update_collection::<C>))
                     .route("", web::delete().to(remove_collection::<C>)),
+            )
+            .service(
+                web::scope("/providers")
+                    .route("", web::post().to(add_provider::<C>))
+                    .route("", web::get().to(list_providers::<C>))
+                    .service(
+                        web::resource("/{provider}")
+                            .route(web::get().to(get_provider_definition::<C>))
+                            .route(web::put().to(update_provider_definition::<C>))
+                            .route(web::delete().to(delete_provider::<C>)),
+                    ),
             ),
     );
 }
@@ -181,6 +193,7 @@ async fn get_layer_providers<C: ApplicationContext>(
     let mut providers = vec![];
     if options.offset == 0 && options.limit > 0 {
         providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: crate::layers::storage::INTERNAL_PROVIDER_ID,
                 collection_id: LayerCollectionId(
@@ -205,13 +218,13 @@ async fn get_layer_providers<C: ApplicationContext>(
     {
         if provider_listing.priority <= -1000 {
             continue; // skip providers that are disabled
-        };
+        }
 
         // TODO: resolve providers in parallel
         let provider = match external.load_layer_provider(provider_listing.id).await {
             Ok(provider) => provider,
             Err(err) => {
-                log::error!("Error loading provider: {err:?}");
+                tracing::error!("Error loading provider: {err:?}");
                 continue;
             }
         };
@@ -223,7 +236,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         let collection_id = match provider.get_root_layer_collection_id().await {
             Ok(root) => root,
             Err(err) => {
-                log::error!(
+                tracing::error!(
                     "Error loading provider {}, could not get root collection id: {err:?}",
                     provider_listing.id,
                 );
@@ -232,6 +245,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         };
 
         providers.push(CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
             id: ProviderLayerCollectionId {
                 provider_id: provider_listing.id,
                 collection_id,
@@ -243,7 +257,7 @@ async fn get_layer_providers<C: ApplicationContext>(
     }
     let root_collection = LayerCollection {
         id: ProviderLayerCollectionId {
-            provider_id: ROOT_PROVIDER_ID.into(),
+            provider_id: ROOT_PROVIDER_ID,
             collection_id: LayerCollectionId(ROOT_COLLECTION_ID.to_string()),
         },
         name: "Layer Providers".to_string(),
@@ -295,7 +309,7 @@ async fn get_layer_providers<C: ApplicationContext>(
         )
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id"),
+        ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id"),
         ("collection" = LayerCollectionId, description = "Layer collection id"),
         LayerCollectionListOptions
     ),
@@ -318,7 +332,7 @@ async fn list_collection_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
+    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
         let collection = db
             .load_layer_collection(&item, options.into_inner())
             .await?;
@@ -327,7 +341,7 @@ async fn list_collection_handler<C: ApplicationContext>(
     }
 
     let collection = db
-        .load_layer_provider(provider.into())
+        .load_layer_provider(provider)
         .await?
         .load_layer_collection(&item, options.into_inner())
         .await?;
@@ -356,7 +370,7 @@ async fn list_collection_handler<C: ApplicationContext>(
         )
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id")
+        ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id")
     ),
     security(
         ("session_token" = [])
@@ -377,7 +391,7 @@ async fn provider_capabilities_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    let capabilities = match provider.into() {
+    let capabilities = match provider {
         crate::layers::storage::INTERNAL_PROVIDER_ID => LayerCollectionProvider::capabilities(&db),
         provider => db.load_layer_provider(provider).await?.capabilities(),
     };
@@ -427,7 +441,7 @@ async fn provider_capabilities_handler<C: ApplicationContext>(
         )
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id", example = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74"),
+        ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id", example = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74"),
         ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
         SearchParameters
     ),
@@ -451,7 +465,7 @@ async fn search_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    let collection = match provider.into() {
+    let collection = match provider {
         crate::layers::storage::INTERNAL_PROVIDER_ID => {
             LayerCollectionProvider::search(&db, &collection, options.into_inner()).await?
         }
@@ -477,7 +491,7 @@ async fn search_handler<C: ApplicationContext>(
         )
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id", example = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74"),
+        ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id", example = "ce5e84db-cbf9-48a2-9a32-d4b7cc56ea74"),
         ("collection" = LayerCollectionId, description = "Layer collection id", example = "05102bb3-a855-4a37-8a8a-30026a91fef1"),
         SearchParameters
     ),
@@ -501,7 +515,7 @@ async fn autocomplete_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    let suggestions = match provider.into() {
+    let suggestions = match provider {
         crate::layers::storage::INTERNAL_PROVIDER_ID => {
             LayerCollectionProvider::autocomplete_search(&db, &collection, options.into_inner())
                 .await?
@@ -672,7 +686,7 @@ async fn autocomplete_handler<C: ApplicationContext>(
         )
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id"),
+        ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id"),
         ("layer" = LayerCollectionId, description = "Layer id"),
     ),
     security(
@@ -688,14 +702,14 @@ async fn layer_handler<C: ApplicationContext>(
 
     let db = app_ctx.session_context(session).db();
 
-    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID.into() {
+    if provider == crate::layers::storage::INTERNAL_PROVIDER_ID {
         let collection = db.load_layer(&item.into()).await?;
 
         return Ok(web::Json(collection));
     }
 
     let collection = db
-        .load_layer_provider(provider.into())
+        .load_layer_provider(provider)
         .await?
         .load_layer(&item.into())
         .await?;
@@ -712,7 +726,7 @@ async fn layer_handler<C: ApplicationContext>(
         (status = 200, response = IdResponse::<WorkflowId>)
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id"),
+        ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id"),
         ("layer" = LayerCollectionId, description = "Layer id"),
     ),
     security(
@@ -727,10 +741,10 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
     let (provider, item) = path.into_inner();
 
     let db = app_ctx.session_context(session.clone()).db();
-    let layer = match provider.into() {
+    let layer = match provider {
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item.into()).await?,
         _ => {
-            db.load_layer_provider(provider.into())
+            db.load_layer_provider(provider)
                 .await?
                 .load_layer(&item.into())
                 .await?
@@ -756,8 +770,8 @@ async fn layer_to_workflow_id_handler<C: ApplicationContext>(
         )
     ),
     params(
-        ("provider" = DataProviderId, description = "Data provider id"),
-        ("layer" = LayerCollectionId, description = "Layer id"),
+        ("provider" = crate::api::model::datatypes::DataProviderId, description = "Data provider id"),
+        ("layer" = LayerId, description = "Layer id"),
     ),
     security(
         ("session_token" = [])
@@ -775,10 +789,10 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let db = ctx.db();
 
-    let layer = match provider.into() {
+    let layer = match provider {
         crate::layers::storage::INTERNAL_PROVIDER_ID => db.load_layer(&item).await?,
         _ => {
-            db.load_layer_provider(provider.into())
+            db.load_layer_provider(provider)
                 .await?
                 .load_layer(&item)
                 .await?
@@ -787,44 +801,11 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let workflow_id = db.register_workflow(layer.workflow.clone()).await?;
 
-    let execution_context = ctx.execution_context()?;
-
-    let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
-
-    let raster_operator = layer
-        .workflow
-        .operator
-        .clone()
-        .get_raster()?
-        .initialize(workflow_operator_path_root, &execution_context)
-        .await?;
-
-    let result_descriptor = raster_operator.result_descriptor();
-
-    let sqr = SpatialGridQueryRectangle::new(
-        result_descriptor
-            .tiling_grid_definition(execution_context.tiling_specification())
-            .tiling_grid_bounds(),
-    );
-
-    let qr_time = result_descriptor
-        .time
-        .ok_or(LayerResultDescriptorMissingFields {
-            field: "time".to_string(),
-            cause: "is None".to_string(),
-        })?;
-
-    let qr = geoengine_datatypes::primitives::RasterQueryRectangle::new(
-        sqr,
-        qr_time,
-        BandSelection::first_n(result_descriptor.bands.len() as u32),
-    );
-
     let from_workflow = RasterDatasetFromWorkflowParams {
         name: None,
         display_name: layer.name,
         description: Some(layer.description),
-        query: qr,
+        query: None,
         as_cog: true,
     };
 
@@ -833,7 +814,6 @@ async fn layer_to_dataset<C: ApplicationContext>(
 
     let task_id = schedule_raster_dataset_from_workflow_task(
         format!("layer {item}"),
-        raster_operator,
         workflow_id,
         ctx,
         from_workflow,
@@ -1180,6 +1160,165 @@ async fn remove_collection_from_collection<C: ApplicationContext>(
     Ok(HttpResponse::Ok().finish())
 }
 
+/// Add a new provider
+#[utoipa::path(
+    tag = "Layers",
+    post,
+    path = "/layerDb/providers",
+    params(),
+    request_body = TypedDataProviderDefinition,
+    responses(
+        (status = 200, response = IdResponse::<DataProviderId>)
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn add_provider<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    request: web::Json<TypedDataProviderDefinition>,
+) -> Result<web::Json<IdResponse<DataProviderId>>> {
+    let provider = request.into_inner().into();
+
+    let id = app_ctx
+        .into_inner()
+        .session_context(session)
+        .db()
+        .add_layer_provider(provider)
+        .await?;
+
+    Ok(web::Json(IdResponse { id }))
+}
+
+/// List all providers
+#[utoipa::path(
+    tag = "Layers",
+    get,
+    path = "/layerDb/providers",
+    params(LayerProviderListingOptions),
+    responses(
+        (status = 200, description = "OK", body = Vec<LayerProviderListing>)
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn list_providers<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    options: ValidatedQuery<LayerProviderListingOptions>,
+) -> Result<web::Json<Vec<LayerProviderListing>>> {
+    let providers = app_ctx
+        .into_inner()
+        .session_context(session)
+        .db()
+        .list_layer_providers(options.into_inner())
+        .await?;
+
+    Ok(web::Json(providers.into_iter().map(Into::into).collect()))
+}
+
+/// Get an existing provider's definition
+#[utoipa::path(
+    tag = "Layers",
+    get,
+    path = "/layerDb/providers/{provider}",
+    params(
+        ("provider" = uuid::Uuid, description = "Layer provider id"),
+    ),
+    responses(
+        (status = 200, description = "OK", body = TypedDataProviderDefinition)
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn get_provider_definition<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    path: web::Path<uuid::Uuid>,
+) -> Result<web::Json<TypedDataProviderDefinition>> {
+    let id = DataProviderId(path.into_inner());
+
+    let provider = app_ctx
+        .into_inner()
+        .session_context(session)
+        .db()
+        .get_layer_provider_definition(id)
+        .await?
+        .into();
+
+    Ok(web::Json(provider))
+}
+
+/// Update an existing provider's definition
+#[utoipa::path(
+    tag = "Layers",
+    put,
+    path = "/layerDb/providers/{provider}",
+    params(
+        ("provider" = uuid::Uuid, description = "Layer provider id"),
+    ),
+    request_body = TypedDataProviderDefinition,
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn update_provider_definition<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    path: web::Path<uuid::Uuid>,
+    request: web::Json<TypedDataProviderDefinition>,
+) -> Result<HttpResponse> {
+    let id = DataProviderId(path.into_inner());
+    let definition = request.into_inner().into();
+
+    app_ctx
+        .into_inner()
+        .session_context(session)
+        .db()
+        .update_layer_provider_definition(id, definition)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
+/// Delete an existing provider
+#[utoipa::path(
+    tag = "Layers",
+    delete,
+    path = "/layerDb/providers/{provider}",
+    params(
+        ("provider" = uuid::Uuid, description = "Layer provider id"),
+    ),
+    responses(
+        (status = 200, description = "OK")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+async fn delete_provider<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    path: web::Path<uuid::Uuid>,
+) -> Result<HttpResponse> {
+    let id = DataProviderId(path.into_inner());
+
+    app_ctx
+        .into_inner()
+        .session_context(session)
+        .db()
+        .delete_layer_provider(id)
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -1187,23 +1326,30 @@ mod tests {
     use crate::{
         api::model::responses::ErrorResponse,
         contexts::{PostgresContext, Session, SessionId},
-        datasets::RasterDatasetFromWorkflowResult,
+        datasets::{
+            RasterDatasetFromWorkflowResult,
+            dataset_listing_provider::{
+                DatasetLayerListingCollection, DatasetLayerListingProviderDefinition,
+            },
+            external::aruna::ArunaDataProviderDefinition,
+        },
         ge_context,
         layers::{layer::Layer, storage::INTERNAL_PROVIDER_ID},
-        tasks::{util::test::wait_for_task_to_finish, TaskManager, TaskStatus},
+        tasks::{TaskManager, TaskStatus, util::test::wait_for_task_to_finish},
         users::{UserAuth, UserSession},
-        util::tests::{admin_login, read_body_string, send_test_request, TestDataUploads},
+        util::tests::{TestDataUploads, admin_login, read_body_string, send_test_request},
         workflows::workflow::Workflow,
     };
     use actix_web::{
         dev::ServiceResponse,
         http::header,
-        test::{read_body_json, TestRequest},
+        test::{self, TestRequest, read_body_json},
     };
     use actix_web_httpauth::headers::authorization::Bearer;
     use geoengine_datatypes::{
         primitives::{
-            CacheHint, Coordinate2D, RasterQueryRectangle, TimeGranularity, TimeInterval,
+            BandSelection, CacheHint, CacheTtlSeconds, Coordinate2D, RasterQueryRectangle,
+            TimeGranularity, TimeInterval,
         },
         raster::{
             GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType, RasterTile2D,
@@ -1872,6 +2018,376 @@ mod tests {
         assert!(response.status().is_success(), "{response:?}");
     }
 
+    fn default_dataset_layer_listing_provider_definition() -> DatasetLayerListingProviderDefinition
+    {
+        DatasetLayerListingProviderDefinition {
+            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+            name: "User Data Listing".to_string(),
+            description: "User specific datasets grouped by tags.".to_string(),
+            priority: None,
+            collections: vec![
+                DatasetLayerListingCollection {
+                    name: "User Uploads".to_string(),
+                    description: "Datasets uploaded by the user.".to_string(),
+                    tags: vec!["upload".to_string()],
+                },
+                DatasetLayerListingCollection {
+                    name: "Workflows".to_string(),
+                    description: "Datasets created from workflows.".to_string(),
+                    tags: vec!["workflow".to_string()],
+                },
+                DatasetLayerListingCollection {
+                    name: "All Datasets".to_string(),
+                    description: "All datasets".to_string(),
+                    tags: vec!["*".to_string()],
+                },
+            ],
+        }
+    }
+
+    #[ge_context::test]
+    async fn test_get_provider_definition(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        ctx.db()
+            .add_layer_provider(
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone(),
+                ),
+            )
+            .await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/layerDb/providers/cbb21ee3-d15d-45c5-a175-66964adf4e85")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let response_provider =
+            serde_json::from_str::<TypedDataProviderDefinition>(&read_body_string(response).await)
+                .unwrap();
+        assert_eq!(
+            response_provider,
+            TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                dataset_listing_provider.into()
+            )
+        );
+    }
+
+    #[ge_context::test]
+    async fn test_add_provider_definition(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        let req = test::TestRequest::post()
+            .uri("/layerDb/providers")
+            .set_json(serde_json::json!(
+                &TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone().into(),
+                )
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        assert_eq!(
+            ctx.db()
+                .get_layer_provider_definition(
+                    DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+                )
+                .await
+                .unwrap(),
+            crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                dataset_listing_provider
+            )
+        );
+    }
+
+    #[ge_context::test]
+    async fn test_update_provider_definition(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        ctx.db()
+            .add_layer_provider(
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider,
+                ),
+            )
+            .await.unwrap();
+
+        let dataset_listing_provider = DatasetLayerListingProviderDefinition {
+            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+            name: "Updated User Data Listing".to_string(),
+            description: "Updated User specific datasets grouped by tags.".to_string(),
+            priority: Some(2),
+            collections: vec![
+                DatasetLayerListingCollection {
+                    name: "Updated User Uploads".to_string(),
+                    description: "Datasets uploaded by the user.".to_string(),
+                    tags: vec!["upload".to_string()],
+                },
+                DatasetLayerListingCollection {
+                    name: "Workflows".to_string(),
+                    description: "Datasets created from workflows.".to_string(),
+                    tags: vec!["workflow".to_string()],
+                },
+            ],
+        };
+
+        let req = test::TestRequest::put()
+            .uri("/layerDb/providers/cbb21ee3-d15d-45c5-a175-66964adf4e85")
+            .set_json(serde_json::json!(
+                &TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone().into(),
+                )
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        assert_eq!(
+            ctx.db()
+                .get_layer_provider_definition(
+                    DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+                )
+                .await
+                .unwrap(),
+            crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                dataset_listing_provider
+            )
+        );
+    }
+
+    #[ge_context::test]
+    async fn test_delete_provider_definition(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        ctx.db()
+            .add_layer_provider(
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider,
+                ),
+            )
+            .await.unwrap();
+
+        let req = test::TestRequest::delete()
+            .uri("/layerDb/providers/cbb21ee3-d15d-45c5-a175-66964adf4e85")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        assert!(
+            ctx.db()
+                .get_layer_provider_definition(DataProviderId::from_u128(
+                    0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85
+                ),)
+                .await
+                .is_err()
+        );
+    }
+
+    #[ge_context::test]
+    async fn test_cannot_add_existing_provider_definition(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        ctx.db()
+            .add_layer_provider(
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone(),
+                ),
+            )
+            .await.unwrap();
+
+        let req = test::TestRequest::post()
+            .uri("/layerDb/providers")
+            .set_json(serde_json::json!(
+                &TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone().into(),
+                )
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_client_error(), "{response:?}");
+
+        assert_eq!(
+            response.response().error().unwrap().to_string(),
+            crate::error::Error::ProviderIdAlreadyExists {
+                provider_id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85)
+            }
+            .to_string()
+        );
+    }
+
+    #[ge_context::test]
+    async fn test_cannot_update_provider_id(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        ctx.db()
+            .add_layer_provider(
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider,
+                ),
+            )
+            .await.unwrap();
+
+        let dataset_listing_provider = DatasetLayerListingProviderDefinition {
+            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e86),
+            name: "Updated User Data Listing".to_string(),
+            description: "Updated User specific datasets grouped by tags.".to_string(),
+            priority: Some(2),
+            collections: vec![],
+        };
+
+        let req = test::TestRequest::put()
+            .uri("/layerDb/providers/cbb21ee3-d15d-45c5-a175-66964adf4e85")
+            .set_json(serde_json::json!(
+                &TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone().into(),
+                )
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_client_error(), "{response:?}");
+
+        assert_eq!(
+            response.response().error().unwrap().to_string(),
+            crate::error::Error::ProviderIdUnmodifiable.to_string()
+        );
+    }
+
+    #[ge_context::test]
+    async fn test_cannot_update_provider_type(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        ctx.db()
+            .add_layer_provider(
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider,
+                ),
+            )
+            .await.unwrap();
+
+        let aruna_provider = ArunaDataProviderDefinition {
+            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+            name: "Aruna".to_string(),
+            description: String::new(),
+            priority: None,
+            api_url: String::new(),
+            project_id: String::new(),
+            api_token: String::new(),
+            filter_label: String::new(),
+            cache_ttl: CacheTtlSeconds::default(),
+        };
+
+        let req = test::TestRequest::put()
+            .uri("/layerDb/providers/cbb21ee3-d15d-45c5-a175-66964adf4e85")
+            .set_json(serde_json::json!(
+                &TypedDataProviderDefinition::ArunaDataProviderDefinition(
+                    aruna_provider.clone().into(),
+                )
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_client_error(), "{response:?}");
+
+        assert_eq!(
+            response.response().error().unwrap().to_string(),
+            crate::error::Error::ProviderTypeUnmodifiable.to_string()
+        );
+    }
+
+    #[ge_context::test]
+    async fn test_cannot_update_non_existing_provider(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        let req = test::TestRequest::put()
+            .uri("/layerDb/providers/cbb21ee3-d15d-45c5-a175-66964adf4e85")
+            .set_json(serde_json::json!(
+                &TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone().into(),
+                )
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_client_error(), "{response:?}");
+
+        assert_eq!(
+            response.response().error().unwrap().to_string(),
+            "A permission error occurred: Permission Owner for resource provider:cbb21ee3-d15d-45c5-a175-66964adf4e85 denied..".to_string()
+        );
+    }
+
+    #[ge_context::test]
+    async fn test_cannot_get_non_existing_provider_definition(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+
+        let session_id = session.id();
+
+        let req = test::TestRequest::get()
+            .uri("/layerDb/providers/cbb21ee3-d15d-45c5-a175-66964adf4e85")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_client_error(), "{response:?}");
+
+        assert_eq!(
+            response.response().error().unwrap().to_string(),
+            "TokioPostgres".to_string()
+        );
+    }
+
     struct MockRasterWorkflowLayerDescription {
         workflow: Workflow,
         tiling_specification: TilingSpecification,
@@ -1953,11 +2469,11 @@ mod tests {
                 tile_size_in_pixels: GridShape::new([2, 2]),
             };
 
-            let query_rectangle = RasterQueryRectangle::new_with_grid_bounds(
+            let query_rectangle = RasterQueryRectangle::new(
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 1).unwrap(),
                 TimeInterval::new_unchecked(
-                    1_671_868_800_000 + i64::from(time_shift_millis),
-                    1_672_041_600_000 + i64::from(time_shift_millis),
+                    1_671_868_800_000 - i64::from(time_shift_millis),
+                    1_672_041_600_000 - i64::from(time_shift_millis),
                 ),
                 BandSelection::first(),
             );
@@ -2047,7 +2563,7 @@ mod tests {
             .await
             .unwrap();
 
-        let response = if let TaskStatus::Completed { info, .. } = status {
+        if let TaskStatus::Completed { info, .. } = status {
             info.as_any_arc()
                 .downcast::<RasterDatasetFromWorkflowResult>()
                 .unwrap()
@@ -2055,9 +2571,7 @@ mod tests {
                 .clone()
         } else {
             panic!("Task must be completed");
-        };
-
-        response
+        }
     }
 
     async fn raster_layer_to_dataset_success(
@@ -2116,7 +2630,8 @@ mod tests {
         tiling_spec = "test_raster_layer_with_timeshift_to_dataset_success_tiling_spec"
     )]
     async fn test_raster_layer_with_timeshift_to_dataset_success(app_ctx: PostgresContext<NoTls>) {
-        let mock_source = MockRasterWorkflowLayerDescription::new(true, 1_000);
+        let mock_source: MockRasterWorkflowLayerDescription =
+            MockRasterWorkflowLayerDescription::new(true, 1_000);
         raster_layer_to_dataset_success(app_ctx, mock_source).await;
     }
 
@@ -2130,6 +2645,7 @@ mod tests {
         let mock_source = MockRasterWorkflowLayerDescription::new(false, 0);
 
         let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
 
         let session_id = session.id();
 
@@ -2137,12 +2653,36 @@ mod tests {
 
         let res = send_dataset_creation_test_request(app_ctx, layer, session_id).await;
 
-        ErrorResponse::assert(
-            res,
-            400,
-            "LayerResultDescriptorMissingFields",
-            "Result Descriptor field 'time' is None",
-        )
-        .await;
+        assert_eq!(res.status(), 200, "{:?}", res.response());
+
+        let task_response =
+            serde_json::from_str::<TaskResponse>(&read_body_string(res).await).unwrap();
+
+        let task_manager = Arc::new(ctx.tasks());
+        wait_for_task_to_finish(task_manager.clone(), task_response.task_id).await;
+
+        let status = task_manager
+            .get_task_status(task_response.task_id)
+            .await
+            .unwrap();
+
+        let error_res = if let TaskStatus::Failed { error, .. } = status {
+            error
+                .clone()
+                .into_any_arc()
+                .downcast::<crate::error::Error>()
+                .unwrap()
+        } else {
+            panic!("Task must fail");
+        };
+
+        let crate::error::Error::LayerResultDescriptorMissingFields { field: f, cause: c } =
+            error_res.as_ref()
+        else {
+            panic!("Error must be LayerResultDescriptorMissingFields")
+        };
+
+        assert_eq!(f, "time");
+        assert_eq!(c, "is None");
     }
 }

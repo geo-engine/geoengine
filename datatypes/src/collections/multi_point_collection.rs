@@ -10,7 +10,7 @@ use rayon::{
 
 use crate::primitives::{Coordinate2D, MultiPoint, MultiPointRef};
 use crate::util::arrow::downcast_array;
-use crate::util::{arrow::ArrowTyped, Result};
+use crate::util::{Result, arrow::ArrowTyped};
 use crate::{
     collections::{
         FeatureCollection, FeatureCollectionInfos, FeatureCollectionIterator, FeatureCollectionRow,
@@ -1257,8 +1257,8 @@ mod tests {
         use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 
         use crate::util::well_known_data::{
-            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
-            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
+            MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
         };
 
         let from = SpatialReference::epsg_4326();
@@ -1310,8 +1310,8 @@ mod tests {
         use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
 
         use crate::util::well_known_data::{
-            COLOGNE_EPSG_4326, COLOGNE_EPSG_900_913, HAMBURG_EPSG_4326, HAMBURG_EPSG_900_913,
-            MARBURG_EPSG_4326, MARBURG_EPSG_900_913,
+            COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
+            MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
         };
 
         let from = SpatialReference::epsg_4326();

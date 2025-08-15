@@ -1,10 +1,9 @@
 use crate::engine::{QueryContext, RasterQueryProcessor};
-use crate::util::stream_zip::StreamArrayZip;
 use crate::util::Result;
+use crate::util::stream_zip::StreamArrayZip;
 use futures::future::{self, BoxFuture, Join, JoinAll};
 use futures::stream::{BoxStream, FusedStream, Zip};
-use futures::{ready, StreamExt};
-use futures::{Future, Stream};
+use futures::{Future, Stream, StreamExt, ready};
 use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy,
@@ -288,7 +287,7 @@ where
                             let num_spatial_tiles = *num_spatial_tiles.get_or_insert_with(|| {
                                 Self::number_of_tiles_in_grid_bounds(
                                     &tile_a.tile_information(),
-                                    query_rect.spatial_query().grid_bounds(), // TODO: this should be calculated from the tile grid bounds and not the spatial bounds.
+                                    query_rect.spatial_bounds(), // TODO: this should be calculated from the tile grid bounds and not the spatial bounds.
                                 )
                             });
 
@@ -306,21 +305,22 @@ where
                                     // advance current query rectangle
                                     let mut new_start = min(tile_a.time.end(), tile_b.time.end());
 
-                                    if new_start == query_rect.time_interval.start() {
+                                    if new_start == query_rect.time_interval().start() {
                                         // in the case that the time interval has no length, i.e. start=end,
                                         // we have to advance `new_start` to prevent infinite loops.
                                         // Otherwise, the new query rectangle would be equal to the previous one.
                                         new_start += 1;
                                     }
 
-                                    if new_start >= query_rect.time_interval.end() {
+                                    if new_start >= query_rect.time_interval().end() {
                                         // the query window is exhausted, end the stream
                                         state.set(State::Finished);
                                     } else {
-                                        query_rect.time_interval = TimeInterval::new_unchecked(
-                                            new_start,
-                                            query_rect.time_interval.end(),
-                                        );
+                                        *query_rect.time_interval_mut() =
+                                            TimeInterval::new_unchecked(
+                                                new_start,
+                                                query_rect.time_interval().end(),
+                                            );
 
                                         state.set(State::Initial);
                                     }
@@ -441,7 +441,7 @@ where
                     let num_spatial_tiles = *num_spatial_tiles.get_or_insert_with(|| {
                         Self::number_of_tiles_in_grid_bounds(
                             &tiles[0].tile_information(),
-                            query_rect.spatial_query().grid_bounds(),
+                            query_rect.spatial_bounds(),
                         )
                     });
 
@@ -468,20 +468,20 @@ where
                                 .min()
                                 .expect("N > 0");
 
-                            if new_start == query_rect.time_interval.start() {
+                            if new_start == query_rect.time_interval().start() {
                                 // in the case that the time interval has no length, i.e. start=end,
                                 // we have to advance `new_start` to prevent infinite loops.
                                 // Otherwise, the new query rectangle would be equal to the previous one.
                                 new_start += 1;
                             }
 
-                            if new_start >= query_rect.time_interval.end() {
+                            if new_start >= query_rect.time_interval().end() {
                                 // the query window is exhausted, end the stream
                                 state.set(ArrayState::Finished);
                             } else {
-                                query_rect.time_interval = TimeInterval::new_unchecked(
+                                *query_rect.time_interval_mut() = TimeInterval::new_unchecked(
                                     new_start,
-                                    query_rect.time_interval.end(),
+                                    query_rect.time_interval().end(),
                                 );
 
                                 state.set(ArrayState::Initial);
@@ -571,8 +571,8 @@ where
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-        RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
+        MockExecutionContext, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        SpatialGridDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
@@ -735,12 +735,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -968,12 +968,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1179,12 +1179,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1374,12 +1374,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 10),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1543,12 +1543,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(2, 4),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1711,12 +1711,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(2, 4),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1892,12 +1892,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(2, 8),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2082,12 +2082,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(2, 8),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2249,12 +2249,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(1, 3),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor_a = raster_source_a
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

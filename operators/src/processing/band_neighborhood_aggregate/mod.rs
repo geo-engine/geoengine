@@ -70,7 +70,9 @@ pub enum BandNeighborhoodAggregateError {
     ))]
     FirstDerivativeNeedsAtLeastTwoBands,
 
-    #[snafu(display("The distance of the bands for computing the first derivative must be positive, found {distance}."))]
+    #[snafu(display(
+        "The distance of the bands for computing the first derivative must be positive, found {distance}."
+    ))]
     FirstDerivativeDistanceMustBePositive { distance: f64 },
 
     #[snafu(display("The window size for the average must be odd, found {window_size}."))]
@@ -234,11 +236,14 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
         // query the source with all bands, to compute the aggregate
         // then, select only the queried bands
         // TODO: avoid computing the aggregate for bands that are not queried
-        let mut source_query = query.clone();
         let source_result_descriptor = self.source.raster_result_descriptor();
-        source_query.attributes = (&source_result_descriptor.bands).into();
+        let source_query = RasterQueryRectangle::new(
+            query.spatial_bounds(),
+            query.time_interval(),
+            (&source_result_descriptor.bands).into(),
+        );
 
-        let must_extract_bands = query.attributes != source_query.attributes;
+        let must_extract_bands = query.attributes() != source_query.attributes();
 
         let aggregate = match &self.aggregate {
             NeighborhoodAggregate::FirstDerivative { band_distance } => {
@@ -270,7 +275,7 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
 
         if must_extract_bands {
             Ok(Box::pin(aggregate.extract_bands(
-                query.attributes.as_vec(),
+                query.attributes().as_vec(),
                 source_result_descriptor.bands.count(),
             )))
         } else {
@@ -679,11 +684,7 @@ impl Accu for MovingAverageAccu {
 
         // compute bands required for the window
         let window_radius = self.window_size / 2;
-        let first_band = if self.output_band_idx < window_radius {
-            0
-        } else {
-            self.output_band_idx - window_radius
-        };
+        let first_band = self.output_band_idx.saturating_sub(window_radius);
 
         debug_assert!(
             self.input_band_tiles
@@ -698,11 +699,7 @@ impl Accu for MovingAverageAccu {
             self.output_band_idx + window_radius
         };
 
-        if self
-            .input_band_tiles
-            .back()
-            .map_or(true, |t| t.0 < last_band)
-        {
+        if self.input_band_tiles.back().is_none_or(|t| t.0 < last_band) {
             // not enough bands for the window
             return None;
         }
@@ -771,9 +768,7 @@ mod tests {
     };
 
     use crate::{
-        engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors, SpatialGridDescriptor,
-        },
+        engine::{MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor},
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -823,50 +818,53 @@ mod tests {
         assert!(accu.next_band_tile().is_none());
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 0,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }),);
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 1,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                }),
+        );
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 2,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2., 2., 2., 2.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }
@@ -915,50 +913,53 @@ mod tests {
         assert!(accu.next_band_tile().is_none());
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 0,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }),);
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 1,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                }),
+        );
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 2,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2. / 3., 2. / 3., 2. / 3., 2. / 3.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }
@@ -1007,50 +1008,53 @@ mod tests {
         assert!(accu.next_band_tile().is_none());
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1., 2., 3., 4.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 0,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![1., 2., 3., 4.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         accu.add_tile(data.remove(0)).unwrap();
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
-        assert!(accu
-            .next_band_tile()
-            .unwrap()
-            .tiles_equal_ignoring_cache_hint(&RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![3., 4., 5., 6.])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            }));
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 1,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![2., 3., 4., 5.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
+        assert!(
+            accu.next_band_tile()
+                .unwrap()
+                .tiles_equal_ignoring_cache_hint(&RasterTile2D {
+                    time: TimeInterval::new_unchecked(0, 5),
+                    tile_position: [-1, 0].into(),
+                    band: 2,
+                    global_geo_transform: TestDefault::test_default(),
+                    grid_array: Grid::new([2, 2].into(), vec![3., 4., 5., 6.])
+                        .unwrap()
+                        .into(),
+                    properties: Default::default(),
+                    cache_hint: CacheHint::default(),
+                })
+        );
 
         assert!(std::panic::catch_unwind(move || accu.next_band_tile()).is_err());
     }
@@ -1216,13 +1220,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 5),
             BandSelection::new_unchecked(vec![0, 1, 2]),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = band_neighborhood_aggregate
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1359,13 +1363,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
             TimeInterval::new_unchecked(0, 5),
             BandSelection::new_unchecked(vec![0]), // only get first band
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = band_neighborhood_aggregate
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

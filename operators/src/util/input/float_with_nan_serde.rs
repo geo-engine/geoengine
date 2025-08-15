@@ -1,5 +1,5 @@
-use serde::de::{self, Visitor};
 use serde::Serializer;
+use serde::de::{self, Visitor};
 use std::fmt;
 
 /// Serialize and deserialize floats with special treatment of NaN
@@ -163,12 +163,14 @@ mod tests {
 
         // deserialize
 
-        assert!(serde_json::from_value::<Foo>(serde_json::json!({
-            "bar": "nan",
-        }))
-        .unwrap()
-        .bar
-        .is_nan());
+        assert!(
+            serde_json::from_value::<Foo>(serde_json::json!({
+                "bar": "nan",
+            }))
+            .unwrap()
+            .bar
+            .is_nan()
+        );
 
         assert_eq!(
             serde_json::from_value::<Foo>(serde_json::json!({
@@ -215,13 +217,15 @@ mod tests {
 
         // deserialize
 
-        assert!(serde_json::from_value::<Foo>(serde_json::json!({
-            "bar": "nan",
-        }))
-        .unwrap()
-        .bar
-        .unwrap()
-        .is_nan());
+        assert!(
+            serde_json::from_value::<Foo>(serde_json::json!({
+                "bar": "nan",
+            }))
+            .unwrap()
+            .bar
+            .unwrap()
+            .is_nan()
+        );
 
         assert_eq!(
             serde_json::from_value::<Foo>(serde_json::json!({

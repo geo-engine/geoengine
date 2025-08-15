@@ -1,10 +1,11 @@
 #![allow(clippy::unwrap_used)] // okay in benchmarks
 
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
+use criterion::{Criterion, criterion_group, criterion_main};
 use geoengine_datatypes::raster::{
     GridIdx, GridIdx1D, GridIdx2D, GridShape, MapIndexedElements, MapIndexedElementsParallel,
     MaskedGrid,
 };
+use std::hint::black_box;
 
 fn map_indexed_elements_1d_simple(c: &mut Criterion) {
     let grid_shape = GridShape::from([512 * 512]);

@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     operations::reproject::{
-        suggest_output_spatial_grid_like_gdal, CoordinateProjection, Reproject, ReprojectClipped,
+        CoordinateProjection, Reproject, ReprojectClipped, suggest_output_spatial_grid_like_gdal,
     },
     primitives::{
         AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialPartitioned,
@@ -115,7 +115,7 @@ impl SpatialGridDefinition {
     pub fn merge(&self, other: &Self) -> Option<Self> {
         if !self.is_compatible_grid_generic(other) {
             return None;
-        };
+        }
 
         let other_shift =
             other.with_moved_origin_exact_grid(self.geo_transform.origin_coordinate)?;
@@ -135,7 +135,7 @@ impl SpatialGridDefinition {
     pub fn intersection(&self, other: &SpatialGridDefinition) -> Option<SpatialGridDefinition> {
         if !self.is_compatible_grid_generic(other) {
             return None;
-        };
+        }
 
         let (other_shift, dist) = other.with_moved_origin_to_nearest_grid_edge_with_distance(
             self.geo_transform.origin_coordinate,
@@ -323,13 +323,13 @@ impl<P: CoordinateProjection> ReprojectClipped<P> for SpatialGridDefinition {
             .area_of_use_intersection(&projector.target_srs())?;
         if target_bounds_in_source_srs.is_none() {
             return Ok(None);
-        };
+        }
         let target_bounds_in_source_srs = target_bounds_in_source_srs.expect("case checked above");
         let intersection_grid_bounds =
             target_bounds_in_source_srs.intersection(&self.spatial_partition());
         if intersection_grid_bounds.is_none() {
             return Ok(None);
-        };
+        }
         let intersection_grid_bounds = intersection_grid_bounds.expect("case checked above");
         let intersecting_grid =
             self.spatial_bounds_to_compatible_spatial_grid(intersection_grid_bounds);

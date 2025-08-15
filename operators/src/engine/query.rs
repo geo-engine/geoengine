@@ -129,24 +129,11 @@ pub struct MockQueryContext {
     pub abort_trigger: Option<QueryAbortTrigger>,
 }
 
-impl TestDefault for MockQueryContext {
-    fn test_default() -> Self {
-        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
-        Self {
-            chunk_byte_size: ChunkByteSize::test_default(),
-            tiling_specification: TilingSpecification::test_default(),
-            thread_pool: create_rayon_thread_pool(0),
-            cache: None,
-            quota_checker: None,
-            quota_tracking: None,
-            abort_registration,
-            abort_trigger: Some(abort_trigger),
-        }
-    }
-}
-
 impl MockQueryContext {
-    pub fn new(chunk_byte_size: ChunkByteSize, tiling_specification: TilingSpecification) -> Self {
+    pub(super) fn new(
+        chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
+    ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
@@ -160,7 +147,7 @@ impl MockQueryContext {
         }
     }
 
-    pub fn new_with_query_extensions(
+    pub(super) fn new_with_query_extensions(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         cache: Option<Arc<SharedCache>>,
@@ -180,7 +167,7 @@ impl MockQueryContext {
         }
     }
 
-    pub fn with_chunk_size_and_thread_count(
+    pub(super) fn with_chunk_size_and_thread_count(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         num_threads: usize,

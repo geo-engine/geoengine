@@ -67,8 +67,8 @@ impl Plot for ScatterPlot {
 
 #[cfg(test)]
 mod tests {
-    use crate::plots::scatter_plot::ScatterPlot;
     use crate::plots::Plot;
+    use crate::plots::scatter_plot::ScatterPlot;
     use crate::primitives::Coordinate2D;
 
     #[test]

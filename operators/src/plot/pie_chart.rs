@@ -18,7 +18,7 @@ use geoengine_datatypes::primitives::{
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub const PIE_CHART_OPERATOR_NAME: &str = "PieChart";
 
@@ -112,7 +112,7 @@ pub struct InitializedCountPieChart<Op> {
     result_descriptor: PlotResultDescriptor,
     column_name: String,
     column_label: String,
-    class_mapping: Option<HashMap<u8, String>>,
+    class_mapping: Option<BTreeMap<u8, String>>,
     donut: bool,
 }
 
@@ -123,7 +123,7 @@ impl<Op> InitializedCountPieChart<Op> {
         result_descriptor: PlotResultDescriptor,
         column_name: String,
         column_label: String,
-        class_mapping: Option<HashMap<u8, String>>,
+        class_mapping: Option<BTreeMap<u8, String>>,
         donut: bool,
     ) -> Self {
         Self {
@@ -181,7 +181,7 @@ pub struct CountPieChartVectorQueryProcessor {
     input: TypedVectorQueryProcessor,
     column_label: String,
     column_name: String,
-    class_mapping: Option<HashMap<u8, String>>,
+    class_mapping: Option<BTreeMap<u8, String>>,
     donut: bool,
 }
 
@@ -206,7 +206,7 @@ impl PlotQueryProcessor for CountPieChartVectorQueryProcessor {
 /// Null-values are empty strings.
 pub fn feature_data_strings_iter<'f>(
     feature_data: &'f FeatureDataRef,
-    class_mapping: Option<&'f HashMap<u8, String>>,
+    class_mapping: Option<&'f BTreeMap<u8, String>>,
 ) -> Box<dyn Iterator<Item = String> + 'f> {
     match (feature_data, class_mapping) {
         (FeatureDataRef::Category(feature_data_ref), Some(class_mapping)) => {
@@ -247,11 +247,7 @@ impl CountPieChartVectorQueryProcessor {
         let mut slices: HashMap<String, f64> = HashMap::new();
 
         // TODO: parallelize
-        let query: VectorQueryRectangle = VectorQueryRectangle::new(
-            query.spatial_query,
-            query.time_interval,
-            ColumnSelection::all(),
-        );
+        let query: VectorQueryRectangle = query.select_attributes(ColumnSelection::all());
 
         call_on_generic_vector_processor!(&self.input, processor => {
 
@@ -328,8 +324,8 @@ mod tests {
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, VectorQueryRectangle};
     use geoengine_datatypes::spatial_reference::SpatialReference;
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::{DataCollection, VectorDataType},
         primitives::MultiPoint,
@@ -426,7 +422,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -459,22 +455,24 @@ mod tests {
         let measurement = Measurement::continuous("foo".to_string(), None);
 
         let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
-            vec![DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[TimeInterval::default(); 6],
-                &[(
-                    "foo",
-                    FeatureData::NullableFloat(vec![
-                        Some(1.),
-                        Some(2.),
-                        None,
-                        Some(1.),
-                        None,
-                        Some(3.),
-                    ]),
-                )],
-            )
-            .unwrap()],
+            vec![
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[TimeInterval::default(); 6],
+                    &[(
+                        "foo",
+                        FeatureData::NullableFloat(vec![
+                            Some(1.),
+                            Some(2.),
+                            None,
+                            Some(1.),
+                            None,
+                            Some(3.),
+                        ]),
+                    )],
+                )
+                .unwrap(),
+            ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();
@@ -501,7 +499,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -646,7 +644,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -693,7 +691,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -740,12 +738,14 @@ mod tests {
         );
 
         let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
-            vec![DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[] as &[TimeInterval],
-                &[("foo", FeatureData::Float(vec![]))],
-            )
-            .unwrap()],
+            vec![
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[] as &[TimeInterval],
+                    &[("foo", FeatureData::Float(vec![]))],
+                )
+                .unwrap(),
+            ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();
@@ -772,7 +772,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),
@@ -803,12 +803,14 @@ mod tests {
         );
 
         let vector_source = MockFeatureCollectionSource::with_collections_and_measurements(
-            vec![DataCollection::from_slices(
-                &[] as &[NoGeometry],
-                &[TimeInterval::default()],
-                &[("foo", FeatureData::Float(vec![5.0]))],
-            )
-            .unwrap()],
+            vec![
+                DataCollection::from_slices(
+                    &[] as &[NoGeometry],
+                    &[TimeInterval::default()],
+                    &[("foo", FeatureData::Float(vec![5.0]))],
+                )
+                .unwrap(),
+            ],
             [("foo".to_string(), measurement)].into_iter().collect(),
         )
         .boxed();
@@ -835,7 +837,7 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle::with_bounds(
+                PlotQueryRectangle::new(
                     BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
                     TimeInterval::default(),
                     PlotSeriesSelection::all(),

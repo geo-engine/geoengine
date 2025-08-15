@@ -6,9 +6,9 @@ use crate::engine::{
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
+use futures::StreamExt;
 use futures::stream;
 use futures::stream::BoxStream;
-use futures::StreamExt;
 use geoengine_datatypes::collections::{MultiPointCollection, VectorDataType};
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{CacheHint, SpatialResolution};
@@ -48,11 +48,7 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQu
     fn box_clone(
         &self,
     ) -> Box<
-        dyn MetaData<
-            MockDatasetDataSourceLoadingInfo,
-            VectorResultDescriptor,
-            VectorQueryRectangle,
-        >,
+        dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>,
     > {
         Box::new(self.clone())
     }
@@ -76,11 +72,7 @@ impl MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQu
 pub struct MockDatasetDataSourceProcessor {
     result_descriptor: VectorResultDescriptor,
     loading_info: Box<
-        dyn MetaData<
-            MockDatasetDataSourceLoadingInfo,
-            VectorResultDescriptor,
-            VectorQueryRectangle,
-        >,
+        dyn MetaData<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>,
     >,
 }
 
@@ -213,8 +205,8 @@ mod tests {
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection};
-    use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::util::Identifier;
+    use geoengine_datatypes::util::test::TestDefault;
 
     #[tokio::test]
     async fn test() {
@@ -245,7 +237,7 @@ mod tests {
             panic!()
         };
 
-        let query_rectangle = VectorQueryRectangle::with_bounds(
+        let query_rectangle = VectorQueryRectangle::new(
             BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
             TimeInterval::default(),
             ColumnSelection::all(),

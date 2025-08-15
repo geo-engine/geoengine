@@ -6,7 +6,7 @@ use super::aggregators::{
     TemporalRasterPixelAggregator,
 };
 use super::first_last_subquery::{
-    first_tile_fold_future, last_tile_fold_future, TemporalRasterAggregationSubQueryNoDataOnly,
+    TemporalRasterAggregationSubQueryNoDataOnly, first_tile_fold_future, last_tile_fold_future,
 };
 use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
 use crate::adapters::stack_individual_aligned_raster_bands;
@@ -27,16 +27,15 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, RasterSpatialQueryRectangle, SpatialGridQueryRectangle,
-    SpatialResolution, TimeInstance,
+    BandSelection, RasterQueryRectangle, SpatialResolution, TimeInstance,
 };
-use geoengine_datatypes::raster::{Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
-use log::debug;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
 use std::sync::Arc;
+use tracing::debug;
 
 use typetag;
 
@@ -113,7 +112,7 @@ impl RasterOperator for TemporalRasterAggregation {
 
         if let Some(output_type) = self.params.output_type {
             out_result_descriptor.data_type = output_type;
-        };
+        }
 
         let initialized_operator = InitializedTemporalRasterAggregation {
             name,
@@ -236,7 +235,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>
         + QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialQuery = SpatialGridQueryRectangle,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -320,10 +319,10 @@ where
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<P>>>> {
         ensure!(
-            query.attributes.count() == 1,
+            query.attributes().count() == 1,
             error::InvalidBandCount {
                 expected: 1u32,
-                found: query.attributes.count()
+                found: query.attributes().count()
             }
         );
 
@@ -487,15 +486,15 @@ where
 impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
     Q: QueryProcessor<
-        Output = RasterTile2D<P>,
-        SpatialQuery = RasterSpatialQueryRectangle,
-        Selection = BandSelection,
-        ResultDescription = RasterResultDescriptor,
-    >,
+            Output = RasterTile2D<P>,
+            SpatialBounds = GridBoundingBox2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialQuery = RasterSpatialQueryRectangle;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -520,13 +519,13 @@ mod tests {
     use super::*;
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
             SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
-            raster_stacker::{RasterStacker, RasterStackerParams},
             Expression, ExpressionParams,
+            raster_stacker::{RasterStacker, RasterStackerParams},
         },
     };
     use futures::stream::StreamExt;
@@ -584,12 +583,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -709,12 +708,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -834,12 +833,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -959,12 +958,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1092,12 +1091,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
             TimeInterval::new_unchecked(0, 20),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1174,12 +1173,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1213,26 +1212,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1276,12 +1277,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1315,26 +1316,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1379,12 +1382,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1404,26 +1407,28 @@ mod tests {
 
         assert_eq!(result.len(), 2);
 
-        assert!(result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, false, true, true, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[0].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![13, 42, 15, 16, 17, 18]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, false, true, true, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
 
         assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
             &RasterTile2D::new_with_tile_info(
@@ -1482,12 +1487,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1521,26 +1526,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 42, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1585,12 +1592,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1624,26 +1631,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1688,12 +1697,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1727,26 +1736,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -1792,12 +1803,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1816,60 +1827,62 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&[
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            )
-        ]));
+        assert!(
+            result.tiles_equal_ignoring_cache_hint(&[
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                )
+            ])
+        );
     }
 
     #[tokio::test]
@@ -1914,12 +1927,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1953,26 +1966,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap(),
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap(),
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -2017,12 +2032,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2056,26 +2071,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 2, 3, 0, 5, 6]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -2132,12 +2149,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2156,72 +2173,74 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&[
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+        assert!(
+            result.tiles_equal_ignoring_cache_hint(&[
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new(
+                        [3, 2].into(),
+                        vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
+                    )
+                    .unwrap()
+                    .into(),
+                    CacheHint::default()
                 )
-                .unwrap()
-                .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
-                )
-                .unwrap()
-                .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
-                )
-                .unwrap()
-                .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new(
-                    [3, 2].into(),
-                    vec![13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20, 13 * 20]
-                )
-                .unwrap()
-                .into(),
-                CacheHint::default()
-            )
-        ]),);
+            ]),
+        );
     }
 
     #[tokio::test]
@@ -2267,12 +2286,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2291,60 +2310,62 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&[
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            )
-        ]));
+        assert!(
+            result.tiles_equal_ignoring_cache_hint(&[
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![2, 2, 2, 2, 2, 2])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                )
+            ])
+        );
     }
 
     #[tokio::test]
@@ -2389,12 +2410,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2428,26 +2449,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -2492,12 +2515,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2531,26 +2554,28 @@ mod tests {
             )
         ));
 
-        assert!(result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
-            &RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 30),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                GridOrEmpty::from(
-                    MaskedGrid2D::new(
-                        Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
-                        Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
-                            .unwrap()
-                    )
-                    .unwrap()
-                ),
-                CacheHint::default()
+        assert!(
+            result[1].as_ref().unwrap().tiles_equal_ignoring_cache_hint(
+                &RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 30),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    GridOrEmpty::from(
+                        MaskedGrid2D::new(
+                            Grid2D::new([3, 2].into(), vec![1, 1, 1, 0, 1, 1]).unwrap(),
+                            Grid2D::new([3, 2].into(), vec![true, true, true, false, true, true])
+                                .unwrap()
+                        )
+                        .unwrap()
+                    ),
+                    CacheHint::default()
+                )
             )
-        ));
+        );
     }
 
     #[tokio::test]
@@ -2595,12 +2620,12 @@ mod tests {
         .boxed();
 
         let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(5, 5),
             BandSelection::first(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2893,12 +2918,12 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 30),
             [0, 1].try_into().unwrap(),
         );
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2917,112 +2942,114 @@ mod tests {
             .collect::<Vec<_>>()
             .await;
 
-        assert!(result.tiles_equal_ignoring_cache_hint(&[
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                1,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(0, 20),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                1,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 0].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                1,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                0,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            ),
-            RasterTile2D::new_with_tile_info(
-                TimeInterval::new_unchecked(20, 40),
-                TileInformation {
-                    global_tile_position: [-1, 1].into(),
-                    tile_size_in_pixels: [3, 2].into(),
-                    global_geo_transform: TestDefault::test_default(),
-                },
-                1,
-                Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
-                    .unwrap()
-                    .into(),
-                CacheHint::default()
-            )
-        ]));
+        assert!(
+            result.tiles_equal_ignoring_cache_hint(&[
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    1,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(0, 20),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    1,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 0].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    1,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    0,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                ),
+                RasterTile2D::new_with_tile_info(
+                    TimeInterval::new_unchecked(20, 40),
+                    TileInformation {
+                        global_tile_position: [-1, 1].into(),
+                        tile_size_in_pixels: [3, 2].into(),
+                        global_geo_transform: TestDefault::test_default(),
+                    },
+                    1,
+                    Grid2D::new([3, 2].into(), vec![13, 13, 13, 13, 13, 13])
+                        .unwrap()
+                        .into(),
+                    CacheHint::default()
+                )
+            ])
+        );
     }
 
     #[tokio::test]
@@ -3067,13 +3094,13 @@ mod tests {
 
         let exe_ctx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
-        let query_rect = RasterQueryRectangle::new_with_grid_bounds(
+        let query_rect = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
             TimeInterval::new_unchecked(0, 40),
             BandSelection::first(),
         );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

@@ -5,7 +5,7 @@ use geoengine_operators::meta::quota::{ComputationUnit, QuotaMessage, QuotaTrack
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 use std::{collections::HashMap, time::Duration};
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{UnboundedReceiver, UnboundedSender, unbounded_channel};
 use utoipa::ToSchema;
 use uuid::Uuid;
 
@@ -86,9 +86,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
         if self.mode == QuotaTrackingMode::Disabled {
             // if the quota tracking is disabled, we still consume the messages in order to empty the channel, but ignore the messages
             crate::util::spawn(async move {
-                while let Some(_message) = self.quota_receiver.recv().await {
-                    continue;
-                }
+                while let Some(_message) = self.quota_receiver.recv().await {}
             });
 
             return;
@@ -98,8 +96,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
             while let Some(message) = self.quota_receiver.recv().await {
                 let flush_buffer = match message {
                     QuotaMessage::ComputationUnit(computation) => {
-                        // TODO: issue a tracing event instead?
-                        log::trace!(
+                        tracing::trace!(
                             "Quota received. User: {}, Workflow: {}, Computation: {}",
                             computation.user,
                             computation.workflow,
@@ -117,7 +114,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         self.buffer_used >= self.buffer_size
                     }
                     QuotaMessage::Flush => {
-                        log::trace!("Flush `increment_quota_buffer'");
+                        tracing::trace!("Flush `increment_quota_buffer'");
                         true
                     }
                 };
@@ -130,7 +127,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         .bulk_increment_quota_used(self.increment_quota_buffer.drain())
                         .await
                     {
-                        log::error!("Could not increment quota for users {error:?}");
+                        tracing::error!("Could not increment quota for users {error:?}");
                     }
 
                     if let Err(error) = self
@@ -138,7 +135,7 @@ impl<U: UserDb + 'static> QuotaManager<U> {
                         .log_quota_used(self.quota_log_buffer.drain(..))
                         .await
                     {
-                        log::error!("Could not log quota used {error:?}");
+                        tracing::error!("Could not log quota used {error:?}");
                     }
 
                     self.buffer_used = 0;
@@ -222,7 +219,7 @@ mod tests {
         contexts::{ApplicationContext, SessionContext},
         ge_context,
         users::{UserAuth, UserCredentials, UserRegistration},
-        util::tests::{admin_login, MockQuotaTracking},
+        util::tests::{MockQuotaTracking, admin_login},
     };
     use tokio_postgres::NoTls;
 

@@ -5,7 +5,7 @@ use crate::error::Result;
 use crate::error::{self, Error};
 use crate::util::path_with_base_path;
 use actix_multipart::Multipart;
-use actix_web::{web, FromRequest, Responder};
+use actix_web::{FromRequest, Responder, web};
 use futures::StreamExt;
 use gdal::vector::LayerAccess;
 use geoengine_datatypes::util::Identifier;
@@ -14,7 +14,7 @@ use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
 use std::path::Path;
 use tokio::{fs, io::AsyncWriteExt};
-use utoipa::{ToResponse, ToSchema};
+use utoipa::{PartialSchema, ToResponse, ToSchema};
 
 pub(crate) fn init_upload_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -34,23 +34,24 @@ where
 
 struct FileUploadRequest;
 
-impl<'a> ToSchema<'a> for FileUploadRequest {
-    fn schema() -> (&'a str, utoipa::openapi::RefOr<utoipa::openapi::Schema>) {
-        use utoipa::openapi::*;
-        (
-            "FileUploadRequest",
-            ObjectBuilder::new()
-                .property(
-                    "files[]",
-                    ArrayBuilder::new().items(
-                        ObjectBuilder::new()
-                            .schema_type(SchemaType::String)
-                            .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary))),
-                    ),
-                )
-                .required("files[]")
-                .into(),
-        )
+impl ToSchema for FileUploadRequest {}
+
+impl PartialSchema for FileUploadRequest {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
+        use utoipa::openapi::schema::{
+            ArrayBuilder, KnownFormat, ObjectBuilder, SchemaFormat, SchemaType, Type,
+        };
+        ObjectBuilder::new()
+            .property(
+                "files[]",
+                ArrayBuilder::new().items(
+                    ObjectBuilder::new()
+                        .schema_type(SchemaType::Type(Type::String))
+                        .format(Some(SchemaFormat::KnownFormat(KnownFormat::Binary))),
+                ),
+            )
+            .required("files[]")
+            .into()
     }
 }
 
@@ -203,7 +204,7 @@ mod tests {
     use crate::contexts::Session;
     use crate::ge_context;
     use crate::users::UserAuth;
-    use crate::util::tests::{send_test_request, SetMultipartBody, TestDataUploads};
+    use crate::util::tests::{SetMultipartBody, TestDataUploads, send_test_request};
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use tokio_postgres::NoTls;

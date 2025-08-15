@@ -1,6 +1,6 @@
 use crate::primitives::TimeInstance;
-use crate::util::arrow::{downcast_array, padded_buffer_size, ArrowTyped};
 use crate::util::Result;
+use crate::util::arrow::{ArrowTyped, downcast_array, padded_buffer_size};
 use crate::{error, util::ranges::value_in_range};
 use arrow::array::{Array, ArrayBuilder, BooleanArray, Int64Array};
 use arrow::datatypes::{DataType, Field};
@@ -70,11 +70,6 @@ impl TimeInterval {
     {
         let start_instant = start.try_into()?;
         let end_instant = end.try_into()?;
-
-        debug_assert!(
-            start_instant <= end_instant,
-            "{start_instant:?} <= {end_instant:?}"
-        );
 
         ensure!(
             start_instant <= end_instant,
