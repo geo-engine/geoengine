@@ -18,10 +18,12 @@ mod migration_0017_ml_model_tensor_shape;
 mod migration_0018_wildlive_connector;
 mod migration_0019_ml_model_no_data;
 mod migration_0020_provider_permissions;
+mod migration_0021_default_permissions_for_existing_providers;
 
 #[cfg(test)]
 mod schema_info;
 
+use crate::contexts::migrations::migration_0021_default_permissions_for_existing_providers::Migration0021DefaultPermissionsForExistingProviders;
 #[cfg(test)]
 pub(crate) use schema_info::{AssertSchemaEqPopulationConfig, assert_migration_schema_eq};
 
@@ -37,6 +39,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0018WildliveConnector),
         Box::new(Migration0019MlModelNoData),
         Box::new(Migration0020ProviderPermissions),
+        Box::new(Migration0021DefaultPermissionsForExistingProviders),
     ]
 }
 
