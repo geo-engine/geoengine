@@ -711,83 +711,16 @@ where
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
     // query all time steps inside the query, across all spatial tiles and bands
-    let rows = conn
-        .query(
-            "
-            SELECT DISTINCT
-                time, (time).start
-            FROM
-                dataset_tiles
-            WHERE
-                dataset_id = $1 AND time_interval_intersects(time, $2)
-            ORDER BY
-               (time).start",
-            &[&dataset_id, &query_time],
-        )
-        .await
-        .map_err(|e| geoengine_operators::error::Error::MetaData {
-            source: Box::new(e),
-        })?;
-
-    let time_steps: Vec<TimeInterval> = rows.into_iter().map(|row| row.get(0)).collect();
+    let time_steps = collect_timesteps_in_query(dataset_id, query_time, conn).await?;
 
     // handle case where no time steps are found
     if time_steps.is_empty() {
         // Query for the closest time step before the query time
-        let before_rows = conn
-            .query(
-                "
-                SELECT
-                    (time).end
-                FROM
-                    dataset_tiles
-                WHERE
-                    dataset_id = $1 AND (time).end <= $2
-                ORDER BY
-                   (time).end DESC
-                LIMIT 1",
-                &[&dataset_id, &query_time.start()],
-            )
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?;
+        let time =
+            resolve_time_from_first_tile_before_and_after_query(dataset_id, query_time, conn)
+                .await?;
 
-        // Query for the closest time step after the query time
-        let after_rows = conn
-            .query(
-                "
-                SELECT
-                    (time).start
-                FROM
-                    dataset_tiles
-                WHERE
-                    dataset_id = $1 AND (time).start >= $2
-                ORDER BY
-                   (time).start ASC
-                LIMIT 1",
-                &[&dataset_id, &query_time.end()],
-            )
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?;
-
-        let start = if let Some(row) = before_rows.first() {
-            row.get(0)
-        } else {
-            TimeInstance::MIN
-        };
-
-        let end = if let Some(row) = after_rows.first() {
-            row.get(0)
-        } else {
-            TimeInstance::MAX
-        };
-
-        return Ok(vec![
-            TimeInterval::new(start, end).expect("start must be before end"),
-        ]);
+        return Ok(vec![time]);
     }
 
     // fill the gaps in the returned time steps
@@ -889,6 +822,104 @@ where
     }
 
     Ok(filled_time_steps)
+}
+
+async fn resolve_time_from_first_tile_before_and_after_query<Tls>(
+    dataset_id: DatasetId,
+    query_time: TimeInterval,
+    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+) -> Result<TimeInterval>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let before_rows = conn
+        .query(
+            "
+                SELECT
+                    (time).end
+                FROM
+                    dataset_tiles
+                WHERE
+                    dataset_id = $1 AND (time).end <= $2
+                ORDER BY
+                   (time).end DESC
+                LIMIT 1",
+            &[&dataset_id, &query_time.start()],
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+    let after_rows = conn
+        .query(
+            "
+                SELECT
+                    (time).start
+                FROM
+                    dataset_tiles
+                WHERE
+                    dataset_id = $1 AND (time).start >= $2
+                ORDER BY
+                   (time).start ASC
+                LIMIT 1",
+            &[&dataset_id, &query_time.end()],
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+    let start = if let Some(row) = before_rows.first() {
+        row.get(0)
+    } else {
+        TimeInstance::MIN
+    };
+
+    let end = if let Some(row) = after_rows.first() {
+        row.get(0)
+    } else {
+        TimeInstance::MAX
+    };
+
+    Ok(TimeInterval::new(start, end).expect("start must be before end"))
+}
+
+async fn collect_timesteps_in_query<Tls>(
+    dataset_id: DatasetId,
+    query_time: TimeInterval,
+    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+) -> Result<Vec<TimeInterval>>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let rows = conn
+        .query(
+            "
+            SELECT DISTINCT
+                time, (time).start
+            FROM
+                dataset_tiles
+            WHERE
+                dataset_id = $1 AND time_interval_intersects(time, $2)
+            ORDER BY
+               (time).start",
+            &[&dataset_id, &query_time],
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+    let time_steps: Vec<TimeInterval> = rows.into_iter().map(|row| row.get(0)).collect();
+
+    Ok(time_steps)
 }
 
 #[async_trait]
