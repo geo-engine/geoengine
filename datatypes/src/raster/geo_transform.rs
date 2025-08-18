@@ -277,17 +277,12 @@ impl GeoTransform {
         dist
     }
 
+    /// `coordinate` is a valid pixel edge if it is approximately equal to the nearest pixel edge, within floating point precision
     pub fn is_valid_pixel_edge(&self, coordinate: Coordinate2D) -> bool {
-        // TODO: maybe use fraction of pixel size as M?
-        approx_eq!(
-            Coordinate2D,
-            self.distance_to_nearest_pixel_edge(coordinate),
-            Coordinate2D::new(0., 0.),
-            float_cmp::F64Margin {
-                epsilon: 0.000_001, // TODO: check
-                ulps: 2
-            }
-        )
+        let edge = self.nearest_pixel_edge(coordinate);
+        let edge_coord = self.grid_idx_to_pixel_upper_left_coordinate_2d(edge);
+        // compare x and y separately to account for difference in magnitude
+        approx_eq!(f64, coordinate.x, edge_coord.x) && approx_eq!(f64, coordinate.y, edge_coord.y)
     }
 
     pub fn is_compatible_grid(&self, other: GeoTransform) -> bool {
@@ -634,5 +629,33 @@ mod tests {
         let coord = Coordinate2D::new(1.0, -1.0);
         let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
         assert_eq!(center_coord_idx, [1, 1].into());
+    }
+
+    #[test]
+    fn it_detects_valid_pixel_edge_robustly() {
+        let geo_transform = GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2);
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.4)));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.399_999_999_999_99)));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.4_f64.next_up())));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.4_f64.next_down())));
+        assert!(!geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.41)));
+
+        let geo_transform = GeoTransform::new(
+            (10_000_000_000_000_000_f64, -10_000_000_000_000_000_f64).into(),
+            10_000_000_000_000_000_f64,
+            -10_000_000_000_000_000_f64,
+        );
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(
+            10_000_000_000_000_000_f64,
+            -10_000_000_000_000_000_f64
+        )));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(
+            10_000_000_000_000_001_f64,
+            -10_000_000_000_000_000_f64
+        )));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(
+            10_000_000_000_000_000_f64.next_up(),
+            -10_000_000_000_000_000_f64.next_up()
+        )));
     }
 }

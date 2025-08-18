@@ -62,16 +62,7 @@ impl SpatialGridDefinition {
     /// Moves the origin to another pixel edge. The spatial location stays the same!
     /// Check if you can use `shift_bounds_relative_by_pixel_offset`!
     pub fn with_moved_origin_exact_grid(&self, new_origin: Coordinate2D) -> Option<Self> {
-        if approx_eq!(
-            Coordinate2D,
-            self.geo_transform
-                .distance_to_nearest_pixel_edge(new_origin),
-            Coordinate2D::new(0., 0.),
-            float_cmp::F64Margin {
-                epsilon: 0.000_001, // TODO: check
-                ulps: 2
-            }
-        ) {
+        if self.geo_transform.is_valid_pixel_edge(new_origin) {
             Some(self.with_moved_origin_to_nearest_grid_edge(new_origin))
         } else {
             None
@@ -505,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    fn bla() {
+    fn intersection_with_floating_point_discrepancies() {
         let a = SpatialGridDefinition {
             geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
             grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
@@ -544,7 +535,7 @@ mod tests {
     }
 
     #[test]
-    fn blub() {
+    fn move_origin_with_floating_point_discrepancies() {
         let tile = SpatialGridDefinition {
             geo_transform: GeoTransform::new((0.0, 0.0).into(), 0.2, -0.2),
             grid_bounds: GridBoundingBox2D::new([0, 512], [511, 1023]).unwrap(),
