@@ -294,7 +294,7 @@ pub enum Error {
     WrongMetadataType,
 
     #[snafu(display(
-        "The conditions ul.x < lr.x && ul.y < lr.y are not met by ul:{} lr:{}",
+        "The conditions ul.x < lr.x && ul.y > lr.y are not met by ul:{} lr:{}",
         upper_left_coordinate,
         lower_right_coordinate
     ))]

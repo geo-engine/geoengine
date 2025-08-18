@@ -384,6 +384,11 @@ pub enum Error {
         source: crate::source::GdalSourceError,
     },
 
+    #[snafu(display("MultiBandGdalSource error: {source}"), context(false))]
+    MultiBandGdalSource {
+        source: crate::source::MultiBandGdalSourceError,
+    },
+
     QueryCanceled,
 
     AbortTriggerAlreadyUsed,

@@ -11,7 +11,10 @@ use crate::machine_learning::MlModelLoadingInfo;
 use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
-use crate::source::{GdalLoadingInfo, OgrSourceDataset};
+use crate::source::{
+    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+    OgrSourceDataset,
+};
 use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
@@ -34,6 +37,11 @@ pub trait ExecutionContext: Send
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    >
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;

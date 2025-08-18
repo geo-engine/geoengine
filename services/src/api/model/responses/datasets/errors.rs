@@ -104,3 +104,29 @@ impl fmt::Debug for UpdateDatasetError {
         write!(f, "{}", ge_report(self))
     }
 }
+
+#[derive(Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum AddDatasetTilesError {
+    #[snafu(display("Cannot load dataset for adding tiles"))]
+    CannotLoadDatasetForAddingTiles { source: error::Error },
+    #[snafu(display("Cannot add tiles to dataset: {source}"))]
+    CannotAddTilesToDataset { source: error::Error },
+}
+
+impl ResponseError for AddDatasetTilesError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Debug for AddDatasetTilesError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
+    }
+}
