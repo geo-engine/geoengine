@@ -16,7 +16,7 @@ use crate::util::Result;
 use crate::processing::raster_vector_join::aggregated::RasterVectorAggregateJoinProcessor;
 use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::primitives::{find_next_best_overview_level_resolution, FeatureDataType};
+use geoengine_datatypes::primitives::{FeatureDataType, find_next_best_overview_level_resolution};
 use geoengine_datatypes::raster::{Pixel, RasterDataType, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;

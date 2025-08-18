@@ -230,10 +230,12 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedInte
 
         let input_resolution = in_descriptor.spatial_grid.spatial_resolution();
 
-        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate == out_descriptor
+        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate
+            == out_descriptor
                 .spatial_grid
                 .geo_transform()
-                .origin_coordinate {
+                .origin_coordinate
+        {
             None
         } else {
             Some(

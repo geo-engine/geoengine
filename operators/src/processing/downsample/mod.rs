@@ -13,7 +13,7 @@ use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{
-    find_next_best_overview_level_resolution, BandSelection, CacheHint, Coordinate2D,
+    BandSelection, CacheHint, Coordinate2D, find_next_best_overview_level_resolution,
 };
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
@@ -219,10 +219,12 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
 
         let input_resolution = in_descriptor.spatial_grid.spatial_resolution();
 
-        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate == out_descriptor
+        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate
+            == out_descriptor
                 .spatial_grid
                 .geo_transform()
-                .origin_coordinate {
+                .origin_coordinate
+        {
             None
         } else {
             Some(

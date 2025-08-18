@@ -7,8 +7,8 @@ use crate::engine::{
     VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
-use crate::util::input::RasterOrVectorOperator;
 use crate::util::Result;
+use crate::util::input::RasterOrVectorOperator;
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
