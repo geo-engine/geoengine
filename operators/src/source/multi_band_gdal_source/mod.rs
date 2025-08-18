@@ -2,6 +2,7 @@ use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetadataMapping,
 };
@@ -24,7 +25,9 @@ use gdal::errors::GdalError;
 use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags, Metadata as GdalMetadata};
 use gdal_sys::VSICurlPartialClearCache;
-use geoengine_datatypes::primitives::{QueryRectangle, SpatialPartition2D};
+use geoengine_datatypes::primitives::{
+    QueryRectangle, SpatialPartition2D, SpatialResolution, find_next_best_overview_level,
+};
 use geoengine_datatypes::raster::TilingSpatialGridDefinition;
 use geoengine_datatypes::{
     dataset::NamedData,
@@ -43,7 +46,7 @@ use reader::{
     ReaderState,
 };
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ResultExt, ensure};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::Path;
@@ -541,7 +544,7 @@ impl RasterOperator for MultiBandGdalSource {
             InitializedGdalSourceOperator::initialize_original_resolution(
                 op_name,
                 path,
-                self.params.data.to_string(),
+                self.params.data,
                 meta_data,
                 meta_data_result_descriptor,
                 context.tiling_specification(),
@@ -551,7 +554,7 @@ impl RasterOperator for MultiBandGdalSource {
             InitializedGdalSourceOperator::initialize_with_overview_level(
                 op_name,
                 path,
-                self.params.data.to_string(),
+                self.params.data,
                 meta_data,
                 meta_data_result_descriptor,
                 context.tiling_specification(),
@@ -568,7 +571,7 @@ impl RasterOperator for MultiBandGdalSource {
 pub struct InitializedGdalSourceOperator {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
-    data: String,
+    data_name: NamedData,
     pub meta_data: MultiBandGdalMetaData,
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
@@ -581,7 +584,7 @@ impl InitializedGdalSourceOperator {
     pub fn initialize_original_resolution(
         name: CanonicOperatorName,
         path: WorkflowOperatorPath,
-        data: String,
+        data_name: NamedData,
         meta_data: MultiBandGdalMetaData,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
@@ -589,7 +592,7 @@ impl InitializedGdalSourceOperator {
         InitializedGdalSourceOperator {
             name,
             path,
-            data,
+            data_name,
             produced_result_descriptor: result_descriptor,
             meta_data,
             tiling_specification,
@@ -601,7 +604,7 @@ impl InitializedGdalSourceOperator {
     pub fn initialize_with_overview_level(
         name: CanonicOperatorName,
         path: WorkflowOperatorPath,
-        data: String,
+        data_name: NamedData,
         meta_data: MultiBandGdalMetaData,
         result_descriptor: RasterResultDescriptor,
         tiling_specification: TilingSpecification,
@@ -627,7 +630,7 @@ impl InitializedGdalSourceOperator {
         InitializedGdalSourceOperator {
             name,
             path,
-            data,
+            data_name,
             produced_result_descriptor: result_descriptor,
             meta_data,
             tiling_specification,
@@ -752,7 +755,44 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
     }
 
     fn data(&self) -> Option<String> {
-        Some(self.data.clone())
+        Some(self.data_name.to_string())
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        // TODO: handle cases where the original workflow explicitly loads overviews in the source
+        ensure!(
+            self.overview_level == 0,
+            SourcesMustNotUseOverviews {
+                data: self.data_name.to_string(),
+                oveview_level: self.overview_level
+            }
+        );
+
+        // as overview level is always 0 for now, the result descriptor contains the native resolution
+        // TODO: when allowing to optimize upon overview levels, compute the native resolution first
+        let native_resolution = self
+            .produced_result_descriptor
+            .spatial_grid
+            .spatial_resolution();
+
+        // TODO: get available overviews levels from the dataset metadata (not available yet) and only load these.
+        //       Then, we might have to prepend a Resampling operator to match the target resolution.
+        //       For now, we just load the overview level regardless and let gdal handle the resamṕling.
+        let next_best_overview_level =
+            find_next_best_overview_level(native_resolution, target_resolution);
+
+        Ok(MultiBandGdalSource {
+            params: GdalSourceParameters {
+                data: self.data_name.clone(),
+                overview_level: Some(next_best_overview_level),
+            },
+        }
+        .boxed())
     }
 }
 
