@@ -219,20 +219,18 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
 
         let input_resolution = in_descriptor.spatial_grid.spatial_resolution();
 
-        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate
-            != out_descriptor
+        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate == out_descriptor
                 .spatial_grid
                 .geo_transform()
-                .origin_coordinate
-        {
+                .origin_coordinate {
+            None
+        } else {
             Some(
                 out_descriptor
                     .spatial_grid
                     .geo_transform()
                     .origin_coordinate,
             )
-        } else {
-            None
         };
 
         if input_resolution == target_resolution {
@@ -253,9 +251,8 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
                     },
                 }
                 .boxed());
-            } else {
-                return Ok(optimzed_source);
             }
+            return Ok(optimzed_source);
         }
 
         // target resolution must be coarser than input

@@ -383,6 +383,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_reduces_interpolation_resolution() {
         let mut exe_ctx = MockExecutionContext::test_default();
 
@@ -504,6 +505,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_replaces_upsampling_with_downsampling() {
         let mut exe_ctx = MockExecutionContext::test_default();
 
@@ -625,6 +627,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_optimizes_downsampling() {
         let mut exe_ctx = MockExecutionContext::test_default();
 
@@ -746,6 +749,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_optimizes_reprojection() {
         let mut exe_ctx = MockExecutionContext::test_default();
 
@@ -777,7 +781,7 @@ mod tests {
             .await
             .unwrap();
 
-        let expected_resolution = 14255.015508816849;
+        let expected_resolution = 14_255.015_508_816_849;
 
         assert_eq!(
             workflow_initialized
@@ -806,8 +810,8 @@ mod tests {
                     "outputOriginReference": null,
                     "outputResolution": {
                         "type": "resolution",
-                        "x": 28510.031017633697,
-                        "y": 28510.031017633697
+                        "x": 28_510.031_017_633_697,
+                        "y": 28_510.031_017_633_697
                     }
                 },
                 "sources": {
@@ -882,6 +886,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_optimizes_rasterization() {
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("ne_10m_ports");
@@ -913,8 +918,8 @@ mod tests {
                     columns: Default::default(),
                     time: None,
                     bbox: Some(BoundingBox2D::new_unchecked(
-                        [-171.75795, -54.809444].into(),
-                        [179.309364, 78.226111].into(),
+                        [-171.757_95, -54.809_444].into(),
+                        [179.309_364, 78.226_111].into(),
                     )),
                 },
                 phantom: Default::default(),
@@ -958,7 +963,7 @@ mod tests {
             .unwrap();
 
         let json = serde_json::to_value(&rasterization_optimized).unwrap();
-        println!("{}", serde_json::to_string_pretty(&json).unwrap());
+
         assert_eq!(
             json,
             serde_json::json!({
@@ -1002,6 +1007,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_optimizes_raster_vector_join() {
         let mut exe_ctx = MockExecutionContext::test_default();
 
@@ -1038,8 +1044,8 @@ mod tests {
                     columns: Default::default(),
                     time: None,
                     bbox: Some(BoundingBox2D::new_unchecked(
-                        [-171.75795, -54.809444].into(),
-                        [179.309364, 78.226111].into(),
+                        [-171.757_95, -54.809_444].into(),
+                        [179.309_364, 78.226_111].into(),
                     )),
                 },
                 phantom: Default::default(),
@@ -1198,6 +1204,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_optimizes_complex_workflow() {
         let mut exe_ctx = MockExecutionContext::test_default();
 
@@ -1234,8 +1241,8 @@ mod tests {
                     columns: Default::default(),
                     time: None,
                     bbox: Some(BoundingBox2D::new_unchecked(
-                        [-171.75795, -54.809444].into(),
-                        [179.309364, 78.226111].into(),
+                        [-171.757_95, -54.809_444].into(),
+                        [179.309_364, 78.226_111].into(),
                     )),
                 },
                 phantom: Default::default(),

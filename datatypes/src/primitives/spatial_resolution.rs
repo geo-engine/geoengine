@@ -110,6 +110,7 @@ impl ApproxEq for SpatialResolution {
     }
 }
 
+#[allow(clippy::float_cmp)]
 impl PartialOrd for SpatialResolution {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         if self.x < other.x && self.y < other.y {
@@ -117,6 +118,7 @@ impl PartialOrd for SpatialResolution {
         } else if self.x > other.x && self.y > other.y {
             Some(std::cmp::Ordering::Greater)
         } else if self.x == other.x && self.y == other.y {
+            // TODO: use `approx_eq`?
             Some(std::cmp::Ordering::Equal)
         } else {
             None

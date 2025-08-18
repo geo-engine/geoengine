@@ -20,7 +20,7 @@ use crate::{
         Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
         Interpolation, InterpolationMethod, InterpolationParams, InterpolationResolution,
     },
-    util::{Result, input::RasterOrVectorOperator, math::is_power_of_two},
+    util::{Result, input::RasterOrVectorOperator},
 };
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -41,6 +41,7 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
+use tracing::trace;
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -644,12 +645,12 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
             (target_resolution.y / current_resolution.y).round() as u32
         );
         // must be a power of 2
-        debug_assert!(is_power_of_two(output_overview_level_factor));
+        debug_assert!(output_overview_level_factor.is_power_of_two());
 
         let input_descriptor = self.source.result_descriptor();
 
         let input_resolution = input_descriptor.spatial_grid.spatial_resolution();
-        let scaled_input_resolution = input_resolution * output_overview_level_factor as f64;
+        let scaled_input_resolution = input_resolution * f64::from(output_overview_level_factor);
 
         let source_optimized = self.source.optimize(scaled_input_resolution)?;
 
@@ -671,9 +672,8 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
         .boxed_context(ProjectionOptimizationFailed)?;
 
         let output_spatial_resolution = output_spatial_grid.spatial_resolution();
-        println!(
-            "output_spatial_resolution: {:?}, target_resolution: {:?}",
-            output_spatial_resolution, target_resolution
+        trace!(
+            "output_spatial_resolution: {output_spatial_resolution:?}, target_resolution: {target_resolution:?}"
         );
 
         let optimized_reprojection = Box::new(Reprojection {

@@ -257,7 +257,7 @@ impl InitializedPlotOperator for InitializedStatistics<Box<dyn InitializedVector
                 percentiles: self
                     .percentiles
                     .iter()
-                    .cloned()
+                    .copied()
                     .map(NotNan::<f64>::new)
                     .collect::<Result<Vec<_>,_>>().expect("percentiles should be not nan because they are NotNan<f64> during initialization"),
             },
@@ -305,7 +305,7 @@ impl InitializedPlotOperator for InitializedStatistics<Vec<Box<dyn InitializedRa
                 percentiles: self
                     .percentiles
                     .iter()
-                    .cloned()
+                    .copied()
                     .map(NotNan::<f64>::new)
                     .collect::<Result<Vec<_>,_>>().expect("percentiles should be not nan because they are NotNan<f64> during initialization"),
             },

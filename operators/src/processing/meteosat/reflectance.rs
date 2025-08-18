@@ -186,7 +186,7 @@ impl InitializedRasterOperator for InitializedReflectance {
         target_resolution: SpatialResolution,
     ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
         Ok(Reflectance {
-            params: self.params.clone(),
+            params: self.params,
             sources: SingleRasterSource {
                 raster: self.source.optimize(target_resolution)?,
             },

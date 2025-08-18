@@ -161,8 +161,8 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
     ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
         Ok(TimeProjection {
             params: TimeProjectionParams {
-                step: self.step.clone(),
-                step_reference: Some(self.step_reference.clone()),
+                step: self.step,
+                step_reference: Some(self.step_reference),
             },
             sources: SingleVectorSource {
                 vector: self.source.optimize(target_resolution)?,

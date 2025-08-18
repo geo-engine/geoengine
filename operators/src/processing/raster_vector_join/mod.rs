@@ -368,10 +368,10 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
                         let mut res = rd.spatial_grid.spatial_resolution();
 
                         if res < target_resolution {
-                            res = find_next_best_overview_level_resolution(res, target_resolution)
+                            res = find_next_best_overview_level_resolution(res, target_resolution);
                         }
 
-                        return r.optimize(res);
+                        r.optimize(res)
                     })
                     .collect::<Result<Vec<_>, crate::optimization::OptimizationError>>()?,
             },

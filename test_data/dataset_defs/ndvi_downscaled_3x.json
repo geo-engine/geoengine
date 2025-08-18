@@ -297,18 +297,20 @@
         "end": "2014-02-01T00:00:00.000Z"
       },
       "spatialGrid": {
-        "type": "source",
-        "geoTransform": {
-          "originCoordinate": {
-            "x": -180.0,
-            "y": 90.0
+        "state": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize": 0.1,
+            "yPixelSize": -0.1
           },
-          "xPixelSize": 0.1,
-          "yPixelSize": -0.1
-        },
-        "gridBounds": {
-          "min": [0, 0],
-          "max": [599, 1199]
+          "gridBounds": {
+            "min": [0, 0],
+            "max": [599, 1199]
+          }
         }
       },
       "bands": [
