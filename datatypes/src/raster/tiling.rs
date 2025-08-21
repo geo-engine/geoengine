@@ -98,6 +98,17 @@ impl TilingStrategy {
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
+    pub fn num_tiles_intersecting(&self, partition: SpatialPartition2D) -> usize {
+        let GridIdx([upper_left_tile_y, upper_left_tile_x]) =
+            self.pixel_idx_to_tile_idx(self.geo_transform.upper_left_pixel_idx(&partition));
+
+        let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
+            self.pixel_idx_to_tile_idx(self.geo_transform.lower_right_pixel_idx(&partition));
+
+        ((upper_left_tile_y - lower_right_tile_y) * (upper_left_tile_x - lower_right_tile_x))
+            as usize
+    }
+
     /// generates the tile idx in \[z,y,x\] order for the tiles intersecting the bounding box
     /// the iterator moves once along the x-axis and then increases the y-axis
     pub fn tile_idx_iterator(

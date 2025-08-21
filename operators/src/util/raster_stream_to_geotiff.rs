@@ -8,6 +8,7 @@ use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
 };
+use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOptions};
@@ -26,6 +27,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryInto;
+use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
 use tracing::debug;
@@ -245,7 +247,11 @@ where
 }
 
 #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
-pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
+pub async fn single_timestep_raster_stream_to_geotiff_bytes<
+    G: ToGeoTiffProgressConsumer,
+    T,
+    C: QueryContext + 'static,
+>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
@@ -254,6 +260,7 @@ pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext +
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
     tiling_specification: TilingSpecification,
+    progress_consumer: G,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -267,6 +274,7 @@ where
         tile_limit,
         conn_closed,
         tiling_specification,
+        progress_consumer,
     )
     .await?;
 
@@ -283,7 +291,11 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
+pub async fn raster_stream_to_geotiff_bytes<
+    G: ToGeoTiffProgressConsumer,
+    T,
+    C: QueryContext + 'static,
+>(
     processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
@@ -292,6 +304,7 @@ pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
     tiling_specification: TilingSpecification,
+    progress_consumer: G,
 ) -> Result<Vec<Vec<u8>>>
 where
     T: Pixel + GdalType,
@@ -308,6 +321,7 @@ where
         tile_limit,
         conn_closed,
         tiling_specification,
+        progress_consumer,
     )
     .await?
     .into_iter()
@@ -321,7 +335,7 @@ where
 }
 
 #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
-pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
+pub async fn raster_stream_to_geotiff<G: ToGeoTiffProgressConsumer, P, C: QueryContext + 'static>(
     file_path: &Path,
     processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
     query_rect: RasterQueryRectangle,
@@ -331,6 +345,7 @@ pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
     tiling_specification: TilingSpecification,
+    progress_consumer: G,
 ) -> Result<Vec<GdalLoadingInfoTemporalSlice>>
 where
     P: Pixel + GdalType,
@@ -359,44 +374,50 @@ where
         None
     };
 
-    let dataset_holder: Result<GdalDatasetHolder<P>> = Ok(GdalDatasetHolder::new_with_tiling_spec(
+    let mut dataset_holder: GdalDatasetHolder<P> = GdalDatasetHolder::new_with_tiling_spec(
         tiling_specification,
         &file_path,
         &query_rect,
         gdal_tiff_metadata,
         gdal_tiff_options,
         gdal_config_options,
-    ));
+    );
 
-    let tile_stream = processor
+    let mut tile_stream = processor
         .raster_query(query_rect.clone(), &query_ctx)
-        .await?;
+        .await?
+        .enumerate();
 
-    let mut dataset_holder = tile_stream
-        .enumerate()
-        .fold(
-            dataset_holder,
-            move |dataset_holder, (tile_index, tile)| async move {
-                if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
-                    return Err(Error::TileLimitExceeded {
-                        limit: tile_limit.expect("limit exist because it is exceeded"),
-                    });
-                }
+    let tiles_intersecting_qrect = tiling_specification
+        .strategy(
+            query_rect.spatial_resolution.x,
+            -query_rect.spatial_resolution.y,
+        )
+        .num_tiles_intersecting(query_rect.spatial_bounds);
 
-                let mut dataset_holder = dataset_holder?;
-                let tile = tile?;
+    while let Some((tile_index, tile)) = tile_stream.next().await {
+        if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
+            return Err(Error::TileLimitExceeded {
+                limit: tile_limit.expect("limit exist because it is exceeded"),
+            });
+        }
 
-                let current_interval = tile.time;
+        let tile: geoengine_datatypes::raster::BaseTile<
+            geoengine_datatypes::raster::GridOrEmpty<
+                geoengine_datatypes::raster::GridShape<[usize; 2]>,
+                P,
+            >,
+        > = tile?;
 
-                let dataset_holder =
-                    crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
-                        dataset_holder
-                            .update_intermediate_dataset_from_time_interval(current_interval)?;
-                        Ok(dataset_holder)
-                    })
-                    .await??;
+        let current_interval = tile.time;
 
-                crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
+        dataset_holder = crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
+            dataset_holder.update_intermediate_dataset_from_time_interval(current_interval)?;
+            Ok(dataset_holder)
+        })
+        .await??;
+
+        dataset_holder = crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
                     let raster_band = dataset_holder
                         .intermediate_dataset
                         .as_ref()
@@ -408,10 +429,15 @@ where
                         .write_tile_into_band(tile, raster_band)?;
                     Ok(dataset_holder)
                 })
-                .await?
-            },
-        )
-        .await?;
+                .await??;
+
+        progress_consumer
+            .consume_progress(ToGeoTiffProgress {
+                workload_tiles: tiles_intersecting_qrect,
+                processed_tiles: tile_index,
+            })
+            .await;
+    }
 
     let intermediate_dataset = dataset_holder
         .intermediate_dataset
@@ -430,6 +456,40 @@ where
     abortable_query_execution(written, conn_closed, query_abort_trigger).await??;
 
     Ok(result)
+}
+
+#[derive(Copy, Clone)]
+pub struct ToGeoTiffProgress {
+    pub workload_tiles: usize,
+    pub processed_tiles: usize,
+}
+
+impl ToGeoTiffProgress {
+    pub fn percent_done(&self) -> f64 {
+        (self.processed_tiles as f64) / (self.workload_tiles as f64)
+    }
+}
+
+impl Display for ToGeoTiffProgress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "Tiles processed: {}, Total workload: {}",
+            self.processed_tiles, self.workload_tiles
+        )
+    }
+}
+
+#[async_trait]
+pub trait ToGeoTiffProgressConsumer {
+    async fn consume_progress(&self, status: ToGeoTiffProgress);
+}
+
+#[async_trait]
+impl ToGeoTiffProgressConsumer for () {
+    async fn consume_progress(&self, _status: ToGeoTiffProgress) {
+        // No-op
+    }
 }
 
 const COG_BLOCK_SIZE: &str = "512";
@@ -1078,6 +1138,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await
         .unwrap();
@@ -1138,6 +1199,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await
         .unwrap();
@@ -1193,6 +1255,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await
         .unwrap();
@@ -1254,6 +1317,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await
         .unwrap();
@@ -1317,6 +1381,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await
         .unwrap();
@@ -1382,6 +1447,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await
         .unwrap();
@@ -1465,6 +1531,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await;
 
@@ -1516,6 +1583,7 @@ mod tests {
             Some(1),
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await;
 
@@ -1569,6 +1637,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await;
 
@@ -1666,6 +1735,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             tiling_specification,
+            (),
         )
         .await
         .unwrap();
