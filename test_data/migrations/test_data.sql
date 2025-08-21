@@ -246,12 +246,6 @@ INSERT INTO roles (id, name)
 VALUES (
     'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
     'foobar@example.org'
-),
-('d5328854-6190-4af9-ad69-4e74b0961ac9', 'admin'),
-('4e8081b6-8aa6-4275-af0c-2fa2da557d28', 'user'),
-(
-    'fd8e87bf-515c-4f36-8da6-1a53702ff102',
-    'anonymous'
 );
 
 INSERT INTO users (
