@@ -1285,5 +1285,4 @@ VALUES (
     'fd8e87bf-515c-4f36-8da6-1a53702ff102',
     'ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f',
     'Read'
-)
-;
+);
