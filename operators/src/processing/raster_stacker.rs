@@ -8,10 +8,13 @@ use crate::engine::{
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, time_interval_extent};
+use geoengine_datatypes::primitives::{
+    BandSelection, RasterQueryRectangle, SpatialResolution, time_interval_extent,
+};
 use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -122,6 +125,7 @@ impl RasterOperator for RasterStacker {
             name,
             path,
             result_descriptor,
+            rename_bands: self.params.rename_bands.clone(),
             raster_sources,
             bands_per_source,
         }))
@@ -134,6 +138,7 @@ pub struct InitializedRasterStacker {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
+    rename_bands: RenameBands,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     bands_per_source: Vec<u32>,
 }
@@ -260,6 +265,25 @@ impl InitializedRasterOperator for InitializedRasterStacker {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: self.rename_bands.clone(),
+            },
+            sources: MultipleRasterSources {
+                rasters: self
+                    .raster_sources
+                    .iter()
+                    .map(|s| s.optimize(resolution))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
+        }
+        .boxed())
     }
 }
 

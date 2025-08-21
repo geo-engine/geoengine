@@ -1,10 +1,11 @@
 use serde::{Deserialize, Serialize};
+use snafu::ResultExt;
 use tracing::debug;
 
-use crate::error;
 use crate::util::Result;
+use crate::{error, optimization::OptimizationError};
 use async_trait::async_trait;
-use geoengine_datatypes::{dataset::NamedData, util::ByteSize};
+use geoengine_datatypes::{dataset::NamedData, primitives::SpatialResolution, util::ByteSize};
 
 use super::{
     CloneablePlotOperator, CloneableRasterOperator, CloneableVectorOperator, CreateSpan,
@@ -136,6 +137,7 @@ pub trait PlotOperator:
 }
 
 // TODO: implement a derive macro for common fields of operators: name, path, data, result_descriptor and automatically implement common trait functions
+#[async_trait]
 pub trait InitializedRasterOperator: Send + Sync {
     /// Get the result descriptor of the `Operator`
     fn result_descriptor(&self) -> &RasterResultDescriptor;
@@ -163,6 +165,26 @@ pub trait InitializedRasterOperator: Send + Sync {
     /// Return the name of the data loaded by the operator (if any)
     fn data(&self) -> Option<String> {
         None
+    }
+
+    /// Optimize the operator graph for a given resolution
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError>;
+
+    /// optimize the operator graph and reinitialize it
+    async fn optimize_and_reinitialize(
+        &self,
+        resolution: SpatialResolution,
+        exe_ctx: &dyn ExecutionContext,
+    ) -> Result<Box<dyn InitializedRasterOperator>> {
+        let optimized = self
+            .optimize(resolution)
+            .context(crate::error::Optimization)?;
+        optimized
+            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .await
     }
 }
 
@@ -195,6 +217,12 @@ pub trait InitializedVectorOperator: Send + Sync {
     fn data(&self) -> Option<String> {
         None
     }
+
+    /// Optimize the operator graph for a given resolution
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError>;
 }
 
 /// A canonic name for an operator and its sources
@@ -256,6 +284,12 @@ pub trait InitializedPlotOperator: Send + Sync {
 
     /// Get a canonic representation of the operator and its sources
     fn canonic_name(&self) -> CanonicOperatorName;
+
+    /// Optimize the operator graph for a given resolution
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError>;
 }
 
 impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
@@ -281,6 +315,13 @@ impl InitializedRasterOperator for Box<dyn InitializedRasterOperator> {
 
     fn data(&self) -> Option<String> {
         self.as_ref().data()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.as_ref().optimize(resolution)
     }
 }
 
@@ -308,6 +349,13 @@ impl InitializedVectorOperator for Box<dyn InitializedVectorOperator> {
     fn data(&self) -> Option<String> {
         self.as_ref().data()
     }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        self.as_ref().optimize(resolution)
+    }
 }
 
 impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
@@ -321,6 +369,13 @@ impl InitializedPlotOperator for Box<dyn InitializedPlotOperator> {
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.as_ref().canonic_name()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        self.as_ref().optimize(resolution)
     }
 }
 

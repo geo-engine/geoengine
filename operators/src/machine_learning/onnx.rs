@@ -13,6 +13,7 @@ use crate::{
             check_model_input_features, check_model_shape, load_onnx_model_from_loading_info,
         },
     },
+    optimization::OptimizationError,
     util::Result,
 };
 use async_trait::async_trait;
@@ -20,7 +21,7 @@ use float_cmp::approx_eq;
 use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::machine_learning::MlModelName;
-use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
+use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
     EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
     MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
@@ -110,6 +111,7 @@ impl RasterOperator for Onnx {
         Ok(Box::new(InitializedOnnx {
             name,
             path,
+            model_name: self.params.model,
             result_descriptor: out_descriptor,
             source,
             model_loading_info,
@@ -123,6 +125,7 @@ impl RasterOperator for Onnx {
 pub struct InitializedOnnx {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    model_name: MlModelName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     model_loading_info: MlModelLoadingInfo,
@@ -163,6 +166,21 @@ impl InitializedRasterOperator for InitializedOnnx {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(Onnx {
+            params: OnnxParams {
+                model: self.model_name.clone(),
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

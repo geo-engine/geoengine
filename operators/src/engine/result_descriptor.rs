@@ -203,6 +203,10 @@ impl SpatialGridDescriptor {
         self.spatial_grid.spatial_partition()
     }
 
+    pub fn geo_transform(&self) -> GeoTransform {
+        self.spatial_grid.geo_transform
+    }
+
     pub fn spatial_resolution(&self) -> SpatialResolution {
         self.spatial_grid.geo_transform.spatial_resolution()
     }
@@ -408,6 +412,10 @@ impl RasterResultDescriptor {
             )),
             bands: RasterBandDescriptors::new_multiple_bands(num_bands),
         }
+    }
+
+    pub fn replace_resolution(&mut self, resolution: SpatialResolution) {
+        self.spatial_grid = self.spatial_grid.with_changed_resolution(resolution);
     }
 }
 

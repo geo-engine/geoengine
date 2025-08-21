@@ -5,6 +5,7 @@ use crate::engine::{
 };
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
+use crate::optimization::OptimizationError;
 use crate::util::{Result, safe_lock_mutex};
 use async_trait::async_trait;
 use csv::{Position, Reader, StringRecord};
@@ -15,6 +16,7 @@ use geoengine_datatypes::collections::{
     BuilderProvider, GeoFeatureCollectionRowBuilder, MultiPointCollection, VectorDataType,
 };
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::{
     primitives::{
         BoundingBox2D, ColumnSelection, Coordinate2D, TimeInterval, VectorQueryRectangle,
@@ -174,6 +176,16 @@ impl InitializedVectorOperator for InitializedCsvSource {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        _target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(CsvSource {
+            params: self.state.clone(),
+        }
+        .boxed())
     }
 }
 

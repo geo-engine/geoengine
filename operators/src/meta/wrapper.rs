@@ -1,15 +1,16 @@
 use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
+    QueryContext, QueryProcessor, RasterOperator, RasterResultDescriptor, ResultDescriptor,
+    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
     WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle};
+use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle, SpatialResolution};
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{Level, span};
 
@@ -155,6 +156,13 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
     fn path(&self) -> WorkflowOperatorPath {
         self.source.path()
     }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.source.optimize(resolution)
+    }
 }
 
 impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn InitializedVectorOperator>> {
@@ -193,6 +201,13 @@ impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn Initialize
 
     fn path(&self) -> WorkflowOperatorPath {
         self.source.path()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        self.source.optimize(resolution)
     }
 }
 

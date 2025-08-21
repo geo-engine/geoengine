@@ -1,21 +1,22 @@
-use crate::{
-    engine::{
-        CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-        InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
-        PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
-        TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
-        WorkflowOperatorPath,
-    },
-    error::{self, Error},
-    util::{Result, input::MultiRasterOrVectorOperator, statistics::PSquareQuantileEstimator},
+use crate::engine::{
+    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
+    InitializedVectorOperator, MultipleRasterOrSingleVectorSource, Operator, OperatorName,
+    PlotOperator, PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor,
+    TypedPlotQueryProcessor, TypedRasterQueryProcessor, TypedVectorQueryProcessor,
+    WorkflowOperatorPath,
 };
+use crate::error::{self, Error};
+use crate::optimization::OptimizationError;
+use crate::util::Result;
+use crate::util::input::MultiRasterOrVectorOperator;
+use crate::util::statistics::PSquareQuantileEstimator;
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BoxPlotAttribute, Plot, PlotData};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
-    RasterQueryRectangle, partitions_extent, time_interval_extent,
+    RasterQueryRectangle, SpatialResolution, partitions_extent, time_interval_extent,
 };
 use geoengine_datatypes::raster::GridOrEmpty;
 use num_traits::AsPrimitive;
@@ -221,6 +222,23 @@ impl InitializedPlotOperator for InitializedBoxPlot<Box<dyn InitializedVectorOpe
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(BoxPlot {
+            params: BoxPlotParams {
+                column_names: self.names.clone(),
+            },
+            sources: MultipleRasterOrSingleVectorSource {
+                source: MultiRasterOrVectorOperator::Vector(
+                    self.source.optimize(target_resolution)?,
+                ),
+            },
+        }
+        .boxed())
+    }
 }
 
 impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRasterOperator>>> {
@@ -244,6 +262,26 @@ impl InitializedPlotOperator for InitializedBoxPlot<Vec<Box<dyn InitializedRaste
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(BoxPlot {
+            params: BoxPlotParams {
+                column_names: self.names.clone(),
+            },
+            sources: MultipleRasterOrSingleVectorSource {
+                source: MultiRasterOrVectorOperator::Raster(
+                    self.source
+                        .iter()
+                        .map(|s| s.optimize(target_resolution))
+                        .collect::<Result<Vec<_>, OptimizationError>>()?,
+                ),
+            },
+        }
+        .boxed())
     }
 }
 

@@ -1,19 +1,22 @@
 use crate::engine::{
-    CanonicOperatorName, InitializedRasterOperator, RasterOperator, RasterResultDescriptor,
-    ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
+    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, RasterOperator,
+    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
 };
-use crate::error;
+use crate::error::{self, Optimization};
 use crate::processing::{
     DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
-    DownsamplingResolution, InitializedDownsampling, InitializedInterpolation,
-    InitializedRasterReprojection, Interpolation, InterpolationMethod, InterpolationParams,
-    InterpolationResolution, Reprojection, ReprojectionParams,
+    DownsamplingResolution, InitializedInterpolation, InitializedRasterReprojection, Interpolation,
+    InterpolationMethod, InterpolationParams, InterpolationResolution, Reprojection,
+    ReprojectionParams,
 };
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
-use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
+use geoengine_datatypes::primitives::{
+    Coordinate2D, SpatialResolution, find_next_best_overview_level_resolution,
+};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use snafu::ResultExt;
 
 pub struct WrapWithProjectionAndResample {
     pub operator: Box<dyn RasterOperator>,
@@ -76,6 +79,7 @@ impl WrapWithProjectionAndResample {
             };
 
             // create the inititalized operator directly, to avoid re-initializing everything
+            // TODO: update the workflow operator path in all operators of the graph!
             let irp = InitializedRasterReprojection::try_new_with_input(
                 CanonicOperatorName::from(&reprojected_workflow),
                 WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
@@ -90,11 +94,12 @@ impl WrapWithProjectionAndResample {
         Ok(res)
     }
 
-    pub fn wrap_with_resample(
+    pub async fn wrap_with_resample(
         self,
         target_origin_reference: Option<Coordinate2D>,
         target_spatial_resolution: Option<SpatialResolution>,
         tiling_spec: TilingSpecification,
+        exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
         if target_origin_reference.is_none() && target_spatial_resolution.is_none() {
             return Ok(self);
@@ -104,7 +109,6 @@ impl WrapWithProjectionAndResample {
             .result_descriptor
             .spatial_grid_descriptor()
             .spatial_resolution();
-
         let target_spatial_grid = if let Some(tsr) = target_spatial_resolution {
             self.result_descriptor
                 .spatial_grid_descriptor()
@@ -112,7 +116,6 @@ impl WrapWithProjectionAndResample {
         } else {
             *self.result_descriptor.spatial_grid_descriptor()
         };
-
         let target_spatial_grid = if let Some(tor) = target_origin_reference {
             // if the request is to move the origin of the query to a different point, we generate a new grid aligned to that point.
             target_spatial_grid
@@ -123,100 +126,152 @@ impl WrapWithProjectionAndResample {
             target_spatial_grid
         };
 
-        let res = if self
+        if self
             .result_descriptor
             .spatial_grid_descriptor()
             .is_compatible_grid(&target_spatial_grid)
         {
             // TODO: resample if origin is not allgned to query? (maybe n
-            self
+            return Ok(self);
         }
-        // Query resolution is smaller then workdlow
-        else if target_spatial_grid.spatial_resolution().x <= rd_resolution.x
+
+        // Query resolution is smaller than workflow => compute on full resolution and append interpolation to decrease resolution
+        if target_spatial_grid.spatial_resolution().x <= rd_resolution.x
             && target_spatial_grid.spatial_resolution().y <= rd_resolution.y
         //TODO: we should allow to use the "interpolation" as long as the fraction is > 0.5. This would require to keep 4 tiles which seems to be fine. The edge case of resampling with same resolution should also use the interpolation since bilieaner woudl make sense here?
         {
-            tracing::debug!(
-                "Target res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting interpolation"
-            );
-            /*
-            let interpolation_method = if self
-                .result_descriptor
-                .bands
-                .bands()
-                .iter()
-                .all(|b| b.measurement.is_continuous())
-            {
-                InterpolationMethod::BiLinear
-            } else {
-                InterpolationMethod::NearestNeighbor
-            };
-            */
-
-            let interpolation_params = InterpolationParams {
-                interpolation: InterpolationMethod::NearestNeighbor,
-                output_resolution: InterpolationResolution::Resolution(
-                    target_spatial_grid.spatial_resolution(),
-                ),
-                output_origin_reference: None,
-            };
-
-            let iop = Interpolation {
-                params: interpolation_params.clone(),
-                sources: self.operator.into(),
-            };
-
-            let iip = InitializedInterpolation::new_with_source_and_params(
-                CanonicOperatorName::from(&iop),
-                WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
-                self.initialized_operator,
-                &interpolation_params,
+            self.interpolation(
+                target_spatial_resolution,
                 tiling_spec,
-            )?;
-            let rd = iip.result_descriptor().clone();
-            Self::new(iop.boxed(), iip.boxed(), rd)
+                rd_resolution,
+                target_spatial_grid,
+            )
         } else {
-            tracing::debug!(
-                "Query res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting downsampling"
-            );
-
-            let downsample_params = DownsamplingParams {
-                sampling_method: DownsamplingMethod::NearestNeighbor,
-                output_resolution: DownsamplingResolution::Resolution(
-                    target_spatial_grid.spatial_resolution(),
-                ),
-                output_origin_reference: None,
-            };
-            let dop = Downsampling {
-                params: downsample_params,
-                sources: self.operator.into(),
-            };
-
-            let ido = InitializedDownsampling::new_with_source_and_params(
-                CanonicOperatorName::from(&dop),
-                WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
-                self.initialized_operator,
-                downsample_params,
-                tiling_spec,
-            )?;
-            let rd = ido.result_descriptor().clone();
-            Self::new(dop.boxed(), ido.boxed(), rd)
-        };
-        Ok(res)
+            // Query resolution is larger than workflow => compute on overview level and append downsampling to increase resolution
+            self.downsampling(
+                target_spatial_resolution,
+                exe_ctx,
+                rd_resolution,
+                target_spatial_grid,
+            )
+            .await
+        }
     }
 
-    pub fn wrap_with_projection_and_resample(
+    async fn downsampling(
+        self,
+        target_spatial_resolution: Option<SpatialResolution>,
+        exe_ctx: &dyn ExecutionContext,
+        rd_resolution: SpatialResolution,
+        target_spatial_grid: crate::engine::SpatialGridDescriptor,
+    ) -> std::result::Result<WrapWithProjectionAndResample, error::Error> {
+        tracing::debug!(
+            "Query res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> optimize workflow and push-down downsampling"
+        );
+
+        let snapped_resolution = find_next_best_overview_level_resolution(
+            self.result_descriptor.spatial_grid.spatial_resolution(),
+            target_spatial_grid.spatial_resolution(),
+        );
+        debug_assert!(snapped_resolution <= target_spatial_grid.spatial_resolution());
+
+        let optimized_operator = self
+            .initialized_operator
+            .optimize(snapped_resolution)
+            .context(Optimization)?;
+
+        if snapped_resolution == target_spatial_grid.spatial_resolution() {
+            // target resolution is an overview level, so we can use the optimized operator directly
+            let initialized_raster_operator = optimized_operator
+                .clone()
+                .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                .await?;
+
+            let rd: RasterResultDescriptor =
+                initialized_raster_operator.result_descriptor().clone();
+            return Ok(Self::new(
+                optimized_operator,
+                initialized_raster_operator,
+                rd,
+            ));
+        }
+
+        // target resolution is not an overview level, so we need to downsample the optimized operator
+        let downsample_params = DownsamplingParams {
+            sampling_method: DownsamplingMethod::NearestNeighbor,
+            output_resolution: DownsamplingResolution::Resolution(
+                target_spatial_grid.spatial_resolution(),
+            ),
+            output_origin_reference: None,
+        };
+        let dop = Downsampling {
+            params: downsample_params,
+            sources: optimized_operator.into(),
+        }
+        .boxed();
+
+        let ido = dop
+            .clone()
+            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .await?;
+
+        let rd = ido.result_descriptor().clone();
+        Ok(Self::new(dop, ido.boxed(), rd))
+    }
+
+    fn interpolation(
+        self,
+        target_spatial_resolution: Option<SpatialResolution>,
+        tiling_spec: TilingSpecification,
+        rd_resolution: SpatialResolution,
+        target_spatial_grid: crate::engine::SpatialGridDescriptor,
+    ) -> std::result::Result<WrapWithProjectionAndResample, error::Error> {
+        tracing::debug!(
+            "Target res: {target_spatial_resolution:?}, workflow res: {rd_resolution:?} --> injecting interpolation"
+        );
+
+        let interpolation_params = InterpolationParams {
+            interpolation: InterpolationMethod::NearestNeighbor, // TODO: choose appropriate interpolation method
+            output_resolution: InterpolationResolution::Resolution(
+                target_spatial_grid.spatial_resolution(),
+            ),
+            output_origin_reference: None,
+        };
+
+        let iop = Interpolation {
+            params: interpolation_params.clone(),
+            sources: self.operator.into(),
+        };
+
+        // TODO: update the workflow operator path in all operators of the graph!
+        let iip = InitializedInterpolation::new_with_source_and_params(
+            CanonicOperatorName::from(&iop),
+            WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
+            self.initialized_operator,
+            &interpolation_params,
+            tiling_spec,
+        )?;
+
+        let rd = iip.result_descriptor().clone();
+
+        Ok(Self::new(iop.boxed(), iip.boxed(), rd))
+    }
+
+    pub async fn wrap_with_projection_and_resample(
         self,
         target_origin_reference: Option<Coordinate2D>,
         target_spatial_resolution: Option<SpatialResolution>,
         target_sref: SpatialReference,
         tiling_spec: TilingSpecification,
+        exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
         self.wrap_with_projection(target_sref, target_origin_reference, tiling_spec)?
             .wrap_with_resample(
                 target_origin_reference,
                 target_spatial_resolution,
                 tiling_spec,
+                exe_ctx,
             )
+            .await
     }
 }

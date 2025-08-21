@@ -8,7 +8,7 @@ use geoengine_datatypes::collections::{
 };
 use geoengine_datatypes::primitives::{
     BoundingBox2D, Circle, FeatureDataType, FeatureDataValue, Measurement, MultiPoint,
-    MultiPointAccess, SpatialBounded, VectorQueryRectangle,
+    MultiPointAccess, SpatialBounded, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use serde::{Deserialize, Serialize};
@@ -22,6 +22,7 @@ use crate::engine::{
 };
 use crate::engine::{InitializedSources, OperatorName, WorkflowOperatorPath};
 use crate::error::{self, Error};
+use crate::optimization::OptimizationError;
 use crate::processing::circle_merging_quadtree::aggregates::MeanAggregator;
 use crate::processing::circle_merging_quadtree::circle_of_points::CircleOfPoints;
 use crate::processing::circle_merging_quadtree::circle_radius_model::LogScaledRadius;
@@ -184,6 +185,7 @@ impl VectorOperator for VisualPointClustering {
         Ok(InitializedVisualPointClustering {
             name,
             path,
+            params: self.params.clone(),
             result_descriptor: VectorResultDescriptor {
                 data_type: VectorDataType::MultiPoint,
                 spatial_reference: in_desc.spatial_reference,
@@ -207,6 +209,7 @@ impl VectorOperator for VisualPointClustering {
 pub struct InitializedVisualPointClustering {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    params: VisualPointClusteringParams,
     result_descriptor: VectorResultDescriptor,
     vector_source: Box<dyn InitializedVectorOperator>,
     radius_model: LogScaledRadius,
@@ -262,6 +265,19 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(VisualPointClustering {
+            params: self.params.clone(),
+            sources: SingleVectorSource {
+                vector: self.vector_source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

@@ -5,6 +5,7 @@ use crate::{
         TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
         WorkflowOperatorPath,
     },
+    optimization::OptimizationError,
     util::Result,
 };
 use async_trait::async_trait;
@@ -16,7 +17,7 @@ use geoengine_datatypes::{
     error::{BoxedResultExt, ErrorSource},
     primitives::{
         BoundingBox2D, ColumnSelection, Geometry, MultiLineString, MultiLineStringRef,
-        MultiPolygon, MultiPolygonRef, VectorQueryRectangle,
+        MultiPolygon, MultiPolygonRef, SpatialResolution, VectorQueryRectangle,
     },
     util::arrow::ArrowTyped,
 };
@@ -168,6 +169,22 @@ impl InitializedVectorOperator for InitializedLineSimplification {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(LineSimplification {
+            params: LineSimplificationParams {
+                algorithm: self.algorithm,
+                epsilon: self.epsilon,
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

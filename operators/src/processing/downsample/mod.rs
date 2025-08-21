@@ -6,12 +6,15 @@ use crate::engine::{
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
-use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
+use geoengine_datatypes::primitives::{
+    BandSelection, CacheHint, Coordinate2D, find_next_best_overview_level_resolution,
+};
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
 };
@@ -203,6 +206,76 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedDown
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let out_descriptor = self.result_descriptor();
+        let in_descriptor = self.raster_source.result_descriptor();
+
+        let input_resolution = in_descriptor.spatial_grid.spatial_resolution();
+
+        let new_origin = if in_descriptor.spatial_grid.geo_transform().origin_coordinate
+            == out_descriptor
+                .spatial_grid
+                .geo_transform()
+                .origin_coordinate
+        {
+            None
+        } else {
+            Some(
+                out_descriptor
+                    .spatial_grid
+                    .geo_transform()
+                    .origin_coordinate,
+            )
+        };
+
+        if input_resolution == target_resolution {
+            // special case where downsampling becomes redundant, unless it also regrids
+
+            // TODO: source does not need to be optimized, but we need it as an `RasterOperator` and not `InitializedRasterOperator`
+            let optimzed_source = self.raster_source.optimize(target_resolution)?;
+
+            if new_origin.is_some() {
+                return Ok(Downsampling {
+                    params: DownsamplingParams {
+                        sampling_method: self.sampling_method,
+                        output_resolution: DownsamplingResolution::Resolution(target_resolution),
+                        output_origin_reference: new_origin,
+                    },
+                    sources: SingleRasterSource {
+                        raster: optimzed_source,
+                    },
+                }
+                .boxed());
+            }
+            return Ok(optimzed_source);
+        }
+
+        // target resolution must be coarser than input
+        debug_assert!(input_resolution < target_resolution);
+
+        let snapped_input_resolution =
+            find_next_best_overview_level_resolution(input_resolution, target_resolution);
+
+        let optimzed_source = self.raster_source.optimize(snapped_input_resolution)?;
+
+        Ok(Downsampling {
+            params: DownsamplingParams {
+                sampling_method: self.sampling_method,
+                output_resolution: DownsamplingResolution::Resolution(target_resolution),
+                output_origin_reference: new_origin,
+            },
+            sources: SingleRasterSource {
+                raster: optimzed_source,
+            },
+        }
+        .boxed())
     }
 }
 

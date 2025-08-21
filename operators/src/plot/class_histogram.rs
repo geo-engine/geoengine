@@ -7,6 +7,7 @@ use crate::engine::{
 use crate::engine::{QueryProcessor, WorkflowOperatorPath};
 use crate::error;
 use crate::error::Error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
 use async_trait::async_trait;
@@ -15,7 +16,7 @@ use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{BarChart, Plot, PlotData};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, ClassificationMeasurement, ColumnSelection,
-    FeatureDataType, Measurement, PlotQueryRectangle, RasterQueryRectangle,
+    FeatureDataType, Measurement, PlotQueryRectangle, RasterQueryRectangle, SpatialResolution,
 };
 use num_traits::AsPrimitive;
 use serde::{Deserialize, Serialize};
@@ -206,6 +207,21 @@ impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedRa
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(ClassHistogram {
+            params: ClassHistogramParams {
+                column_name: self.column_name.clone(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Raster(self.source.optimize(target_resolution)?),
+            },
+        }
+        .boxed())
+    }
 }
 
 impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedVectorOperator>> {
@@ -225,6 +241,21 @@ impl InitializedPlotOperator for InitializedClassHistogram<Box<dyn InitializedVe
 
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(ClassHistogram {
+            params: ClassHistogramParams {
+                column_name: self.column_name.clone(),
+            },
+            sources: SingleRasterOrVectorSource {
+                source: RasterOrVectorOperator::Vector(self.source.optimize(target_resolution)?),
+            },
+        }
+        .boxed())
     }
 }
 

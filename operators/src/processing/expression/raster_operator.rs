@@ -10,11 +10,12 @@ use crate::{
         WorkflowOperatorPath,
     },
     error::InvalidNumberOfExpressionInputBands,
+    optimization::{OptimizableOperator, OptimizationError},
     processing::expression::canonicalize_name,
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::{primitives::SpatialResolution, raster::RasterDataType};
 use geoengine_expression::{
     DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
 };
@@ -121,6 +122,7 @@ impl RasterOperator for Expression {
             path,
             result_descriptor,
             source,
+            expression_string: self.params.expression,
             expression,
             map_no_data: self.params.map_no_data,
         };
@@ -135,11 +137,13 @@ impl OperatorName for Expression {
     const TYPE_NAME: &'static str = "Expression";
 }
 
+#[derive(Clone)]
 pub struct InitializedExpression {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
+    expression_string: String,
     expression: ExpressionAst,
     map_no_data: bool,
 }
@@ -215,6 +219,26 @@ impl InitializedRasterOperator for InitializedExpression {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(resolution)?;
+
+        Ok(Expression {
+            params: ExpressionParams {
+                expression: self.expression_string.clone(),
+                output_type: self.result_descriptor.data_type,
+                output_band: Some(self.result_descriptor.bands[0].clone()),
+                map_no_data: self.map_no_data,
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

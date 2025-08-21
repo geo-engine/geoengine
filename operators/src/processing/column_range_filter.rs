@@ -4,6 +4,7 @@ use crate::engine::{
     VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use crate::util::input::StringOrNumberRange;
 use crate::{adapters::FeatureCollectionChunkMerger, engine::SingleVectorSource};
@@ -14,7 +15,7 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ColumnSelection, FeatureDataType, FeatureDataValue, Geometry,
+    BoundingBox2D, ColumnSelection, FeatureDataType, FeatureDataValue, Geometry, SpatialResolution,
     VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -95,6 +96,19 @@ impl InitializedVectorOperator for InitializedColumnRangeFilter {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(ColumnRangeFilter {
+            params: self.state.clone(),
+            sources: SingleVectorSource {
+                vector: self.vector_source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

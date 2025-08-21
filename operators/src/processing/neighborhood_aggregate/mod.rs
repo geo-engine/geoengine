@@ -10,10 +10,11 @@ use crate::engine::{
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
     Grid2D, GridBoundingBox2D, GridShape2D, GridSize, Pixel, RasterTile2D, TilingSpecification,
 };
@@ -157,10 +158,10 @@ impl RasterOperator for NeighborhoodAggregate {
         let initialized_operator = InitializedNeighborhoodAggregate {
             name,
             path,
+            params: self.params.clone(),
             result_descriptor: raster_source.result_descriptor().clone(),
             raster_source,
             neighborhood: self.params.neighborhood.try_into()?,
-            aggregate_function: self.params.aggregate_function,
             tiling_specification,
         };
 
@@ -173,10 +174,10 @@ impl RasterOperator for NeighborhoodAggregate {
 pub struct InitializedNeighborhoodAggregate {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    params: NeighborhoodAggregateParams,
     result_descriptor: RasterResultDescriptor,
     raster_source: Box<dyn InitializedRasterOperator>,
     neighborhood: Neighborhood,
-    aggregate_function: AggregateFunctionParams,
     tiling_specification: TilingSpecification,
 }
 
@@ -185,7 +186,7 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
         let source_processor = self.raster_source.query_processor()?;
 
         let res = call_on_generic_raster_processor!(
-            source_processor, p => match &self.aggregate_function  {
+            source_processor, p => match &self.params.aggregate_function  {
                 AggregateFunctionParams::Sum => NeighborhoodAggregateProcessor::<_,_, Sum>::new(
                         p,
                         self.tiling_specification,
@@ -218,6 +219,19 @@ impl InitializedRasterOperator for InitializedNeighborhoodAggregate {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(NeighborhoodAggregate {
+            params: self.params.clone(),
+            sources: SingleRasterSource {
+                raster: self.raster_source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

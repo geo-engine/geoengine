@@ -316,7 +316,9 @@ async fn wms_map_handler<C: ApplicationContext>(
                 Some(request_resolution),
                 request_spatial_ref.into(),
                 tiling_spec,
-            )?;
+                &execution_context,
+            )
+            .await?;
         // TODO: add a resammple operator for downsampling AND resample push down!
 
         let initialized = wrapped.initialized_operator;
@@ -900,7 +902,10 @@ mod tests {
 
         let image_bytes = actix_web::test::read_body(res).await;
 
-        // geoengine_datatypes::util::test::save_test_bytes(&image_bytes, "ne2_rgb_colorizer.png");
+        // geoengine_datatypes::util::test::save_test_bytes(
+        //     &image_bytes,
+        //     test_data!("wms/ne2_rgb_colorizer.png").to_str().unwrap(),
+        // );
 
         assert_image_equals(test_data!("wms/ne2_rgb_colorizer.png"), &image_bytes);
     }

@@ -9,6 +9,7 @@ use crate::{
         VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
         WorkflowOperatorPath,
     },
+    optimization::OptimizationError,
     util::Result,
 };
 use async_trait::async_trait;
@@ -16,7 +17,7 @@ use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
     FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, VectorQueryRectangle,
+    MultiLineString, MultiPoint, MultiPolygon, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use geoengine_datatypes::{
@@ -101,6 +102,7 @@ pub enum OutputColumn {
 struct InitializedVectorExpression {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    params: VectorExpressionParams,
     result_descriptor: VectorResultDescriptor,
     features: Box<dyn InitializedVectorOperator>,
     expression: Arc<LinkedExpression>,
@@ -151,7 +153,7 @@ impl VectorOperator for VectorExpression {
                 insert_new_column(
                     &mut result_descriptor.columns,
                     output_column_name.clone(),
-                    self.params.output_measurement,
+                    self.params.output_measurement.clone(),
                 )?;
                 DataType::Number
             }
@@ -191,6 +193,7 @@ impl VectorOperator for VectorExpression {
         let initialized_operator = InitializedVectorExpression {
             name,
             path,
+            params: self.params.clone(),
             result_descriptor,
             features: initialized_source.vector,
             expression,
@@ -453,6 +456,19 @@ impl InitializedVectorOperator for InitializedVectorExpression {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(VectorExpression {
+            params: self.params.clone(),
+            sources: SingleVectorSource {
+                vector: self.features.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

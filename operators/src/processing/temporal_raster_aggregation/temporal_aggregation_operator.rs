@@ -14,6 +14,7 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::processing::temporal_raster_aggregation::aggregators::PercentileEstimateAggregator;
 use crate::{
     adapters::SubQueryTileAggregator,
@@ -25,7 +26,9 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInstance};
+use geoengine_datatypes::primitives::{
+    BandSelection, RasterQueryRectangle, SpatialResolution, TimeInstance,
+};
 use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use serde::{Deserialize, Serialize};
@@ -193,6 +196,24 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: self.aggregation_type,
+                window: self.window,
+                window_reference: Some(self.window_reference),
+                output_type: self.output_type,
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

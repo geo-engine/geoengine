@@ -6,6 +6,7 @@ use crate::engine::{
     RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use async_trait::async_trait;
@@ -17,7 +18,7 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement,
-    RasterQueryRectangle,
+    RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey,
@@ -178,6 +179,19 @@ impl InitializedRasterOperator for InitializedReflectance {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(Reflectance {
+            params: self.params,
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 

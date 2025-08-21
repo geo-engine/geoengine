@@ -1,4 +1,5 @@
 use crate::engine::SpatialGridDescriptor;
+use crate::optimization::OptimizationError;
 use crate::processing::BandNeighborhoodAggregateError;
 use crate::util::statistics::StatisticsError;
 use bb8_postgres::bb8;
@@ -523,6 +524,10 @@ pub enum Error {
     #[snafu(context(false), display("BandNeighborhoodAggregate: {source}"))]
     BandNeighborhoodAggregate {
         source: BandNeighborhoodAggregateError,
+    },
+    #[snafu(display("Error during workflow optimization: {source}"))]
+    Optimization {
+        source: OptimizationError,
     },
 }
 
