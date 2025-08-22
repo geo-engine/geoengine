@@ -1,3 +1,4 @@
+use crate::contexts::migrations::migration_0031_gdal_tiles::Migration0031GdalTiles;
 pub use crate::contexts::migrations::{
     current_schema::CurrentSchemaMigration, migration_0015_log_quota::Migration0015LogQuota,
     migration_0016_merge_providers::Migration0016MergeProviders,
@@ -20,6 +21,7 @@ mod migration_0018_wildlive_connector;
 mod migration_0019_ml_model_no_data;
 mod migration_0020_provider_permissions;
 mod migration_0030_raster_result_desc;
+mod migration_0031_gdal_tiles;
 
 #[cfg(test)]
 mod schema_info;
@@ -40,6 +42,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0019MlModelNoData),
         Box::new(Migration0020ProviderPermissions),
         Box::new(Migration0030RasterResultDesc),
+        Box::new(Migration0031GdalTiles),
     ]
 }
 

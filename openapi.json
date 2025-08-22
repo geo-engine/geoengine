@@ -805,6 +805,35 @@
         ]
       }
     },
+    "/dataset/{dataset}/tiles": {
+      "post": {
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Add a tile to a gdal dataset.",
+        "operationId": "add_dataset_tiles_handler",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AutoCreateDataset"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": ""
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
     "/datasetFromWorkflow/{id}": {
       "post": {
         "tags": [
@@ -6460,6 +6489,37 @@
           }
         }
       },
+      "DatasetTile": {
+        "type": "object",
+        "required": [
+          "time",
+          "spatial_partition",
+          "band",
+          "z_index",
+          "params"
+        ],
+        "properties": {
+          "band": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
+          },
+          "spatial_partition": {
+            "$ref": "#/components/schemas/SpatialPartition2D"
+          },
+          "time": {
+            "$ref": "#/components/schemas/TimeInterval"
+          },
+          "z_index": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "DateTimeParseFormat": {
         "type": "string"
       },
@@ -7064,6 +7124,24 @@
             "type": "string",
             "enum": [
               "GdalMetaDataNetCdfCf"
+            ]
+          }
+        }
+      },
+      "GdalMultiBand": {
+        "type": "object",
+        "required": [
+          "type",
+          "resultDescriptor"
+        ],
+        "properties": {
+          "resultDescriptor": {
+            "$ref": "#/components/schemas/RasterResultDescriptor"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "GdalMultiBand"
             ]
           }
         }
@@ -7679,6 +7757,9 @@
           },
           {
             "$ref": "#/components/schemas/GdalMetaDataList"
+          },
+          {
+            "$ref": "#/components/schemas/GdalMultiBand"
           }
         ],
         "discriminator": {
@@ -7687,6 +7768,7 @@
             "GdalMetaDataList": "#/components/schemas/GdalMetaDataList",
             "GdalMetaDataNetCdfCf": "#/components/schemas/GdalMetadataNetCdfCf",
             "GdalMetaDataRegular": "#/components/schemas/GdalMetaDataRegular",
+            "GdalMultiBand": "#/components/schemas/GdalMultiBand",
             "GdalStatic": "#/components/schemas/GdalMetaDataStatic",
             "MockMetaData": "#/components/schemas/MockMetaData",
             "OgrMetaData": "#/components/schemas/OgrMetaData"

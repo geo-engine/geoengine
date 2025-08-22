@@ -62,12 +62,7 @@ impl SpatialGridDefinition {
     /// Moves the origin to another pixel edge. The spatial location stays the same!
     /// Check if you can use `shift_bounds_relative_by_pixel_offset`!
     pub fn with_moved_origin_exact_grid(&self, new_origin: Coordinate2D) -> Option<Self> {
-        if approx_eq!(
-            Coordinate2D,
-            self.geo_transform
-                .distance_to_nearest_pixel_edge(new_origin),
-            Coordinate2D::new(0., 0.)
-        ) {
+        if self.geo_transform.is_valid_pixel_edge(new_origin) {
             Some(self.with_moved_origin_to_nearest_grid_edge(new_origin))
         } else {
             None
@@ -140,6 +135,7 @@ impl SpatialGridDefinition {
         let (other_shift, dist) = other.with_moved_origin_to_nearest_grid_edge_with_distance(
             self.geo_transform.origin_coordinate,
         );
+
         if dist.x.abs() > self.geo_transform().x_pixel_size().abs() * 0.00001 // TODO: maybe use exact_grid and another epsilon?
             || dist.y.abs() > self.geo_transform().y_pixel_size().abs() * 0.00001
         {
@@ -496,6 +492,61 @@ mod tests {
         assert_eq!(
             fliped.grid_bounds,
             GridBoundingBox2D::new_min_max(-26, -11, 1, 2).unwrap()
+        );
+    }
+
+    #[test]
+    fn intersection_with_floating_point_discrepancies() {
+        let a = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
+        };
+
+        let b = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((-45.0, 22.399_999_999_999_99).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [561, 1124]).unwrap(),
+        };
+
+        assert_eq!(
+            a.intersection(&b),
+            Some(SpatialGridDefinition {
+                geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+                grid_bounds: GridBoundingBox2D::new([338, 675], [899, 1799]).unwrap(),
+            })
+        );
+
+        let a = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),
+        };
+
+        let b = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((-45.0, 90.0).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 0], [561, 1124]).unwrap(),
+        };
+
+        assert_eq!(
+            a.intersection(&b),
+            Some(SpatialGridDefinition {
+                geo_transform: GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2),
+                grid_bounds: GridBoundingBox2D::new([0, 675], [561, 1799]).unwrap(),
+            })
+        );
+    }
+
+    #[test]
+    fn move_origin_with_floating_point_discrepancies() {
+        let tile = SpatialGridDefinition {
+            geo_transform: GeoTransform::new((0.0, 0.0).into(), 0.2, -0.2),
+            grid_bounds: GridBoundingBox2D::new([0, 512], [511, 1023]).unwrap(),
+        };
+
+        assert_eq!(
+            tile.with_moved_origin_exact_grid((-45.0, 22.399_999_999_999_99).into()),
+            Some(SpatialGridDefinition {
+                geo_transform: GeoTransform::new((-45.0, 22.400_000_000_000_002).into(), 0.2, -0.2), // TODO: 22.3999..9 vs 22.4 vs. 22.40000..01
+                grid_bounds: GridBoundingBox2D::new([112, 737], [623, 1248]).unwrap(),
+            })
         );
     }
 }

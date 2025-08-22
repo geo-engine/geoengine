@@ -1,3 +1,4 @@
+use crate::api::handlers::datasets::DatasetTile;
 use crate::api::model::services::UpdateDataset;
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
@@ -19,15 +20,18 @@ use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::primitives::RasterQueryRectangle;
-use geoengine_datatypes::primitives::VectorQueryRectangle;
+use geoengine_datatypes::primitives::{CacheHint, RasterQueryRectangle, TimeInstance};
+use geoengine_datatypes::primitives::{TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use geoengine_operators::source::{
+    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+    OgrSourceDataset, TileFile,
+};
 use postgres_types::{FromSql, ToSql};
 
 pub async fn resolve_dataset_name_to_id<Tls>(
@@ -593,6 +597,427 @@ where
 }
 
 #[async_trait]
+impl<Tls>
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for PostgresDb<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn meta_data(
+        &self,
+        data_id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
+    > {
+        let id = data_id
+            .internal()
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
+
+        let mut conn = self.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+        let tx = conn.build_transaction().start().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        if !self
+            .has_permission_in_tx(id, Permission::Read, &tx)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?
+        {
+            return Err(geoengine_operators::error::Error::PermissionDenied);
+        }
+
+        let stmt = tx
+            .prepare(
+                "
+            SELECT
+                d.meta_data
+            FROM
+                user_permitted_datasets p JOIN datasets d
+                    ON (p.dataset_id = d.id)
+            WHERE
+                d.id = $1 AND p.user_id = $2
+            LIMIT 
+                1",
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let row = tx
+            .query_one(&stmt, &[&id, &self.session.user.id])
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let meta_data: MetaDataDefinition = row.get(0);
+
+        let result_descriptor = match meta_data {
+            MetaDataDefinition::GdalMultiBand(b) => b.result_descriptor,
+            _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
+        };
+
+        Ok(Box::new(MultiBandGdalLoadingInfoProvider {
+            dataset_id: id,
+            result_descriptor,
+            db: self.clone(),
+        }))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct MultiBandGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    dataset_id: DatasetId,
+    result_descriptor: RasterResultDescriptor,
+    db: PostgresDb<Tls>,
+}
+
+async fn create_gap_free_time_steps<Tls>(
+    dataset_id: DatasetId,
+    query_time: TimeInterval,
+    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+) -> Result<Vec<TimeInterval>>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    // query all time steps inside the query, across all spatial tiles and bands
+    let time_steps = collect_timesteps_in_query(dataset_id, query_time, conn).await?;
+
+    // handle case where no time steps are found
+    if time_steps.is_empty() {
+        // Query for the closest time step before the query time
+        let time =
+            resolve_time_from_first_tile_before_and_after_query(dataset_id, query_time, conn)
+                .await?;
+
+        return Ok(vec![time]);
+    }
+
+    // fill the gaps in the returned time steps
+    let mut filled_time_steps = vec![];
+
+    for time_step in time_steps {
+        let Some(last_step) = filled_time_steps.last() else {
+            filled_time_steps.push(time_step);
+            continue;
+        };
+
+        if last_step.end() < time_step.start() {
+            // gap, add the gap
+            filled_time_steps.push(
+                TimeInterval::new(last_step.end(), time_step.start())
+                    .expect("start must be before end"),
+            );
+        }
+
+        filled_time_steps.push(time_step);
+    }
+
+    // fill the gaps before and after the data/query time
+    let (time_start, time_end) = match (filled_time_steps.first(), filled_time_steps.last()) {
+        (Some(first), Some(last)) => (first.start(), last.end()),
+        _ => (query_time.start(), query_time.end()),
+    };
+
+    // fill possible gaps at the beginning and end of the data/query time
+
+    if time_start > query_time.start() {
+        // last tile before query
+        let rows = conn
+            .query(
+                "
+            SELECT DISTINCT
+                (time).end
+            FROM
+                dataset_tiles
+            WHERE
+                dataset_id = $1 AND (time).end < $2
+            ORDER BY
+               (time).end DESC
+            LIMIT 1",
+                &[&dataset_id, &time_start],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let start = if let Some(row) = rows.first() {
+            row.get(0)
+        } else {
+            TimeInstance::MIN
+        };
+
+        filled_time_steps.insert(
+            0,
+            TimeInterval::new(start, time_start).expect("start must be before end"),
+        );
+    }
+
+    if time_end < query_time.end() {
+        // first tile after query
+
+        let rows = conn
+            .query(
+                "
+            SELECT DISTINCT
+                (time).start
+            FROM
+                dataset_tiles
+            WHERE
+                dataset_id = $1 AND (time).start > $2
+            ORDER BY
+               (time).start ASC
+            LIMIT 1",
+                &[
+                    &dataset_id,
+                    &filled_time_steps
+                        .last()
+                        .expect("at least one time step")
+                        .start(),
+                ],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let end = if let Some(row) = rows.first() {
+            row.get(0)
+        } else {
+            TimeInstance::MAX
+        };
+
+        filled_time_steps.push(TimeInterval::new(time_end, end).expect("start must be before end"));
+    }
+
+    Ok(filled_time_steps)
+}
+
+async fn resolve_time_from_first_tile_before_and_after_query<Tls>(
+    dataset_id: DatasetId,
+    query_time: TimeInterval,
+    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+) -> Result<TimeInterval>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let before_rows = conn
+        .query(
+            "
+                SELECT
+                    (time).end
+                FROM
+                    dataset_tiles
+                WHERE
+                    dataset_id = $1 AND (time).end <= $2
+                ORDER BY
+                   (time).end DESC
+                LIMIT 1",
+            &[&dataset_id, &query_time.start()],
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+    let after_rows = conn
+        .query(
+            "
+                SELECT
+                    (time).start
+                FROM
+                    dataset_tiles
+                WHERE
+                    dataset_id = $1 AND (time).start >= $2
+                ORDER BY
+                   (time).start ASC
+                LIMIT 1",
+            &[&dataset_id, &query_time.end()],
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+    let start = if let Some(row) = before_rows.first() {
+        row.get(0)
+    } else {
+        TimeInstance::MIN
+    };
+
+    let end = if let Some(row) = after_rows.first() {
+        row.get(0)
+    } else {
+        TimeInstance::MAX
+    };
+
+    Ok(TimeInterval::new(start, end).expect("start must be before end"))
+}
+
+async fn collect_timesteps_in_query<Tls>(
+    dataset_id: DatasetId,
+    query_time: TimeInterval,
+    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+) -> Result<Vec<TimeInterval>>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let rows = conn
+        .query(
+            "
+            SELECT DISTINCT
+                time, (time).start
+            FROM
+                dataset_tiles
+            WHERE
+                dataset_id = $1 AND time_interval_intersects(time, $2)
+            ORDER BY
+               (time).start",
+            &[&dataset_id, &query_time],
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+
+    let time_steps: Vec<TimeInterval> = rows.into_iter().map(|row| row.get(0)).collect();
+
+    Ok(time_steps)
+}
+
+#[async_trait]
+impl<Tls>
+    MetaData<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for MultiBandGdalLoadingInfoProvider<Tls>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    async fn loading_info(
+        &self,
+        query: MultiBandGdalLoadingInfoQueryRectangle,
+    ) -> Result<MultiBandGdalLoadingInfo, geoengine_operators::error::Error> {
+        // NOTE: we query only the files that are needed for answering the query, but to retrieve ALL the time steps in the query we have to consider the whole world and not the restrained bbox
+
+        let conn = self.db.conn_pool.get().await.map_err(|e| {
+            geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            }
+        })?;
+
+        // query the files
+        let rows = conn
+            .query(
+                "
+            SELECT
+                bbox, time, band, z_index, gdal_params
+            FROM
+                dataset_tiles
+            WHERE
+                dataset_id = $1 AND 
+                spatial_partition2d_intersects(bbox, $2) AND
+                time_interval_intersects(time, $3) AND
+                band = ANY($4)
+            ORDER BY
+                (time).start, band, z_index",
+                &[
+                    &self.dataset_id,
+                    &query.spatial_bounds(),
+                    &query.time_interval(),
+                    &query.attributes().as_slice(),
+                ],
+            )
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        let files: Vec<TileFile> = rows
+            .into_iter()
+            .map(|row| TileFile {
+                spatial_partition: row.get(0),
+                time: row.get(1),
+                band: row.get(2),
+                z_index: row.get(3),
+                params: row.get(4),
+            })
+            .collect();
+
+        let time_steps = create_gap_free_time_steps(self.dataset_id, query.time_interval(), &conn)
+            .await
+            .map_err(|e| geoengine_operators::error::Error::MetaData {
+                source: Box::new(e),
+            })?;
+
+        Ok(MultiBandGdalLoadingInfo::new(
+            time_steps,
+            files,
+            CacheHint::default(), // TODO: implement cache hint, should it be one value for the whole dataset? If so, load it once(!) from the database and add it to the loading info. Otherwise add the cache hint as a new attribute to the tiles.
+        ))
+    }
+
+    async fn result_descriptor(
+        &self,
+    ) -> Result<RasterResultDescriptor, geoengine_operators::error::Error> {
+        Ok(self.result_descriptor.clone())
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<
+        dyn MetaData<
+                MultiBandGdalLoadingInfo,
+                RasterResultDescriptor,
+                MultiBandGdalLoadingInfoQueryRectangle,
+            >,
+    > {
+        Box::new(self.clone())
+    }
+}
+
+#[async_trait]
 impl<Tls> DatasetStore for PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -811,6 +1236,35 @@ where
         let stmt = tx.prepare("DELETE FROM datasets WHERE id = $1;").await?;
 
         tx.execute(&stmt, &[&dataset_id]).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn add_dataset_tiles(&self, dataset: DatasetId, tiles: Vec<DatasetTile>) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        for tile in tiles {
+            tx.execute(
+                "INSERT INTO dataset_tiles (dataset_id, time, bbox, band, z_index, gdal_params)
+                VALUES ($1, $2, $3, $4, $5, $6)",
+                &[
+                    &dataset,
+                    &tile.time,
+                    &tile.spatial_partition,
+                    &tile.band,
+                    &tile.z_index,
+                    &geoengine_operators::source::GdalDatasetParameters::from(tile.params),
+                ],
+            )
+            .await?;
+        }
 
         tx.commit().await?;
 
