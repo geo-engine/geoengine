@@ -395,12 +395,16 @@ where
         )
         .num_tiles_intersecting(query_rect.spatial_bounds);
 
+    let mut tile_count = 0;
+
     while let Some((tile_index, tile)) = tile_stream.next().await {
         if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
             return Err(Error::TileLimitExceeded {
                 limit: tile_limit.expect("limit exist because it is exceeded"),
             });
         }
+
+        tile_count = tile_index;
 
         let tile: geoengine_datatypes::raster::BaseTile<
             geoengine_datatypes::raster::GridOrEmpty<
@@ -432,9 +436,10 @@ where
                 .await??;
 
         progress_consumer
-            .consume_progress(ToGeoTiffProgress {
-                workload_tiles: tiles_intersecting_qrect,
+            .consume_progress(ToGeoTiffProgress::Processing {
+                tiles_per_timestep: tiles_intersecting_qrect,
                 processed_tiles: tile_index,
+                current_time_step: current_interval,
             })
             .await;
     }
@@ -455,28 +460,72 @@ where
 
     abortable_query_execution(written, conn_closed, query_abort_trigger).await??;
 
+    progress_consumer
+        .consume_progress(ToGeoTiffProgress::Done {
+            tiles_per_timestep: tiles_intersecting_qrect,
+            processed_tiles: tile_count,
+        })
+        .await;
+
     Ok(result)
 }
 
-#[derive(Copy, Clone)]
-pub struct ToGeoTiffProgress {
-    pub workload_tiles: usize,
-    pub processed_tiles: usize,
+#[derive(Copy, Clone, Debug)]
+pub enum ToGeoTiffProgress {
+    Processing {
+        tiles_per_timestep: usize,
+        current_time_step: TimeInterval,
+        processed_tiles: usize,
+    },
+    Done {
+        tiles_per_timestep: usize,
+        processed_tiles: usize,
+    },
 }
 
 impl ToGeoTiffProgress {
     pub fn percent_done(&self) -> f64 {
-        (self.processed_tiles as f64) / (self.workload_tiles as f64)
+        match *self {
+            Self::Done { .. } => 1.0,
+            Self::Processing { .. } => 0.0,
+        }
+    }
+
+    pub fn percent_done_current_timestep(&self) -> f64 {
+        match *self {
+            Self::Done { .. } => 1.0,
+            Self::Processing {
+                tiles_per_timestep,
+                current_time_step: _,
+                processed_tiles,
+            } => (processed_tiles % tiles_per_timestep) as f64 / tiles_per_timestep as f64,
+        }
     }
 }
 
 impl Display for ToGeoTiffProgress {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "Tiles processed: {}, Total workload: {}",
-            self.processed_tiles, self.workload_tiles
-        )
+        match *self {
+            Self::Done {
+                processed_tiles,
+                tiles_per_timestep,
+            } => write!(
+                f,
+                "Done: Total tiles processed: {processed_tiles}; Tiles per time step: {tiles_per_timestep}",
+            ),
+            Self::Processing {
+                tiles_per_timestep,
+                current_time_step,
+                processed_tiles,
+            } => write!(
+                f,
+                "Processing: Total tiles processed: {}; Tiles per time step: {}; Current {} @ {:.3}%",
+                processed_tiles,
+                tiles_per_timestep,
+                current_time_step,
+                (self.percent_done_current_timestep() * 100.)
+            ),
+        }
     }
 }
 

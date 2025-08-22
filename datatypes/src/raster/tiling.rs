@@ -105,8 +105,8 @@ impl TilingStrategy {
         let GridIdx([lower_right_tile_y, lower_right_tile_x]) =
             self.pixel_idx_to_tile_idx(self.geo_transform.lower_right_pixel_idx(&partition));
 
-        ((upper_left_tile_y - lower_right_tile_y) * (upper_left_tile_x - lower_right_tile_x))
-            as usize
+        (((lower_right_tile_y - upper_left_tile_y) + 1)
+            * ((lower_right_tile_x - upper_left_tile_x) + 1)) as usize
     }
 
     /// generates the tile idx in \[z,y,x\] order for the tiles intersecting the bounding box
