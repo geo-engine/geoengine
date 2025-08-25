@@ -2,6 +2,7 @@ use super::{
     all_migrations,
     database_migration::{DatabaseVersion, Migration},
 };
+use crate::permissions::Role;
 use crate::{
     error::Result,
     layers::{
@@ -11,11 +12,6 @@ use crate::{
 use async_trait::async_trait;
 use pwhash::bcrypt;
 use tokio_postgres::Transaction;
-use uuid::Uuid;
-
-const ADMIN_ROLE_ID: Uuid = Uuid::from_u128(0xd532_8854_6190_4af9_ad69_4e74_b096_1ac9);
-const REGISTERED_USER_ROLE_ID: Uuid = Uuid::from_u128(0x4e80_81b6_8aa6_4275_af0c_2fa2_da55_7d28);
-const ANONYMOUS_USER_ROLE_ID: Uuid = Uuid::from_u128(0xfd8e_87bf_515c_4f36_8da6_1a53_702f_f102);
 
 const ADMIN_QUOTA: i64 = 9_223_372_036_854_775_807; // max postgres `bigint` value
 
@@ -131,9 +127,9 @@ impl CurrentSchemaMigration {
                 ;
                 ",
             &[
-                &ADMIN_ROLE_ID,
-                &REGISTERED_USER_ROLE_ID,
-                &ANONYMOUS_USER_ROLE_ID,
+                &Role::admin_role_id().0,
+                &Role::registered_user_role_id().0,
+                &Role::anonymous_role_id().0,
             ],
         )
         .await?;
@@ -157,7 +153,7 @@ impl CurrentSchemaMigration {
                 );
                 ",
             &[
-                &ADMIN_ROLE_ID,
+                &Role::admin_role_id().0,
                 &user_config.admin_email,
                 &bcrypt::hash(user_config.admin_password)
                     .expect("Admin password hash should be valid"),
@@ -176,7 +172,7 @@ impl CurrentSchemaMigration {
                     $1
                 );
                 ",
-            &[&ADMIN_ROLE_ID],
+            &[&Role::admin_role_id().0],
         )
         .await?;
 
@@ -194,9 +190,9 @@ impl CurrentSchemaMigration {
                     ;
                     ",
             &[
-                &ADMIN_ROLE_ID,
-                &REGISTERED_USER_ROLE_ID,
-                &ANONYMOUS_USER_ROLE_ID,
+                &Role::admin_role_id().0,
+                &Role::registered_user_role_id().0,
+                &Role::anonymous_role_id().0,
                 &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
                 &UNSORTED_COLLECTION_ID,
             ],
