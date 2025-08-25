@@ -1184,6 +1184,10 @@ CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
 
 -- Data
 
+INSERT INTO geoengine (clear_database_on_start, database_version) VALUES (
+    FALSE, '0015_log_quota'
+);
+
 INSERT INTO layer_collections (
     id,
     name,

@@ -30,9 +30,8 @@ impl Migration for Migration0018WildliveConnector {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::contexts::migrations::{
-        Migration0015LogQuota, Migration0016MergeProviders, migrations_by_range,
-    };
+    use crate::contexts::migrations::database_migration::tests::create_migration_0015_snapshot;
+    use crate::contexts::migrations::{Migration0016MergeProviders, migrations_by_range};
     use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{config::get_config_element, contexts::migrate_database};
     use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
@@ -49,15 +48,7 @@ mod tests {
         let mut conn = pool.get().await.unwrap();
 
         // initial schema
-        migrate_database(
-            &mut conn,
-            &migrations_by_range(
-                &Migration0015LogQuota.version(),
-                &Migration0015LogQuota.version(),
-            ),
-        )
-        .await
-        .unwrap();
+        create_migration_0015_snapshot(&mut conn).await.unwrap();
 
         // insert test data on initial schema
         assert_eq!(

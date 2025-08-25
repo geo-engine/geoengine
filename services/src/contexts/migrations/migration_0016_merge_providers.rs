@@ -1,7 +1,4 @@
-use super::{
-    Migration0015LogQuota,
-    database_migration::{DatabaseVersion, Migration},
-};
+use super::database_migration::{DatabaseVersion, Migration};
 use crate::error::Result;
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
@@ -12,7 +9,7 @@ pub struct Migration0016MergeProviders;
 #[async_trait]
 impl Migration for Migration0016MergeProviders {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some(Migration0015LogQuota.version())
+        Some("0015_log_quota".into())
     }
 
     fn version(&self) -> DatabaseVersion {
