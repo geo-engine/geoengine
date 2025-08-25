@@ -278,4 +278,64 @@ mod tests {
             assert!(partition.intersects(&tile.spatial_partition()));
         }
     }
+
+    #[test]
+    fn num_tiles_intersecting_insid_esingle() {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: [512, 512].into(),
+            geo_transform: GeoTransform::new((0., 0.).into(), 10.0, -10.0),
+        };
+
+        let partition = SpatialPartition2D::new(
+            Coordinate2D {
+                x: 0. + 70., // add / remove 7 pixels to not be at a tile border
+                y: 5120. - 70.,
+            },
+            Coordinate2D {
+                x: 5120. - 70.,
+                y: 0. + 70.,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(strat.num_tiles_intersecting(partition), 1 * 1);
+    }
+
+    #[test]
+    fn num_tiles_intersecting_border() {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: [512, 512].into(),
+            geo_transform: GeoTransform::new((0., 0.).into(), 10.0, -10.0),
+        };
+
+        let partition = SpatialPartition2D::new(
+            Coordinate2D { x: 0., y: 51200. },
+            Coordinate2D { x: 51200., y: 0. },
+        )
+        .unwrap();
+
+        assert_eq!(strat.num_tiles_intersecting(partition), 10 * 10);
+    }
+
+    #[test]
+    fn num_tiles_intersecting_inside() {
+        let strat = TilingStrategy {
+            tile_size_in_pixels: [512, 512].into(),
+            geo_transform: GeoTransform::new((0., 0.).into(), 10.0, -10.0),
+        };
+
+        let partition = SpatialPartition2D::new(
+            Coordinate2D {
+                x: 0. + 70., // add / remove 7 pixels to not be at a tile border
+                y: 51200. - 70.,
+            },
+            Coordinate2D {
+                x: 51200. - 70.,
+                y: 0. + 70.,
+            },
+        )
+        .unwrap();
+
+        assert_eq!(strat.num_tiles_intersecting(partition), 10 * 10);
+    }
 }
