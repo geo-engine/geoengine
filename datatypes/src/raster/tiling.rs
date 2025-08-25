@@ -298,7 +298,7 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(strat.num_tiles_intersecting(partition), 1 * 1);
+        assert_eq!(strat.num_tiles_intersecting(partition), 1);
     }
 
     #[test]
