@@ -26,6 +26,7 @@ impl Migration for Migration0016MergeProviders {
 #[cfg(test)]
 mod tests {
     use crate::contexts::migrations::all_migrations;
+    use crate::contexts::migrations::database_migration::tests::create_migration_0015_snapshot;
     use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{config::get_config_element, contexts::migrate_database};
     use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
@@ -42,9 +43,7 @@ mod tests {
         let mut conn = pool.get().await.unwrap();
 
         // initial schema
-        migrate_database(&mut conn, &all_migrations()[0..1])
-            .await
-            .unwrap();
+        create_migration_0015_snapshot(&mut conn).await.unwrap();
 
         // insert test data on initial schema
         assert_eq!(
@@ -55,7 +54,7 @@ mod tests {
         );
 
         // perform this migration
-        migrate_database(&mut conn, &all_migrations()[1..=1])
+        migrate_database(&mut conn, &all_migrations()[..=0])
             .await
             .unwrap();
 
