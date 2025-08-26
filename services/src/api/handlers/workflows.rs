@@ -1548,6 +1548,7 @@ mod tests {
             None,
             Box::pin(futures::future::pending()),
             exe_ctx.tiling_specification(),
+            (),
         )
         .await
         .unwrap();
