@@ -26,6 +26,9 @@ pub trait AxisAlignedRectangle: Copy {
 
     fn intersection(&self, other: &Self) -> Option<Self>;
 
+    #[must_use]
+    fn union(&self, other: &Self) -> Self;
+
     /// create a `BoundingBox2D` with `self.lower_left()` and `self.upper_right()`
     fn as_bbox(&self) -> BoundingBox2D;
 }
@@ -167,6 +170,28 @@ impl SpatialPartition2D {
         }
     }
 
+    #[must_use]
+    pub fn union(&self, other: &Self) -> Self {
+        Self {
+            upper_left_coordinate: Coordinate2D::new(
+                self.upper_left_coordinate
+                    .x
+                    .min(other.upper_left_coordinate.x),
+                self.upper_left_coordinate
+                    .y
+                    .max(other.upper_left_coordinate.y),
+            ),
+            lower_right_coordinate: Coordinate2D::new(
+                self.lower_right_coordinate
+                    .x
+                    .max(other.lower_right_coordinate.x),
+                self.lower_right_coordinate
+                    .y
+                    .min(other.lower_right_coordinate.y),
+            ),
+        }
+    }
+
     /// Return true if the partition contains the `other`.
     /// A partition contains another partition if it contains all of its points
     /// OR the other partition is equal to it.
@@ -283,6 +308,10 @@ impl AxisAlignedRectangle for SpatialPartition2D {
 
     fn intersection(&self, other: &Self) -> Option<Self> {
         self.intersection(other)
+    }
+
+    fn union(&self, other: &Self) -> Self {
+        self.union(other)
     }
 
     fn as_bbox(&self) -> BoundingBox2D {
