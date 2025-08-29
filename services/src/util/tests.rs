@@ -1376,3 +1376,11 @@ pub(crate) mod mock_oidc {
         )
     }
 }
+
+#[cfg(test)]
+pub fn json_file_responder(path: &Path) -> impl httptest::responders::Responder + use<> {
+    let json = std::fs::read_to_string(path).unwrap();
+    httptest::responders::status_code(200)
+        .append_header("Content-Type", "application/json")
+        .body(json)
+}

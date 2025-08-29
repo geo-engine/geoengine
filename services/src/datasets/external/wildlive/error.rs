@@ -48,4 +48,9 @@ pub enum WildliveError {
     },
 
     UnableToLookupStation,
+
+    #[snafu(display("Invalid authentication key"))]
+    AuthKeyInvalid {
+        source: Box<dyn ErrorSource>,
+    },
 }

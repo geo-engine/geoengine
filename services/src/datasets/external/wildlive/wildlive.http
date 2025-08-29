@@ -129,3 +129,49 @@ Content-Type: application/json
     "page_num": 0,
     "page_size": 10000
 }
+
+###
+
+# @name openid_login
+POST https://webapp.senckenberg.de/auth/realms/wildlive-portal/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password
+&client_id=geoengine
+&username={{$dotenv WILDLIVE_USERNAME}}
+&password={{$dotenv WILDLIVE_PASSWORD}}
+&client_secret={{$dotenv WILDLIVE_CLIENT_SECRET}}
+
+###
+
+# @name openid_refresh
+POST https://webapp.senckenberg.de/auth/realms/wildlive-portal/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&client_id=geoengine
+&refresh_token={{openid_login.response.body.$.refresh_token}}
+&client_secret={{$dotenv WILDLIVE_CLIENT_SECRET}}
+
+###
+
+# @name openid_login
+POST https://webapp.senckenberg.de/auth/realms/wildlive-portal/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=password
+&client_id=wildlive-frontend
+&username={{$dotenv WILDLIVE_USERNAME}}
+&password={{$dotenv WILDLIVE_PASSWORD}}
+
+###
+
+# @name openid_refresh
+POST https://webapp.senckenberg.de/auth/realms/wildlive-portal/protocol/openid-connect/token
+Content-Type: application/x-www-form-urlencoded
+
+grant_type=refresh_token
+&client_id=wildlive-frontend
+&refresh_token={{openid_login.response.body.$.refresh_token}}
+
+###
