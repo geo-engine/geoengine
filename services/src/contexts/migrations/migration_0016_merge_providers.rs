@@ -1,7 +1,4 @@
-use super::{
-    Migration0015LogQuota,
-    database_migration::{DatabaseVersion, Migration},
-};
+use super::database_migration::{DatabaseVersion, Migration};
 use crate::error::Result;
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
@@ -12,7 +9,7 @@ pub struct Migration0016MergeProviders;
 #[async_trait]
 impl Migration for Migration0016MergeProviders {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some(Migration0015LogQuota.version())
+        Some("0015_log_quota".into())
     }
 
     fn version(&self) -> DatabaseVersion {
@@ -29,6 +26,7 @@ impl Migration for Migration0016MergeProviders {
 #[cfg(test)]
 mod tests {
     use crate::contexts::migrations::all_migrations;
+    use crate::contexts::migrations::database_migration::tests::create_migration_0015_snapshot;
     use crate::util::postgres::DatabaseConnectionConfig;
     use crate::{config::get_config_element, contexts::migrate_database};
     use bb8_postgres::{PostgresConnectionManager, bb8::Pool};
@@ -45,9 +43,7 @@ mod tests {
         let mut conn = pool.get().await.unwrap();
 
         // initial schema
-        migrate_database(&mut conn, &all_migrations()[0..1])
-            .await
-            .unwrap();
+        create_migration_0015_snapshot(&mut conn).await.unwrap();
 
         // insert test data on initial schema
         assert_eq!(
@@ -58,7 +54,7 @@ mod tests {
         );
 
         // perform this migration
-        migrate_database(&mut conn, &all_migrations()[1..=1])
+        migrate_database(&mut conn, &all_migrations()[..=0])
             .await
             .unwrap();
 
