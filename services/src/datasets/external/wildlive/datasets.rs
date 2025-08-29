@@ -584,10 +584,10 @@ pub(super) async fn captures_dataset(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::tests::json_file_responder;
     use geoengine_datatypes::test_data;
-    use httptest::{Expectation, all_of, matchers, matchers::request, responders};
+    use httptest::{Expectation, all_of, matchers, matchers::request};
     use pretty_assertions::assert_eq;
-    use std::path::Path;
 
     #[tokio::test]
     async fn it_downloads_a_projects_dataset() {
@@ -602,7 +602,7 @@ mod tests {
                     "type:project"
                 )))),
             ])
-            .respond_with(json_responder(test_data!(
+            .respond_with(json_file_responder(test_data!(
                 "wildlive/responses/projects.json"
             ))),
         );
@@ -628,7 +628,7 @@ mod tests {
                 }))
             ),
             ])
-            .respond_with(json_responder(test_data!(
+            .respond_with(json_file_responder(test_data!(
                 "wildlive/responses/station_coordinates.json"
             ))),
         );
@@ -655,13 +655,6 @@ mod tests {
         );
     }
 
-    fn json_responder(path: &Path) -> impl httptest::responders::Responder + use<> {
-        let json = std::fs::read_to_string(path).unwrap();
-        responders::status_code(200)
-            .append_header("Content-Type", "application/json")
-            .body(json)
-    }
-
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_downloads_a_project_stations_dataset() {
@@ -672,7 +665,7 @@ mod tests {
                 request::method("GET"),
                 request::path("/api/objects/wildlive/ef7833589d61b2d2a905"),
             ])
-            .respond_with(json_responder(test_data!(
+            .respond_with(json_file_responder(test_data!(
                 "wildlive/responses/project.json"
             ))),
         );
@@ -701,7 +694,7 @@ mod tests {
                 }))
             ),
             ])
-            .respond_with(json_responder(test_data!(
+            .respond_with(json_file_responder(test_data!(
                 "wildlive/responses/station_setups.json"
             ))),
         );
@@ -901,7 +894,7 @@ mod tests {
                 request::method("GET"),
                 request::path("/api/objects/wildlive/ef7833589d61b2d2a905"),
             ])
-            .respond_with(json_responder(test_data!(
+            .respond_with(json_file_responder(test_data!(
                 "wildlive/responses/project.json"
             ))),
         );
@@ -930,7 +923,7 @@ mod tests {
                 }))
             ),
             ])
-            .respond_with(json_responder(test_data!(
+            .respond_with(json_file_responder(test_data!(
                 "wildlive/responses/station_setups.json"
             ))),
         );
@@ -957,7 +950,7 @@ mod tests {
                     page_size: PAGE_SIZE,
                 }))),
             ])
-            .respond_with(json_responder(test_data!(
+            .respond_with(json_file_responder(test_data!(
                 "wildlive/responses/image_objects.json"
             ))),
         );
@@ -982,7 +975,7 @@ mod tests {
                     page_size: PAGE_SIZE,
                 }))),
             ])
-            .respond_with(json_responder(test_data!(
+            .respond_with(json_file_responder(test_data!(
                 "wildlive/responses/annotations.json"
             ))),
         );

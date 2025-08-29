@@ -51,6 +51,7 @@ use crate::layers::external::TypedDataProviderDefinition;
 pub use cache::WildliveDbCache;
 pub use error::WildliveError;
 
+mod auth;
 mod cache;
 mod datasets;
 mod error;
@@ -63,6 +64,7 @@ pub struct WildliveDataConnectorDefinition {
     pub id: DataProviderId,
     pub name: String,
     pub description: String,
+    /// An OpenID Connect refresh token for the WildLIVE! Portal API
     pub api_key: Option<String>,
     pub priority: Option<i16>,
 }
@@ -72,12 +74,8 @@ pub struct WildliveDataConnector<D: GeoEngineDb> {
     id: DataProviderId,
     api_endpoint: Url,
     user: Option<UserId>,
-    /// API key for bearer authentication
-    ///
-    /// ## TODO
-    /// - mechanism for key renewal
-    /// - use new type for secrets <https://github.com/geo-engine/geoengine/pull/1050>
-    api_key: Option<String>,
+    /// An OpenID Connect refresh token for the WildLIVE! Portal API
+    refresh_token: Option<String>,
     name: String,
     description: String,
     db: Arc<D>,
@@ -110,12 +108,14 @@ enum WildliveLayerId {
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for WildliveDataConnectorDefinition {
     async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
+
+
         Ok(Box::new(WildliveDataConnector {
             id: self.id,
             user: None, // TODO: set user
             api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/")
                 .map_err(|source| WildliveError::InvalidUrl { source })?,
-            api_key: self.api_key,
+            refresh_token: self.api_key,
             name: self.name,
             description: self.description,
             db: Arc::new(db),
@@ -171,6 +171,32 @@ impl<D: GeoEngineDb> DataProvider for WildliveDataConnector<D> {
     }
 }
 
+impl<D: GeoEngineDb> WildliveDataConnector<D> {
+    async fn update_and_get_token_for_request(
+        &self,
+        refresh_token: Option<&str>,
+    ) -> Result<Option<String>> {
+        let Some(refresh_token) = refresh_token else {
+            return Ok(None);
+        };
+
+        let tokens = auth::retrieve_access_and_refresh_token(
+            self.api_endpoint.as_str(),
+            refresh_token.to_string(),
+        ).await?;
+
+        self.db.update_layer_provider_definition(self.id, WildliveDataConnectorDefinition {
+            id: self.id,
+            name: self.name.clone(),
+            description: self.description.clone(),
+            api_key: Some(tokens.refresh_token.clone()),
+            priority: None,
+        }.into()).await.boxed_context(error::UnexpectedExecution)?;
+
+        Ok(Some(tokens.access_token))
+    }
+}
+
 #[async_trait]
 impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
     fn capabilities(&self) -> ProviderCapabilities {
@@ -204,7 +230,7 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 })];
 
                 let projects =
-                    datasets::projects(&self.api_endpoint, self.api_key.as_deref()).await?;
+                    datasets::projects(&self.api_endpoint, self.refresh_token.as_deref()).await?;
 
                 for project in projects {
                     items.push(CollectionItem::Collection(LayerCollectionListing {
@@ -372,7 +398,7 @@ impl<D: GeoEngineDb>
         meta_data(
             self.id,
             &self.api_endpoint,
-            self.api_key.as_deref(),
+            self.refresh_token.as_deref(),
             self.db.clone(),
             layer_id,
         )
@@ -447,7 +473,7 @@ impl<D: GeoEngineDb> WildliveDataConnector<D> {
 async fn meta_data<D: GeoEngineDb>(
     provider_id: DataProviderId,
     api_endpoint: &Url,
-    api_key: Option<&str>,
+    refresh_token: Option<&str>,
     db: Arc<D>,
     layer_id: WildliveLayerId,
 ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>> {
@@ -463,7 +489,7 @@ async fn meta_data<D: GeoEngineDb>(
             project_metadata(
                 provider_id,
                 api_endpoint,
-                api_key,
+                refresh_token,
                 db,
                 db_config,
                 layer_name,
@@ -474,7 +500,7 @@ async fn meta_data<D: GeoEngineDb>(
             stations_metadata(
                 provider_id,
                 api_endpoint,
-                api_key,
+                refresh_token,
                 db,
                 db_config,
                 layer_name,
@@ -486,7 +512,7 @@ async fn meta_data<D: GeoEngineDb>(
             captures_metadata(
                 provider_id,
                 api_endpoint,
-                api_key,
+                refresh_token,
                 db,
                 db_config,
                 layer_name,
@@ -500,13 +526,26 @@ async fn meta_data<D: GeoEngineDb>(
 async fn project_metadata<D: GeoEngineDb>(
     provider_id: DataProviderId,
     api_endpoint: &Url,
-    api_key: Option<&str>,
+    refresh_token: Option<&str>,
     db: Arc<D>,
     db_config: DatabaseConnectionConfig,
     layer_name: String,
 ) -> Result<Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>> {
     if !db.has_projects(provider_id).await? {
-        let dataset = projects_dataset(api_endpoint, api_key).await?;
+        // let api_token = if let Some(refresh_token) = refresh_token {
+        //     Some(
+        //         auth::retrieve_access_and_refresh_token(
+        //             api_endpoint.as_str(),
+        //             refresh_token.to_string(),
+        //         )
+        //         .await?
+        //         .access_token,
+        //     )
+        // } else {
+        //     None
+        // };
+        let api_tokn = refresh_token.and_then(f)
+        let dataset = projects_dataset(api_endpoint, refresh_token).await?;
         db.insert_projects(provider_id, &dataset).await?;
     }
 
@@ -949,7 +988,7 @@ mod tests {
             name: "WildLIVE! Portal Connector".to_string(),
             description: "WildLIVE! Portal Connector".to_string(),
             user: None,
-            api_key: None,
+            refresh_token: None,
             db: Arc::new(ctx.db()),
         };
 
@@ -1203,7 +1242,7 @@ mod tests {
             name: "WildLIVE! Portal Connector".to_string(),
             description: "WildLIVE! Portal Connector".to_string(),
             user: None,
-            api_key: None,
+            refresh_token: None,
             db: Arc::new(ctx.db()),
         };
 
