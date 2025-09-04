@@ -4,18 +4,20 @@ use std::task::{Context, Poll};
 
 use crate::adapters::RasterStreamExt;
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    ResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{FutureExt, Stream};
-use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
-    GridIdx2D, GridIndexAccess, MapElements, MapIndexedElements, RasterDataType, RasterTile2D,
+    GridBoundingBox2D, GridIdx2D, GridIndexAccess, MapElements, MapIndexedElements, RasterDataType,
+    RasterTile2D,
 };
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
@@ -189,14 +191,14 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
 }
 
 pub(crate) struct BandNeighborhoodAggregateProcessor {
-    source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
+    source: BoxRasterQueryProcessor<f64>,
     result_descriptor: RasterResultDescriptor,
     aggregate: NeighborhoodAggregate,
 }
 
 impl BandNeighborhoodAggregateProcessor {
     pub fn new(
-        source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
+        source: BoxRasterQueryProcessor<f64>,
         result_descriptor: RasterResultDescriptor,
         aggregate: NeighborhoodAggregate,
     ) -> Self {
@@ -209,10 +211,13 @@ impl BandNeighborhoodAggregateProcessor {
 }
 
 #[async_trait]
-impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
-    type RasterType = f64;
+impl QueryProcessor for BandNeighborhoodAggregateProcessor {
+    type Output = RasterTile2D<f64>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
 
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -267,9 +272,14 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
         }
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
     }
+}
+
+#[async_trait]
+impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
+    type RasterType = f64;
 }
 
 #[pin_project(project = BandNeighborhoodAggregateStreamProjection)]

@@ -761,6 +761,13 @@ where
     }
 }
 
+impl<T> RasterQueryProcessor for GdalSourceProcessor<T>
+where
+    T: Pixel + gdal::raster::GdalType + FromPrimitive,
+{
+    type RasterType = T;
+}
+
 pub type GdalSource = SourceOperator<GdalSourceParameters>;
 
 impl OperatorName for GdalSource {

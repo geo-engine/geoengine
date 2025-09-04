@@ -180,7 +180,7 @@ where
     #[allow(clippy::too_many_arguments)]
     async fn process_typed_collection_chunk<'a, P: Pixel>(
         collection: FeatureCollection<G>,
-        raster_processor: &'a dyn RasterQueryProcessor<RasterType = P>,
+        raster_processor: &'a dyn RasterQueryProcessor<RasterType = P, Output = RasterTile2D<P>>,
         column_names: &'a [String],
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,

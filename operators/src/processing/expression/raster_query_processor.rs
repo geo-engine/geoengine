@@ -1,6 +1,9 @@
 use super::RasterExpressionError;
 use crate::{
-    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
+    engine::{
+        BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterQueryProcessor,
+        RasterResultDescriptor,
+    },
     util::Result,
 };
 use async_trait::async_trait;
@@ -114,6 +117,14 @@ where
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
+}
+
+impl<TO, Tuple> RasterQueryProcessor for ExpressionQueryProcessor<TO, Tuple>
+where
+    TO: Pixel,
+    Tuple: ExpressionTupleProcessor<TO>,
+{
+    type RasterType = TO;
 }
 
 #[async_trait]

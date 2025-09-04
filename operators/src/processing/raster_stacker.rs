@@ -1,9 +1,9 @@
 use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, MultipleRasterSources, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
@@ -12,7 +12,9 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, time_interval_extent};
-use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D, RenameBands};
+use geoengine_datatypes::raster::{
+    DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands,
+};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -264,14 +266,14 @@ impl InitializedRasterOperator for InitializedRasterStacker {
 }
 
 pub(crate) struct RasterStackerProcessor<T> {
-    sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
+    sources: Vec<BoxRasterQueryProcessor<T>>,
     result_descriptor: RasterResultDescriptor,
     bands_per_source: Vec<u32>,
 }
 
 impl<T> RasterStackerProcessor<T> {
     pub fn new(
-        sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
+        sources: Vec<BoxRasterQueryProcessor<T>>,
         result_descriptor: RasterResultDescriptor,
         bands_per_source: Vec<u32>,
     ) -> Self {
@@ -308,12 +310,16 @@ fn map_query_bands_to_source_bands(
 }
 
 #[async_trait]
-impl<T> RasterQueryProcessor for RasterStackerProcessor<T>
+impl<T> QueryProcessor for RasterStackerProcessor<T>
 where
     T: Pixel,
 {
-    type RasterType = T;
-    async fn raster_query<'a>(
+    type Output = RasterTile2D<T>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
+
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -338,9 +344,17 @@ where
         Ok(Box::pin(output))
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
     }
+}
+
+#[async_trait]
+impl<T> RasterQueryProcessor for RasterStackerProcessor<T>
+where
+    T: Pixel,
+{
+    type RasterType = T;
 }
 
 #[cfg(test)]

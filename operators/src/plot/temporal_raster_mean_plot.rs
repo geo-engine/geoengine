@@ -1,7 +1,7 @@
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedSources, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor, SingleRasterSource,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedPlotOperator,
+    InitializedRasterOperator, InitializedSources, Operator, OperatorName, PlotOperator,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterSource,
     TypedPlotQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
@@ -126,7 +126,7 @@ impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
 
 /// A query processor that calculates the `TemporalRasterMeanPlot` about its input.
 pub struct MeanRasterPixelValuesOverTimeQueryProcessor<P: Pixel> {
-    raster: Box<dyn RasterQueryProcessor<RasterType = P>>,
+    raster: BoxRasterQueryProcessor<P>,
     time_position: MeanRasterPixelValuesOverTimePosition,
     measurement: Measurement,
     draw_area: bool,

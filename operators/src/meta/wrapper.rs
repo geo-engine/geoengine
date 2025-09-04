@@ -1,7 +1,7 @@
 use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
     WorkflowOperatorPath,
 };
@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle};
+use geoengine_datatypes::raster::RasterTile2D;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{Level, span};
 
@@ -325,4 +326,11 @@ where
     fn result_descriptor(&self) -> &Self::ResultDescription {
         self.processor.result_descriptor()
     }
+}
+
+impl<Q> RasterQueryProcessor for QueryProcessorWrapper<Q, RasterTile2D<Q::RasterType>>
+where
+    Q: RasterQueryProcessor + QueryProcessor<Output = RasterTile2D<Q::RasterType>>,
+{
+    type RasterType = Q::RasterType;
 }

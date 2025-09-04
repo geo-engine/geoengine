@@ -1,7 +1,8 @@
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -126,7 +127,7 @@ where
         }
     }
 
-    pub fn create_boxed(source: Q) -> Box<dyn RasterQueryProcessor<RasterType = POut>> {
+    pub fn create_boxed(source: Q) -> BoxRasterQueryProcessor<POut> {
         RasterTypeConversionQueryProcessor::new(source).boxed()
     }
 }
@@ -158,6 +159,16 @@ where
     fn result_descriptor(&self) -> &Self::ResultDescription {
         self.query_processor.raster_result_descriptor()
     }
+}
+
+impl<Q, PIn, POut> RasterQueryProcessor for RasterTypeConversionQueryProcessor<Q, PIn, POut>
+where
+    Q: RasterQueryProcessor<RasterType = PIn>,
+    RasterTile2D<PIn>: ConvertDataType<RasterTile2D<POut>>,
+    POut: Pixel,
+    PIn: Pixel,
+{
+    type RasterType = POut;
 }
 
 #[cfg(test)]

@@ -2,9 +2,9 @@ use std::sync::Arc;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    OperatorName, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
 use crate::util::Result;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
@@ -13,7 +13,6 @@ use num_traits::AsPrimitive;
 use rayon::ThreadPool;
 
 use crate::error::Error;
-use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement,
@@ -296,23 +295,18 @@ fn calculate_esd(timestamp: &DateTime) -> f64 {
 #[async_trait]
 impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<PixelOut>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = GridBoundingBox2D;
-    type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
 
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
@@ -321,6 +315,14 @@ where
     fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
     }
+}
+
+#[async_trait]
+impl<Q> RasterQueryProcessor for ReflectanceProcessor<Q>
+where
+    Q: RasterQueryProcessor<RasterType = PixelOut>,
+{
+    type RasterType = PixelOut;
 }
 
 #[cfg(test)]

@@ -2,19 +2,19 @@ use crate::adapters::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
 };
 use crate::engine::{
-    CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator, OperatorData,
+    OperatorName, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
 use geoengine_datatypes::primitives::{CacheExpiration, TimeInstance};
 use geoengine_datatypes::raster::{
-    GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
-    TilingSpecification,
+    GridBoundingBox2D, GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel,
+    RasterTile2D, TilingSpecification,
 };
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
@@ -99,17 +99,20 @@ where
 }
 
 #[async_trait]
-impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
+impl<T> QueryProcessor for MockRasterSourceProcessor<T>
 where
     T: Pixel,
 {
-    type RasterType = T;
-    async fn raster_query<'a>(
+    type Output = RasterTile2D<T>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
+
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<crate::util::Result<RasterTile2D<Self::RasterType>>>>
-    {
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
         let mut known_time_start: Option<TimeInstance> = None;
         let mut known_time_end: Option<TimeInstance> = None;
         let qt = query.time_interval();
@@ -179,9 +182,17 @@ where
         .boxed())
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
     }
+}
+
+#[async_trait]
+impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
+where
+    T: Pixel,
+{
+    type RasterType = T;
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -301,7 +312,7 @@ pub struct InitializedMockRasterSource<T: Pixel> {
 
 impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T>
 where
-    TypedRasterQueryProcessor: From<std::boxed::Box<dyn RasterQueryProcessor<RasterType = T>>>,
+    TypedRasterQueryProcessor: From<BoxRasterQueryProcessor<T>>,
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
