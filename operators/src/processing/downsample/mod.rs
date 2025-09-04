@@ -235,14 +235,18 @@ where
 }
 
 #[async_trait]
+impl<Q, P> RasterQueryProcessor for DownsampleProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+{
+    type RasterType = P;
+}
+
+#[async_trait]
 impl<Q, P> QueryProcessor for DownsampleProcessor<Q, P>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;

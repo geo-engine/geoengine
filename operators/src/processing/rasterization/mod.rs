@@ -14,14 +14,14 @@ use futures::stream::BoxStream;
 use futures::{StreamExt, stream};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
-    SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, Coordinate2D, RasterQueryRectangle,
+    SpatialPartition2D, SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
-    ChangeGridBounds, GeoTransform, Grid as GridWithFlexibleBoundType, Grid2D, GridIdx,
-    GridOrEmpty, GridSize, RasterDataType, RasterTile2D, TilingSpecification, TilingStrategy,
-    UpdateIndexedElementsParallel,
+    ChangeGridBounds, GeoTransform, Grid as GridWithFlexibleBoundType, Grid2D, GridBoundingBox2D,
+    GridIdx, GridOrEmpty, GridSize, RasterDataType, RasterTile2D, TilingSpecification,
+    TilingStrategy, UpdateIndexedElementsParallel,
 };
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use num_traits::FloatConst;
@@ -253,8 +253,11 @@ pub struct GridRasterizationQueryProcessor {
 }
 
 #[async_trait]
-impl RasterQueryProcessor for GridRasterizationQueryProcessor {
-    type RasterType = f64;
+impl QueryProcessor for GridRasterizationQueryProcessor {
+    type Output = RasterTile2D<f64>;
+    type SpatialBounds = GridBoundingBox2D;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
 
     /// Performs a grid rasterization by first determining the grid resolution to use.
     /// The grid resolution is limited to the query resolution, because a finer granularity
@@ -264,11 +267,11 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     /// grid cells.
     /// Finally, the grid resolution is upsampled (if necessary) to the tile resolution.
     #[allow(clippy::too_many_lines)]
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
+    ) -> util::Result<BoxStream<'a, util::Result<Self::Output>>> {
         let spatial_grid_desc = self
             .result_descriptor
             .tiling_grid_definition(ctx.tiling_specification());
@@ -346,9 +349,13 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
         }
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
+}
+
+impl RasterQueryProcessor for GridRasterizationQueryProcessor {
+    type RasterType = f64;
 }
 
 pub struct DensityRasterizationQueryProcessor {
@@ -360,8 +367,11 @@ pub struct DensityRasterizationQueryProcessor {
 }
 
 #[async_trait]
-impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
-    type RasterType = f64;
+impl QueryProcessor for DensityRasterizationQueryProcessor {
+    type Output = RasterTile2D<f64>;
+    type SpatialBounds = GridBoundingBox2D;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
 
     /// Performs a gaussian density rasterization.
     /// For each tile, the spatial bounds are extended by `radius` in x and y direction.
@@ -369,11 +379,11 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
     /// its surrounding tile pixels (up to `radius` distance) is measured and input into the
     /// gaussian density function with the configured standard deviation. The density values
     /// for each pixel are then summed to result in the tile pixel grid.
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
+    ) -> util::Result<BoxStream<'a, util::Result<Self::Output>>> {
         let spatial_grid_desc = self
             .result_descriptor
             .tiling_grid_definition(ctx.tiling_specification());
@@ -410,10 +420,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
                 let mut chunks = points_processor.query(vector_query, ctx).await?;
 
-                let mut tile_data = Grid2D::new_filled(
-                    tiling_strategy.tile_size_in_pixels,
-                    Self::RasterType::from(0),
-                );
+                let mut tile_data = Grid2D::new_filled(tiling_strategy.tile_size_in_pixels, 0.0);
 
                 let mut cache_hint = CacheHint::max_duration();
 
@@ -471,9 +478,13 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
         }
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
+}
+
+impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
+    type RasterType = f64;
 }
 
 fn generate_zeroed_tiles<'a>(

@@ -1,7 +1,8 @@
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, Operator, OperatorName, QueryProcessor, RasterBandDescriptor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::util::Result;
 use async_trait::async_trait;
@@ -190,7 +191,7 @@ fn create_boxed_processor<Q, P, S>(
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     source: Q,
-) -> Box<dyn RasterQueryProcessor<RasterType = P>>
+) -> BoxRasterQueryProcessor<P>
 where
     Q: RasterQueryProcessor<RasterType = P> + 'static,
     P: Pixel + FromPrimitive + 'static + Default,
@@ -250,6 +251,33 @@ where
 }
 
 #[async_trait]
+impl<Q, P, S> QueryProcessor for RasterTransformationProcessor<Q, P, S>
+where
+    P: Pixel + FromPrimitive + 'static + Default,
+    f64: AsPrimitive<P>,
+    Q: RasterQueryProcessor<RasterType = P> + 'static,
+    S: Send + Sync + 'static + ScalingTransformation<P>,
+{
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = Q::SpatialBounds;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = Q::Selection;
+
+    async fn _query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
+        let src = self.source.raster_query(query, ctx).await?;
+        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
+        Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+}
+
 impl<Q, P, S> RasterQueryProcessor for RasterTransformationProcessor<Q, P, S>
 where
     P: Pixel + FromPrimitive + 'static + Default,
@@ -258,25 +286,6 @@ where
     S: Send + Sync + 'static + ScalingTransformation<P>,
 {
     type RasterType = P;
-
-    async fn raster_query<'a>(
-        &'a self,
-        query: geoengine_datatypes::primitives::RasterQueryRectangle,
-        ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<
-        futures::stream::BoxStream<
-            'a,
-            Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>,
-        >,
-    > {
-        let src = self.source.raster_query(query, ctx).await?;
-        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
-        Ok(rs.boxed())
-    }
-
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
-    }
 }
 
 #[cfg(test)]

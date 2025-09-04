@@ -2,15 +2,15 @@ use crate::adapters::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
 };
 use crate::engine::{
-    QueryContext, RasterQueryProcessor, RasterResultDescriptor, VectorQueryProcessor,
-    VectorResultDescriptor,
+    QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor,
+    VectorQueryProcessor, VectorResultDescriptor,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
-use geoengine_datatypes::raster::{RasterTile2D, TilingSpecification};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, VectorQueryRectangle};
+use geoengine_datatypes::raster::{GridBoundingBox2D, RasterTile2D, TilingSpecification};
 
 /// This `QueryProcessor` allows to rewrite a query. It does not change the data. Results of the children are forwarded.
 pub(crate) struct MapQueryProcessor<S, Q, A, R> {
@@ -32,14 +32,17 @@ impl<S, Q, A, R> MapQueryProcessor<S, Q, A, R> {
 }
 
 #[async_trait]
-impl<S, Q> RasterQueryProcessor
-    for MapQueryProcessor<S, Q, TilingSpecification, RasterResultDescriptor>
+impl<S, Q> QueryProcessor for MapQueryProcessor<S, Q, TilingSpecification, RasterResultDescriptor>
 where
     S: RasterQueryProcessor,
     Q: Fn(RasterQueryRectangle) -> Result<Option<RasterQueryRectangle>> + Sync + Send,
 {
-    type RasterType = S::RasterType;
-    async fn raster_query<'a>(
+    type Output = S::Output;
+    type SpatialBounds = GridBoundingBox2D;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -71,9 +74,18 @@ where
         }
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
+}
+
+impl<S, Q> RasterQueryProcessor
+    for MapQueryProcessor<S, Q, TilingSpecification, RasterResultDescriptor>
+where
+    S: RasterQueryProcessor,
+    Q: Fn(RasterQueryRectangle) -> Result<Option<RasterQueryRectangle>> + Sync + Send,
+{
+    type RasterType = S::RasterType;
 }
 
 #[async_trait]

@@ -1,9 +1,9 @@
 use crate::{
     engine::{
-        CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        Operator, OperatorName, QueryContext, RasterBandDescriptor, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-        TypedRasterQueryProcessor, WorkflowOperatorPath,
+        BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+        InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor,
+        RasterBandDescriptor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     error,
     machine_learning::{
@@ -19,12 +19,12 @@ use async_trait::async_trait;
 use float_cmp::approx_eq;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::machine_learning::MlModelName;
-use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
+use geoengine_datatypes::primitives::{BandSelection, Measurement, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
     EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
     MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
 };
+use geoengine_datatypes::{machine_learning::MlModelName, raster::GridBoundingBox2D};
 use ndarray::{Array2, Array4};
 use ort::{
     tensor::{IntoTensorElementType, PrimitiveTensorElementType},
@@ -167,7 +167,7 @@ impl InitializedRasterOperator for InitializedOnnx {
 }
 
 pub(crate) struct OnnxProcessor<TIn, TOut> {
-    source: Box<dyn RasterQueryProcessor<RasterType = TIn>>, // as most ml algorithms work on f32 we use this as input type
+    source: BoxRasterQueryProcessor<TIn>, // as most ml algorithms work on f32 we use this as input type
     result_descriptor: RasterResultDescriptor,
     model_loading_info: MlModelLoadingInfo,
     phantom: std::marker::PhantomData<TOut>,
@@ -176,7 +176,7 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
     pub fn new(
-        source: Box<dyn RasterQueryProcessor<RasterType = TIn>>,
+        source: BoxRasterQueryProcessor<TIn>,
         result_descriptor: RasterResultDescriptor,
         model_loading_info: MlModelLoadingInfo,
         tile_shape: GridShape2D,
@@ -192,15 +192,18 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
 }
 
 #[async_trait]
-impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
+impl<TIn, TOut> QueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValueIn + IntoTensorElementType + PrimitiveTensorElementType,
     TOut: Pixel + NoDataValueOut + IntoTensorElementType + PrimitiveTensorElementType,
 {
-    type RasterType = TOut;
+    type Output = RasterTile2D<TOut>;
+    type SpatialBounds = GridBoundingBox2D;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     #[allow(clippy::too_many_lines)]
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -396,9 +399,18 @@ where
         Ok(stream.boxed())
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
     }
+}
+
+#[async_trait]
+impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
+where
+    TIn: Pixel + NoDataValueIn + IntoTensorElementType + PrimitiveTensorElementType,
+    TOut: Pixel + NoDataValueOut + IntoTensorElementType + PrimitiveTensorElementType,
+{
+    type RasterType = TOut;
 }
 
 // Trait to handle mapping masked pixels to model inputs for all datatypes.

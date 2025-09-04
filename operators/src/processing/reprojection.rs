@@ -589,12 +589,7 @@ where
 
 impl<Q, P> RasterReprojectionProcessor<Q, P>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
     pub fn new(
@@ -618,12 +613,7 @@ where
 #[async_trait]
 impl<Q, P> QueryProcessor for RasterReprojectionProcessor<Q, P>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
@@ -667,6 +657,14 @@ where
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
+}
+
+impl<Q, P> RasterQueryProcessor for RasterReprojectionProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
+    P: Pixel,
+{
+    type RasterType = P;
 }
 
 #[cfg(test)]

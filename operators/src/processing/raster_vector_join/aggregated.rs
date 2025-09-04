@@ -16,6 +16,7 @@ use crate::{
 };
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt, stream::BoxStream};
+use geoengine_datatypes::raster::RasterTile2D;
 use geoengine_datatypes::{
     collections::{FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications},
     primitives::{
@@ -65,7 +66,7 @@ where
     #[allow(clippy::too_many_arguments, clippy::too_many_lines)] // TODO: refactor to reduce arguments
     async fn extract_raster_values<P: Pixel>(
         collection: &FeatureCollection<G>,
-        raster_processor: &dyn RasterQueryProcessor<RasterType = P>,
+        raster_processor: &dyn RasterQueryProcessor<RasterType = P, Output = RasterTile2D<P>>,
         column_names: &[String],
         feature_aggreation: FeatureAggregationMethod,
         feature_aggregation_ignore_no_data: bool,

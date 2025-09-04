@@ -29,8 +29,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        ChunkByteSize, ExecutionContext, InitializedRasterOperator, MockQueryContext, QueryContext,
-        QueryProcessor, RasterOperator, RasterQueryProcessor, SingleRasterSource,
+        BoxRasterQueryProcessor, ChunkByteSize, ExecutionContext, InitializedRasterOperator,
+        MockQueryContext, QueryContext, QueryProcessor, RasterOperator, SingleRasterSource,
         SingleVectorMultipleRasterSources, StatisticsWrappingMockExecutionContext,
         TypedRasterQueryProcessor, VectorOperator, VectorQueryProcessor, WorkflowOperatorPath,
     },
@@ -325,7 +325,7 @@ fn run_benchmark(
 fn collect_raster_query<P: Pixel>(
     runtime: &tokio::runtime::Runtime,
     query_ctx: &dyn QueryContext,
-    processor: &Box<dyn RasterQueryProcessor<RasterType = P>>,
+    processor: &BoxRasterQueryProcessor<P>,
     query_rectangle: RasterQueryRectangle,
 ) {
     let stream =

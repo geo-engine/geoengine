@@ -250,12 +250,7 @@ where
 #[async_trait]
 impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
     P: Pixel,
     f64: AsPrimitive<P>,
     A: AggregateFunction + 'static,
@@ -297,6 +292,17 @@ where
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         self.source.result_descriptor()
     }
+}
+
+#[async_trait]
+impl<Q, P, A> RasterQueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
+where
+    P: Pixel,
+    f64: AsPrimitive<P>,
+    A: AggregateFunction + 'static,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
+{
+    type RasterType = P;
 }
 
 #[cfg(test)]

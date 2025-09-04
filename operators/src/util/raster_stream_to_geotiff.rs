@@ -1,4 +1,4 @@
-use crate::engine::QueryProcessor;
+use crate::engine::{BoxRasterQueryProcessor, QueryProcessor};
 use crate::error;
 use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
@@ -35,7 +35,7 @@ use super::{abortable_query_execution, spawn_blocking};
 ///       time series
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     mut query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -213,7 +213,7 @@ where
 }
 
 async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: geoengine_datatypes::primitives::RasterQueryRectangle,
     query_ctx: C,
     tile_limit: Option<usize>,
@@ -240,7 +240,7 @@ where
 
 #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
 pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -276,7 +276,7 @@ where
 
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -313,7 +313,7 @@ where
 #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
 pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
     file_path: &Path,
-    processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
+    processor: BoxRasterQueryProcessor<P>,
     query_rect: RasterQueryRectangle,
     mut query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,

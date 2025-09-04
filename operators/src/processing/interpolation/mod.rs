@@ -251,12 +251,7 @@ where
 #[async_trait]
 impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
     P: Pixel,
     I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
@@ -317,6 +312,15 @@ where
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.out_result_descriptor
     }
+}
+
+impl<Q, P, I> RasterQueryProcessor for InterploationProcessor<Q, P, I>
+where
+    P: Pixel,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
+    I: InterpolationAlgorithm<GridBoundingBox2D, P>,
+{
+    type RasterType = P;
 }
 
 #[derive(Debug, Clone)]

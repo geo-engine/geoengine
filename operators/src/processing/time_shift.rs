@@ -1,7 +1,7 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, QueryContext, RasterOperator, RasterQueryProcessor,
+    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
@@ -492,19 +492,22 @@ where
 }
 
 #[async_trait]
-impl<Q, P, Shift> RasterQueryProcessor for RasterTimeShiftProcessor<Q, P, Shift>
+impl<Q, P, Shift> QueryProcessor for RasterTimeShiftProcessor<Q, P, Shift>
 where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
     Shift: TimeShiftOperation,
 {
-    type RasterType = P;
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = Q::SpatialBounds;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = Q::Selection;
 
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval())?;
         let query = query.select_time_interval(time_interval);
         let stream = self.processor.raster_query(query, ctx).await?;
@@ -521,9 +524,18 @@ where
         Ok(Box::pin(stream))
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
+}
+
+impl<Q, P, Shift> RasterQueryProcessor for RasterTimeShiftProcessor<Q, P, Shift>
+where
+    P: Pixel,
+    Q: RasterQueryProcessor<RasterType = P>,
+    Shift: TimeShiftOperation,
+{
+    type RasterType = P;
 }
 
 #[cfg(test)]

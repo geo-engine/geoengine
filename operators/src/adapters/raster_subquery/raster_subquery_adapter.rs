@@ -2,7 +2,7 @@ use crate::adapters::SparseTilesFillAdapter;
 use crate::adapters::sparse_tiles_fill_adapter::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds,
 };
-use crate::engine::{QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor};
+use crate::engine::{QueryContext, RasterQueryProcessor};
 use crate::error;
 use crate::util::Result;
 use async_trait::async_trait;
@@ -13,9 +13,9 @@ use futures::{
     stream::{BoxStream, TryFold},
 };
 use futures::{Stream, StreamExt, TryFutureExt};
+use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::TimeInterval;
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
 use geoengine_datatypes::raster::{
     EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep, TilingStrategy,
 };
@@ -207,12 +207,7 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> FusedStream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType: QueryProcessor<
-            Output = RasterTile2D<PixelType>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     fn is_terminated(&self) -> bool {
@@ -224,12 +219,7 @@ impl<'a, PixelType, RasterProcessorType, SubQuery> Stream
     for RasterSubQueryAdapter<'a, PixelType, RasterProcessorType, SubQuery>
 where
     PixelType: Pixel,
-    RasterProcessorType: QueryProcessor<
-            Output = RasterTile2D<PixelType>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    RasterProcessorType: RasterQueryProcessor<RasterType = PixelType>,
     SubQuery: SubQueryTileAggregator<'a, PixelType> + 'static,
 {
     type Item = Result<Option<RasterTile2D<PixelType>>>;
