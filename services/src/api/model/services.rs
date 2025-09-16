@@ -5,11 +5,14 @@ use crate::api::model::operators::{
     MlModelMetadata, MockMetaData, OgrMetaData,
 };
 use crate::datasets::DatasetName;
-use crate::datasets::external::GdalRetries;
+use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
 use crate::datasets::storage::validate_tags;
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::projects::Symbology;
+use crate::util::Secret;
+use crate::util::oidc::RefreshToken;
 use crate::util::parsing::deserialize_base_url;
+use geoengine_datatypes::primitives::DateTime;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -1008,7 +1011,8 @@ pub struct WildliveDataConnectorDefinition {
     pub id: DataProviderId,
     pub name: String,
     pub description: String,
-    pub api_key: Option<String>,
+    pub refresh_token: Option<Secret<String>>,
+    pub expiry_date: Option<DateTime>,
     pub priority: Option<i16>,
 }
 
@@ -1020,7 +1024,10 @@ impl From<WildliveDataConnectorDefinition>
             id: value.id.into(),
             name: value.name,
             description: value.description,
-            api_key: value.api_key,
+            auth: value.refresh_token.map(|t| WildliveDataConnectorAuth {
+                refresh_token: Secret::new(RefreshToken::new(t.0)),
+                expiry_date: value.expiry_date.unwrap_or_else(DateTime::now),
+            }),
             priority: value.priority,
         }
     }
@@ -1030,12 +1037,23 @@ impl From<crate::datasets::external::WildliveDataConnectorDefinition>
     for WildliveDataConnectorDefinition
 {
     fn from(value: crate::datasets::external::WildliveDataConnectorDefinition) -> Self {
+        let (refresh_token, expiry_date) = value
+            .auth
+            .map(|a| {
+                (
+                    Secret::new(a.refresh_token.into_inner().into_inner().into_secret()),
+                    a.expiry_date,
+                )
+            })
+            .unzip();
+
         WildliveDataConnectorDefinition {
             r#type: Default::default(),
             id: value.id.into(),
             name: value.name,
             description: value.description,
-            api_key: Some(SECRET_REPLACEMENT.to_string()),
+            refresh_token,
+            expiry_date,
             priority: value.priority,
         }
     }

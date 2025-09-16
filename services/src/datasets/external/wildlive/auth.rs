@@ -1,7 +1,7 @@
 use super::{Result, WildliveError, error};
 use geoengine_datatypes::error::BoxedResultExt;
 use oauth2::{
-    ClientId, EndpointNotSet, ExtraTokenFields, RefreshToken, StandardErrorResponse,
+    AccessToken, ClientId, EndpointNotSet, ExtraTokenFields, RefreshToken, StandardErrorResponse,
     StandardTokenResponse, TokenResponse as _, TokenUrl,
 };
 use openidconnect::{
@@ -16,13 +16,13 @@ use openidconnect::{
 use url::Url;
 
 const CLIENT_ID: &str = "wildlive-frontend";
-const ISSUER_URL: &str = "https://webapp.senckenberg.de/auth/realms/wildlive-portal/";
+pub(super) const ISSUER_URL: &str = "https://webapp.senckenberg.de/auth/realms/wildlive-portal/";
 
 #[derive(Debug)]
-struct TokenResponse {
-    pub(super) access_token: String,
+pub(super) struct TokenResponse {
+    pub(super) access_token: AccessToken,
     pub(super) expires_in: u64,
-    pub(super) refresh_token: String,
+    pub(super) refresh_token: RefreshToken,
     pub(super) refresh_expires_in: u64,
 }
 
@@ -35,12 +35,18 @@ impl ExtraTokenFields for RefreshExpiresInField {}
 
 impl From<WildliveTokenResponse> for TokenResponse {
     fn from(response: WildliveTokenResponse) -> Self {
+        let refresh_token = response
+            .refresh_token()
+            .cloned()
+            .unwrap_or_else(|| RefreshToken::new("".to_string()));
+        debug_assert!(
+            refresh_token.secret().len() > 0,
+            "refresh token should be present"
+        );
         Self {
-            access_token: response.access_token().secret().to_string(),
+            access_token: response.access_token().clone(),
             expires_in: response.expires_in().map_or(0, |d| d.as_secs()),
-            refresh_token: response
-                .refresh_token()
-                .map_or_else(|| String::new(), |rt| rt.secret().to_string()),
+            refresh_token,
             refresh_expires_in: response.extra_fields().extra_fields().refresh_expires_in,
         }
     }
@@ -83,7 +89,7 @@ type WildliveClient<
 
 pub async fn retrieve_access_and_refresh_token(
     issuer_url: &str,
-    refresh_token: String,
+    refresh_token: &RefreshToken,
 ) -> Result<TokenResponse> {
     let client_id = ClientId::new(CLIENT_ID.to_string());
 
@@ -101,7 +107,6 @@ pub async fn retrieve_access_and_refresh_token(
     let client = WildliveClient::new(client_id, IssuerUrl::from_url(issuer_url), jwks);
     let client = client.set_token_uri(token_url);
 
-    let refresh_token = RefreshToken::new(refresh_token);
     let refresh_token_request = client.exchange_refresh_token(&refresh_token);
 
     // TODO: re-use the client
@@ -145,13 +150,14 @@ pub async fn retrieve_jwks(issuer_url: &str) -> Result<CoreJsonWebKeySet> {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
     use crate::util::tests::json_file_responder;
     use geoengine_datatypes::test_data;
     use httptest::{Expectation, all_of, matchers};
 
     #[tokio::test]
-    async fn test_name() {
+    async fn it_retrieves_a_new_set_of_tokens() {
         let mock_server = httptest::Server::run();
 
         mock_server.expect(
@@ -176,6 +182,11 @@ mod tests {
             ))),
         );
 
-        assert!(retrieve_access_and_refresh_token(&mock_server.url_str("/"), "eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI0MWFlNzYxMC1jNzIyLTRmOWQtOGJhNi02ZTc2MmRkNDIxOWIifQ.eyJleHAiOjE3NTYxMzI5NTcsImlhdCI6MTc1NjEzMTE1NywianRpIjoiOTIwYTljM2EtMjZkMC00Y2NiLWIxYWQtNDRlNWU2NzZmZWU4IiwiaXNzIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwiYXVkIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwic3ViIjoiMmRhZDgxZGYtOTVhZS00Y2E4LWE4NTktZWQyZjM0OWRlOWY2IiwidHlwIjoiUmVmcmVzaCIsImF6cCI6IndpbGRsaXZlLWZyb250ZW5kIiwic2Vzc2lvbl9zdGF0ZSI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSIsInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsInNpZCI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSJ9.COoMWxp6IZ_IKTQ-GGAb22CIcybY32II5wn9beaSoyw".to_string()).await.is_ok());
+        let refresh_token = RefreshToken::new("eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI0MWFlNzYxMC1jNzIyLTRmOWQtOGJhNi02ZTc2MmRkNDIxOWIifQ.eyJleHAiOjE3NTYxMzI5NTcsImlhdCI6MTc1NjEzMTE1NywianRpIjoiOTIwYTljM2EtMjZkMC00Y2NiLWIxYWQtNDRlNWU2NzZmZWU4IiwiaXNzIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwiYXVkIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwic3ViIjoiMmRhZDgxZGYtOTVhZS00Y2E4LWE4NTktZWQyZjM0OWRlOWY2IiwidHlwIjoiUmVmcmVzaCIsImF6cCI6IndpbGRsaXZlLWZyb250ZW5kIiwic2Vzc2lvbl9zdGF0ZSI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSIsInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsInNpZCI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSJ9.COoMWxp6IZ_IKTQ-GGAb22CIcybY32II5wn9beaSoyw".into());
+        let response = retrieve_access_and_refresh_token(&mock_server.url_str("/"), &refresh_token)
+            .await
+            .unwrap();
+
+        assert!(response.refresh_token.secret().len() > 0);
     }
 }

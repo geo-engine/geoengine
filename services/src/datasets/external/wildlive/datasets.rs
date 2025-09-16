@@ -4,6 +4,7 @@ use geoengine_datatypes::{
     error::BoxedResultExt,
     primitives::{BoundingBox2D, Coordinate2D},
 };
+use oauth2::AccessToken;
 use serde::{Deserialize, Serialize};
 use snafu::OptionExt;
 use std::collections::{BTreeMap, HashMap};
@@ -157,7 +158,7 @@ impl From<&Coordinate> for Coordinate2D {
 
 pub(super) async fn projects_dataset(
     api_endpoint: &Url,
-    api_token: Option<&str>,
+    api_token: Option<&AccessToken>,
 ) -> Result<Vec<ProjectFeature>> {
     let projects = projects(api_endpoint, api_token).await?;
     let station_coordinates = stations::<StationCoordinate>(
@@ -216,7 +217,10 @@ pub(super) async fn projects_dataset(
     Ok(features)
 }
 
-pub(super) async fn projects(api_endpoint: &Url, api_token: Option<&str>) -> Result<Vec<Project>> {
+pub(super) async fn projects(
+    api_endpoint: &Url,
+    api_token: Option<&AccessToken>,
+) -> Result<Vec<Project>> {
     let mut url = api_endpoint.join("search")?;
     url.query_pairs_mut()
         .append_pair("query", "type:project")
@@ -227,7 +231,7 @@ pub(super) async fn projects(api_endpoint: &Url, api_token: Option<&str>) -> Res
 
     let mut request = reqwest::Client::new().get(url);
     if let Some(token) = api_token {
-        request = request.bearer_auth(token);
+        request = request.bearer_auth(token.secret());
     }
 
     let response: QueryResults<Project> = request.send().await?.json().await?;
@@ -239,14 +243,18 @@ pub(super) async fn projects(api_endpoint: &Url, api_token: Option<&str>) -> Res
         .collect())
 }
 
-async fn project(api_endpoint: &Url, api_token: Option<&str>, project_id: &str) -> Result<Project> {
+async fn project(
+    api_endpoint: &Url,
+    api_token: Option<&AccessToken>,
+    project_id: &str,
+) -> Result<Project> {
     let url = api_endpoint.join(&format!("objects/{project_id}"))?;
 
     debug!(target: "Query", "{url}");
 
     let mut request = reqwest::Client::new().get(url);
     if let Some(token) = api_token {
-        request = request.bearer_auth(token);
+        request = request.bearer_auth(token.secret());
     }
 
     let response: Project = request.send().await?.json().await?;
@@ -264,7 +272,7 @@ pub(super) struct SearchRequest {
 
 pub(super) async fn project_stations_dataset(
     api_endpoint: &Url,
-    api_token: Option<&str>,
+    api_token: Option<&AccessToken>,
     project_id: &str,
 ) -> Result<Vec<StationFeature>> {
     let mut project = vec![project(api_endpoint, api_token, project_id).await?];
@@ -311,7 +319,7 @@ pub(super) async fn project_stations_dataset(
 
 async fn stations<T>(
     api_endpoint: &Url,
-    api_token: Option<&str>,
+    api_token: Option<&AccessToken>,
     fields: Vec<String>,
     projects: &[Project],
 ) -> Result<impl Iterator<Item = T> + use<T>>
@@ -351,7 +359,7 @@ where
                 page_size: PAGE_SIZE,
             })?);
     if let Some(token) = api_token {
-        request = request.bearer_auth(token);
+        request = request.bearer_auth(token.secret());
     }
 
     let results: QueryResults<T> = request.send().await?.json().await?;
@@ -362,7 +370,7 @@ where
 
 async fn image_objects(
     api_endpoint: &Url,
-    api_token: Option<&str>,
+    api_token: Option<&AccessToken>,
     mut stations: impl Iterator<Item = &StationSetup>,
 ) -> Result<Vec<ImageObject>> {
     let mut query = String::from("type:ImageObject AND (/atStation:\"");
@@ -402,7 +410,7 @@ async fn image_objects(
                 page_size: PAGE_SIZE,
             })?);
     if let Some(token) = api_token {
-        request = request.bearer_auth(token);
+        request = request.bearer_auth(token.secret());
     }
 
     let results: QueryResults<ImageObject> = request.send().await?.json().await?;
@@ -453,7 +461,7 @@ fn subquery(result_type: &str, lookup_path: &str, lookup_ids: &mut Vec<&str>) ->
 
 async fn image_annotations(
     api_endpoint: &Url,
-    api_token: Option<&str>,
+    api_token: Option<&AccessToken>,
     image_objects: &[ImageObject],
 ) -> Result<impl Iterator<Item = Annotation> + use<>> {
     // ) -> Result<HashMap<String, Annotation>> {
@@ -495,7 +503,7 @@ async fn image_annotations(
                 page_size: PAGE_SIZE,
             })?);
         if let Some(token) = &api_token {
-            request = request.bearer_auth(token);
+            request = request.bearer_auth(token.secret());
         }
 
         let reponse = request.send().await?;
@@ -511,7 +519,7 @@ async fn image_annotations(
 
 pub(super) async fn captures_dataset(
     api_endpoint: &Url,
-    api_token: Option<&str>,
+    api_token: Option<&AccessToken>,
     project_id: &str,
 ) -> Result<Vec<CaptureFeature>> {
     let project = project(api_endpoint, api_token, project_id).await?;
