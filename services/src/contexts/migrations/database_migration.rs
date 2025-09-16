@@ -189,14 +189,14 @@ where
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::{
         config::get_config_element,
         contexts::PostgresDb,
         contexts::{
             SessionId,
-            migrations::{CurrentSchemaMigration, Migration0015LogQuota, all_migrations},
+            migrations::{CurrentSchemaMigration, all_migrations},
         },
         permissions::RoleId,
         projects::{ProjectDb, ProjectListOptions},
@@ -208,6 +208,22 @@ mod tests {
     use geoengine_datatypes::{primitives::DateTime, test_data};
     use tokio_postgres::NoTls;
 
+    pub async fn create_migration_0015_snapshot<Tls>(
+        connection: &mut PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    ) -> Result<()>
+    where
+        Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static,
+        <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+        <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+        <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+    {
+        connection
+            .batch_execute(include_str!("migration_0015_snapshot.sql"))
+            .await?;
+
+        Ok(())
+    }
+
     #[tokio::test]
     #[serial_test::parallel]
     async fn it_migrates() -> Result<()> {
@@ -216,7 +232,7 @@ mod tests {
         #[async_trait]
         impl Migration for TestMigration {
             fn prev_version(&self) -> Option<DatabaseVersion> {
-                Some(Migration0015LogQuota.version())
+                Some("0015_log_quota".to_string())
             }
 
             fn version(&self) -> DatabaseVersion {
@@ -256,11 +272,8 @@ mod tests {
             }
         }
 
-        let migrations: Vec<Box<dyn Migration>> = vec![
-            Box::new(Migration0015LogQuota),
-            Box::new(TestMigration),
-            Box::new(FollowUpMigration),
-        ];
+        let migrations: Vec<Box<dyn Migration>> =
+            vec![Box::new(TestMigration), Box::new(FollowUpMigration)];
 
         let postgres_config = get_config_element::<crate::config::Postgres>()?;
         let db_config = DatabaseConnectionConfig::from(postgres_config);
@@ -269,6 +282,8 @@ mod tests {
         let pool = Pool::builder().build(pg_mgr).await?;
 
         let mut conn = pool.get().await?;
+
+        create_migration_0015_snapshot(&mut conn).await?;
 
         migrate_database(&mut conn, &migrations).await?;
 
@@ -295,6 +310,8 @@ mod tests {
         let pool = Pool::builder().build(pg_mgr).await?;
 
         let mut conn = pool.get().await?;
+
+        create_migration_0015_snapshot(&mut conn).await?;
 
         migrate_database(&mut conn, &all_migrations()).await?;
 
@@ -338,7 +355,7 @@ mod tests {
         let mut conn = pool.get().await?;
 
         // initial schema
-        migrate_database(&mut conn, &all_migrations()[0..1]).await?;
+        create_migration_0015_snapshot(&mut conn).await?;
 
         // insert test data on initial schema
         let test_data_sql = std::fs::read_to_string(test_data!("migrations/test_data.sql"))?;

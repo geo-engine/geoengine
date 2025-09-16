@@ -5,12 +5,12 @@ use bb8_postgres::{
 use futures::future::BoxFuture;
 use tokio_postgres::{NoTls, Transaction};
 
+use super::Migration;
+use crate::contexts::migrations::database_migration::tests::create_migration_0015_snapshot;
 use crate::{
     config::get_config_element, contexts::migrate_database,
     util::postgres::DatabaseConnectionConfig,
 };
-
-use super::Migration;
 
 type Result<T, E = tokio_postgres::Error> = std::result::Result<T, E>;
 
@@ -433,6 +433,11 @@ pub async fn assert_migration_schema_eq(
     assert_schema_eq(
         |mut connection| {
             Box::pin(async move {
+                // Start from migration 0015 snapshot
+                create_migration_0015_snapshot(&mut connection)
+                    .await
+                    .unwrap();
+
                 migrate_database(&mut connection, migrations).await.unwrap();
 
                 connection

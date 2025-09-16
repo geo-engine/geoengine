@@ -141,7 +141,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let query_rect = if request_spatial_ref == workflow_spatial_ref {
         Some(query_rect)
     } else {
-        reproject_query(query_rect, workflow_spatial_ref, request_spatial_ref)?
+        reproject_query(query_rect, workflow_spatial_ref, request_spatial_ref, true)?
     };
 
     let Some(query_rect) = query_rect else {
