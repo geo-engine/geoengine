@@ -9528,6 +9528,10 @@
           }
         }
       },
+      "Secret_String": {
+        "type": "string",
+        "description": "A wrapper type that serializes to \"*****\" and can be deserialized from any string.\nIf the inner value is \"*****\", it is considered unknown and `as_option` returns `None`.\nThis is useful for secrets that should not be exposed in API responses, but can be set in API requests."
+      },
       "SentinelS2L2ACogsProviderDefinition": {
         "type": "object",
         "required": [
@@ -11036,14 +11040,15 @@
           "description"
         ],
         "properties": {
-          "apiKey": {
+          "description": {
+            "type": "string"
+          },
+          "expiryDate": {
             "type": [
               "string",
               "null"
-            ]
-          },
-          "description": {
-            "type": "string"
+            ],
+            "format": "date-time"
           },
           "id": {
             "$ref": "#/components/schemas/DataProviderId"
@@ -11057,6 +11062,16 @@
               "null"
             ],
             "format": "int32"
+          },
+          "refreshToken": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Secret_String"
+              }
+            ]
           },
           "type": {
             "type": "string",

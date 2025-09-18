@@ -15,7 +15,6 @@ use crate::{
             LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
         },
     },
-    permissions::ResourceId,
     users::UserId,
     util::{Secret, oidc::RefreshToken, postgres::DatabaseConnectionConfig},
     workflows::workflow::Workflow,
@@ -76,6 +75,7 @@ pub struct WildliveDataConnectorDefinition {
 }
 
 #[derive(Debug, PartialEq, Clone, Deserialize, Serialize, FromSql, ToSql)]
+#[serde(rename_all = "camelCase")]
 pub struct WildliveDataConnectorAuth {
     pub refresh_token: Secret<RefreshToken>,
     pub expiry_date: DateTime,
@@ -123,19 +123,10 @@ enum WildliveLayerId {
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for WildliveDataConnectorDefinition {
     async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
-        // convention says that the first one is the owner
-        let user = db
-            .list_permissions(ResourceId::DataProvider(self.id), 0, 1)
-            .await
-            .boxed_context(error::UnexpectedExecution)?
-            .first()
-            .and_then(|p| {
-                if !p.permission.is_owner() || p.role.is_admin() {
-                    return None;
-                }
-
-                Some(UserId(p.role.id.0))
-            });
+        // TODO: Usually, for non-system data connectors, we need to namespace our layers and data by
+        // the user that created the data connector. However, currently the implementation does not adhere to this.
+        // So for now, we can omit using a namespace.
+        let user = None;
 
         Ok(Box::new(WildliveDataConnector {
             definition: *self,
@@ -488,7 +479,7 @@ impl<D: GeoEngineDb> WildliveDataConnector<D> {
 async fn update_and_get_token_for_request(
     definition: &WildliveDataConnectorDefinition,
     api_auth_endpoint: &Url,
-    db: &impl GeoEngineDb,
+    _db: &impl GeoEngineDb,
 ) -> Result<Option<AccessToken>> {
     let Some(refresh_token) = definition.refresh_token_option() else {
         return Ok(None);
@@ -503,9 +494,10 @@ async fn update_and_get_token_for_request(
         expiry_date: DateTime::now() + Duration::seconds(tokens.refresh_expires_in as i64),
     });
 
-    db.update_layer_provider_definition(definition.id, definition.into())
-        .await
-        .boxed_context(error::UnexpectedExecution)?;
+    // TODO: update here in case the old one becomes invalid
+    // db.update_layer_provider_definition(definition.id, definition.into())
+    //     .await
+    //     .boxed_context(error::UnexpectedExecution)?;
 
     Ok(Some(tokens.access_token))
 }
@@ -861,7 +853,6 @@ impl TryFrom<LayerId> for WildliveLayerId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::datasets::external::wildlive::auth;
     use crate::{
         contexts::{PostgresSessionContext, SessionContext},
         datasets::external::wildlive::datasets::{PAGE_SIZE, SearchRequest},
