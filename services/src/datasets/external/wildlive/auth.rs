@@ -1,8 +1,13 @@
+use std::borrow::Cow;
+
+use crate::util::join_base_url_and_path;
+
 use super::{Result, WildliveError, error};
 use geoengine_datatypes::error::BoxedResultExt;
 use oauth2::{
-    AccessToken, ClientId, EndpointNotSet, ExtraTokenFields, RefreshToken, StandardErrorResponse,
-    StandardTokenResponse, TokenResponse as _, TokenUrl,
+    AccessToken, AuthorizationCode, ClientId, ClientSecret, EndpointNotSet, ExtraTokenFields,
+    PkceCodeVerifier, RedirectUrl, RefreshToken, StandardErrorResponse, StandardTokenResponse,
+    TokenResponse as _, TokenUrl,
 };
 use openidconnect::{
     Client, EmptyAdditionalClaims, IdTokenFields, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl,
@@ -15,10 +20,7 @@ use openidconnect::{
 };
 use url::Url;
 
-const CLIENT_ID: &str = "wildlive-frontend";
-pub(super) const ISSUER_URL: &str = "https://webapp.senckenberg.de/auth/realms/wildlive-portal/";
-
-#[derive(Debug)]
+#[derive(Debug, serde::Deserialize)]
 pub(super) struct TokenResponse {
     pub(super) access_token: AccessToken,
     pub(super) expires_in: u64,
@@ -38,9 +40,9 @@ impl From<WildliveTokenResponse> for TokenResponse {
         let refresh_token = response
             .refresh_token()
             .cloned()
-            .unwrap_or_else(|| RefreshToken::new("".to_string()));
+            .unwrap_or_else(|| RefreshToken::new(String::new()));
         debug_assert!(
-            refresh_token.secret().len() > 0,
+            !refresh_token.secret().is_empty(),
             "refresh token should be present"
         );
         Self {
@@ -88,64 +90,172 @@ type WildliveClient<
 >;
 
 pub async fn retrieve_access_and_refresh_token(
-    issuer_url: &str,
+    http_client: &reqwest::Client,
+    wildlive_config: &crate::config::WildliveOidc,
     refresh_token: &RefreshToken,
 ) -> Result<TokenResponse> {
-    let client_id = ClientId::new(CLIENT_ID.to_string());
+    let client_id = ClientId::new(wildlive_config.client_id.clone());
 
-    let issuer_url =
-        Url::parse(issuer_url).map_err(|source| WildliveError::InvalidUrl { source })?;
     let token_url = TokenUrl::from_url(
-        issuer_url
-            .join("protocol/openid-connect/token")
+        join_base_url_and_path(&wildlive_config.issuer, "protocol/openid-connect/token")
             .map_err(|source| WildliveError::InvalidUrl { source })?,
     );
 
     // TODO: cache the jwks to not fetch it every time
-    let jwks = retrieve_jwks(issuer_url.as_str()).await?;
+    let jwks = retrieve_jwks(&http_client, &wildlive_config.issuer).await?;
 
-    let client = WildliveClient::new(client_id, IssuerUrl::from_url(issuer_url), jwks);
-    let client = client.set_token_uri(token_url);
+    let mut client = WildliveClient::new(
+        client_id,
+        IssuerUrl::from_url(wildlive_config.issuer.clone()),
+        jwks,
+    )
+    .set_token_uri(token_url);
 
-    let refresh_token_request = client.exchange_refresh_token(&refresh_token);
+    if let Some(client_secret) = wildlive_config.client_secret.as_ref() {
+        client = client.set_client_secret(ClientSecret::new(client_secret.into()));
+    }
 
-    // TODO: re-use the client
-    let http_client = reqwest::ClientBuilder::new()
-        // Following redirects opens the client up to SSRF vulnerabilities.
-        .redirect(reqwest::redirect::Policy::none())
-        .build()
-        .boxed_context(error::UnexpectedExecution)?;
+    let refresh_token_request = client.exchange_refresh_token(refresh_token);
 
     refresh_token_request
-        .request_async(&http_client)
+        .request_async(http_client)
         .await
         .boxed_context(error::AuthKeyInvalid)
         .map(TokenResponse::from)
 }
 
-pub async fn retrieve_jwks(issuer_url: &str) -> Result<CoreJsonWebKeySet> {
-    let issuer_url =
-        Url::parse(issuer_url).map_err(|source| WildliveError::InvalidUrl { source })?;
+pub async fn retrieve_jwks(
+    http_client: &reqwest::Client,
+    issuer_url: &Url,
+) -> Result<CoreJsonWebKeySet> {
+    let jwks_url = join_base_url_and_path(issuer_url, "protocol/openid-connect/certs")
+        .map_err(|source| WildliveError::InvalidUrl { source })?;
 
-    // TODO: re-use the client
+    // let provider_metadata = CoreProviderMetadata::discover_async(issuer_url, &http_client).await?;
+    // Ok(provider_metadata.jwks())
+
+    let jwks_url = JsonWebKeySetUrl::from_url(jwks_url);
+
+    JsonWebKeySet::fetch_async(&jwks_url, http_client)
+        .await
+        .boxed_context(error::Oidc {
+            info: "fetching JWKS failed",
+        })
+}
+
+pub async fn retrieve_wildlive_tokens(
+    http_client: &reqwest::Client,
+    local_config: &crate::config::Oidc,
+    code: &str,
+    pkce_verifier: &str,
+    redirect_uri: Url,
+    broker_provider: &str,
+) -> Result<TokenResponse> {
+    let client_id = ClientId::new(local_config.client_id.clone());
+    let token_url = TokenUrl::from_url(
+        join_base_url_and_path(&local_config.issuer, "protocol/openid-connect/token")
+            .map_err(|source| WildliveError::InvalidUrl { source })?,
+    );
+    let broker_url = join_base_url_and_path(
+        &local_config.issuer,
+        &format!("broker/{broker_provider}/token"),
+    )
+    .map_err(|source| WildliveError::InvalidUrl { source })?;
+
+    // Step 1: Exchange code for tokens at local OIDC provider
+
+    let jwks = retrieve_jwks(http_client, &local_config.issuer).await?;
+
+    let mut client = WildliveClient::new(
+        client_id,
+        IssuerUrl::from_url(local_config.issuer.clone()),
+        jwks,
+    )
+    .set_token_uri(token_url);
+
+    if let Some(client_secret) = local_config.client_secret.as_ref() {
+        client = client.set_client_secret(ClientSecret::new(client_secret.into()));
+    }
+
+    let code = AuthorizationCode::new(code.to_string());
+    let pkce_verifier = PkceCodeVerifier::new(pkce_verifier.to_string());
+
+    let token_request = client
+        .exchange_code(code)
+        .set_pkce_verifier(pkce_verifier)
+        .set_redirect_uri(Cow::Owned(RedirectUrl::from_url(redirect_uri)));
+
+    dbg!(&token_request);
+
+    let token_response = dbg!(token_request.request_async(http_client).await)
+        .boxed_context(error::AuthKeyInvalid)?;
+
+    // Step 2: Access tokens for wildlive OIDC provider using the access token from step 1
+
+    let broker_request = http_client
+        .get(broker_url)
+        .bearer_auth(token_response.access_token().secret())
+        .header("Accept", "application/json");
+
+    dbg!(
+        broker_request
+            .send()
+            .await
+            .boxed_context(error::Oidc {
+                info: "request to broker failed"
+            })?
+            .json::<TokenResponse>()
+            .await
+    )
+    .boxed_context(error::AuthKeyInvalid)
+}
+
+pub async fn retrieve_refresh_token_from_local_code(
+    local_config: crate::config::Oidc,
+    wildlive_config: crate::config::WildliveOidc,
+    code: &str,
+    pkce_verifier: &str,
+    redirect_uri: Url,
+) -> Result<TokenResponse> {
     let http_client = reqwest::ClientBuilder::new()
         // Following redirects opens the client up to SSRF vulnerabilities.
         .redirect(reqwest::redirect::Policy::none())
         .build()
         .boxed_context(error::UnexpectedExecution)?;
 
-    // let provider_metadata = CoreProviderMetadata::discover_async(issuer_url, &http_client).await?;
-    // Ok(provider_metadata.jwks())
+    let tokens = retrieve_wildlive_tokens(
+        &http_client,
+        &local_config,
+        code,
+        pkce_verifier,
+        redirect_uri,
+        &wildlive_config.broker_provider,
+    )
+    .await?;
 
-    let jwks_url = JsonWebKeySetUrl::from_url(
-        issuer_url
-            .join("protocol/openid-connect/certs")
+    let client_id = ClientId::new(wildlive_config.client_id);
+    let issuer_url = wildlive_config.issuer.clone();
+    let token_url = TokenUrl::from_url(
+        join_base_url_and_path(&issuer_url, "protocol/openid-connect/token")
             .map_err(|source| WildliveError::InvalidUrl { source })?,
     );
 
-    JsonWebKeySet::fetch_async(&jwks_url, &http_client)
-        .await
-        .boxed_context(error::UnexpectedExecution)
+    let jwks = retrieve_jwks(&http_client, &issuer_url).await?;
+
+    let mut client = WildliveClient::new(client_id, IssuerUrl::from_url(issuer_url), jwks)
+        .set_token_uri(token_url);
+
+    if let Some(client_secret) = wildlive_config.client_secret {
+        client = client.set_client_secret(ClientSecret::new(client_secret));
+    }
+
+    let token_request = client.exchange_refresh_token(&tokens.refresh_token);
+
+    dbg!(&token_request);
+
+    dbg!(token_request.request_async(&http_client).await)
+        .boxed_context(error::AuthKeyInvalid)
+        .map(TokenResponse::from)
 }
 
 #[cfg(test)]
@@ -182,11 +292,26 @@ mod tests {
             ))),
         );
 
-        let refresh_token = RefreshToken::new("eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI0MWFlNzYxMC1jNzIyLTRmOWQtOGJhNi02ZTc2MmRkNDIxOWIifQ.eyJleHAiOjE3NTYxMzI5NTcsImlhdCI6MTc1NjEzMTE1NywianRpIjoiOTIwYTljM2EtMjZkMC00Y2NiLWIxYWQtNDRlNWU2NzZmZWU4IiwiaXNzIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwiYXVkIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwic3ViIjoiMmRhZDgxZGYtOTVhZS00Y2E4LWE4NTktZWQyZjM0OWRlOWY2IiwidHlwIjoiUmVmcmVzaCIsImF6cCI6IndpbGRsaXZlLWZyb250ZW5kIiwic2Vzc2lvbl9zdGF0ZSI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSIsInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsInNpZCI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSJ9.COoMWxp6IZ_IKTQ-GGAb22CIcybY32II5wn9beaSoyw".into());
-        let response = retrieve_access_and_refresh_token(&mock_server.url_str("/"), &refresh_token)
-            .await
+        let http_client = reqwest::ClientBuilder::new()
+            // Following redirects opens the client up to SSRF vulnerabilities.
+            .redirect(reqwest::redirect::Policy::none())
+            .build()
             .unwrap();
 
-        assert!(response.refresh_token.secret().len() > 0);
+        let refresh_token = RefreshToken::new("eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI0MWFlNzYxMC1jNzIyLTRmOWQtOGJhNi02ZTc2MmRkNDIxOWIifQ.eyJleHAiOjE3NTYxMzI5NTcsImlhdCI6MTc1NjEzMTE1NywianRpIjoiOTIwYTljM2EtMjZkMC00Y2NiLWIxYWQtNDRlNWU2NzZmZWU4IiwiaXNzIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwiYXVkIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwic3ViIjoiMmRhZDgxZGYtOTVhZS00Y2E4LWE4NTktZWQyZjM0OWRlOWY2IiwidHlwIjoiUmVmcmVzaCIsImF6cCI6IndpbGRsaXZlLWZyb250ZW5kIiwic2Vzc2lvbl9zdGF0ZSI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSIsInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsInNpZCI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSJ9.COoMWxp6IZ_IKTQ-GGAb22CIcybY32II5wn9beaSoyw".into());
+        let response = retrieve_access_and_refresh_token(
+            &http_client,
+            &crate::config::WildliveOidc {
+                issuer: Url::parse(&mock_server.url_str("/")).unwrap(),
+                client_id: "wildlive-frontend".into(),
+                client_secret: None,
+                broker_provider: "wildlive-portal".into(),
+            },
+            &refresh_token,
+        )
+        .await
+        .unwrap();
+
+        assert!(!response.refresh_token.secret().is_empty());
     }
 }

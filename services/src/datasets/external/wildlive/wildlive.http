@@ -175,3 +175,8 @@ grant_type=refresh_token
 &refresh_token={{openid_login.response.body.$.refresh_token}}
 
 ###
+
+###
+
+GET https://auth.geoengine.io/realms/AI4WildLIVE/broker/wildlive-portal/token
+Authorization: Bearer {{openid_login.response.body.$.access_token}}

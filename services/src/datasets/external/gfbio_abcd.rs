@@ -82,11 +82,11 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioAbcdDataProviderDefiniti
         self.priority.unwrap_or(0)
     }
 
-    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    async fn update(&self, new: TypedDataProviderDefinition) -> Result<TypedDataProviderDefinition>
     where
         Self: Sized,
     {
-        match new {
+        Ok(match new {
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(mut new) => {
                 if new.db_config.password == SECRET_REPLACEMENT {
                     new.db_config.password.clone_from(&self.db_config.password);
@@ -94,7 +94,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for GfbioAbcdDataProviderDefiniti
                 TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(new)
             }
             _ => new,
-        }
+        })
     }
 }
 

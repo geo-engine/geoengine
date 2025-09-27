@@ -169,6 +169,7 @@ group_abcd_units = true
 enabled = false
 issuer = ""
 client_id = ""
+client_secret = ""
 scopes = []
 
 [open_telemetry]
@@ -184,3 +185,12 @@ enabled = false
 size_in_mb = 1_000 # 1 GB
 # storage limit for collecting query results before insertion into the cache in 
 landing_zone_ratio = 0.1 # 10% of total cache size
+
+[wildlive]
+api_endpoint = "https://wildlive.senckenberg.de/api/"
+
+[wildlive.oidc]
+issuer = "https://webapp.senckenberg.de/auth/realms/wildlive-portal/"
+client_id = "geoengine"
+client_secret = ""
+broker_provider = "wildlive-portal"

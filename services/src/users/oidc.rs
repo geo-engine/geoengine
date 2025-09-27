@@ -202,7 +202,7 @@ impl From<Oidc> for OidcManager {
 }
 
 struct OidcRequestDb {
-    issuer: String,
+    issuer: Url,
     client_id: String,
     client_secret: Option<String>,
     scopes: Vec<String>,
@@ -677,7 +677,7 @@ mod tests {
         }
     }
 
-    fn single_state_nonce_mocked_request_db(server_url: String) -> OidcRequestDb {
+    fn single_state_nonce_mocked_request_db(server_url: Url) -> OidcRequestDb {
         OidcRequestDb {
             issuer: server_url,
             client_id: String::new(),
@@ -763,7 +763,7 @@ mod tests {
     #[tokio::test]
     async fn get_client_success() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str());
@@ -779,7 +779,7 @@ mod tests {
     #[tokio::test]
     async fn get_client_bad_request() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let error_message = serde_json::to_string(&json!({
@@ -808,7 +808,7 @@ mod tests {
     #[tokio::test]
     async fn get_client_auth_code_unsupported() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
@@ -827,7 +827,7 @@ mod tests {
     #[tokio::test]
     async fn get_client_id_rsa_signing_unsupported() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
@@ -846,7 +846,7 @@ mod tests {
     #[tokio::test]
     async fn get_client_missing_scopes() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
@@ -865,7 +865,7 @@ mod tests {
     #[tokio::test]
     async fn get_client_missing_claims() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
@@ -955,7 +955,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_success() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1017,7 +1017,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_id_token() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
@@ -1051,7 +1051,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_nonce() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1078,7 +1078,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_wrong_nonce() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1105,7 +1105,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_email() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1132,7 +1132,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_name() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1159,7 +1159,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_access_token_duration() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1186,7 +1186,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_access_hashcode_mismatch() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1215,7 +1215,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_twice() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1246,7 +1246,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_multiple_requests() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let mut request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1313,7 +1313,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_bad_request() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1347,7 +1347,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_after_bad_request() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1389,7 +1389,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_refresh_success() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1414,7 +1414,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_refresh_failed() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 

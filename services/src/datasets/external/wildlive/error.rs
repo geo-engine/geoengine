@@ -53,4 +53,18 @@ pub enum WildliveError {
     AuthKeyInvalid {
         source: Box<dyn ErrorSource>,
     },
+
+    #[snafu(display("Missing configuration for Wildlive OIDC on server"))]
+    MissingConfiguration {
+        source: Box<dyn ErrorSource>,
+    },
+
+    #[snafu(display("The provided connector is not of type Wildlive"))]
+    WrongConnectorType,
+
+    #[snafu(display("OIDC Error: {info}"))]
+    Oidc {
+        info: &'static str,
+        source: Box<dyn ErrorSource>,
+    },
 }

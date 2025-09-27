@@ -1066,6 +1066,19 @@ impl MockQuotaTracking for QuotaTracking {
     }
 }
 
+/// A responder that serves a json file with content type application/json.
+///
+/// # Panics
+/// Panics if the file cannot be read.
+///
+#[cfg(test)]
+pub fn json_file_responder(path: &Path) -> impl httptest::responders::Responder + use<> {
+    let json = std::fs::read_to_string(path).unwrap();
+    httptest::responders::status_code(200)
+        .append_header("Content-Type", "application/json")
+        .body(json)
+}
+
 #[cfg(test)]
 pub(crate) mod mock_oidc {
     use crate::config::Oidc;
@@ -1089,6 +1102,7 @@ pub(crate) mod mock_oidc {
         EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce,
         ResponseTypes, StandardClaims, SubjectIdentifier,
     };
+    use url::Url;
 
     const TEST_PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\n\
 	    MIIEogIBAAKCAQEAxIm5pngAgY4V+6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEp\n\
@@ -1142,7 +1156,7 @@ pub(crate) mod mock_oidc {
     pub const SINGLE_NONCE: &str = "Nonce_1";
 
     pub struct MockTokenConfig {
-        issuer: String,
+        issuer: Url,
         client_id: String,
         pub email: Option<EndUserEmail>,
         pub name: Option<LocalizedClaim<EndUserName>>,
@@ -1154,7 +1168,7 @@ pub(crate) mod mock_oidc {
     }
 
     impl MockTokenConfig {
-        pub fn create_from_issuer_and_client(issuer: String, client_id: String) -> Self {
+        pub fn create_from_issuer_and_client(issuer: Url, client_id: String) -> Self {
             let mut name = LocalizedClaim::new();
             name.insert(None, EndUserName::new("Robin".to_string()));
             let name = Some(name);
@@ -1173,7 +1187,7 @@ pub(crate) mod mock_oidc {
         }
 
         pub fn create_from_tokens(
-            issuer: String,
+            issuer: Url,
             client_id: String,
             duration: core::time::Duration,
             access_token: String,
@@ -1237,7 +1251,7 @@ pub(crate) mod mock_oidc {
     ) -> StandardTokenResponse<CoreIdTokenFields, BasicTokenType> {
         let id_token = CoreIdToken::new(
             CoreIdTokenClaims::new(
-                IssuerUrl::new(mock_token_config.issuer)
+                IssuerUrl::new(mock_token_config.issuer.to_string())
                     .expect("Parsing mock issuer should not fail"),
                 vec![Audience::new(mock_token_config.client_id)],
                 Utc::now() + Duration::seconds(300),
@@ -1319,7 +1333,7 @@ pub(crate) mod mock_oidc {
         let client_id = "";
 
         let server = mock_valid_provider_discovery(config.expected_discoveries);
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
         if config.creates_first_token {
             let mock_token_config = MockTokenConfig::create_from_tokens(
@@ -1375,12 +1389,4 @@ pub(crate) mod mock_oidc {
             },
         )
     }
-}
-
-#[cfg(test)]
-pub fn json_file_responder(path: &Path) -> impl httptest::responders::Responder + use<> {
-    let json = std::fs::read_to_string(path).unwrap();
-    httptest::responders::status_code(200)
-        .append_header("Content-Type", "application/json")
-        .body(json)
 }

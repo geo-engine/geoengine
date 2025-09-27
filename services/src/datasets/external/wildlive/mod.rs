@@ -2,7 +2,7 @@ use crate::{
     config,
     contexts::GeoEngineDb,
     datasets::{
-        external::wildlive::auth::ISSUER_URL,
+        external::wildlive::auth::retrieve_refresh_token_from_local_code,
         listing::{Provenance, ProvenanceOutput},
     },
     layers::{
@@ -49,6 +49,7 @@ use postgres_protocol::escape::escape_literal;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
+use tracing::error;
 use url::Url;
 
 use crate::layers::external::TypedDataProviderDefinition;
@@ -68,7 +69,7 @@ pub struct WildliveDataConnectorDefinition {
     pub id: DataProviderId,
     pub name: String,
     pub description: String,
-    /// An OpenID Connect refresh token for the WildLIVE! Portal API
+    /// An `OpenID` Connect refresh token for the `WildLIVE!` Portal API
     #[serde(flatten)]
     pub auth: Option<WildliveDataConnectorAuth>,
     pub priority: Option<i16>,
@@ -90,8 +91,8 @@ impl WildliveDataConnectorDefinition {
 #[derive(Debug)]
 pub struct WildliveDataConnector<D: GeoEngineDb> {
     definition: WildliveDataConnectorDefinition,
-    api_endpoint: Url,
-    api_auth_endpoint: Url,
+    local_oidc_config: config::Oidc,
+    wildlive_config: config::Wildlive,
     user: Option<UserId>,
     db: Arc<D>,
 }
@@ -120,6 +121,13 @@ enum WildliveLayerId {
     },
 }
 
+#[derive(Debug, Clone, Deserialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct OidcAuthToken {
+    code: String,
+    pkce_verifier: String,
+}
+
 #[async_trait]
 impl<D: GeoEngineDb> DataProviderDefinition<D> for WildliveDataConnectorDefinition {
     async fn initialize(self: Box<Self>, db: D) -> crate::error::Result<Box<dyn DataProvider>> {
@@ -131,16 +139,16 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for WildliveDataConnectorDefiniti
         Ok(Box::new(WildliveDataConnector {
             definition: *self,
             user,
-            api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/")
-                .map_err(|source| WildliveError::InvalidUrl { source })?,
-            api_auth_endpoint: Url::parse(ISSUER_URL)
-                .map_err(|source| WildliveError::InvalidUrl { source })?,
+            local_oidc_config: config::get_config_element::<config::Oidc>()
+                .boxed_context(error::MissingConfiguration)?,
+            wildlive_config: config::get_config_element::<config::Wildlive>()
+                .boxed_context(error::MissingConfiguration)?,
             db: Arc::new(db),
         }))
     }
 
     fn type_name(&self) -> &'static str {
-        "WildLIVE! Portal Connector"
+        "WildLIVE!"
     }
 
     fn name(&self) -> String {
@@ -155,29 +163,55 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for WildliveDataConnectorDefiniti
         self.priority.unwrap_or(0)
     }
 
-    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
-    where
-        Self: Sized,
-    {
+    async fn update(
+        &self,
+        new: TypedDataProviderDefinition,
+    ) -> crate::error::Result<TypedDataProviderDefinition> {
+        dbg!(&self, &new);
+
         let TypedDataProviderDefinition::WildliveDataConnectorDefinition(mut new) = new else {
-            return new; // TODO: throw error instead?
+            return Err(WildliveError::WrongConnectorType.into());
         };
 
         let Some(new_auth) = &mut new.auth else {
             // no auth given in new definition, nothing to do
-            return TypedDataProviderDefinition::WildliveDataConnectorDefinition(new);
+            return Ok(TypedDataProviderDefinition::WildliveDataConnectorDefinition(new));
         };
 
-        let Some(self_auth) = &self.auth else {
-            // no auth in self, nothing to copy
-            return TypedDataProviderDefinition::WildliveDataConnectorDefinition(new);
-        };
-
-        if new_auth.refresh_token.is_unknown() {
+        if new_auth.refresh_token.is_unknown()
+            && let Some(self_auth) = &self.auth
+        {
+            // no new auth, so copy the old one
             new_auth.clone_from(self_auth);
+
+            return Ok(TypedDataProviderDefinition::WildliveDataConnectorDefinition(new));
         }
 
-        TypedDataProviderDefinition::WildliveDataConnectorDefinition(new)
+        // if it is JSON, let's assume it is an auth code
+        let Ok(auth_token) = serde_json::from_str::<OidcAuthToken>(new_auth.refresh_token.as_str())
+        else {
+            // otherwise, assume it is a refresh token
+            return Ok(TypedDataProviderDefinition::WildliveDataConnectorDefinition(new));
+        };
+
+        let local_config = config::get_config_element::<config::Oidc>()
+            .boxed_context(error::MissingConfiguration)?;
+        let wildlive_config = config::get_config_element::<config::Wildlive>()
+            .boxed_context(error::MissingConfiguration)?;
+
+        let tokens = retrieve_refresh_token_from_local_code(
+            local_config,
+            wildlive_config.oidc,
+            &auth_token.code,
+            &auth_token.pkce_verifier,
+        )
+        .await?;
+
+        new_auth.refresh_token = Secret::new(tokens.refresh_token.into());
+        new_auth.expiry_date =
+            DateTime::now() + Duration::seconds(tokens.refresh_expires_in as i64);
+
+        Ok(TypedDataProviderDefinition::WildliveDataConnectorDefinition(new))
     }
 }
 
@@ -232,11 +266,13 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
 
                 let api_token = update_and_get_token_for_request(
                     &self.definition,
-                    &self.api_auth_endpoint,
+                    &self.wildlive_config.oidc.issuer,
                     self.db.as_ref(),
                 )
                 .await?;
-                let projects = datasets::projects(&self.api_endpoint, api_token.as_ref()).await?;
+                let projects =
+                    datasets::projects(&self.wildlive_config.api_endpoint, api_token.as_ref())
+                        .await?;
 
                 for project in projects {
                     items.push(CollectionItem::Collection(LayerCollectionListing {
@@ -478,15 +514,21 @@ impl<D: GeoEngineDb> WildliveDataConnector<D> {
 
 async fn update_and_get_token_for_request(
     definition: &WildliveDataConnectorDefinition,
-    api_auth_endpoint: &Url,
+    config: &config::WildliveOidc,
     _db: &impl GeoEngineDb,
 ) -> Result<Option<AccessToken>> {
     let Some(refresh_token) = definition.refresh_token_option() else {
         return Ok(None);
     };
 
+    let http_client = reqwest::ClientBuilder::new()
+        // Following redirects opens the client up to SSRF vulnerabilities.
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .unwrap();
+
     let tokens =
-        auth::retrieve_access_and_refresh_token(api_auth_endpoint.as_str(), refresh_token).await?;
+        auth::retrieve_access_and_refresh_token(&http_client, config, refresh_token).await?;
 
     let mut definition = definition.clone();
     definition.auth = Some(WildliveDataConnectorAuth {
@@ -857,6 +899,7 @@ mod tests {
         contexts::{PostgresSessionContext, SessionContext},
         datasets::external::wildlive::datasets::{PAGE_SIZE, SearchRequest},
         ge_context,
+        util::join_base_url_and_path,
     };
     use geoengine_datatypes::{
         collections::VectorDataType,
@@ -1016,7 +1059,11 @@ mod tests {
                 priority: None,
             },
             user: None,
-            api_auth_endpoint: api_endpoint.join("/auth/realms/wildlive-portal/").unwrap(),
+            api_auth_endpoint: join_base_url_and_path(
+                &api_endpoint,
+                "/auth/realms/wildlive-portal/",
+            )
+            .unwrap(),
             api_endpoint,
             db: Arc::new(ctx.db()),
         };
@@ -1274,7 +1321,11 @@ mod tests {
                 priority: None,
             },
             user: None,
-            api_auth_endpoint: api_endpoint.join("/auth/realms/wildlive-portal/").unwrap(),
+            api_auth_endpoint: join_base_url_and_path(
+                &api_endpoint,
+                "/auth/realms/wildlive-portal/",
+            )
+            .unwrap(),
             api_endpoint,
             db: Arc::new(ctx.db()),
         };
