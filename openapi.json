@@ -11078,6 +11078,12 @@
             "enum": [
               "WildLIVE!"
             ]
+          },
+          "user": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },

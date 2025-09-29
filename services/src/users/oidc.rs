@@ -150,7 +150,7 @@ impl OidcManager {
         use crate::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
 
         let request_db = OidcRequestDb {
-            issuer: value.issuer.to_string(),
+            issuer: value.issuer,
             client_id: value.client_id.to_string(),
             client_secret: value.client_secret.clone(),
             scopes: value.scopes,
@@ -588,7 +588,7 @@ impl TryFrom<Oidc> for OidcRequestDb {
     fn try_from(value: Oidc) -> Result<Self, Self::Error> {
         if value.enabled {
             let db = OidcRequestDb {
-                issuer: value.issuer.to_string(),
+                issuer: value.issuer,
                 client_id: value.client_id.to_string(),
                 client_secret: value.client_secret.clone(),
                 scopes: value.scopes,
@@ -666,7 +666,7 @@ mod tests {
 
     fn single_state_nonce_request_db() -> OidcRequestDb {
         OidcRequestDb {
-            issuer: ISSUER_URL.to_string(),
+            issuer: Url::parse(ISSUER_URL).unwrap(),
             client_id: "DummyClient".to_string(),
             client_secret: Some("DummySecret".to_string()),
             scopes: vec!["profile".to_string(), "email".to_string()],
@@ -886,7 +886,7 @@ mod tests {
     #[tokio::test]
     async fn generate_request_success() {
         let request_db = OidcRequestDb {
-            issuer: ISSUER_URL.to_owned() + "oidc/test",
+            issuer: Url::parse(&(ISSUER_URL.to_owned() + "oidc/test")).unwrap(),
             client_id: "DummyClient".to_string(),
             client_secret: Some("DummySecret".to_string()),
             scopes: vec!["profile".to_string(), "email".to_string()],

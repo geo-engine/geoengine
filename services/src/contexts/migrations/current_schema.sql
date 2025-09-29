@@ -818,6 +818,7 @@ CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
 );
 
 CREATE TYPE "WildliveDataConnectorAuth" AS (
+    "user" text,
     refresh_token text,
     expiry_date TIMESTAMPTZ
 );

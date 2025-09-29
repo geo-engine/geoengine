@@ -10,7 +10,8 @@ use oauth2::{
     TokenResponse as _, TokenUrl,
 };
 use openidconnect::{
-    Client, EmptyAdditionalClaims, IdTokenFields, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl,
+    Client, EmptyAdditionalClaims, IdTokenFields, IdTokenVerifier, IssuerUrl, JsonWebKeySet,
+    JsonWebKeySetUrl, Nonce, TokenResponse as _,
     core::{
         CoreAuthDisplay, CoreAuthPrompt, CoreErrorResponseType, CoreGenderClaim, CoreJsonWebKey,
         CoreJsonWebKeySet, CoreJweContentEncryptionAlgorithm, CoreJwsSigningAlgorithm,
@@ -22,7 +23,9 @@ use url::Url;
 
 #[derive(Debug, serde::Deserialize)]
 pub(super) struct TokenResponse {
+    pub(super) user: Option<String>,
     pub(super) access_token: AccessToken,
+    #[allow(dead_code)]
     pub(super) expires_in: u64,
     pub(super) refresh_token: RefreshToken,
     pub(super) refresh_expires_in: u64,
@@ -35,8 +38,11 @@ struct RefreshExpiresInField {
 
 impl ExtraTokenFields for RefreshExpiresInField {}
 
-impl From<WildliveTokenResponse> for TokenResponse {
-    fn from(response: WildliveTokenResponse) -> Self {
+impl TokenResponse {
+    fn from_response(
+        response: &WildliveTokenResponse,
+        id_token_verifier: &IdTokenVerifier<'_, CoreJsonWebKey>,
+    ) -> Result<Self> {
         let refresh_token = response
             .refresh_token()
             .cloned()
@@ -45,12 +51,32 @@ impl From<WildliveTokenResponse> for TokenResponse {
             !refresh_token.secret().is_empty(),
             "refresh token should be present"
         );
-        Self {
+
+        let user = response
+            .id_token()
+            .ok_or(WildliveError::Oidc {
+                info: "missing ID token in response",
+                source: Box::new(openidconnect::ClaimsVerificationError::Unsupported(
+                    "ID token is missing".to_string(),
+                )),
+            })?
+            .claims(id_token_verifier, |_n: Option<&Nonce>| {
+                // we just want the username for display purposes, so we skip nonce verification
+                Ok(())
+            })
+            .boxed_context(error::Oidc {
+                info: "failed to extract user from ID token",
+            })?
+            .preferred_username()
+            .map(|e| e.to_string());
+
+        Ok(Self {
+            user,
             access_token: response.access_token().clone(),
             expires_in: response.expires_in().map_or(0, |d| d.as_secs()),
             refresh_token,
             refresh_expires_in: response.extra_fields().extra_fields().refresh_expires_in,
-        }
+        })
     }
 }
 
@@ -102,7 +128,7 @@ pub async fn retrieve_access_and_refresh_token(
     );
 
     // TODO: cache the jwks to not fetch it every time
-    let jwks = retrieve_jwks(&http_client, &wildlive_config.issuer).await?;
+    let jwks = retrieve_jwks(http_client, &wildlive_config.issuer).await?;
 
     let mut client = WildliveClient::new(
         client_id,
@@ -115,13 +141,17 @@ pub async fn retrieve_access_and_refresh_token(
         client = client.set_client_secret(ClientSecret::new(client_secret.into()));
     }
 
+    let id_token_verifier = client.id_token_verifier();
+
     let refresh_token_request = client.exchange_refresh_token(refresh_token);
 
-    refresh_token_request
-        .request_async(http_client)
-        .await
-        .boxed_context(error::AuthKeyInvalid)
-        .map(TokenResponse::from)
+    TokenResponse::from_response(
+        &refresh_token_request
+            .request_async(http_client)
+            .await
+            .boxed_context(error::AuthKeyInvalid)?,
+        &id_token_verifier,
+    )
 }
 
 pub async fn retrieve_jwks(
@@ -185,9 +215,9 @@ pub async fn retrieve_wildlive_tokens(
         .set_pkce_verifier(pkce_verifier)
         .set_redirect_uri(Cow::Owned(RedirectUrl::from_url(redirect_uri)));
 
-    dbg!(&token_request);
-
-    let token_response = dbg!(token_request.request_async(http_client).await)
+    let token_response = token_request
+        .request_async(http_client)
+        .await
         .boxed_context(error::AuthKeyInvalid)?;
 
     // Step 2: Access tokens for wildlive OIDC provider using the access token from step 1
@@ -197,17 +227,15 @@ pub async fn retrieve_wildlive_tokens(
         .bearer_auth(token_response.access_token().secret())
         .header("Accept", "application/json");
 
-    dbg!(
-        broker_request
-            .send()
-            .await
-            .boxed_context(error::Oidc {
-                info: "request to broker failed"
-            })?
-            .json::<TokenResponse>()
-            .await
-    )
-    .boxed_context(error::AuthKeyInvalid)
+    broker_request
+        .send()
+        .await
+        .boxed_context(error::Oidc {
+            info: "request to broker failed",
+        })?
+        .json::<TokenResponse>()
+        .await
+        .boxed_context(error::AuthKeyInvalid)
 }
 
 pub async fn retrieve_refresh_token_from_local_code(
@@ -233,29 +261,7 @@ pub async fn retrieve_refresh_token_from_local_code(
     )
     .await?;
 
-    let client_id = ClientId::new(wildlive_config.client_id);
-    let issuer_url = wildlive_config.issuer.clone();
-    let token_url = TokenUrl::from_url(
-        join_base_url_and_path(&issuer_url, "protocol/openid-connect/token")
-            .map_err(|source| WildliveError::InvalidUrl { source })?,
-    );
-
-    let jwks = retrieve_jwks(&http_client, &issuer_url).await?;
-
-    let mut client = WildliveClient::new(client_id, IssuerUrl::from_url(issuer_url), jwks)
-        .set_token_uri(token_url);
-
-    if let Some(client_secret) = wildlive_config.client_secret {
-        client = client.set_client_secret(ClientSecret::new(client_secret));
-    }
-
-    let token_request = client.exchange_refresh_token(&tokens.refresh_token);
-
-    dbg!(&token_request);
-
-    dbg!(token_request.request_async(&http_client).await)
-        .boxed_context(error::AuthKeyInvalid)
-        .map(TokenResponse::from)
+    retrieve_access_and_refresh_token(&http_client, &wildlive_config, &tokens.refresh_token).await
 }
 
 #[cfg(test)]

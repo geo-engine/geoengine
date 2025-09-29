@@ -1011,6 +1011,7 @@ pub struct WildliveDataConnectorDefinition {
     pub id: DataProviderId,
     pub name: String,
     pub description: String,
+    pub user: Option<String>,
     pub refresh_token: Option<Secret<String>>,
     pub expiry_date: Option<DateTime>,
     pub priority: Option<i16>,
@@ -1025,6 +1026,7 @@ impl From<WildliveDataConnectorDefinition>
             name: value.name,
             description: value.description,
             auth: value.refresh_token.map(|t| WildliveDataConnectorAuth {
+                user: value.user.unwrap_or_else(|| "<unknown user>".to_string()),
                 refresh_token: Secret::new(RefreshToken::new(t.0)),
                 expiry_date: value.expiry_date.unwrap_or_else(DateTime::now),
             }),
@@ -1037,21 +1039,23 @@ impl From<crate::datasets::external::WildliveDataConnectorDefinition>
     for WildliveDataConnectorDefinition
 {
     fn from(value: crate::datasets::external::WildliveDataConnectorDefinition) -> Self {
-        let (refresh_token, expiry_date) = value
-            .auth
-            .map(|a| {
-                (
-                    Secret::new(a.refresh_token.into_inner().into_inner().into_secret()),
-                    a.expiry_date,
-                )
-            })
-            .unzip();
+        let (user, refresh_token, expiry_date) = match value.auth {
+            Some(auth) => (
+                Some(auth.user),
+                Some(Secret::new(
+                    auth.refresh_token.into_inner().into_inner().into_secret(),
+                )),
+                Some(auth.expiry_date),
+            ),
+            _ => (None, None, None),
+        };
 
         WildliveDataConnectorDefinition {
             r#type: Default::default(),
             id: value.id.into(),
             name: value.name,
             description: value.description,
+            user,
             refresh_token,
             expiry_date,
             priority: value.priority,

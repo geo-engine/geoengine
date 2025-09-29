@@ -1,8 +1,6 @@
 use crate::datasets::upload::VolumeName;
 use crate::error::{self, Result};
-use crate::util::parsing::{
-    deserialize_api_prefix, deserialize_base_url, deserialize_base_url_option,
-};
+use crate::util::parsing::{deserialize_api_prefix, deserialize_base_url_option};
 use config::{Config, Environment, File};
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::util::test::TestDefault;
@@ -493,7 +491,6 @@ pub struct Wildlive {
 
 #[derive(Clone, Debug, Deserialize)]
 pub struct WildliveOidc {
-    #[serde(deserialize_with = "deserialize_base_url")]
     pub issuer: Url,
     pub client_id: String,
     pub client_secret: Option<String>,
