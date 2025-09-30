@@ -1083,6 +1083,7 @@ pub fn json_file_responder(path: &Path) -> impl httptest::responders::Responder 
 pub(crate) mod mock_oidc {
     use crate::config::Oidc;
     use crate::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+    use crate::util::join_base_url_and_path;
     use chrono::{Duration, Utc};
     use httptest::matchers::{matches, request};
     use httptest::responders::status_code;
@@ -1211,23 +1212,26 @@ pub(crate) mod mock_oidc {
         }
     }
 
-    pub fn mock_provider_metadata(provider_base_url: &str) -> DefaultProviderMetadata {
+    pub fn mock_provider_metadata(provider_base_url: &Url) -> DefaultProviderMetadata {
         CoreProviderMetadata::new(
-            IssuerUrl::new(provider_base_url.to_string())
-                .expect("Parsing mock issuer should not fail"),
-            AuthUrl::new(provider_base_url.to_owned() + "/authorize")
-                .expect("Parsing mock auth url should not fail"),
-            JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk")
-                .expect("Parsing mock jwk url should not fail"),
+            IssuerUrl::from_url(provider_base_url.clone()),
+            AuthUrl::from_url(
+                join_base_url_and_path(provider_base_url, "authorize")
+                    .expect("Parsing mock auth url should not fail"),
+            ),
+            JsonWebKeySetUrl::from_url(
+                join_base_url_and_path(provider_base_url, "jwk")
+                    .expect("Parsing mock jwk url should not fail"),
+            ),
             vec![ResponseTypes::new(vec![CoreResponseType::Code])],
             vec![],
             vec![CoreJwsSigningAlgorithm::RsaSsaPssSha256],
             EmptyAdditionalProviderMetadata {},
         )
-        .set_token_endpoint(Some(
-            TokenUrl::new(provider_base_url.to_owned() + "/token")
+        .set_token_endpoint(Some(TokenUrl::from_url(
+            join_base_url_and_path(provider_base_url, "token")
                 .expect("Parsing mock token url should not fail"),
-        ))
+        )))
         .set_scopes_supported(Some(vec![
             Scope::new("openid".to_string()),
             Scope::new("email".to_string()),
@@ -1289,9 +1293,9 @@ pub(crate) mod mock_oidc {
 
     pub fn mock_valid_provider_discovery(expected_discoveries: usize) -> Server {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
-        let provider_metadata = mock_provider_metadata(server_url.as_str());
+        let provider_metadata = mock_provider_metadata(&server_url);
         let jwks = mock_jwks();
 
         server.expect(

@@ -697,8 +697,7 @@ mod tests {
         let client_id = request_db.client_id.clone();
         let client_secret = request_db.client_secret.clone();
 
-        let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_jwks(mock_jwks());
+        let provider_metadata = mock_provider_metadata(&request_db.issuer).set_jwks(mock_jwks());
 
         let mut client = Client::from_provider_metadata(
             provider_metadata,
@@ -766,7 +765,7 @@ mod tests {
         let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
-        let provider_metadata = mock_provider_metadata(request_db.issuer.as_str());
+        let provider_metadata = mock_provider_metadata(&request_db.issuer);
         let jwks = mock_jwks();
 
         mock_provider_discovery(&server, &provider_metadata, &jwks);
@@ -812,7 +811,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_response_types_supported(vec![]);
+            mock_provider_metadata(&request_db.issuer).set_response_types_supported(vec![]);
         let jwks = mock_jwks();
 
         mock_provider_discovery(&server, &provider_metadata, &jwks);
@@ -830,7 +829,7 @@ mod tests {
         let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
-        let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
+        let provider_metadata = mock_provider_metadata(&request_db.issuer)
             .set_id_token_signing_alg_values_supported(vec![]);
         let jwks = mock_jwks();
 
@@ -850,7 +849,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_scopes_supported(None);
+            mock_provider_metadata(&request_db.issuer).set_scopes_supported(None);
         let jwks = mock_jwks();
 
         mock_provider_discovery(&server, &provider_metadata, &jwks);
@@ -869,7 +868,7 @@ mod tests {
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_claims_supported(None);
+            mock_provider_metadata(&request_db.issuer).set_claims_supported(None);
         let jwks = mock_jwks();
 
         mock_provider_discovery(&server, &provider_metadata, &jwks);
