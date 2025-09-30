@@ -827,8 +827,8 @@ CREATE TYPE "WildliveDataConnectorDefinition" AS (
     id uuid,
     "name" text,
     description text,
-    auth "WildliveDataConnectorAuth",
-    priority smallint
+    priority smallint,
+    auth "WildliveDataConnectorAuth"
 );
 
 CREATE TYPE "DataProviderDefinition" AS (
