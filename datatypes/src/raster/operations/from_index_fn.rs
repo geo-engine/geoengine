@@ -300,9 +300,9 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::raster::{GridIdx2D, GridOrEmpty2D, GridShape};
-
     use super::*;
+    use crate::raster::{GridIdx2D, GridOrEmpty2D, GridShape};
+    use num::Integer;
 
     #[test]
     fn grid_from_2d_linear_index() {
@@ -428,11 +428,9 @@ mod tests {
     #[test]
     fn masked_grid_from_linear_index_option() {
         let grid_shape = GridShape::from([2, 4]);
-        let masked_grid =
-            MaskedGrid::from_index_fn(
-                &grid_shape,
-                |i: usize| if i % 2 == 0 { Some(i) } else { None },
-            );
+        let masked_grid = MaskedGrid::from_index_fn(&grid_shape, |i: usize| {
+            if i.is_multiple_of(2) { Some(i) } else { None }
+        });
         assert_eq!(masked_grid.shape(), &GridShape::from([2, 4]));
         let res_values: Vec<Option<usize>> = masked_grid.masked_element_deref_iterator().collect();
         assert_eq!(
@@ -445,7 +443,7 @@ mod tests {
     fn masked_grid_from_linear_index_parallel_option() {
         let grid_shape = GridShape::from([2, 4]);
         let masked_grid = MaskedGrid::from_index_fn_parallel(&grid_shape, |i: usize| {
-            if i % 2 == 0 { Some(i) } else { None }
+            if i.is_multiple_of(2) { Some(i) } else { None }
         });
         assert_eq!(masked_grid.shape(), &GridShape::from([2, 4]));
         let res_values: Vec<Option<usize>> = masked_grid.masked_element_deref_iterator().collect();
@@ -460,7 +458,7 @@ mod tests {
         let grid_shape = GridShape::from([2, 4]);
         let masked_grid = MaskedGrid::from_index_fn(&grid_shape, |GridIdx([y, x]): GridIdx2D| {
             let r = y * 10 + x;
-            if r % 2 == 0 { Some(r) } else { None }
+            if r.is_multiple_of(2) { Some(r) } else { None }
         });
         assert_eq!(masked_grid.shape(), &GridShape::from([2, 4]));
         let res_values: Vec<Option<isize>> = masked_grid.masked_element_deref_iterator().collect();

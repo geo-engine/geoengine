@@ -99,13 +99,13 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManagerBackend {
             .task_unique_id()
             .map(|task_unique_id| (task.task_type(), task_unique_id));
 
-        if let Some(task_unique_id) = &task_unique_key {
-            if !lock.unique_tasks.insert(task_unique_id.clone()) {
-                return Err(TaskError::DuplicateTask {
-                    task_type: task_unique_id.0,
-                    task_unique_id: task_unique_id.1.clone(),
-                });
-            }
+        if let Some(task_unique_id) = &task_unique_key
+            && !lock.unique_tasks.insert(task_unique_id.clone())
+        {
+            return Err(TaskError::DuplicateTask {
+                task_type: task_unique_id.0,
+                task_unique_id: task_unique_id.1.clone(),
+            });
         }
 
         let task_type = task.task_type();

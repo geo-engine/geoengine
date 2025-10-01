@@ -165,7 +165,7 @@ struct CreateOverviewsParams {
     resampling_method: Option<ResamplingMethod>,
 }
 
-/// Create overviews for all NetCDF files of the provider
+/// Create overviews for all `NetCDF` files of the provider
 #[utoipa::path(
     tag = "Overviews",
     put,
@@ -366,7 +366,7 @@ struct CreateOverviewParams {
 #[into_params(names("path"))]
 struct EbvPath(#[param(value_type = String)] PathBuf);
 
-/// Creates overview for a single NetCDF file
+/// Creates overview for a single `NetCDF` file
 #[utoipa::path(
     tag = "Overviews",
     put,
@@ -407,7 +407,7 @@ async fn create_overview<C: ApplicationContext>(
     Ok(web::Json(TaskResponse::new(task_id)))
 }
 
-/// Refreshes an overview for a single NetCDF file.
+/// Refreshes an overview for a single `NetCDF` file.
 /// Does not generate new raster files but re-creates the overview metadata.
 #[utoipa::path(
     tag = "Overviews",
@@ -573,7 +573,7 @@ struct RemoveOverviewParams {
     force: bool,
 }
 
-/// Removes an overview for a single NetCDF file.
+/// Removes an overview for a single `NetCDF` file.
 /// - `force`: If true, the task will be aborted without calling clean-up functions.
 #[utoipa::path(
     tag = "Overviews",

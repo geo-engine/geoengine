@@ -690,11 +690,11 @@ where
         debug!("result descr bbox: {:?}", result_descriptor.bbox);
         debug!("query bbox: {:?}", query.spatial_bounds);
 
-        if let Some(data_spatial_bounds) = result_descriptor.bbox {
-            if !data_spatial_bounds.intersects(&query.spatial_bounds) {
-                debug!("query does not intersect spatial data bounds");
-                empty = true;
-            }
+        if let Some(data_spatial_bounds) = result_descriptor.bbox
+            && !data_spatial_bounds.intersects(&query.spatial_bounds)
+        {
+            debug!("query does not intersect spatial data bounds");
+            empty = true;
         }
 
         // TODO: use the time bounds to early return.

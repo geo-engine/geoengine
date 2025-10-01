@@ -41,12 +41,11 @@ pub fn visit_schema<T: OpenapiVisitor>(
                 for property in obj.properties.values() {
                     visit_schema(property, components, visitor, source_location);
                 }
-                if let Some(additional_properties) = &obj.additional_properties {
-                    if let AdditionalProperties::RefOr(properties_schema) =
+                if let Some(additional_properties) = &obj.additional_properties
+                    && let AdditionalProperties::RefOr(properties_schema) =
                         additional_properties.as_ref()
-                    {
-                        visit_schema(properties_schema, components, visitor, source_location);
-                    }
+                {
+                    visit_schema(properties_schema, components, visitor, source_location);
                 }
             }
             Schema::OneOf(oo) => {
