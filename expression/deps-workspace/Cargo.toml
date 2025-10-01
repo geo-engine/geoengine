@@ -1,7 +1,14 @@
 [package]
 name = "geoengine-expression-deps"
 version = "0.0.0"
+publish = false
 edition = "2024"
+description = "A crate to hold dependencies for geoengine-expression"
+license-file = "../../LICENSE"
+repository = "https://github.com/geo-engine/geoengine"
+readme = "../../README.md"
+keywords = ["geoengine", "gis", "geospatial", "data processing"]
+categories = ["science::geo"]
 
 [lib]
 path = "lib.rs"

@@ -29,8 +29,9 @@ lto = true
 inherits = "test"
 strip = "debuginfo"
 
-[workspace.lints.clippy]
 # configure default clippy lints
+[workspace.lints.clippy]
+cargo = { level = "warn", priority = 0 }
 complexity = { level = "warn", priority = 0 }
 style = { level = "warn", priority = 0 }
 perf = { level = "warn", priority = 0 }
@@ -60,6 +61,9 @@ print_stderr = { level = "warn", priority = 1 }
 print_stdout = { level = "warn", priority = 1 }
 unimplemented = { level = "warn", priority = 1 }
 unwrap_used = { level = "warn", priority = 1 }
+
+# disable some cargo lints
+multiple_crate_versions = { level = "allow", priority = 1 }
 
 [workspace.dependencies]
 actix = { version = "0.13", default-features = false }
