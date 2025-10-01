@@ -1,3 +1,5 @@
+#![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
+
 //! GEO BON EBV Portal catalog lookup service
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.

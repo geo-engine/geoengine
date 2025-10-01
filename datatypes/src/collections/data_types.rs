@@ -364,24 +364,24 @@ impl FeatureCollectionInfos for TypedFeatureCollection {
     impl_function_by_forwarding_ref!(fn len(&self) -> usize);
     impl_function_by_forwarding_ref!(fn is_simple(&self) -> bool);
     impl_function_by_forwarding_ref!(fn column_type(&self, column_name: &str) -> Result<FeatureDataType>);
-    impl_function_by_forwarding_ref!(fn data(&self, column_name: &str) -> Result<FeatureDataRef>);
+    impl_function_by_forwarding_ref!(fn data(&self, column_name: &str) -> Result<FeatureDataRef<'_>>);
     impl_function_by_forwarding_ref!(fn time_intervals(&self) -> &[TimeInterval]);
     impl_function_by_forwarding_ref!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
     impl_function_by_forwarding_ref!(fn byte_size(&self) -> usize);
-    impl_function_by_forwarding_ref!(fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter);
-    impl_function_by_forwarding_ref!(fn column_names(&self) -> Keys<String, FeatureDataType>);
+    impl_function_by_forwarding_ref!(fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter<'_>);
+    impl_function_by_forwarding_ref!(fn column_names(&self) -> Keys<'_, String, FeatureDataType>);
 }
 
 impl FeatureCollectionInfos for TypedFeatureCollectionRef<'_> {
     impl_function_by_forwarding_ref2!(fn len(&self) -> usize);
     impl_function_by_forwarding_ref2!(fn is_simple(&self) -> bool);
     impl_function_by_forwarding_ref2!(fn column_type(&self, column_name: &str) -> Result<FeatureDataType>);
-    impl_function_by_forwarding_ref2!(fn data(&self, column_name: &str) -> Result<FeatureDataRef>);
+    impl_function_by_forwarding_ref2!(fn data(&self, column_name: &str) -> Result<FeatureDataRef<'_>>);
     impl_function_by_forwarding_ref2!(fn time_intervals(&self) -> &[TimeInterval]);
     impl_function_by_forwarding_ref2!(fn column_types(&self) -> HashMap<String, FeatureDataType>);
     impl_function_by_forwarding_ref2!(fn byte_size(&self) -> usize);
-    impl_function_by_forwarding_ref2!(fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter);
-    impl_function_by_forwarding_ref2!(fn column_names(&self) -> Keys<String, FeatureDataType>);
+    impl_function_by_forwarding_ref2!(fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter<'_>);
+    impl_function_by_forwarding_ref2!(fn column_names(&self) -> Keys<'_, String, FeatureDataType>);
 }
 
 impl ToGeoJson<'_> for TypedFeatureCollection {

@@ -39,7 +39,7 @@ struct TaskHandle {
 }
 
 impl SimpleTaskManagerBackend {
-    async fn write_lock_all(&self) -> WriteLockAll {
+    async fn write_lock_all(&self) -> WriteLockAll<'_> {
         let (tasks_by_id, status_by_id, task_list, unique_tasks) = tokio::join!(
             self.tasks_by_id.write(),
             self.status_by_id.write(),
@@ -54,7 +54,7 @@ impl SimpleTaskManagerBackend {
         }
     }
 
-    async fn write_lock_for_update(&self) -> WriteLockForUpdate {
+    async fn write_lock_for_update(&self) -> WriteLockForUpdate<'_> {
         let (tasks_by_id, unique_tasks) =
             tokio::join!(self.tasks_by_id.write(), self.unique_tasks.write());
         WriteLockForUpdate {

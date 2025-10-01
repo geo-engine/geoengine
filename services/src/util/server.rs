@@ -354,7 +354,7 @@ pub fn connection_init(connection: &dyn Any, data: &mut Extensions) {
 //       idea: have a global map of sockets being monitored for connection close. When a new connection arrives: get its fd and
 //       check whether this fd is currently being monitored. If so: notify the monitor channel of the new connection via a channel.
 #[cfg(target_os = "linux")]
-pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<()> {
+pub fn connection_closed(req: &HttpRequest, timeout: Option<Duration>) -> BoxFuture<'_, ()> {
     use futures::TryFutureExt;
     use nix::errno::Errno;
     use nix::sys::socket::MsgFlags;

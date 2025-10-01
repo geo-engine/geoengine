@@ -458,7 +458,7 @@ mod tests {
         let grid_shape = GridShape::from([2, 4]);
         let masked_grid = MaskedGrid::from_index_fn(&grid_shape, |GridIdx([y, x]): GridIdx2D| {
             let r = y * 10 + x;
-            if r.is_multiple_of(2) { Some(r) } else { None }
+            if r.is_multiple_of(&2) { Some(r) } else { None }
         });
         assert_eq!(masked_grid.shape(), &GridShape::from([2, 4]));
         let res_values: Vec<Option<isize>> = masked_grid.masked_element_deref_iterator().collect();

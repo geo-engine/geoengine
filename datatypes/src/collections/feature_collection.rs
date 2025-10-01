@@ -776,10 +776,10 @@ pub trait FeatureCollectionInfos {
     fn column_types(&self) -> HashMap<String, FeatureDataType>;
 
     /// Return the column names of all attributes
-    fn column_names(&self) -> hash_map::Keys<String, FeatureDataType>;
+    fn column_names(&self) -> hash_map::Keys<'_, String, FeatureDataType>;
 
     /// Return the names of the columns of this type
-    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter;
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter<'_>;
 
     /// Retrieve column data
     ///
@@ -787,7 +787,7 @@ pub trait FeatureCollectionInfos {
     ///
     /// This method fails if there is no `column_name` with that name
     ///
-    fn data(&self, column_name: &str) -> Result<FeatureDataRef>;
+    fn data(&self, column_name: &str) -> Result<FeatureDataRef<'_>>;
 
     /// Retrieve time intervals
     fn time_intervals(&self) -> &[TimeInterval];
@@ -1003,7 +1003,7 @@ where
         }
     }
 
-    fn data(&self, column_name: &str) -> Result<FeatureDataRef> {
+    fn data(&self, column_name: &str) -> Result<FeatureDataRef<'_>> {
         ensure!(
             !Self::is_reserved_name(column_name),
             error::CannotAccessReservedColumn {
@@ -1098,14 +1098,14 @@ where
         table_size + map_size
     }
 
-    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter {
+    fn column_names_of_type(&self, column_type: FeatureDataType) -> FilteredColumnNameIter<'_> {
         FilteredColumnNameIter {
             iter: self.types.iter(),
             column_type,
         }
     }
 
-    fn column_names(&self) -> hash_map::Keys<String, FeatureDataType> {
+    fn column_names(&self) -> hash_map::Keys<'_, String, FeatureDataType> {
         self.types.keys()
     }
 }
