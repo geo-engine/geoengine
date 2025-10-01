@@ -386,14 +386,6 @@ impl GdalDatasetParameters {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct TilingInformation {
-    pub x_axis_tiles: usize,
-    pub y_axis_tiles: usize,
-    pub x_axis_tile_size: usize,
-    pub y_axis_tile_size: usize,
-}
-
 pub struct GdalSourceProcessor<T>
 where
     T: Pixel,

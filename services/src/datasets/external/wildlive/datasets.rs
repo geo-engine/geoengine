@@ -64,13 +64,6 @@ struct StationSetup {
     pub decimal_longitude: f64,
 }
 
-#[derive(Debug, serde::Deserialize, PartialEq)]
-pub(super) struct StationName {
-    pub id: String,
-    pub name: String,
-    pub description: String,
-}
-
 #[derive(Debug, Clone, serde::Deserialize)]
 struct ImageObject {
     pub id: String,
