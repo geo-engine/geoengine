@@ -14,5 +14,5 @@ proc-macro = false
 harness = false
 
 [dependencies]
-geo = "0.30.0"
-geo-types = "0.7.16" # important for compatibility when linking
+geo = "0.31.0"
+geo-types = "0.7.17" # important for compatibility when linking
