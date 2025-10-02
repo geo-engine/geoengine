@@ -442,6 +442,10 @@ impl DateTimeParseFormat {
             (has_tz, has_time)
         };
 
+        // TODO: remove when chrono supports `%.3f` again
+        // cf. <https://github.com/chronotope/chrono/issues/1732>
+        let fmt = fmt.replace("%.3f", "%.f");
+
         DateTimeParseFormat {
             fmt,
             has_tz,
