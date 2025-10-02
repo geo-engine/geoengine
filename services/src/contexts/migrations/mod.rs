@@ -5,6 +5,8 @@ pub use crate::contexts::migrations::{
     migration_0017_ml_model_tensor_shape::Migration0017MlModelTensorShape,
     migration_0018_wildlive_connector::Migration0018WildliveConnector,
     migration_0020_provider_permissions::Migration0020ProviderPermissions,
+    migration_0021_default_permissions_for_existing_providers::Migration0021DefaultPermissionsForExistingProviders,
+    migration_0022_permission_queries::Migration0022PermissionQueries,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -18,11 +20,11 @@ mod migration_0018_wildlive_connector;
 mod migration_0019_ml_model_no_data;
 mod migration_0020_provider_permissions;
 mod migration_0021_default_permissions_for_existing_providers;
+mod migration_0022_permission_queries;
 
 #[cfg(test)]
 mod schema_info;
 
-use crate::contexts::migrations::migration_0021_default_permissions_for_existing_providers::Migration0021DefaultPermissionsForExistingProviders;
 #[cfg(test)]
 pub(crate) use schema_info::{AssertSchemaEqPopulationConfig, assert_migration_schema_eq};
 
@@ -46,6 +48,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0019MlModelNoData),
         Box::new(Migration0020ProviderPermissions),
         Box::new(Migration0021DefaultPermissionsForExistingProviders),
+        Box::new(Migration0022PermissionQueries),
     ]
 }
 
