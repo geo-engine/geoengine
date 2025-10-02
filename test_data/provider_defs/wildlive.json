@@ -2,5 +2,7 @@
   "type": "WildliveDataConnectorDefinition",
   "id": "b9e0e7c2-4f2a-4e3d-9c8a-2e7f5b1a6d3f",
   "name": "WildLIVE!",
-  "description": "WildLIVE! Portal Connector"
+  "description": "WildLIVE! Portal Connector",
+  "refresh_token": "eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI0MWFlNzYxMC1jNzIyLTRmOWQtOGJhNi02ZTc2MmRkNDIxOWIifQ.eyJleHAiOjE3NTgxMDA4MTIsImlhdCI6MTc1ODA5OTAxMiwianRpIjoiZWUzY2NiMzktY2FkMC00OTUxLWI0N2UtMjA3MWM4YWM0MDJkIiwiaXNzIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwiYXVkIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwic3ViIjoiMmRhZDgxZGYtOTVhZS00Y2E4LWE4NTktZWQyZjM0OWRlOWY2IiwidHlwIjoiUmVmcmVzaCIsImF6cCI6IndpbGRsaXZlLWZyb250ZW5kIiwic2Vzc2lvbl9zdGF0ZSI6ImJkYTkzMGE5LTQwODQtNDBlZi05YzYwLWVkOWYyZmM2ZmM2ZiIsInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsInNpZCI6ImJkYTkzMGE5LTQwODQtNDBlZi05YzYwLWVkOWYyZmM2ZmM2ZiJ9.rONEn-weoLqF7w9Rltw-ysxSy3Y7MQmV3kMEjvCSRUA",
+  "expiry_date": "2025-12-31T23:59:59Z"
 }

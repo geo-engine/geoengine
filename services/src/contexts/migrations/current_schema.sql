@@ -817,12 +817,18 @@ CREATE TYPE "CopernicusDataspaceDataProviderDefinition" AS (
     gdal_config "StringPair" []
 );
 
+CREATE TYPE "WildliveDataConnectorAuth" AS (
+    "user" text,
+    refresh_token text,
+    expiry_date TIMESTAMPTZ
+);
+
 CREATE TYPE "WildliveDataConnectorDefinition" AS (
     id uuid,
     "name" text,
     description text,
-    api_key text,
-    priority smallint
+    priority smallint,
+    auth "WildliveDataConnectorAuth"
 );
 
 CREATE TYPE "DataProviderDefinition" AS (

@@ -108,11 +108,11 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for ArunaDataProviderDefinition {
         self.priority.unwrap_or(0)
     }
 
-    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
-    where
-        Self: Sized,
-    {
-        match new {
+    async fn update(
+        &self,
+        new: TypedDataProviderDefinition,
+    ) -> crate::error::Result<TypedDataProviderDefinition> {
+        Ok(match new {
             TypedDataProviderDefinition::ArunaDataProviderDefinition(mut new) => {
                 if new.api_token == SECRET_REPLACEMENT {
                     new.api_token.clone_from(&self.api_token);
@@ -120,7 +120,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for ArunaDataProviderDefinition {
                 TypedDataProviderDefinition::ArunaDataProviderDefinition(new)
             }
             _ => new,
-        }
+        })
     }
 }
 

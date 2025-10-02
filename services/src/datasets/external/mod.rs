@@ -14,4 +14,6 @@ pub use sentinel_s2_l2a_cogs::{
     GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacQueryBuffer,
     StacZone,
 };
-pub use wildlive::{WildliveDataConnectorDefinition, WildliveDbCache, WildliveError};
+pub use wildlive::{
+    WildliveDataConnectorAuth, WildliveDataConnectorDefinition, WildliveDbCache, WildliveError,
+};

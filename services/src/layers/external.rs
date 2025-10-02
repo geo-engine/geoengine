@@ -46,11 +46,11 @@ pub trait DataProviderDefinition<D: GeoEngineDb>: Send + Sync + std::fmt::Debug 
         0
     }
 
-    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    async fn update(&self, new: TypedDataProviderDefinition) -> Result<TypedDataProviderDefinition>
     where
         Self: Sized,
     {
-        new
+        Ok(new)
     }
 }
 
@@ -246,7 +246,9 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
             Self::EdrDataProviderDefinition(def) => DataProviderDefinition::<D>::type_name(def),
             Self::CopernicusDataspaceDataProviderDefinition(_) => "CioDataProviderDefinition",
             Self::SentinelS2L2ACogsProviderDefinition(_) => "SentinelS2L2ACogsProviderDefinition",
-            Self::WildliveDataConnectorDefinition(_) => "WildliveDataConnectorDefinition",
+            Self::WildliveDataConnectorDefinition(def) => {
+                DataProviderDefinition::<D>::type_name(def)
+            }
         }
     }
 
@@ -329,46 +331,49 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
         }
     }
 
-    fn update(&self, other: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    async fn update(
+        &self,
+        other: TypedDataProviderDefinition,
+    ) -> Result<TypedDataProviderDefinition>
     where
         Self: Sized,
     {
         match self {
             TypedDataProviderDefinition::ArunaDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::GbifDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::GfbioAbcdDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::GfbioCollectionsDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::EbvPortalDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::EdrDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => {
-                DataProviderDefinition::<D>::update(def, other)
+                DataProviderDefinition::<D>::update(def, other).await
             }
         }
     }
