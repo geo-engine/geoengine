@@ -268,36 +268,56 @@ pub async fn retrieve_refresh_token_from_local_code(
 mod tests {
 
     use super::*;
-    use crate::util::tests::json_file_responder;
-    use geoengine_datatypes::test_data;
-    use httptest::{Expectation, all_of, matchers};
+    use crate::util::tests::mock_oidc::{MockTokenConfig, mock_jwks, mock_token_response};
+    use httptest::{Expectation, all_of, matchers, responders::status_code};
 
     #[tokio::test]
     async fn it_retrieves_a_new_set_of_tokens() {
         let mock_server = httptest::Server::run();
+        let server_url = Url::parse(&mock_server.url_str("/"))
+            .unwrap()
+            .join("realms/AI4WildLIVE")
+            .unwrap();
 
         mock_server.expect(
             Expectation::matching(all_of![
                 matchers::request::method("GET"),
-                matchers::request::path("/protocol/openid-connect/certs"),
+                matchers::request::path("/realms/AI4WildLIVE/protocol/openid-connect/certs"),
                 matchers::request::headers(matchers::contains(("accept", "application/json"))),
             ])
-            .respond_with(json_file_responder(test_data!(
-                "wildlive/responses/certs.json"
-            ))),
+            .respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(serde_json::to_string(&mock_jwks()).unwrap()),
+            ),
         );
+
+        let mut mock_token_config = MockTokenConfig::create_from_tokens(
+            server_url.clone(),
+            "geoengine".into(),
+            std::time::Duration::from_secs(300),
+            "eyJhbGciOiJSUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICJsbkF4V0NqY2lhX3I3cFBySUtTSGd6OVhyRGxzcGY4MHUxMDJpdENoelE4In0".into(),
+            "eyJhbGciOiJIUzI1NiIsInR5cCIgOiAiSldUIiwia2lkIiA6ICI0MWFlNzYxMC1jNzIyLTRmOWQtOGJhNi02ZTc2MmRkNDIxOWIifQ.eyJleHAiOjE3NTYxMzI5NTcsImlhdCI6MTc1NjEzMTE1NywianRpIjoiOTIwYTljM2EtMjZkMC00Y2NiLWIxYWQtNDRlNWU2NzZmZWU4IiwiaXNzIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwiYXVkIjoiaHR0cHM6Ly93ZWJhcHAuc2VuY2tlbmJlcmcuZGUvYXV0aC9yZWFsbXMvd2lsZGxpdmUtcG9ydGFsIiwic3ViIjoiMmRhZDgxZGYtOTVhZS00Y2E4LWE4NTktZWQyZjM0OWRlOWY2IiwidHlwIjoiUmVmcmVzaCIsImF6cCI6IndpbGRsaXZlLWZyb250ZW5kIiwic2Vzc2lvbl9zdGF0ZSI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSIsInNjb3BlIjoiZW1haWwgcHJvZmlsZSIsInNpZCI6ImFhNjljMDkzLTQ4YTUtNDg1Zi1iMWZkLTQ4MTE4YmY2YmI1NSJ9.COoMWxp6IZ_IKTQ-GGAb22CIcybY32II5wn9beaSoyw".into(),
+        );
+        mock_token_config.signing_alg = Some(CoreJwsSigningAlgorithm::RsaSsaPkcs1V15Sha256);
+        mock_token_config.preferred_username = Some("testuser".into());
+        let token_response = mock_token_response(mock_token_config);
+
+        let mut token_response_json = serde_json::to_value(&token_response).unwrap();
+        token_response_json["refresh_expires_in"] = serde_json::json!(300);
 
         mock_server.expect(
             Expectation::matching(all_of![
                 matchers::request::method("POST"),
-                matchers::request::path("/protocol/openid-connect/token"),
+                matchers::request::path("/realms/AI4WildLIVE/protocol/openid-connect/token"),
                 matchers::request::headers(matchers::contains(("accept", "application/json"))),
             ])
-            .respond_with(json_file_responder(test_data!(
-                "wildlive/responses/id-token.json"
-            ))),
+            .respond_with(
+                status_code(200)
+                    .insert_header("content-type", "application/json")
+                    .body(token_response_json.to_string()),
+            ),
         );
-
         let http_client = reqwest::ClientBuilder::new()
             // Following redirects opens the client up to SSRF vulnerabilities.
             .redirect(reqwest::redirect::Policy::none())
@@ -308,8 +328,8 @@ mod tests {
         let response = retrieve_access_and_refresh_token(
             &http_client,
             &crate::config::WildliveOidc {
-                issuer: Url::parse(&mock_server.url_str("/")).unwrap(),
-                client_id: "wildlive-frontend".into(),
+                issuer: server_url.clone(),
+                client_id: "geoengine".into(),
                 client_secret: None,
                 broker_provider: "wildlive-portal".into(),
             },
@@ -319,5 +339,6 @@ mod tests {
         .unwrap();
 
         assert!(!response.refresh_token.secret().is_empty());
+        assert!(response.user.is_some());
     }
 }

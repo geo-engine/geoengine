@@ -1100,8 +1100,8 @@ pub(crate) mod mock_oidc {
     };
     use openidconnect::{
         Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail,
-        EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce,
-        ResponseTypes, StandardClaims, SubjectIdentifier,
+        EndUserName, EndUserUsername, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim,
+        Nonce, ResponseTypes, StandardClaims, SubjectIdentifier,
     };
     use url::Url;
 
@@ -1166,6 +1166,8 @@ pub(crate) mod mock_oidc {
         pub access: String,
         pub access_for_id: String,
         pub refresh: Option<String>,
+        pub signing_alg: Option<CoreJwsSigningAlgorithm>,
+        pub preferred_username: Option<String>,
     }
 
     impl MockTokenConfig {
@@ -1184,6 +1186,8 @@ pub(crate) mod mock_oidc {
                 access: ACCESS_TOKEN.to_string(),
                 access_for_id: ACCESS_TOKEN.to_string(),
                 refresh: None,
+                signing_alg: Some(CoreJwsSigningAlgorithm::RsaSsaPssSha256),
+                preferred_username: None,
             }
         }
 
@@ -1208,6 +1212,8 @@ pub(crate) mod mock_oidc {
                 access: access_token.clone(),
                 access_for_id: access_token,
                 refresh: Some(refresh_token),
+                signing_alg: Some(CoreJwsSigningAlgorithm::RsaSsaPssSha256),
+                preferred_username: None,
             }
         }
     }
@@ -1262,13 +1268,20 @@ pub(crate) mod mock_oidc {
                 Utc::now(),
                 StandardClaims::new(SubjectIdentifier::new("DUMMY_SUBJECT_ID".to_string()))
                     .set_email(mock_token_config.email)
-                    .set_name(mock_token_config.name),
+                    .set_name(mock_token_config.name)
+                    .set_preferred_username(
+                        mock_token_config
+                            .preferred_username
+                            .map(EndUserUsername::new),
+                    ),
                 EmptyAdditionalClaims {},
             )
             .set_nonce(mock_token_config.nonce),
             &CoreRsaPrivateSigningKey::from_pem(TEST_PRIVATE_KEY, None)
                 .expect("Cannot create mock of RSA private key"),
-            CoreJwsSigningAlgorithm::RsaSsaPssSha256,
+            mock_token_config
+                .signing_alg
+                .unwrap_or(CoreJwsSigningAlgorithm::RsaSsaPssSha256),
             Some(&AccessToken::new(
                 mock_token_config.access_for_id.to_string(),
             )),

@@ -431,9 +431,6 @@ impl<D: GeoEngineDb>
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        let config = config::get_config_element::<config::Wildlive>()
-            .map_err(|_| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-
         let layer_id = if let DataId::External(data_id) = id {
             data_id.layer_id.clone()
         } else {
@@ -443,11 +440,16 @@ impl<D: GeoEngineDb>
         let layer_id = WildliveLayerId::try_from(layer_id)
             .map_err(|_| geoengine_operators::error::Error::InvalidDataId)?;
 
-        meta_data(&self.definition, &config, self.db.clone(), layer_id)
-            .await
-            .map_err(|error| geoengine_operators::error::Error::MetaData {
-                source: Box::new(error),
-            })
+        meta_data(
+            &self.definition,
+            &self.wildlive_config,
+            self.db.clone(),
+            layer_id,
+        )
+        .await
+        .map_err(|error| geoengine_operators::error::Error::MetaData {
+            source: Box::new(error),
+        })
     }
 }
 
