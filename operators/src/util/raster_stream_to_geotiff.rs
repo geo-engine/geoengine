@@ -1101,7 +1101,6 @@ fn geotiff_to_cog(
 
     let mut options = RasterCreationOptions::new();
     options.add_name_value("COMPRESS", COMPRESSION_FORMAT)?;
-    options.add_name_value("TILED", "YES")?;
     options.add_name_value("NUM_THREADS", num_threads)?;
     options.add_name_value("BLOCKSIZE", COG_BLOCK_SIZE)?;
 
@@ -1131,9 +1130,7 @@ mod tests {
     use geoengine_datatypes::primitives::{DateTime, Duration};
     use geoengine_datatypes::raster::{Grid, RasterDataType};
     use geoengine_datatypes::test_data;
-    use geoengine_datatypes::util::{
-        ImageFormat, assert_image_equals, assert_image_equals_with_format,
-    };
+    use geoengine_datatypes::util::{ImageFormat, assert_image_equals_with_format};
     use geoengine_datatypes::{
         primitives::{Coordinate2D, SpatialPartition2D, SpatialResolution, TimeInterval},
         raster::TilingSpecification,
@@ -1197,9 +1194,10 @@ mod tests {
         //    "../test_data/raster/geotiff_from_stream_compressed.tiff",
         // );
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/geotiff_from_stream_compressed.tiff"),
             &bytes,
+            ImageFormat::Tiff,
         );
     }
 
@@ -1253,9 +1251,10 @@ mod tests {
         .await
         .unwrap();
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/geotiff_with_mask_from_stream_compressed.tiff"),
             &bytes,
+            ImageFormat::Tiff,
         );
     }
 
@@ -1440,9 +1439,10 @@ mod tests {
         //     "../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff",
         // );
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/cloud_optimized_geotiff_from_stream_compressed.tiff"),
             &bytes,
+            ImageFormat::Tiff,
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1514,19 +1514,22 @@ mod tests {
         //     );
         // }
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/cloud_optimized_geotiff_timestep_0_from_stream_compressed.tiff"),
             bytes.pop().expect("bytes should have length 3").as_slice(),
+            ImageFormat::Tiff,
         );
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/cloud_optimized_geotiff_timestep_1_from_stream_compressed.tiff"),
             bytes.pop().expect("bytes should have length 3").as_slice(),
+            ImageFormat::Tiff,
         );
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/cloud_optimized_geotiff_timestep_2_from_stream_compressed.tiff"),
             bytes.pop().expect("bytes should have length 3").as_slice(),
+            ImageFormat::Tiff,
         );
 
         // TODO: check programmatically that intermediate file is gone
