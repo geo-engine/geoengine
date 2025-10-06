@@ -11,7 +11,7 @@ use crate::error::{
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, time_interval_extent};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
 use geoengine_datatypes::raster::{
     DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands,
 };
@@ -87,7 +87,13 @@ impl RasterOperator for RasterStacker {
                     .ok_or(crate::error::Error::CantMergeSpatialGridDescriptor { a, b })
             })?;
 
-        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
+        let time = in_descriptors.iter().skip(1).map(|rd| rd.time).try_fold(
+            in_descriptors
+                .first()
+                .expect("There must be at least one input")
+                .time,
+            |a, b| a.try_merge(b),
+        )?;
 
         let data_type = in_descriptors[0].data_type;
         let spatial_reference = in_descriptors[0].spatial_reference;
@@ -355,6 +361,14 @@ where
     T: Pixel,
 {
     type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        unimplemented!()
+    }
 }
 
 #[cfg(test)]
@@ -363,7 +377,7 @@ mod tests {
 
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, TimeInstance, TimeInterval},
+        primitives::{CacheHint, TimeInstance, TimeInterval, TimeStep},
         raster::{
             GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType,
             TilesEqualIgnoringCacheHint,
@@ -501,7 +515,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: Some(TimeInterval::new_unchecked(0, 10)),
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 5)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -751,7 +768,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -930,7 +950,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),

@@ -9,7 +9,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle};
+use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::RasterTile2D;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{Level, span};
@@ -328,9 +328,18 @@ where
     }
 }
 
+#[async_trait]
 impl<Q> RasterQueryProcessor for QueryProcessorWrapper<Q, RasterTile2D<Q::RasterType>>
 where
     Q: RasterQueryProcessor + QueryProcessor<Output = RasterTile2D<Q::RasterType>>,
 {
     type RasterType = Q::RasterType;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, TimeInterval>> {
+        self.processor.time_query(query, ctx).await
+    }
 }

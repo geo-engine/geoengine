@@ -761,11 +761,41 @@ where
     }
 }
 
+#[async_trait]
 impl<T> RasterQueryProcessor for GdalSourceProcessor<T>
 where
     T: Pixel + gdal::raster::GdalType + FromPrimitive,
 {
     type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<BoxStream<'a, TimeInterval>> {
+        let rdt = self.raster_result_descriptor().time;
+
+        let q_bounds = self
+            .raster_result_descriptor()
+            .tiling_grid_definition(ctx.tiling_specification())
+            .tiling_grid_bounds();
+        let q_rect = RasterQueryRectangle::new(q_bounds, query, BandSelection::first());
+        let ldif = self.meta_data.loading_info(q_rect).await?;
+
+        match rdt.dimension {
+            geoengine_datatypes::primitives::TimeDimension::Regular(regular_time_dimension) => {
+                regular_time_dimension
+                    .intersecting_intervals(query)
+                    .map_err(Into::into)
+                    .map(|it| stream::iter(it).boxed())
+            }
+            geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                let times_iter = ldif.info.map(|ld| ld.time);
+
+                todo!()
+            }
+        }
+    }
 }
 
 pub type GdalSource = SourceOperator<GdalSourceParameters>;

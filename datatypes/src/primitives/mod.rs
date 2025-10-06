@@ -16,6 +16,8 @@ mod query_rectangle;
 mod spatial_partition;
 mod spatial_resolution;
 mod spatio_temporal_bounded;
+mod time_dimension;
+mod time_gap_fill_iter;
 mod time_instance;
 mod time_interval;
 mod time_step;
@@ -47,6 +49,8 @@ pub use spatial_partition::{
 };
 pub use spatial_resolution::SpatialResolution;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
+pub use time_dimension::{RegularTimeDimension, TimeDimension};
+pub use time_gap_fill_iter::TimeGapFillAdapterIter;
 pub use time_instance::TimeInstance;
 pub use time_interval::{TimeInterval, time_interval_extent};
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};

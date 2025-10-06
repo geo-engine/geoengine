@@ -659,12 +659,21 @@ where
     }
 }
 
+#[async_trait]
 impl<Q, P> RasterQueryProcessor for RasterReprojectionProcessor<Q, P>
 where
     Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
     P: Pixel,
 {
     type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        self.source.time_query(query, ctx).await
+    }
 }
 
 #[cfg(test)]
@@ -1048,7 +1057,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(5),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
                 GridBoundingBox2D::new([-2, 0], [1, 3]).unwrap(),
@@ -1266,7 +1278,13 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857).into(),
-            time: None,
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(
+                    TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
+                    TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
+                )),
+                TimeStep::months(1),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(data_geo_transform, data_bounds),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -1380,7 +1398,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32636).into(),
-            time: None,
+            time: crate::engine::TimeDescriptor::new_irregular(None),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(
                     Coordinate2D::new(166_021.44, 9_329_005.188),

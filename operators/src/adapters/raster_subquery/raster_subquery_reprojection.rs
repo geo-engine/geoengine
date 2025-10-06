@@ -374,7 +374,7 @@ impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::BandSelection,
+        primitives::{BandSelection, TimeStep},
         raster::{
             BoundedGrid, GeoTransform, Grid, GridBoundingBox2D, GridShape, GridShape2D,
             RasterDataType, SpatialGridDefinition, TilesEqualIgnoringCacheHint,
@@ -387,7 +387,7 @@ mod tests {
         adapters::RasterSubQueryAdapter,
         engine::{
             MockExecutionContext, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-            SpatialGridDescriptor, WorkflowOperatorPath,
+            SpatialGridDescriptor, TimeDescriptor, WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -446,7 +446,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
             spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
                 GeoTransform::new(Coordinate2D::new(0., 2.), 1., -1.),
                 GridShape::new_2d(2, 4).bounding_box(),

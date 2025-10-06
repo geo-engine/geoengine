@@ -88,7 +88,7 @@ impl PlotOperator for ClassHistogram {
                     name,
                     PlotResultDescriptor {
                         spatial_reference: in_desc.spatial_reference,
-                        time: in_desc.time,
+                        time: in_desc.time.bounds,
                         // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
                         bbox: Some(in_desc.spatial_bounds().as_bbox()),
                     },
@@ -412,7 +412,7 @@ mod tests {
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors,
         RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, StaticMetaData,
-        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+        TimeDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{
@@ -511,7 +511,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
@@ -894,7 +894,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
@@ -1105,7 +1105,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),

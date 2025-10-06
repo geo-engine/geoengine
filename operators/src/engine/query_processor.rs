@@ -14,7 +14,8 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
-    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
+    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, TimeInterval,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, GridBoundingBox2D, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
@@ -121,6 +122,12 @@ pub trait RasterQueryProcessor:
     fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
         self.result_descriptor()
     }
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, TimeInterval>>;
 }
 
 pub type BoxRasterQueryProcessor<P> = Box<
@@ -252,6 +259,14 @@ where
 #[async_trait]
 impl<T: Pixel> RasterQueryProcessor for BoxRasterQueryProcessor<T> {
     type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, TimeInterval>> {
+        self.as_ref().time_query(query, ctx).await
+    }
 }
 
 #[async_trait]

@@ -323,6 +323,14 @@ where
     Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
     type RasterType = PixelOut;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        self.source.time_query(query, ctx).await
+    }
 }
 
 #[cfg(test)]

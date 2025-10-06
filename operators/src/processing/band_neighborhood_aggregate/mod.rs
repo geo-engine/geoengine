@@ -280,6 +280,14 @@ impl QueryProcessor for BandNeighborhoodAggregateProcessor {
 #[async_trait]
 impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
     type RasterType = f64;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        self.source.time_query(query, ctx).await
+    }
 }
 
 #[pin_project(project = BandNeighborhoodAggregateStreamProjection)]
@@ -755,14 +763,16 @@ impl Accu for MovingAverageAccu {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{BandSelection, CacheHint, TimeInterval},
+        primitives::{BandSelection, CacheHint, TimeInterval, TimeStep},
         raster::{Grid, GridBoundingBox2D, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
     use crate::{
-        engine::{MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor},
+        engine::{
+            MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -1188,7 +1198,16 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        Some(
+                            TimeInterval::new(
+                                data.first().unwrap().time.start(),
+                                data.last().unwrap().time.end(),
+                            )
+                            .unwrap(),
+                        ),
+                        TimeStep::millis(5),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -1331,7 +1350,16 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        Some(
+                            TimeInterval::new(
+                                data.first().unwrap().time.start(),
+                                data.last().unwrap().time.end(),
+                            )
+                            .unwrap(),
+                        ),
+                        TimeStep::millis(5),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),

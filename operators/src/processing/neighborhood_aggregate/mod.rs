@@ -303,6 +303,14 @@ where
     Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
 {
     type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        self.source.time_query(query, ctx).await
+    }
 }
 
 #[cfg(test)]
@@ -312,7 +320,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, SpatialGridDescriptor,
+            RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -325,7 +333,7 @@ mod tests {
         operations::image::{Colorizer, RgbaColor},
         primitives::{
             CacheHint, Coordinate2D, DateTime, RasterQueryRectangle, SpatialPartition2D,
-            TimeInstance, TimeInterval,
+            TimeInstance, TimeInterval, TimeStep,
         },
         raster::{
             GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, RasterDataType, RasterTile2D,
@@ -657,19 +665,27 @@ mod tests {
             ),
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::I8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(
+                    raster_tiles.first().unwrap().time.start(),
+                    raster_tiles.last().unwrap().time.end(),
+                )),
+                TimeStep::millis(10),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::I8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                        GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
-                    ),
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed()

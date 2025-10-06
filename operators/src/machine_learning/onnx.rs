@@ -19,7 +19,9 @@ use async_trait::async_trait;
 use float_cmp::approx_eq;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{BandSelection, Measurement, RasterQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BandSelection, Measurement, RasterQueryRectangle, TimeInterval,
+};
 use geoengine_datatypes::raster::{
     EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
     MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
@@ -411,6 +413,14 @@ where
     TOut: Pixel + NoDataValueOut + IntoTensorElementType + PrimitiveTensorElementType,
 {
     type RasterType = TOut;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, TimeInterval>> {
+        self.source.time_query(query, ctx).await
+    }
 }
 
 // Trait to handle mapping masked pixels to model inputs for all datatypes.
@@ -484,6 +494,7 @@ impl_no_data_value_none!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
+    use crate::engine::TimeDescriptor;
     use crate::machine_learning::MlModelInputNoDataHandling;
     use crate::machine_learning::MlModelLoadingInfo;
     use crate::machine_learning::MlModelMetadata;
@@ -502,6 +513,7 @@ mod tests {
     };
     use approx::assert_abs_diff_eq;
     use futures::StreamExt;
+    use geoengine_datatypes::primitives::TimeStep;
     use geoengine_datatypes::raster::GridBoundingBox2D;
     use geoengine_datatypes::raster::RasterTile2D;
     use geoengine_datatypes::raster::SpatialGridDefinition;
@@ -676,7 +688,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -693,7 +705,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -879,7 +891,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -896,7 +908,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -913,7 +925,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -1064,7 +1076,7 @@ mod tests {
                 TestDefault::test_default(),
                 GridBoundingBox2D::new_min_max(-512, -1, 0, 1023).unwrap(),
             )),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
             bands: RasterBandDescriptors::new_single_band(),
         };
 

@@ -59,7 +59,8 @@ mod test_util {
 
     use crate::engine::{
         MockExecutionContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
-        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, WorkflowOperatorPath,
+        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
+        WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::meteosat::{
@@ -187,7 +188,7 @@ mod test_util {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
                         GridBoundingBox2D::new([-3, 0], [0, 2]).unwrap(),
@@ -271,7 +272,16 @@ mod test_util {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::SrOrg, 81)
                     .into(),
-                time: None,
+                time: TimeDescriptor::new_regular_with_origin_at_start(
+                    TimeInterval::new_unchecked(
+                        TimeInstance::from_str("2012-12-12T12:00:00.000Z").unwrap(),
+                        TimeInstance::from_str("2020-12-12T12:00:00.000Z").unwrap(),
+                    ),
+                    TimeStep {
+                        granularity: TimeGranularity::Minutes,
+                        step: 15,
+                    },
+                ),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new(origin_coordinate, x_pixel_size, y_pixel_size),
                     GridShape2D::new_2d(3712, 3712).bounding_box(),

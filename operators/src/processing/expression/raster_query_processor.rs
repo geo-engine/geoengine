@@ -119,12 +119,21 @@ where
     }
 }
 
+#[async_trait]
 impl<TO, Tuple> RasterQueryProcessor for ExpressionQueryProcessor<TO, Tuple>
 where
     TO: Pixel,
     Tuple: ExpressionTupleProcessor<TO>,
 {
     type RasterType = TO;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        unimplemented!()
+    }
 }
 
 #[async_trait]

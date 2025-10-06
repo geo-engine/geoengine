@@ -98,7 +98,7 @@ impl RasterOperator for Rasterization {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterDataType::F64,
-            time: in_desc.time,
+            time: crate::engine::TimeDescriptor::new_irregular(in_desc.time), // FIXME: the operator really should use a regular time axis
             spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, pixel_bounds),
             bands: RasterBandDescriptors::new_single_band(),
         };
@@ -354,8 +354,19 @@ impl QueryProcessor for GridRasterizationQueryProcessor {
     }
 }
 
+#[async_trait]
 impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     type RasterType = f64;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> crate::util::Result<
+        futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>,
+    > {
+        unimplemented!()
+    }
 }
 
 pub struct DensityRasterizationQueryProcessor {
@@ -483,8 +494,19 @@ impl QueryProcessor for DensityRasterizationQueryProcessor {
     }
 }
 
+#[async_trait]
 impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
     type RasterType = f64;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> crate::util::Result<
+        futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>,
+    > {
+        unimplemented!()
+    }
 }
 
 fn generate_zeroed_tiles<'a>(

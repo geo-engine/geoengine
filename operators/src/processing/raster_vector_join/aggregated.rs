@@ -302,8 +302,8 @@ mod tests {
 
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors,
-        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, VectorColumnInfo,
-        VectorOperator, WorkflowOperatorPath,
+        RasterOperator, RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
+        VectorColumnInfo, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use geoengine_datatypes::collections::{
@@ -312,7 +312,7 @@ mod tests {
 
     use geoengine_datatypes::primitives::{
         BoundingBox2D, CacheHint, Coordinate2D, FeatureData, FeatureDataRef, FeatureDataType,
-        Measurement, MultiPoint, MultiPolygon, TimeInterval,
+        Measurement, MultiPoint, MultiPolygon, TimeInterval, TimeStep,
     };
     use geoengine_datatypes::raster::{
         GeoTransform, Grid2D, GridBoundingBox2D, RasterTile2D, TileInformation, TilingSpecification,
@@ -339,7 +339,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
@@ -437,7 +437,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 20)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 1]).unwrap(),
@@ -561,7 +564,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 20)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
@@ -716,7 +722,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 20)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [2, 5]).unwrap(),
@@ -975,7 +984,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        Some(TimeInterval::new_unchecked(0, 20)),
+                        TimeStep::millis(10),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(0, 2, 0, 5).unwrap(),

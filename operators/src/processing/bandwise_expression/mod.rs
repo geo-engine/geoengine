@@ -255,12 +255,20 @@ where
     TO: Pixel,
 {
     type RasterType = TO;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        self.source.time_query(query, ctx).await
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{CacheHint, TimeInterval},
+        primitives::{CacheHint, TimeInterval, TimeStep},
         raster::{
             Grid, GridBoundingBox2D, GridShape, MapElements, RenameBands,
             TilesEqualIgnoringCacheHint,
@@ -272,7 +280,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
-            SpatialGridDescriptor,
+            SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -374,7 +382,16 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(
+                    TimeInterval::new(
+                        data.first().unwrap().time.start(),
+                        data.last().unwrap().time.end(),
+                    )
+                    .unwrap(),
+                ),
+                TimeStep::millis(5),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 TestDefault::test_default(),
                 GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),

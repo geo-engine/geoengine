@@ -529,6 +529,7 @@ where
     }
 }
 
+#[async_trait]
 impl<Q, P, Shift> RasterQueryProcessor for RasterTimeShiftProcessor<Q, P, Shift>
 where
     P: Pixel,
@@ -536,6 +537,24 @@ where
     Shift: TimeShiftOperation,
 {
     type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, TimeInterval>> {
+        let (time_interval, state) = self.shift.shift(query)?;
+        let stream = self.processor.time_query(time_interval, ctx).await?;
+
+        let stream = stream
+            .filter_map(move |ti| {
+                // reverse time shift for results
+                futures::future::ready(self.shift.reverse_shift(ti, state).ok()) // TODO: maybe we need to return Result<TimeInterval> here but that is a relatively large overhead since the Error type enum is quite big
+            })
+            .boxed();
+
+        Ok(stream)
+    }
 }
 
 #[cfg(test)]
@@ -545,7 +564,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, SingleRasterSource,
-            SpatialGridDescriptor,
+            SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
@@ -859,7 +878,13 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
+                )),
+                TimeStep::years(1),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
                 GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1035,7 +1060,13 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
+                )),
+                TimeStep::years(1),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [0, 4]).unwrap(),

@@ -958,7 +958,7 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
-    use crate::engine::{MockExecutionContext, RasterResultDescriptor};
+    use crate::engine::{MockExecutionContext, RasterResultDescriptor, TimeDescriptor};
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
     use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
@@ -1433,6 +1433,9 @@ mod tests {
             },
         ];
 
+        let time_bounds =
+            TimeInterval::new(data[0].time.start(), data.last().unwrap().time.end()).unwrap();
+
         let ecx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
         let ctx = ecx.mock_query_context_test_default();
@@ -1442,6 +1445,7 @@ mod tests {
             1,
             GridBoundingBox2D::new([-4, -4], [4, 4]).unwrap(),
             GeoTransform::test_default(),
+            TimeDescriptor::new_regular(Some(time_bounds), time_bounds.start(), time_step.into()),
         );
 
         let query_time = TimeInterval::new(data[0].time.start(), data[1].time.end()).unwrap();
@@ -1453,7 +1457,7 @@ mod tests {
         }
         .boxed();
 
-        let query_rectangle = RasterQueryRectangle::new(
+        let query_rectangle: geoengine_datatypes::primitives::QueryRectangle<geoengine_datatypes::raster::GridBoundingBox<[isize; 2]>, BandSelection> = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, -1], [0, 1]).unwrap(),
             query_time,
             BandSelection::first(),

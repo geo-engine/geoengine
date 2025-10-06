@@ -241,6 +241,14 @@ where
     P: Pixel,
 {
     type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        self.source.time_query(query, ctx).await
+    }
 }
 
 #[async_trait]
@@ -513,9 +521,11 @@ mod tests {
     use super::*;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
+        TimeDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
+    use geoengine_datatypes::primitives::TimeStep;
     use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -627,7 +637,16 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(
+                    TimeInterval::new(
+                        data.first().unwrap().time.start(),
+                        data.last().unwrap().time.end(),
+                    )
+                    .unwrap(),
+                ),
+                TimeStep::millis(5),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
@@ -860,7 +879,16 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(
+                    TimeInterval::new(
+                        data.first().unwrap().time.start(),
+                        data.last().unwrap().time.end(),
+                    )
+                    .unwrap(),
+                ),
+                TimeStep::millis(5),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 8, 0, 8).unwrap(),

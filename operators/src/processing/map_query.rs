@@ -79,6 +79,7 @@ where
     }
 }
 
+#[async_trait]
 impl<S, Q> RasterQueryProcessor
     for MapQueryProcessor<S, Q, TilingSpecification, RasterResultDescriptor>
 where
@@ -86,6 +87,14 @@ where
     Q: Fn(RasterQueryRectangle) -> Result<Option<RasterQueryRectangle>> + Sync + Send,
 {
     type RasterType = S::RasterType;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        self.source.time_query(query, ctx).await
+    }
 }
 
 #[async_trait]

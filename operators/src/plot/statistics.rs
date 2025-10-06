@@ -114,7 +114,7 @@ impl PlotOperator for Statistics {
                     );
                 }
 
-                let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
+                let time = time_interval_extent(in_descriptors.iter().map(|d| d.time.bounds));
                 let bbox = partitions_extent(in_descriptors.iter().map(|d| d.spatial_bounds()));
 
                 let initialized_operator = InitializedStatistics::new(
@@ -558,7 +558,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterOperator, RasterResultDescriptor,
-        SpatialGridDescriptor,
+        SpatialGridDescriptor, TimeDescriptor,
     };
     use crate::engine::{RasterBandDescriptors, VectorOperator};
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
@@ -642,7 +642,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
@@ -725,7 +725,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
@@ -837,7 +837,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
@@ -948,7 +948,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
@@ -1311,7 +1311,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 TestDefault::test_default(),
                 GridBoundingBox2D::new_min_max(-90, 89, -180, 179).unwrap(),

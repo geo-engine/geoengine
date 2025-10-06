@@ -193,6 +193,14 @@ where
     T: Pixel,
 {
     type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        unimplemented!()
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, PartialEq, Clone)]
@@ -349,8 +357,9 @@ mod tests {
     use super::*;
     use crate::engine::{
         MockExecutionContext, QueryProcessor, RasterBandDescriptors, SpatialGridDescriptor,
+        TimeDescriptor,
     };
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval, TimeStep};
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, MaskedGrid, RasterDataType,
         RasterProperties, TileInformation,
@@ -383,7 +392,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., 0.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
@@ -545,7 +554,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        Some(TimeInterval::new_unchecked(1, 3)),
+                        TimeStep::millis(1),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),

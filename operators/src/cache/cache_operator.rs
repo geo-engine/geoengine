@@ -281,6 +281,7 @@ where
     }
 }
 
+#[async_trait]
 impl<T, P> RasterQueryProcessor
     for CacheQueryProcessor<
         P,
@@ -298,6 +299,16 @@ where
         Stream<Item = Result<RasterTile2D<T>, CacheError>> + Send + Sync + 'static,
 {
     type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        _query: geoengine_datatypes::primitives::TimeInterval,
+        _ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+        unimplemented!(
+            "RasterQueryProcessor::time_query is not implemented for CacheQueryProcessor"
+        );
+    }
 }
 
 #[allow(clippy::large_enum_variant)] // TODO: Box instead?
