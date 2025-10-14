@@ -792,7 +792,7 @@ where
             user_permitted_datasets p JOIN datasets d 
                 ON (p.dataset_id = d.id)
         WHERE 
-            d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
+            d.id = $1 AND p.user_id = $2 AND p.max_permission = 'Owner';",
             )
             .await?;
 
