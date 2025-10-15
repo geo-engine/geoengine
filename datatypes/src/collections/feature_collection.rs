@@ -1831,12 +1831,6 @@ mod tests {
                 + struct_stack_size
                 + arrow_overhead_bytes
                 + time_interval_size(i);
-            // dbg!(
-            //     i,
-            //     computed_size,
-            //     expected_size,
-            //     expected_size as isize - computed_size as isize
-            // );
             assert_eq!(computed_size, expected_size, "failed for i={i}");
         }
     }
