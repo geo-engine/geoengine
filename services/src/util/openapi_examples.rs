@@ -120,15 +120,15 @@ where
                 }
             }
         }
-        if let Ok(cookie_str) = serde_urlencoded::to_string(cookies) {
-            if !cookie_str.is_empty() {
-                req = req.append_header((header::COOKIE, cookie_str.replace('&', "; ")));
-            }
+        if let Ok(cookie_str) = serde_urlencoded::to_string(cookies)
+            && !cookie_str.is_empty()
+        {
+            req = req.append_header((header::COOKIE, cookie_str.replace('&', "; ")));
         }
-        if let Ok(query_params_str) = serde_urlencoded::to_string(query_params) {
-            if !query_params_str.is_empty() {
-                uri = format!("{uri}?{query_params_str}");
-            }
+        if let Ok(query_params_str) = serde_urlencoded::to_string(query_params)
+            && !query_params_str.is_empty()
+        {
+            uri = format!("{uri}?{query_params_str}");
         }
         req.uri(uri.as_str())
     }

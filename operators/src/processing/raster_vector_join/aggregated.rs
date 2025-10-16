@@ -125,27 +125,27 @@ where
                 let raster = raster?;
                 let band = raster.band as usize;
 
-                if let Some(end) = time_end {
-                    if end != raster.time.end() {
-                        // new time slice => consume old aggregator and create new one
+                if let Some(end) = time_end
+                    && end != raster.time.end()
+                {
+                    // new time slice => consume old aggregator and create new one
 
-                        let new_feature_agg = create_feature_aggregator::<P>(
-                            collection.len(),
-                            feature_aggreation,
-                            feature_aggregation_ignore_no_data,
-                        );
+                    let new_feature_agg = create_feature_aggregator::<P>(
+                        collection.len(),
+                        feature_aggreation,
+                        feature_aggregation_ignore_no_data,
+                    );
 
-                        let olg_feature_agg =
-                            std::mem::replace(&mut feature_band_aggregators[band], new_feature_agg);
+                    let olg_feature_agg =
+                        std::mem::replace(&mut feature_band_aggregators[band], new_feature_agg);
 
-                        temporal_band_aggregators[band].add_feature_data(
-                            olg_feature_agg.into_data(),
-                            time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
-                        )?;
+                    temporal_band_aggregators[band].add_feature_data(
+                        olg_feature_agg.into_data(),
+                        time_span.time_interval.duration_ms(), // TODO: use individual feature duration?
+                    )?;
 
-                        if temporal_band_aggregators[band].is_satisfied() {
-                            break;
-                        }
+                    if temporal_band_aggregators[band].is_satisfied() {
+                        break;
                     }
                 }
                 time_end = Some(raster.time.end());

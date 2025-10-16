@@ -1763,10 +1763,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
-            }
+            columns.text.sort();
         }
 
         assert_eq!(
@@ -1862,10 +1861,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.datetime.sort();
-            }
+            columns.datetime.sort();
         }
 
         assert_eq!(
@@ -1941,10 +1939,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.datetime.sort();
-            }
+            columns.datetime.sort();
         }
 
         assert_eq!(
@@ -2020,10 +2017,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.datetime.sort();
-            }
+            columns.datetime.sort();
         }
 
         assert_eq!(
@@ -2168,10 +2164,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
-            }
+            columns.text.sort();
         }
 
         assert_eq!(

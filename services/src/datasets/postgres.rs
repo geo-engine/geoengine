@@ -61,7 +61,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    fn to_typed_metadata(&self) -> Result<DatasetMetaData>;
+    fn to_typed_metadata(&self) -> Result<DatasetMetaData<'_>>;
 }
 
 pub struct DatasetMetaData<'m> {

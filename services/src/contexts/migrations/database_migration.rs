@@ -43,10 +43,10 @@ where
     {
         Ok(stmt) => stmt,
         Err(e) => {
-            if let Some(code) = e.code() {
-                if *code == SqlState::UNDEFINED_TABLE {
-                    return Ok(None);
-                }
+            if let Some(code) = e.code()
+                && *code == SqlState::UNDEFINED_TABLE
+            {
+                return Ok(None);
             }
             return Err(crate::error::Error::TokioPostgres { source: e });
         }

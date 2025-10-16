@@ -980,8 +980,6 @@ where
         let old_definition = self.get_layer_provider_definition(id).await?;
         let provider = DataProviderDefinition::<Self>::update(&old_definition, provider);
 
-        println!("{:?}", provider);
-
         let prio = DataProviderDefinition::<Self>::priority(&provider);
 
         let clamp_prio = Self::clamp_prio(&provider, prio);

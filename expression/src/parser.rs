@@ -257,11 +257,11 @@ impl ExpressionParser {
             } else {
                 let expression = self.build_ast(pair.into_inner(), variables)?;
 
-                if let Some(data_type) = data_type {
-                    if data_type != expression.data_type() {
-                        return Err(ExpressionSemanticError::AllBranchesMustOutputSameType
-                            .into_parser_error(span));
-                    }
+                if let Some(data_type) = data_type
+                    && data_type != expression.data_type()
+                {
+                    return Err(ExpressionSemanticError::AllBranchesMustOutputSameType
+                        .into_parser_error(span));
                 }
 
                 return Ok(AstNode::Branch {

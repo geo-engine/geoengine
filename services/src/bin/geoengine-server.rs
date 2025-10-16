@@ -77,7 +77,7 @@ fn open_telemetry_layer<S>(
 ) -> Result<
     tracing_opentelemetry::OpenTelemetryLayer<
         S,
-        impl opentelemetry::trace::Tracer + tracing_opentelemetry::PreSampledTracer + use<S>,
+        impl opentelemetry::trace::Tracer<Span: Send + Sync> + use<S>,
     >,
 >
 where

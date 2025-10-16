@@ -1093,12 +1093,12 @@ where
             )
             .await;
 
-        if let Err(err) = res {
-            if err.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION) {
-                return Err(RoleDbError::RoleAlreadyExists {
-                    role_name: role_name.to_string(),
-                });
-            }
+        if let Err(err) = res
+            && err.code() == Some(&tokio_postgres::error::SqlState::UNIQUE_VIOLATION)
+        {
+            return Err(RoleDbError::RoleAlreadyExists {
+                role_name: role_name.to_string(),
+            });
         }
 
         tx.commit().await.context(PostgresRoleDbError)?;
