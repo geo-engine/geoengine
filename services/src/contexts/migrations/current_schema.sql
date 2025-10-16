@@ -1168,60 +1168,76 @@ CREATE UNIQUE INDEX ON permissions (
     ml_model_id
 );
 
+CREATE UNIQUE INDEX ON permissions (
+    role_id,
+    permission,
+    provider_id
+);
+
 CREATE VIEW user_permitted_datasets
 AS
 SELECT
     r.user_id,
     p.dataset_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.dataset_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.dataset_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.dataset_id;
 
 CREATE VIEW user_permitted_projects
 AS
 SELECT
     r.user_id,
     p.project_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.project_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.project_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.project_id;
 
 CREATE VIEW user_permitted_layer_collections
 AS
 SELECT
     r.user_id,
     p.layer_collection_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.layer_collection_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.layer_collection_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.layer_collection_id;
 
 CREATE VIEW user_permitted_layers
 AS
 SELECT
     r.user_id,
     p.layer_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.layer_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.layer_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.layer_id;
 
 CREATE VIEW user_permitted_providers
 AS
 SELECT
     r.user_id,
     p.provider_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.provider_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.provider_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.provider_id;
 
 CREATE TABLE oidc_session_tokens (
     session_id uuid PRIMARY KEY REFERENCES sessions (
@@ -1239,11 +1255,13 @@ AS
 SELECT
     r.user_id,
     p.ml_model_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.ml_model_id;
 
 CREATE TABLE quota_log (
     timestamp timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
