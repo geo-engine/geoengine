@@ -96,5 +96,8 @@ mod tests {
 
         let serialized_bytes: Vec<u8> = serde_json::to_string(&Foo).unwrap().into_bytes();
         let _: Foo = serde_json::from_reader(serialized_bytes.as_slice()).unwrap();
+
+        let serialized_bytes: Vec<u8> = serde_json::to_string(&Bar).unwrap().into_bytes();
+        let _: Bar = serde_json::from_reader(serialized_bytes.as_slice()).unwrap();
     }
 }

@@ -333,7 +333,7 @@ impl Colorizer {
     ///
     /// assert_eq!(logarithmic_color_mapper.call(5.5), RgbaColor::new(189, 189, 189, 255));
     /// ```
-    pub fn create_color_mapper(&self) -> ColorMapper {
+    pub fn create_color_mapper(&self) -> ColorMapper<'_> {
         const COLOR_TABLE_SIZE: usize = 254; // use 256 colors with no data and default colors
 
         let (min_value, max_value) = (self.min_value(), self.max_value());

@@ -39,7 +39,7 @@ struct TaskHandle {
 }
 
 impl SimpleTaskManagerBackend {
-    async fn write_lock_all(&self) -> WriteLockAll {
+    async fn write_lock_all(&self) -> WriteLockAll<'_> {
         let (tasks_by_id, status_by_id, task_list, unique_tasks) = tokio::join!(
             self.tasks_by_id.write(),
             self.status_by_id.write(),
@@ -54,7 +54,7 @@ impl SimpleTaskManagerBackend {
         }
     }
 
-    async fn write_lock_for_update(&self) -> WriteLockForUpdate {
+    async fn write_lock_for_update(&self) -> WriteLockForUpdate<'_> {
         let (tasks_by_id, unique_tasks) =
             tokio::join!(self.tasks_by_id.write(), self.unique_tasks.write());
         WriteLockForUpdate {
@@ -99,13 +99,13 @@ impl TaskManager<SimpleTaskManagerContext> for SimpleTaskManagerBackend {
             .task_unique_id()
             .map(|task_unique_id| (task.task_type(), task_unique_id));
 
-        if let Some(task_unique_id) = &task_unique_key {
-            if !lock.unique_tasks.insert(task_unique_id.clone()) {
-                return Err(TaskError::DuplicateTask {
-                    task_type: task_unique_id.0,
-                    task_unique_id: task_unique_id.1.clone(),
-                });
-            }
+        if let Some(task_unique_id) = &task_unique_key
+            && !lock.unique_tasks.insert(task_unique_id.clone())
+        {
+            return Err(TaskError::DuplicateTask {
+                task_type: task_unique_id.0,
+                task_unique_id: task_unique_id.1.clone(),
+            });
         }
 
         let task_type = task.task_type();

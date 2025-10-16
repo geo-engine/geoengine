@@ -91,7 +91,7 @@ wkt = { workspace = true }
 zip = { workspace = true }
 
 [target.'cfg(target_os = "linux")'.dependencies]
-nix = { version = "0.29", features = ["socket"] }
+nix = { version = "0.30", features = ["socket"] }
 
 [dev-dependencies]
 assert_cmd = { workspace = true }
@@ -99,7 +99,7 @@ httptest = { workspace = true }
 pretty_assertions = { workspace = true }
 prost = { workspace = true }             # must be compatbile with aruna-rust-api
 serial_test = { workspace = true }
-xml-rs = { workspace = true }
+xml = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
