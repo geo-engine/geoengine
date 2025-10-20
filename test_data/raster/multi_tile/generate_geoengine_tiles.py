@@ -103,3 +103,8 @@ if __name__ == "__main__":
     for filepath in glob.glob(os.path.join(input_dir, "*.tif")):
         if os.path.isfile(filepath):
             create_geoengine_tiles_from_raster(filepath, "results/z_index_reversed/tiles", tile_size_px=512, origin=(0, 0))
+
+    input_dir = "results/overview_level_2/global"
+    for filepath in glob.glob(os.path.join(input_dir, "*.tif")):
+        if os.path.isfile(filepath):
+            create_geoengine_tiles_from_raster(filepath, "results/overview_level_2/tiles", tile_size_px=512, origin=(0, 0))

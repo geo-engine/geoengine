@@ -12,7 +12,7 @@ use crate::{
     },
     util::Result,
 };
-use float_cmp::approx_eq;
+use float_cmp::{ApproxEq, approx_eq};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 
@@ -206,6 +206,57 @@ impl SpatialGridDefinition {
         );
 
         Self::new(geo_transform, grid_bounds)
+    }
+
+    /// snap the grid bounds to be multiples of `overview_level` within the given dataset bounds s.t. directly reading from an overview is possible
+    /// i.e. starting from multiple of `overview_level` and having a size that is multiple of `overview_level` (or goes to the end of the dataset)
+    pub fn snap_to_dataset_overview_level(
+        &self,
+        dataset_grid: SpatialGridDefinition,
+        overview_level: u32,
+    ) -> Option<Self> {
+        debug_assert!(
+            self.geo_transform
+                .approx_eq(dataset_grid.geo_transform, float_cmp::F64Margin::default())
+                && self.is_compatible_grid_generic(&dataset_grid)
+                && self
+                    .grid_bounds
+                    .intersection(&dataset_grid.grid_bounds())
+                    .is_some()
+        );
+
+        let overview_level = overview_level as isize;
+
+        let [current_min_x, current_max_x] = self.grid_bounds.x_bounds();
+        let [current_min_y, current_max_y] = self.grid_bounds.y_bounds();
+
+        let snapped_min_x = (current_min_x / overview_level) * overview_level;
+        let snapped_min_y = (current_min_y / overview_level) * overview_level;
+
+        let current_size_x = current_max_x - current_min_x + 1;
+        let current_size_y = current_max_y - current_min_y + 1;
+
+        let snapped_size_y =
+            ((current_size_y + overview_level - 1) / overview_level) * overview_level;
+        let snapped_size_x =
+            ((current_size_x + overview_level - 1) / overview_level) * overview_level;
+
+        // Calculate snapped maximum (inclusive)
+        let snapped_max_y = snapped_min_y + snapped_size_y - 1;
+        let snapped_max_x = snapped_min_x + snapped_size_x - 1;
+
+        // Create snapped bounds
+        let snapped_bounds = GridBoundingBox2D::new(
+            [snapped_min_y, snapped_min_x],
+            [snapped_max_y, snapped_max_x],
+        )
+        .ok()?;
+
+        // limit snapped bounds to dataset bounds
+        let intersection = snapped_bounds.intersection(&dataset_grid.grid_bounds())?;
+
+        // Use the intersection as the final bounds
+        Some(Self::new(self.geo_transform, intersection))
     }
 }
 
@@ -547,6 +598,30 @@ mod tests {
                 geo_transform: GeoTransform::new((-45.0, 22.400_000_000_000_002).into(), 0.2, -0.2), // TODO: 22.3999..9 vs 22.4 vs. 22.40000..01
                 grid_bounds: GridBoundingBox2D::new([112, 737], [623, 1248]).unwrap(),
             })
+        );
+    }
+
+    #[test]
+    fn it_snaps_to_overview_levels() {
+        let tile_dataset_intersection_grid = SpatialGridDefinition::new(
+            GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
+            GridBoundingBox2D::new([1, 1], [3, 3]).unwrap(),
+        );
+
+        let dataset_grid = SpatialGridDefinition::new(
+            GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
+            GridBoundingBox2D::new([0, 0], [8, 8]).unwrap(),
+        );
+
+        let snapped =
+            tile_dataset_intersection_grid.snap_to_dataset_overview_level(dataset_grid, 2);
+
+        assert_eq!(
+            snapped,
+            Some(SpatialGridDefinition::new(
+                GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
+                GridBoundingBox2D::new([0, 0], [3, 3]).unwrap()
+            ))
         );
     }
 }

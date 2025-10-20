@@ -137,7 +137,7 @@ where
     pub produced_result_descriptor: RasterResultDescriptor,
     pub tiling_specification: TilingSpecification,
     pub meta_data: MultiBandGdalMetaData,
-    pub _overview_level: u32, // TODO: is it correct that this is never needed?
+    pub overview_level: u32,
     pub original_resolution_spatial_grid: Option<SpatialGridDefinition>,
     pub _phantom_data: PhantomData<T>,
 }
@@ -423,6 +423,7 @@ where
             Some(original_resolution_spatial_grid) => {
                 GdalReaderMode::OverviewLevel(OverviewReaderState {
                     original_dataset_grid: original_resolution_spatial_grid,
+                    overview_level: self.overview_level,
                 })
             }
         };
@@ -465,7 +466,7 @@ where
                     band_idx,
                 )
             })
-            .buffered(16) // TODO: make configurable
+            .buffered(1) // TODO: make configurable
             .boxed();
 
         return Ok(stream);
@@ -652,7 +653,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _overview_level: self.overview_level,
+                    overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
                     _phantom_data: PhantomData,
                 }
@@ -663,7 +664,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _overview_level: self.overview_level,
+                    overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
                     _phantom_data: PhantomData,
                 }
@@ -674,7 +675,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _overview_level: self.overview_level,
+                    overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
                     _phantom_data: PhantomData,
                 }
@@ -695,7 +696,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _overview_level: self.overview_level,
+                    overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
                     _phantom_data: PhantomData,
                 }
@@ -706,7 +707,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _overview_level: self.overview_level,
+                    overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
                     _phantom_data: PhantomData,
                 }
@@ -722,7 +723,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _overview_level: self.overview_level,
+                    overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
                     _phantom_data: PhantomData,
                 }
@@ -733,7 +734,7 @@ impl InitializedRasterOperator for InitializedGdalSourceOperator {
                     produced_result_descriptor: self.produced_result_descriptor.clone(),
                     tiling_specification: self.tiling_specification,
                     meta_data: self.meta_data.clone(),
-                    _overview_level: self.overview_level,
+                    overview_level: self.overview_level,
                     original_resolution_spatial_grid: self.original_resolution_spatial_grid,
                     _phantom_data: PhantomData,
                 }
@@ -954,6 +955,10 @@ mod tests {
         ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
     };
     use crate::test_data;
+    use crate::util::raster_stream_to_geotiff::{
+        GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
+        raster_stream_to_geotiff_bytes,
+    };
     use crate::util::test::raster_tile_from_file;
     use futures::TryStreamExt;
     use geoengine_datatypes::dataset::{DataId, DatasetId};
@@ -2435,6 +2440,138 @@ mod tests {
                 raster_tile_from_file::<u16>(
                     test_data!(format!(
                         "raster/multi_tile/results/z_index_reversed/tiles/{f}"
+                    )),
+                    tiling_spatial_grid_definition,
+                    expected_time,
+                    0,
+                )
+                .unwrap()
+            })
+            .collect();
+
+        assert_eq_two_list_of_tiles(&tiles, &expected_tiles, false);
+
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn it_loads_overview_level() -> Result<()> {
+        let mut execution_context = MockExecutionContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
+
+        let time_steps = vec![TimeInterval::new_unchecked(
+            TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
+        )];
+
+        let files = tiles_by_file_name(&[
+            "2025-01-01_tile_x0_y0_b0.tif",
+            "2025-01-01_tile_x0_y1_b0.tif",
+            "2025-01-01_tile_x1_y0_b0.tif",
+            "2025-01-01_tile_x1_y1_b0.tif",
+        ]);
+
+        let dataset_name = add_multi_tile_dataset(&mut execution_context, files, time_steps);
+
+        let operator = MultiBandGdalSource {
+            params: GdalSourceParameters::new_with_overview_level(dataset_name, 2),
+        }
+        .boxed();
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?.get_u16().unwrap();
+
+        let tiling_spec = execution_context.tiling_specification();
+
+        let tiling_spatial_grid_definition = processor
+            .result_descriptor()
+            .spatial_grid_descriptor()
+            .tiling_grid_definition(tiling_spec);
+
+        let query_tiling_pixel_grid = tiling_spatial_grid_definition
+            .tiling_spatial_grid_definition()
+            .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+                (-180., 90.).into(),
+                (180.0, -90.).into(),
+            ));
+
+        // let query_tiling_pixel_grid = tiling_spatial_grid_definition
+        //     .tiling_spatial_grid_definition()
+        //     .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+        //         (-180., 90.).into(),
+        //         (0.0, 0.).into(),
+        //     ));
+
+        // let query_tiling_pixel_grid = tiling_spatial_grid_definition
+        //     .tiling_spatial_grid_definition()
+        //     .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
+        //         (0., 90.).into(),
+        //         (180.0, 0.).into(),
+        //     ));
+
+        let query_rect = RasterQueryRectangle::new(
+            query_tiling_pixel_grid.grid_bounds(),
+            TimeInterval::new_instant(
+                geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                    .unwrap(),
+            )
+            .unwrap(),
+            BandSelection::first(),
+        );
+
+        let tiles = processor
+            .query(query_rect.clone(), &query_ctx)
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        // // Write geotiff_bytes to disk
+        // let mut geotiff_bytes = raster_stream_to_geotiff_bytes(
+        //     processor,
+        //     query_rect,
+        //     query_ctx,
+        //     GdalGeoTiffDatasetMetadata {
+        //         no_data_value: Some(0.),
+        //         spatial_reference: SpatialReference::epsg_4326(),
+        //     },
+        //     GdalGeoTiffOptions {
+        //         as_cog: false,
+        //         compression_num_threads: GdalCompressionNumThreads::AllCpus,
+        //         force_big_tiff: false,
+        //     },
+        //     None,
+        //     Box::pin(futures::future::pending()),
+        // )
+        // .await?;
+
+        // std::fs::write("overview_level_2.tif", &geotiff_bytes[0])
+        //     .expect("Failed to write GeoTIFF file");
+
+        let expected_tiles = [
+            "2025-01-01_global_b0_tile_0.tif",
+            "2025-01-01_global_b0_tile_1.tif",
+            "2025-01-01_global_b0_tile_2.tif",
+            "2025-01-01_global_b0_tile_3.tif",
+        ];
+
+        let expected_time = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2025-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2025-02-01T00:00:00Z").unwrap(),
+        );
+
+        let expected_tiles: Vec<_> = expected_tiles
+            .iter()
+            .map(|f| {
+                raster_tile_from_file::<u16>(
+                    test_data!(format!(
+                        "raster/multi_tile/results/overview_level_2/tiles/{f}"
                     )),
                     tiling_spatial_grid_definition,
                     expected_time,

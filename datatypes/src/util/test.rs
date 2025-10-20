@@ -165,6 +165,15 @@ pub fn assert_eq_two_list_of_tiles<P: Pixel>(
                 let mat_a = a.grid_array.clone().into_materialized_masked_grid();
                 let mat_b = b.grid_array.clone().into_materialized_masked_grid();
 
+                assert_eq!(
+                    mat_a.inner_grid.data.len(),
+                    mat_b.inner_grid.data.len(),
+                    "grid data len of tile {} input_a: {:?}, input_b: {:?}",
+                    i,
+                    mat_a.inner_grid.data.len(),
+                    mat_b.inner_grid.data.len(),
+                );
+
                 for (pi, idx) in grid_idx_iter_2d(&mat_a).enumerate() {
                     let a_v = mat_a
                         .get_at_grid_index(idx)

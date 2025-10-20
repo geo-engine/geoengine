@@ -86,6 +86,14 @@ for date_idx, date in enumerate(dates):
         global_ds_rev.SetGeoTransform(global_gt)
         global_ds_rev.SetProjection(proj)
 
+        global_ds_overview_filename = f"results/overview_level_2/global/{date}_global_b{band}.tif"
+        global_ds_overview = driver.Create(
+            global_ds_overview_filename, global_width // 2, global_height // 2, 1, gdal.GDT_UInt16,
+            options=["COMPRESS=DEFLATE"]
+        )
+        global_ds_overview.SetGeoTransform((minx, px_size_x * 2, 0, maxy, 0, px_size_y * 2))
+        global_ds_overview.SetProjection(proj)
+
         global_tiles = []
 
         for i in range(tiles_x):
@@ -133,7 +141,7 @@ for date_idx, date in enumerate(dates):
                         "lowerRightCoordinate": {"x": lower_right_x, "y": lower_right_y}
                     },
                     "band": band,
-                    "z_index": i + j,
+                    "z_index": i + j, # todo
                     "params": {
                         "filePath": f"test_data/raster/multi_tile/{filename}",
                         "rasterbandChannel": 1,
@@ -177,10 +185,26 @@ for date_idx, date in enumerate(dates):
             )
 
 
+        # overview
+        band = global_ds.GetRasterBand(1)
+        overview_data_downsampled = band.ReadRaster(
+            0, 0, global_width, global_height,
+            int(global_width / 2), int(global_height / 2),
+            buf_type=gdal.GDT_UInt16
+        )
+        overview_array = np.frombuffer(overview_data_downsampled, dtype=np.uint16).reshape(int(global_height / 2), int(global_width / 2))       
+        global_ds_overview.GetRasterBand(1).WriteArray(overview_array)
+        global_ds_overview.FlushCache()
+
+        global_ds_overview.FlushCache()
+        global_ds_overview = None
         global_ds.FlushCache()
         global_ds = None
         global_ds_rev.FlushCache()
         global_ds_rev = None
+
+
+
 
 with open("metadata/loading_info.json", "w") as f:
     json.dump(loading_info, f, indent=2)
