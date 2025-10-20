@@ -955,10 +955,6 @@ mod tests {
         ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
     };
     use crate::test_data;
-    use crate::util::raster_stream_to_geotiff::{
-        GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
-        raster_stream_to_geotiff_bytes,
-    };
     use crate::util::test::raster_tile_from_file;
     use futures::TryStreamExt;
     use geoengine_datatypes::dataset::{DataId, DatasetId};
@@ -2500,20 +2496,6 @@ mod tests {
                 (-180., 90.).into(),
                 (180.0, -90.).into(),
             ));
-
-        // let query_tiling_pixel_grid = tiling_spatial_grid_definition
-        //     .tiling_spatial_grid_definition()
-        //     .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
-        //         (-180., 90.).into(),
-        //         (0.0, 0.).into(),
-        //     ));
-
-        // let query_tiling_pixel_grid = tiling_spatial_grid_definition
-        //     .tiling_spatial_grid_definition()
-        //     .spatial_bounds_to_compatible_spatial_grid(SpatialPartition2D::new_unchecked(
-        //         (0., 90.).into(),
-        //         (180.0, 0.).into(),
-        //     ));
 
         let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),

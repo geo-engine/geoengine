@@ -1,9 +1,8 @@
 use geoengine_datatypes::{
     primitives::AxisAlignedRectangle,
     raster::{
-        BoundedGrid, GridBoundingBox, GridBoundingBox2D, GridBounds, GridContains, GridIdx2D,
-        GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, RasterProperties,
-        SpatialGridDefinition,
+        GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty, GridShape2D,
+        GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
     },
 };
 use tracing::{trace, warn};
@@ -194,10 +193,6 @@ impl OverviewReaderState {
         actual_gdal_dataset_spatial_grid_definition: &SpatialGridDefinition, // This is the spatial grid of an actual gdal file
         tile: &SpatialGridDefinition, // This is a tile inside the grid we use for the global dataset consisting of potentially many gdal files...
     ) -> Option<GdalReadAdvise> {
-        dbg!(self);
-        dbg!(actual_gdal_dataset_spatial_grid_definition);
-        dbg!(tile);
-
         // Check if the y_axis is fliped.
         let (actual_gdal_dataset_spatial_grid_definition, flip_y) =
             if actual_gdal_dataset_spatial_grid_definition
@@ -251,13 +246,11 @@ impl OverviewReaderState {
             );
 
             // replace the origin with the desired one. this forces the overview grid on the actual grid
-            let shift_to_actual_space = nearest_in_overview_space.replace_origin(
+            nearest_in_overview_space.replace_origin(
                 actual_gdal_dataset_spatial_grid_definition
                     .geo_transform()
                     .origin_coordinate(),
-            );
-
-            shift_to_actual_space
+            )
         };
 
         // then we change the resolution to the original resolution of the gdal dataset
@@ -309,6 +302,7 @@ impl OverviewReaderState {
         // must start from overview level aligned pixel
         debug_assert_eq!(read_window.start_x % self.overview_level as isize, 0);
         debug_assert_eq!(read_window.start_y % self.overview_level as isize, 0);
+
         // must be multiple of overview level in size, unless we are at the edge of the dataset
         debug_assert!(
             read_window.size_x % self.overview_level as usize == 0
@@ -331,11 +325,11 @@ impl OverviewReaderState {
         if can_fill_whole_tile {
             // ensure that the read window is `overview_level` times larger than the tile
             debug_assert_eq!(
-                read_window.size_x / tile.grid_bounds().grid_shape().x() as usize,
+                read_window.size_x / tile.grid_bounds().grid_shape().x(),
                 self.overview_level as usize
             );
             debug_assert_eq!(
-                read_window.size_y / tile.grid_bounds().grid_shape().y() as usize,
+                read_window.size_y / tile.grid_bounds().grid_shape().y(),
                 self.overview_level as usize
             );
 
@@ -358,8 +352,6 @@ impl OverviewReaderState {
                 readable_area_in_overview_res
             } else {
                 // we need to make the readable area grid compatible to the tile in overview space, as the actual origin does not exist in overview space
-                // TODO: can this still happen if we snap the intersection to the overview level? I think yes, because the intersection is snapped with respect to the file origin and the tile is aligned with respect to the global view of the raster
-                // TODO: make this a method on spatial grid: force align one SpatialGrid to another
                 let tile_edge_idx = tile.geo_transform.coordinate_to_grid_idx_2d(
                     readable_area_in_overview_res
                         .geo_transform()
@@ -373,8 +365,6 @@ impl OverviewReaderState {
                     readable_area_in_overview_res.replace_origin(tile_edge_coord);
 
                 // if the snapping of the origin causes us to lose a pixel, we extend the bounds by one pixel in the respective direction
-                // TODO: instead of checking stuff, just compute the new bounds directly?
-                // use original origin before snapping to actual space !!!
                 let mut extend = [0, 0];
                 if tile.geo_transform().origin_coordinate().y - tile_edge_coord.y
                     > tile.geo_transform().y_pixel_size()
@@ -432,8 +422,6 @@ impl OverviewReaderState {
                     }
                 }
 
-                // TODO: restrict to file bounds
-
                 let bounds = GridBoundingBox2D::new_unchecked(
                     readable_area_in_overview_res_and_tile_space
                         .grid_bounds()
@@ -450,21 +438,12 @@ impl OverviewReaderState {
                 )
             };
 
-        // TODO: do we snap too much? first we snap the tile to the actual pixel space, then we snap the intersection in actual space to overview space
-        //       in the test we first snap from -44.8 to -45 and then we snap from -45 to -45.2, which means we miss one pixel one the lower right
-
         // Calculate the intersection of the readable area and the tile, result is in geotransform of the tile!
-        // let readable_tile_area = tile
-        //     .intersection(&readable_area_in_overview_res_and_tile_space)
-        //     .expect(
-        //         "Since there was an intersection earlyer, there must be a part of data to read.",
-        //     );
-        let readable_tile_area =
-            if let Some(tile) = tile.intersection(&readable_area_in_overview_res_and_tile_space) {
-                tile
-            } else {
-                panic!("OHNO")
-            };
+        let readable_tile_area = tile
+            .intersection(&readable_area_in_overview_res_and_tile_space)
+            .expect(
+                "Since there was an intersection earlyer, there must be a part of data to read.",
+            );
 
         // we need to crop the window to the intersection of the tiling based bounds and the dataset bounds
         let crop_tl = readable_tile_area.min_index() - tile.min_index();
@@ -480,41 +459,12 @@ impl OverviewReaderState {
             "readable bounds must be contained in tile bounds"
         );
 
-        dbg!(shifted_readable_bounds);
-
-        // ensure that the read window is `overview_level` times larger than the tile
-        // TODO: is not the case when input file is not on overview level grid alginment
-        //       -> only check this if it is algined, otherwise log a debug message
-        // debug_assert!(
-        //     read_window.size_x / shifted_readable_bounds.grid_shape().x() as usize
-        //         == self.overview_level as usize
-        //         || (read_window.size_x + 1) / shifted_readable_bounds.grid_shape().x() as usize
-        //             == self.overview_level as usize,
-        //     "X axis read window {} is not overview level times larger than tile {}",
-        //     read_window.size_x,
-        //     shifted_readable_bounds.grid_shape().x()
-        // );
-
-        // debug_assert!(
-        //     read_window.size_y / shifted_readable_bounds.grid_shape().y() as usize
-        //         == self.overview_level as usize
-        //         || (read_window.size_y + 1) / shifted_readable_bounds.grid_shape().y() as usize
-        //             == self.overview_level as usize,
-        //     "Y axis read window {} is not overview level times larger than tile {}",
-        //     read_window.size_y,
-        //     shifted_readable_bounds.grid_shape().y()
-        // );
-
-        let advise = dbg!(GdalReadAdvise {
+        Some(GdalReadAdvise {
             gdal_read_widow: read_window,
             read_window_bounds: shifted_readable_bounds,
             bounds_of_target: tile.grid_bounds,
             flip_y,
-        });
-
-        trace!("Tile is only partially contained: {advise:?}");
-
-        Some(advise)
+        })
     }
 }
 
@@ -768,336 +718,6 @@ mod tests {
 
         assert!(tiling_to_dataset_read_advise.flip_y);
     }
-
-    /*
-     #[test]
-    fn gdal_geotransform_to_read_bounds() {
-        let gdal_geo_transform: GdalDatasetGeoTransform = GdalDatasetGeoTransform {
-            origin_coordinate: Coordinate2D::new(0., 0.),
-            x_pixel_size: 1.,
-            y_pixel_size: -1.,
-        };
-
-        let gdal_data_size = GridShape2D::new([1024, 1024]);
-
-        let ti: TileInformation = TileInformation::new(
-            GridIdx([1, 1]),
-            GridShape2D::new([512, 512]),
-            GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-        );
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 512,
-                size_y: 512,
-                start_x: 512,
-                start_y: 512,
-            }
-        );
-
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([512, 512]), GridIdx([1023, 1023])).unwrap()
-        );
-    }
-
-    #[test]
-    fn gdal_geotransform_to_read_bounds_half_res() {
-        let gdal_geo_transform: GdalDatasetGeoTransform = GdalDatasetGeoTransform {
-            origin_coordinate: Coordinate2D::new(0., 0.),
-            x_pixel_size: 1.,
-            y_pixel_size: -1.,
-        };
-
-        let gdal_data_size = GridShape2D::new([1024, 1024]);
-
-        let ti: TileInformation = TileInformation::new(
-            GridIdx([0, 0]),
-            GridShape2D::new([512, 512]),
-            GeoTransform::new(Coordinate2D::new(0., 0.), 2., -2.),
-        );
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 1024,
-                size_y: 1024,
-                start_x: 0,
-                start_y: 0,
-            }
-        );
-
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([0, 0]), GridIdx([511, 511])).unwrap()
-        );
-    }
-
-    #[test]
-    fn gdal_geotransform_to_read_bounds_2x_res() {
-        let gdal_geo_transform: GdalDatasetGeoTransform = GdalDatasetGeoTransform {
-            origin_coordinate: Coordinate2D::new(0., 0.),
-            x_pixel_size: 1.,
-            y_pixel_size: -1.,
-        };
-
-        let gdal_data_size = GridShape2D::new([1024, 1024]);
-
-        let ti: TileInformation = TileInformation::new(
-            GridIdx([0, 0]),
-            GridShape2D::new([512, 512]),
-            GeoTransform::new(Coordinate2D::new(0., 0.), 0.5, -0.5),
-        );
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 256,
-                size_y: 256,
-                start_x: 0,
-                start_y: 0,
-            }
-        );
-
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([0, 0]), GridIdx([511, 511])).unwrap()
-        );
-    }
-
-    #[test]
-    fn gdal_geotransform_to_read_bounds_ul_out() {
-        let gdal_geo_transform: GdalDatasetGeoTransform = GdalDatasetGeoTransform {
-            origin_coordinate: Coordinate2D::new(-3., 3.),
-            x_pixel_size: 1.,
-            y_pixel_size: -1.,
-        };
-
-        let gdal_data_size = GridShape2D::new([1024, 1024]);
-        let tile_grid_shape = GridShape2D::new([512, 512]);
-        let tiling_global_geo_transfom = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
-
-        let ti: TileInformation =
-            TileInformation::new(GridIdx([0, 0]), tile_grid_shape, tiling_global_geo_transfom);
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        // since the origin of the tile is at -3,3 and the "coordinate nearest to zero" is 0,0 the tile at tile position 0,0 maps to the read window starting at 3,3 with 512x512 pixels
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 512,
-                size_y: 512,
-                start_x: 3,
-                start_y: 3,
-            }
-        );
-
-        // the data maps to the complete tile
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([0, 0]), GridIdx([511, 511])).unwrap()
-        );
-
-        let ti: TileInformation =
-            TileInformation::new(GridIdx([1, 1]), tile_grid_shape, tiling_global_geo_transfom);
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        // since the origin of the tile is at -3,3 and the "coordinate nearest to zero" is 0,0 the tile at tile position 1,1 maps to the read window starting at 515,515 (512+3, 512+3) with 512x512 pixels
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 509,
-                size_y: 509,
-                start_x: 515,
-                start_y: 515,
-            }
-        );
-
-        // the data maps only to a part of the tile since the data is only 1024x1024 pixels in size. So the tile at tile position 1,1 maps to the data starting at 515,515 (512+3, 512+3) with 509x509 pixels left.
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([512, 512]), GridIdx([1020, 1020])).unwrap()
-        );
-    }
-
-    #[test]
-    fn gdal_geotransform_to_read_bounds_ul_in() {
-        let gdal_geo_transform: GdalDatasetGeoTransform = GdalDatasetGeoTransform {
-            origin_coordinate: Coordinate2D::new(3., -3.),
-            x_pixel_size: 1.,
-            y_pixel_size: -1.,
-        };
-
-        let gdal_data_size = GridShape2D::new([1024, 1024]);
-        let tile_grid_shape = GridShape2D::new([512, 512]);
-        let tiling_global_geo_transfom = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
-
-        let ti: TileInformation =
-            TileInformation::new(GridIdx([0, 0]), tile_grid_shape, tiling_global_geo_transfom);
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        // in this case the data origin is at 3,-3 which is inside the tile at tile position 0,0. Since the tile starts at the "coordinate nearest to zero, which is 0.0,0.0" we need to read the data starting at data 0,0 with 509x509 pixels (512-3, 512-3).
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 509,
-                size_y: 509,
-                start_x: 0,
-                start_y: 0,
-            }
-        );
-
-        // in this case, the data only maps to the last 509x509 pixels of the tile. So the data we read does not fill a whole tile.
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([3, 3]), GridIdx([511, 511])).unwrap()
-        );
-
-        let ti: TileInformation =
-            TileInformation::new(GridIdx([1, 1]), tile_grid_shape, tiling_global_geo_transfom);
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 512,
-                size_y: 512,
-                start_x: 509,
-                start_y: 509,
-            }
-        );
-
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([512, 512]), GridIdx([1023, 1023])).unwrap()
-        );
-
-        let ti: TileInformation =
-            TileInformation::new(GridIdx([2, 2]), tile_grid_shape, tiling_global_geo_transfom);
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 3,
-                size_y: 3,
-                start_x: 1021,
-                start_y: 1021,
-            }
-        );
-
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([1024, 1024]), GridIdx([1026, 1026])).unwrap()
-        );
-    }
-
-    #[test]
-    fn gdal_geotransform_to_read_bounds_ul_out_frac_res() {
-        let gdal_geo_transform: GdalDatasetGeoTransform = GdalDatasetGeoTransform {
-            origin_coordinate: Coordinate2D::new(-9., 9.),
-            x_pixel_size: 9.,
-            y_pixel_size: -9.,
-        };
-        let gdal_data_size = GridShape2D::new([1024, 1024]);
-        let tile_grid_shape = GridShape2D::new([512, 512]);
-        let tiling_global_geo_transfom = GeoTransform::new(Coordinate2D::new(-0., 0.), 3., -3.);
-
-        let ti: TileInformation =
-            TileInformation::new(GridIdx([0, 0]), tile_grid_shape, tiling_global_geo_transfom);
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 170, //
-                size_y: 170,
-                start_x: 1,
-                start_y: 1,
-            }
-        );
-
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([0, 0]), GridIdx([512, 512])).unwrap()
-        ); // we need to read 683 pixels but we only want 682.6666666666666 pixels.
-
-        let ti: TileInformation =
-            TileInformation::new(GridIdx([1, 1]), tile_grid_shape, tiling_global_geo_transfom);
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 171,
-                size_y: 171,
-                start_x: 171,
-                start_y: 171,
-            }
-        );
-
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([510, 510]), GridIdx([1025, 1025])).unwrap()
-        );
-
-        let ti: TileInformation =
-            TileInformation::new(GridIdx([2, 2]), tile_grid_shape, tiling_global_geo_transfom);
-
-        let (read_window, target_bounds) = gdal_geo_transform
-            .grid_bounds_resolution_to_read_window_and_target_grid(gdal_data_size, &ti)
-            .unwrap();
-
-        assert_eq!(
-            read_window,
-            GdalReadWindow {
-                size_x: 171,
-                size_y: 171,
-                start_x: 342,
-                start_y: 342,
-            }
-        );
-
-        assert_eq!(
-            target_bounds,
-            GridBoundingBox2D::new(GridIdx([1023, 1023]), GridIdx([1535, 1535])).unwrap()
-        );
-    }
-     */
 
     #[test]
     fn reader_state_tiling_to_dataset_read_advise_overview_2() {
@@ -1404,7 +1024,7 @@ mod tests {
             geo_transform: GeoTransform::new(
                 Coordinate2D {
                     x: -45.0,
-                    y: 22.39999999999999,
+                    y: 22.399_999_999_999_99,
                 },
                 0.2,
                 -0.2,
@@ -1421,8 +1041,6 @@ mod tests {
             .tiling_to_dataset_read_advise(&actual_gdal_dataset_spatial_grid_definition, &tile)
             .unwrap();
 
-        // x:  -45.2 / 0.4 - -0.4
-        //     -113        - -1
         assert_eq!(
             read_advise.read_window_bounds,
             GridBoundingBox2D::new_unchecked([-56, -113], [-1, -1])
