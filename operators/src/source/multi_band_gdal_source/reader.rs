@@ -195,102 +195,20 @@ impl OverviewReaderState {
     ) -> Option<GdalReadAdvise> {
         // Check if the y_axis is fliped.
         let (actual_gdal_dataset_spatial_grid_definition, flip_y) =
-            if actual_gdal_dataset_spatial_grid_definition
-                .geo_transform()
-                .y_axis_is_neg()
-                == self.original_dataset_grid.geo_transform().y_axis_is_neg()
-            {
-                (*actual_gdal_dataset_spatial_grid_definition, false)
-            } else {
-                (
-                    actual_gdal_dataset_spatial_grid_definition
-                        .flip_axis_y() // first: reverse the coordinate system to match the one used by tiling
-                        .shift_bounds_relative_by_pixel_offset(GridIdx2D::new_y_x(
-                            // second: move the origin to the other end of the y-axis
-                            actual_gdal_dataset_spatial_grid_definition
-                                .grid_bounds()
-                                .axis_size_y() as isize,
-                            0,
-                        )),
-                    true,
-                )
-            };
+            self.normalize_y_axis(actual_gdal_dataset_spatial_grid_definition);
 
-        // This is the intersection of grid of the gdal file and the global grid we use. Usually the dataset is inside the global dataset grid.
-        // IF the intersection is empty the we return early and load nothing
-        // The intersection uses the geo_transform of the gdal dataset which enables us to adress gdal pixels starting at 0,0
-        let actual_bounds_to_use_original_resolution = actual_gdal_dataset_spatial_grid_definition
-            .intersection(&self.original_dataset_grid)?;
-
-        // now we map the tile we want to fill to the original grid. First, we set the tile to use the same origin coordinate as the gdal file/dataset
-        let tile_with_overview_resolution_in_actual_space = if let Some(tile) = tile
-            .with_moved_origin_exact_grid(
-                actual_gdal_dataset_spatial_grid_definition
-                    .geo_transform()
-                    .origin_coordinate(),
-            ) {
-            tile
-        } else {
-            // special case where the original resolution tile's origin is not a valid pixel edge in the overview
-            // in this case we need to snap to the nearest pixel edge in the original resolution
-            trace!(
-                "overview tile grid {:?} does not align with actual datasets grid {:?}, use nearest original edge instead",
-                tile, actual_gdal_dataset_spatial_grid_definition
-            );
-
-            // move to pixel edge nearest to actual grid edge, the result is within one pixel distance in overview space
-            let nearest_in_overview_space = tile.with_moved_origin_to_nearest_grid_edge(
-                actual_gdal_dataset_spatial_grid_definition
-                    .geo_transform()
-                    .origin_coordinate(),
-            );
-
-            // replace the origin with the desired one. this forces the overview grid on the actual grid
-            nearest_in_overview_space.replace_origin(
-                actual_gdal_dataset_spatial_grid_definition
-                    .geo_transform()
-                    .origin_coordinate(),
-            )
-        };
-
-        // then we change the resolution to the original resolution of the gdal dataset
-        let tile_with_original_resolution_in_actual_space =
-            tile_with_overview_resolution_in_actual_space.with_changed_resolution(
-                actual_gdal_dataset_spatial_grid_definition
-                    .geo_transform()
-                    .spatial_resolution(),
-            );
-
-        // Now we need to intersect the tile and the actual bounds to use to identify what we can really read
-        let tile_intersection_original_resolution_actual_space =
-            &tile_with_original_resolution_in_actual_space
-                .intersection(&actual_bounds_to_use_original_resolution)?;
-
-        // if we need to unflip the dataset grid now is the time to do this.
-        let tile_intersection_for_read_window = if flip_y {
-            tile_intersection_original_resolution_actual_space
-                .flip_axis_y() // first: reverse the coordinate system to match the one used by tiling
-                .shift_bounds_relative_by_pixel_offset(GridIdx2D::new_y_x(
-                    // second: move the origin to the other end of the y-axis
-                    actual_gdal_dataset_spatial_grid_definition
-                        .grid_bounds()
-                        .axis_size_y() as isize,
-                    0,
-                ))
-        } else {
-            *tile_intersection_original_resolution_actual_space
-        };
-
-        // The input dataset and the output tile may not be aligned with respect to the overview level, i.e. the origin of the dataset is not a multiple of `overview_level` pixels away from the tile origin
-        // Thus, we snap the computed intersection to the overview level relative to the current GDAL dataset (file) origin to ensure that GDAL actually uses overviews for reading
-        let tile_intersection_for_read_window_snapped_to_overview_level =
-            tile_intersection_original_resolution_actual_space.snap_to_dataset_overview_level(
-                actual_gdal_dataset_spatial_grid_definition,
-                self.overview_level,
-            )?;
+        let (
+            tile_with_original_resolution_in_actual_space,
+            tile_intersection_original_resolution_actual_space,
+            tile_intersection_for_read_window,
+            tile_intersection_for_read_window_snapped_to_overview_level,
+        ) = self.intersect_tile_and_dataset(
+            tile,
+            actual_gdal_dataset_spatial_grid_definition,
+            flip_y,
+        )?;
 
         // generate the read window for GDAL --> This is what we can read in any case.
-        // TODO: does this include everything we need even if we snap the output to geo engine overview level?
         let read_window = GdalReadWindow::new(
             tile_intersection_for_read_window_snapped_to_overview_level.min_index(),
             tile_intersection_for_read_window_snapped_to_overview_level
@@ -322,7 +240,7 @@ impl OverviewReaderState {
         let can_fill_whole_tile = tile_intersection_for_read_window.grid_bounds()
             == tile_with_original_resolution_in_actual_space.grid_bounds();
 
-        if can_fill_whole_tile {
+        let read_window_bounds = if can_fill_whole_tile {
             // ensure that the read window is `overview_level` times larger than the tile
             debug_assert_eq!(
                 read_window.size_x / tile.grid_bounds().grid_shape().x(),
@@ -333,139 +251,257 @@ impl OverviewReaderState {
                 self.overview_level as usize
             );
 
-            let advise = GdalReadAdvise {
-                gdal_read_widow: read_window,
-                read_window_bounds: tile.grid_bounds,
-                bounds_of_target: tile.grid_bounds,
-                flip_y,
-            };
-            trace!("Tile is fully contained: {advise:?}");
-            return Some(advise);
-        }
+            trace!("Tile is fully contained");
 
-        // IF we can't fill the whole tile, we have to find out which area of the tile we can fill.
-        let readable_area_in_overview_res = tile_intersection_original_resolution_actual_space
-            .with_changed_resolution(tile.geo_transform().spatial_resolution());
-
-        let readable_area_in_overview_res_and_tile_space =
-            if tile.is_compatible_grid_generic(&readable_area_in_overview_res) {
-                readable_area_in_overview_res
-            } else {
-                // we need to make the readable area grid compatible to the tile in overview space, as the actual origin does not exist in overview space
-                let tile_edge_idx = tile.geo_transform.coordinate_to_grid_idx_2d(
-                    readable_area_in_overview_res
-                        .geo_transform()
-                        .origin_coordinate(),
-                );
-                let tile_edge_coord = tile
-                    .geo_transform
-                    .grid_idx_to_pixel_upper_left_coordinate_2d(tile_edge_idx);
-
-                let readable_area_in_overview_res_and_tile_space =
-                    readable_area_in_overview_res.replace_origin(tile_edge_coord);
-
-                // if the snapping of the origin causes us to lose a pixel, we extend the bounds by one pixel in the respective direction
-                let mut extend = [0, 0];
-                if tile.geo_transform().origin_coordinate().y - tile_edge_coord.y
-                    > tile.geo_transform().y_pixel_size()
-                {
-                    let max_index = readable_area_in_overview_res_and_tile_space
-                        .grid_bounds()
-                        .max_index()
-                        .y();
-
-                    let new_border_y = readable_area_in_overview_res_and_tile_space
-                        .geo_transform()
-                        .origin_coordinate()
-                        .y
-                        + (readable_area_in_overview_res_and_tile_space
-                            .geo_transform()
-                            .y_pixel_size()
-                            * (max_index + 1) as f64);
-
-                    // TODO: there must be an easier way to check if we are still within the dataset bounds
-                    if new_border_y
-                        < actual_gdal_dataset_spatial_grid_definition // TODO: approx equal?
-                            .spatial_partition()
-                            .lower_right()
-                            .y
-                    {
-                        extend[0] = 1;
-                    }
-                }
-
-                if tile.geo_transform().origin_coordinate().x - tile_edge_coord.x
-                    > tile.geo_transform().x_pixel_size()
-                {
-                    let max_index = readable_area_in_overview_res_and_tile_space
-                        .grid_bounds()
-                        .max_index()
-                        .x();
-
-                    let new_border_x = readable_area_in_overview_res_and_tile_space
-                        .geo_transform()
-                        .origin_coordinate()
-                        .x
-                        + (readable_area_in_overview_res_and_tile_space
-                            .geo_transform()
-                            .x_pixel_size()
-                            * (max_index + 1) as f64);
-
-                    // TODO: there must be an easier way to check if we are still within the dataset bounds
-                    if new_border_x
-                        < actual_gdal_dataset_spatial_grid_definition // TODO: approx equal?
-                            .spatial_partition()
-                            .lower_right()
-                            .x
-                    {
-                        extend[1] = 1;
-                    }
-                }
-
-                let bounds = GridBoundingBox2D::new_unchecked(
-                    readable_area_in_overview_res_and_tile_space
-                        .grid_bounds()
-                        .min_index(),
-                    readable_area_in_overview_res_and_tile_space
-                        .grid_bounds()
-                        .max_index()
-                        + GridIdx2D::new_y_x(extend[0], extend[1]),
-                );
-
-                SpatialGridDefinition::new(
-                    readable_area_in_overview_res_and_tile_space.geo_transform(),
-                    bounds,
-                )
-            };
-
-        // Calculate the intersection of the readable area and the tile, result is in geotransform of the tile!
-        let readable_tile_area = tile
-            .intersection(&readable_area_in_overview_res_and_tile_space)
-            .expect(
-                "Since there was an intersection earlyer, there must be a part of data to read.",
-            );
-
-        // we need to crop the window to the intersection of the tiling based bounds and the dataset bounds
-        let crop_tl = readable_tile_area.min_index() - tile.min_index();
-        let crop_lr = readable_tile_area.max_index() - tile.max_index();
-
-        let shifted_tl = tile.grid_bounds.min_index() + crop_tl;
-        let shifted_lr = tile.grid_bounds.max_index() + crop_lr;
-
-        // now we need to adapt the target pixel space read window to the clipped dataset intersection area
-        let shifted_readable_bounds = GridBoundingBox2D::new_unchecked(shifted_tl, shifted_lr);
-        debug_assert!(
-            tile.grid_bounds().contains(&shifted_readable_bounds),
-            "readable bounds must be contained in tile bounds"
-        );
+            tile.grid_bounds
+        } else {
+            // IF we can't fill the whole tile, we have to find out which area of the tile we can fill.
+            read_window_bounds_for_partially_tile(
+                tile,
+                actual_gdal_dataset_spatial_grid_definition,
+                tile_intersection_original_resolution_actual_space,
+            )
+        };
 
         Some(GdalReadAdvise {
             gdal_read_widow: read_window,
-            read_window_bounds: shifted_readable_bounds,
+            read_window_bounds,
             bounds_of_target: tile.grid_bounds,
             flip_y,
         })
     }
+
+    fn intersect_tile_and_dataset(
+        &self,
+        tile: &SpatialGridDefinition,
+        actual_gdal_dataset_spatial_grid_definition: SpatialGridDefinition,
+        flip_y: bool,
+    ) -> Option<(
+        SpatialGridDefinition,
+        SpatialGridDefinition,
+        SpatialGridDefinition,
+        SpatialGridDefinition,
+    )> {
+        // This is the intersection of grid of the gdal file and the global grid we use. Usually the dataset is inside the global dataset grid.
+        // IF the intersection is empty the we return early and load nothing
+        // The intersection uses the geo_transform of the gdal dataset which enables us to adress gdal pixels starting at 0,0
+        let actual_bounds_to_use_original_resolution = actual_gdal_dataset_spatial_grid_definition
+            .intersection(&self.original_dataset_grid)?;
+
+        let tile_with_overview_resolution_in_actual_space = if let Some(tile) = tile
+            .with_moved_origin_exact_grid(
+                actual_gdal_dataset_spatial_grid_definition
+                    .geo_transform()
+                    .origin_coordinate(),
+            ) {
+            tile
+        } else {
+            // special case where the original resolution tile's origin is not a valid pixel edge in the overview
+            // in this case we need to snap to the nearest pixel edge in the original resolution
+            trace!(
+                "overview tile grid {:?} does not align with actual datasets grid {:?}, use nearest original edge instead",
+                tile, actual_gdal_dataset_spatial_grid_definition
+            );
+
+            // move to pixel edge nearest to actual grid edge, the result is within one pixel distance in overview space
+            let nearest_in_overview_space = tile.with_moved_origin_to_nearest_grid_edge(
+                actual_gdal_dataset_spatial_grid_definition
+                    .geo_transform()
+                    .origin_coordinate(),
+            );
+
+            // replace the origin with the desired one. this forces the overview grid on the actual grid
+            nearest_in_overview_space.replace_origin(
+                actual_gdal_dataset_spatial_grid_definition
+                    .geo_transform()
+                    .origin_coordinate(),
+            )
+        };
+
+        let tile_with_original_resolution_in_actual_space =
+            tile_with_overview_resolution_in_actual_space.with_changed_resolution(
+                actual_gdal_dataset_spatial_grid_definition
+                    .geo_transform()
+                    .spatial_resolution(),
+            );
+
+        let tile_intersection_original_resolution_actual_space =
+            &tile_with_original_resolution_in_actual_space
+                .intersection(&actual_bounds_to_use_original_resolution)?;
+
+        let tile_intersection_for_read_window = if flip_y {
+            tile_intersection_original_resolution_actual_space
+                .flip_axis_y() // first: reverse the coordinate system to match the one used by tiling
+                .shift_bounds_relative_by_pixel_offset(GridIdx2D::new_y_x(
+                    // second: move the origin to the other end of the y-axis
+                    actual_gdal_dataset_spatial_grid_definition
+                        .grid_bounds()
+                        .axis_size_y() as isize,
+                    0,
+                ))
+        } else {
+            *tile_intersection_original_resolution_actual_space
+        };
+
+        let tile_intersection_for_read_window_snapped_to_overview_level =
+            tile_intersection_original_resolution_actual_space.snap_to_dataset_overview_level(
+                actual_gdal_dataset_spatial_grid_definition,
+                self.overview_level,
+            )?;
+
+        Some((
+            tile_with_original_resolution_in_actual_space,
+            *tile_intersection_original_resolution_actual_space,
+            tile_intersection_for_read_window,
+            tile_intersection_for_read_window_snapped_to_overview_level,
+        ))
+    }
+
+    fn normalize_y_axis(
+        &self,
+        actual_gdal_dataset_spatial_grid_definition: &SpatialGridDefinition,
+    ) -> (SpatialGridDefinition, bool) {
+        if actual_gdal_dataset_spatial_grid_definition
+            .geo_transform()
+            .y_axis_is_neg()
+            == self.original_dataset_grid.geo_transform().y_axis_is_neg()
+        {
+            (*actual_gdal_dataset_spatial_grid_definition, false)
+        } else {
+            (
+                actual_gdal_dataset_spatial_grid_definition
+                    .flip_axis_y() // first: reverse the coordinate system to match the one used by tiling
+                    .shift_bounds_relative_by_pixel_offset(GridIdx2D::new_y_x(
+                        // second: move the origin to the other end of the y-axis
+                        actual_gdal_dataset_spatial_grid_definition
+                            .grid_bounds()
+                            .axis_size_y() as isize,
+                        0,
+                    )),
+                true,
+            )
+        }
+    }
+}
+
+fn read_window_bounds_for_partially_tile(
+    tile: &SpatialGridDefinition,
+    actual_gdal_dataset_spatial_grid_definition: SpatialGridDefinition,
+    tile_intersection_original_resolution_actual_space: SpatialGridDefinition,
+) -> geoengine_datatypes::raster::GridBoundingBox<[isize; 2]> {
+    let readable_area_in_overview_res = tile_intersection_original_resolution_actual_space
+        .with_changed_resolution(tile.geo_transform().spatial_resolution());
+
+    let readable_area_in_overview_res_and_tile_space =
+        if tile.is_compatible_grid_generic(&readable_area_in_overview_res) {
+            readable_area_in_overview_res
+        } else {
+            // we need to make the readable area grid compatible to the tile in overview space, as the actual origin does not exist in overview space
+            let tile_edge_idx = tile.geo_transform.coordinate_to_grid_idx_2d(
+                readable_area_in_overview_res
+                    .geo_transform()
+                    .origin_coordinate(),
+            );
+            let tile_edge_coord = tile
+                .geo_transform
+                .grid_idx_to_pixel_upper_left_coordinate_2d(tile_edge_idx);
+
+            let readable_area_in_overview_res_and_tile_space =
+                readable_area_in_overview_res.replace_origin(tile_edge_coord);
+
+            // if the snapping of the origin causes us to lose a pixel, we extend the bounds by one pixel in the respective direction
+            // if it is still contained in the actual dataset bounds
+            let mut extend = [0, 0];
+            if tile.geo_transform().origin_coordinate().y - tile_edge_coord.y
+                > tile.geo_transform().y_pixel_size()
+            {
+                let max_index = readable_area_in_overview_res_and_tile_space
+                    .grid_bounds()
+                    .max_index()
+                    .y();
+
+                let new_border_y = readable_area_in_overview_res_and_tile_space
+                    .geo_transform()
+                    .origin_coordinate()
+                    .y
+                    + (readable_area_in_overview_res_and_tile_space
+                        .geo_transform()
+                        .y_pixel_size()
+                        * (max_index + 1) as f64);
+
+                if new_border_y
+                    < actual_gdal_dataset_spatial_grid_definition
+                        .spatial_partition()
+                        .lower_right()
+                        .y
+                {
+                    extend[0] = 1;
+                }
+            }
+
+            if tile.geo_transform().origin_coordinate().x - tile_edge_coord.x
+                > tile.geo_transform().x_pixel_size()
+            {
+                let max_index = readable_area_in_overview_res_and_tile_space
+                    .grid_bounds()
+                    .max_index()
+                    .x();
+
+                let new_border_x = readable_area_in_overview_res_and_tile_space
+                    .geo_transform()
+                    .origin_coordinate()
+                    .x
+                    + (readable_area_in_overview_res_and_tile_space
+                        .geo_transform()
+                        .x_pixel_size()
+                        * (max_index + 1) as f64);
+
+                if new_border_x
+                    < actual_gdal_dataset_spatial_grid_definition
+                        .spatial_partition()
+                        .lower_right()
+                        .x
+                {
+                    extend[1] = 1;
+                }
+            }
+
+            let bounds = GridBoundingBox2D::new_unchecked(
+                readable_area_in_overview_res_and_tile_space
+                    .grid_bounds()
+                    .min_index(),
+                readable_area_in_overview_res_and_tile_space
+                    .grid_bounds()
+                    .max_index()
+                    + GridIdx2D::new_y_x(extend[0], extend[1]),
+            );
+
+            SpatialGridDefinition::new(
+                readable_area_in_overview_res_and_tile_space.geo_transform(),
+                bounds,
+            )
+        };
+
+    // Calculate the intersection of the readable area and the tile, result is in geotransform of the tile!
+    let readable_tile_area = tile
+        .intersection(&readable_area_in_overview_res_and_tile_space)
+        .expect("Since there was an intersection earlyer, there must be a part of data to read.");
+
+    // we need to crop the window to the intersection of the tiling based bounds and the dataset bounds
+    let crop_tl = readable_tile_area.min_index() - tile.min_index();
+    let crop_lr = readable_tile_area.max_index() - tile.max_index();
+
+    let shifted_tl = tile.grid_bounds.min_index() + crop_tl;
+    let shifted_lr = tile.grid_bounds.max_index() + crop_lr;
+
+    // now we need to adapt the target pixel space read window to the clipped dataset intersection area
+    let shifted_readable_bounds = GridBoundingBox2D::new_unchecked(shifted_tl, shifted_lr);
+    debug_assert!(
+        tile.grid_bounds().contains(&shifted_readable_bounds),
+        "readable bounds must be contained in tile bounds"
+    );
+
+    shifted_readable_bounds
 }
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
