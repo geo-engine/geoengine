@@ -524,7 +524,10 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TimeDescriptor, TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor
+            MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
+            RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TimeDescriptor,
+            TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
+            VectorResultDescriptor,
         },
         machine_learning::MlModelMetadata,
         mock::{MockPointSource, MockPointSourceParams},

@@ -1457,7 +1457,10 @@ mod tests {
         }
         .boxed();
 
-        let query_rectangle: geoengine_datatypes::primitives::QueryRectangle<geoengine_datatypes::raster::GridBoundingBox<[isize; 2]>, BandSelection> = RasterQueryRectangle::new(
+        let query_rectangle: geoengine_datatypes::primitives::QueryRectangle<
+            geoengine_datatypes::raster::GridBoundingBox<[isize; 2]>,
+            BandSelection,
+        > = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, -1], [0, 1]).unwrap(),
             query_time,
             BandSelection::first(),
