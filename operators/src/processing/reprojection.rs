@@ -75,6 +75,7 @@ pub struct InitializedVectorReprojection {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
     result_descriptor: VectorResultDescriptor,
+    params: ReprojectionParams,
     source: Box<dyn InitializedVectorOperator>,
     source_srs: SpatialReference,
     target_srs: SpatialReference,
@@ -130,6 +131,7 @@ impl InitializedVectorReprojection {
             name,
             path,
             result_descriptor: out_desc,
+            params,
             source: source_vector_operator,
             source_srs: in_srs,
             target_srs: params.target_spatial_reference,
@@ -349,14 +351,18 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
 
     fn optimize(
         &self,
-        _target_resolution: SpatialResolution,
+        target_resolution: SpatialResolution,
     ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
-        // TODO: project target resolution to source resolution and push optimization down
-        Err(
-            OptimizationError::OptimizationNotYetImplementedForOperator {
-                operator: "Reprojection (Vector)".to_string(),
-            },
-        )
+        self.source
+            .optimize(target_resolution)
+            .map(|optimized_source| {
+                Box::new(Reprojection {
+                    params: self.params,
+                    sources: SingleRasterOrVectorSource {
+                        source: RasterOrVectorOperator::Vector(optimized_source),
+                    },
+                }) as Box<dyn VectorOperator>
+            })
     }
 }
 
@@ -637,6 +643,7 @@ impl<O: InitializedRasterOperator> InitializedRasterOperator for InitializedRast
 
         let current_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
 
+        // TODO: use `find_next_best_resolution_overview_level` instead?
         let output_overview_level_factor =
             (target_resolution.x / current_resolution.x).round() as u32;
         // must be the same in x and y

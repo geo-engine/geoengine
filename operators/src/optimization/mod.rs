@@ -887,6 +887,218 @@ mod tests {
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
+    async fn it_optimizes_vector_reprojection() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+        let ndvi_downscaled_3x_id = add_ndvi_downscaled_3x_dataset(&mut exe_ctx);
+
+        let id: DataId = DatasetId::new().into();
+        let name = NamedData::with_system_name("ne_10m_ports");
+
+        exe_ctx.add_meta_data::<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>(
+            id.clone(),
+            name.clone(),
+            Box::new(StaticMetaData {
+                loading_info: OgrSourceDataset {
+                    file_name: test_data!(
+                        "vector/data/ne_10m_ports/with_spatial_index/ne_10m_ports.gpkg"
+                    )
+                    .into(),
+                    layer_name: "ne_10m_ports".to_string(),
+                    data_type: Some(VectorDataType::MultiPoint),
+                    time: OgrSourceDatasetTimeType::None,
+                    default_geometry: None,
+                    columns: None,
+                    force_ogr_time_filter: false,
+                    force_ogr_spatial_filter: false,
+                    on_error: OgrSourceErrorSpec::Ignore,
+                    sql_query: None,
+                    attribute_query: None,
+                    cache_ttl: CacheTtlSeconds::default(),
+                },
+                result_descriptor: VectorResultDescriptor {
+                    data_type: VectorDataType::MultiPoint,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    columns: Default::default(),
+                    time: None,
+                    bbox: Some(BoundingBox2D::new_unchecked(
+                        [-171.757_95, -54.809_444].into(),
+                        [179.309_364, 78.226_111].into(),
+                    )),
+                },
+                phantom: Default::default(),
+            }),
+        );
+
+        let ogr_source = OgrSource {
+            params: OgrSourceParameters {
+                data: name,
+                attribute_projection: None,
+                attribute_filters: None,
+            },
+        }
+        .boxed();
+
+        let gdal_source = GdalSource {
+            params: GdalSourceParameters {
+                data: ndvi_id.clone(),
+                overview_level: None,
+            },
+        }
+        .boxed();
+
+        let gdal_source2 = GdalSource {
+            params: GdalSourceParameters {
+                data: ndvi_downscaled_3x_id.clone(),
+                overview_level: None,
+            },
+        }
+        .boxed();
+
+        let raster_vector_join = RasterVectorJoin {
+            params: RasterVectorJoinParams {
+                names: ColumnNames::Default,
+                feature_aggregation: FeatureAggregationMethod::First,
+                feature_aggregation_ignore_no_data: false,
+                temporal_aggregation: TemporalAggregationMethod::None,
+                temporal_aggregation_ignore_no_data: false,
+            },
+            sources: SingleVectorMultipleRasterSources {
+                vector: ogr_source,
+                rasters: vec![gdal_source, gdal_source2],
+            },
+        }
+        .boxed();
+
+        let vector_reprojection = VectorOperator::boxed(Reprojection {
+            params: ReprojectionParams {
+                target_spatial_reference: SpatialReference::new(
+                    SpatialReferenceAuthority::Epsg,
+                    3857,
+                ),
+                derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
+            },
+            sources: SingleRasterOrVectorSource {
+                source: raster_vector_join.into(),
+            },
+        });
+
+        let vector_reprojection_initialized = vector_reprojection
+            .clone()
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let vector_reprojection_optimized = vector_reprojection_initialized
+            .optimize(SpatialResolution::new(0.8, 0.8).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&vector_reprojection_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+              "params": {
+                "deriveOutSpec": "projectionBounds",
+                "targetSpatialReference": "EPSG:3857"
+              },
+              "sources": {
+                "source": {
+                  "params": {
+                    "featureAggregation": "first",
+                    "featureAggregationIgnoreNoData": false,
+                    "names": { "type": "default" },
+                    "temporalAggregation": "none",
+                    "temporalAggregationIgnoreNoData": false
+                  },
+                  "sources": {
+                    "rasters": [
+                      {
+                        "params": { "data": "ndvi", "overviewLevel": 8 },
+                        "type": "GdalSource"
+                      },
+                      {
+                        "params": { "data": "ndvi_downscaled_3x", "overviewLevel": 2 },
+                        "type": "GdalSource"
+                      }
+                    ],
+                    "vector": {
+                      "params": {
+                        "attributeFilters": null,
+                        "attributeProjection": null,
+                        "data": "ne_10m_ports"
+                      },
+                      "type": "OgrSource"
+                    }
+                  },
+                  "type": "RasterVectorJoin"
+                }
+              },
+              "type": "Reprojection"
+            })
+        );
+
+        assert!(
+            vector_reprojection_optimized
+                .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+                .await
+                .is_ok()
+        );
+
+        // check case where output is finer than input
+        let vector_reprojection_optimized = vector_reprojection_initialized
+            .optimize(SpatialResolution::new(0.05, 0.05).unwrap())
+            .unwrap();
+
+        let json = serde_json::to_value(&vector_reprojection_optimized).unwrap();
+
+        assert_eq!(
+            json,
+            serde_json::json!({
+              "params": {
+                "deriveOutSpec": "projectionBounds",
+                "targetSpatialReference": "EPSG:3857"
+              },
+              "sources": {
+                "source": {
+                  "params": {
+                    "featureAggregation": "first",
+                    "featureAggregationIgnoreNoData": false,
+                    "names": { "type": "default" },
+                    "temporalAggregation": "none",
+                    "temporalAggregationIgnoreNoData": false
+                  },
+                  "sources": {
+                    "rasters": [
+                      {
+                        "params": { "data": "ndvi", "overviewLevel": 0 },
+                        "type": "GdalSource"
+                      },
+                      {
+                        "params": { "data": "ndvi_downscaled_3x", "overviewLevel": 0 },
+                        "type": "GdalSource"
+                      }
+                    ],
+                    "vector": {
+                      "params": {
+                        "attributeFilters": null,
+                        "attributeProjection": null,
+                        "data": "ne_10m_ports"
+                      },
+                      "type": "OgrSource"
+                    }
+                  },
+                  "type": "RasterVectorJoin"
+                }
+              },
+              "type": "Reprojection"
+            })
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn it_optimizes_rasterization() {
         let id: DataId = DatasetId::new().into();
         let name = NamedData::with_system_name("ne_10m_ports");
