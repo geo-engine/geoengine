@@ -28,6 +28,7 @@ WITH cte AS (
     FROM datasets
     WHERE (result_descriptor).raster IS NOT NULL
 )
+
 UPDATE datasets
 SET
     result_descriptor.raster.time = (
@@ -45,6 +46,7 @@ WITH cte AS (
     FROM datasets
     WHERE (meta_data).gdal_meta_data_regular IS NOT NULL
 )
+
 UPDATE datasets
 SET
     result_descriptor.raster.time = (
