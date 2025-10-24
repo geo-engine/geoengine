@@ -6,7 +6,8 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
-    CacheTtlSeconds, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+    CacheTtlSeconds, RasterQueryRectangle, TimeFilledItem, TimeInstance, TimeInterval, TimeStep,
+    TimeStepIter,
 };
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -636,6 +637,20 @@ pub struct GdalLoadingInfoTemporalSlice {
     pub params: Option<GdalDatasetParameters>,
     #[serde(default)]
     pub cache_ttl: CacheTtlSeconds,
+}
+
+impl TimeFilledItem for GdalLoadingInfoTemporalSlice {
+    fn create_fill_element(time: TimeInterval) -> Self {
+        Self {
+            time,
+            params: None,
+            cache_ttl: CacheTtlSeconds::max(), // TODO: is this ok?
+        }
+    }
+
+    fn time(&self) -> TimeInterval {
+        self.time
+    }
 }
 
 #[cfg(test)]

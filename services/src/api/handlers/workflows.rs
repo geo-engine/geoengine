@@ -759,6 +759,7 @@ mod tests {
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::arrow::arrow_ipc_file_to_record_batches;
     use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::TimeDescriptor;
     use geoengine_operators::engine::{
         MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptor,
         RasterBandDescriptors, SpatialGridDescriptor, TypedOperator,
@@ -1069,7 +1070,7 @@ mod tests {
                     result_descriptor: RasterResultDescriptor {
                         data_type: RasterDataType::U8,
                         spatial_reference: SpatialReference::epsg_4326().into(),
-                        time: None,
+                        time: TimeDescriptor::new_irregular(None),
                         spatial_grid: SpatialGridDescriptor::source_from_parts(
                             GeoTransform::test_default(),
                             geoengine_datatypes::raster::GridBoundingBox2D::new([0, 0], [199, 199])
@@ -1107,7 +1108,10 @@ mod tests {
                 "type": "raster",
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
-                "time": null,
+                "time": {
+                    "bounds": null,
+                    "dimension": null
+                },
                 "spatialGrid": {
                     "descriptor": "source",
                     "spatialGrid": {
@@ -1384,8 +1388,17 @@ mod tests {
                 "dataType": "U8",
                 "spatialReference": "EPSG:4326",
                 "time": {
-                    "start": 1_388_534_400_000_i64,
-                    "end": 1_404_172_800_000_i64,
+                    "dimension": {
+                        "origin": 0,
+                        "step": {
+                            "granularity": "months",
+                            "step": 1
+                        }
+                    },
+                    "bounds": {
+                        "start": 1_388_534_400_000_i64,
+                        "end": 1_404_172_800_000_i64,
+                    }
                 },
                 "spatialGrid": {
                     "descriptor": "source",

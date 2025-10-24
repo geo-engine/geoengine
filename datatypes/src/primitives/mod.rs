@@ -41,7 +41,7 @@ pub use multi_point::{MultiPoint, MultiPointAccess, MultiPointRef};
 pub use multi_polygon::{MultiPolygon, MultiPolygonAccess, MultiPolygonRef};
 pub use no_geometry::NoGeometry;
 pub use query_rectangle::{
-    BandSelection, ColumnSelection, PlotQueryRectangle, PlotSeriesSelection,
+    BandSelection, BandSelectionIter, ColumnSelection, PlotQueryRectangle, PlotSeriesSelection,
     QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
 };
 pub use spatial_partition::{
@@ -50,7 +50,10 @@ pub use spatial_partition::{
 pub use spatial_resolution::SpatialResolution;
 pub use spatio_temporal_bounded::{SpatialBounded, TemporalBounded};
 pub use time_dimension::{RegularTimeDimension, TimeDimension};
-pub use time_gap_fill_iter::TimeGapFillAdapterIter;
+pub use time_gap_fill_iter::{
+    TimeEmptySingleFill, TimeFilledItem, TimeGapFill, TimeGapFillIter, TimeGapFillNextAction,
+    TimeSingleAppend, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt, TryTimeGapFillIter,
+};
 pub use time_instance::TimeInstance;
 pub use time_interval::{TimeInterval, time_interval_extent};
 pub use time_step::{TimeGranularity, TimeStep, TimeStepIter};

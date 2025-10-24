@@ -332,7 +332,8 @@ impl TimeDescriptor {
         }
     }
 
-    pub fn try_merge(&self, other: Self) -> Result<Self> {
+    #[must_use]
+    pub fn merge(&self, other: Self) -> Self {
         let bounds = match (self.bounds, other.bounds) {
             (Some(a), Some(b)) => Some(a.extend(&b)),
             (Some(a), None) => Some(a),
@@ -350,7 +351,7 @@ impl TimeDescriptor {
             },
         };
 
-        Ok(Self { bounds, dimension })
+        Self { bounds, dimension }
     }
 
     /// Is the time dimension regular?

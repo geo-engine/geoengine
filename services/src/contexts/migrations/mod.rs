@@ -6,6 +6,7 @@ pub use crate::contexts::migrations::{
     migration_0019_ml_model_no_data::Migration0019MlModelNoData,
     migration_0020_provider_permissions::Migration0020ProviderPermissions,
     migration_0030_raster_result_desc::Migration0030RasterResultDesc,
+    migration_0031_time_descriptor::Migration0031TimeDescriptor,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -20,6 +21,7 @@ mod migration_0018_wildlive_connector;
 mod migration_0019_ml_model_no_data;
 mod migration_0020_provider_permissions;
 mod migration_0030_raster_result_desc;
+mod migration_0031_time_descriptor;
 
 #[cfg(test)]
 mod schema_info;
@@ -40,6 +42,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0019MlModelNoData),
         Box::new(Migration0020ProviderPermissions),
         Box::new(Migration0030RasterResultDesc),
+        Box::new(Migration0031TimeDescriptor),
     ]
 }
 

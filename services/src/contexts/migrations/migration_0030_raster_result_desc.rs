@@ -13,7 +13,7 @@ impl Migration for Migration0030RasterResultDesc {
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0019_raster_result_desc".into()
+        "0030_raster_result_desc".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {

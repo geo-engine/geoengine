@@ -12,7 +12,7 @@ use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
 use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
-    RasterOperator, SingleRasterSource, WorkflowOperatorPath,
+    RasterOperator, SingleRasterSource, TimeDescriptor, WorkflowOperatorPath,
 };
 use crate::processing::temporal_raster_aggregation::aggregators::PercentileEstimateAggregator;
 use crate::{
@@ -27,7 +27,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStepIter,
+    BandSelection, RasterQueryRectangle, RegularTimeDimension, TimeFilledItem, TimeInstance,
 };
 use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
@@ -110,6 +110,17 @@ impl RasterOperator for TemporalRasterAggregation {
 
         let mut out_result_descriptor = source.result_descriptor().clone();
 
+        out_result_descriptor.time = TimeDescriptor::new(
+            source.result_descriptor().time.bounds,
+            geoengine_datatypes::primitives::TimeDimension::Regular(RegularTimeDimension {
+                step: self.params.window,
+                origin: self
+                    .params
+                    .window_reference
+                    .unwrap_or(TimeInstance::from_millis_unchecked(0)),
+            }),
+        );
+
         if let Some(output_type) = self.params.output_type {
             out_result_descriptor.data_type = output_type;
         }
@@ -118,11 +129,6 @@ impl RasterOperator for TemporalRasterAggregation {
             name,
             path,
             aggregation_type: self.params.aggregation,
-            window: self.params.window,
-            window_reference: self
-                .params
-                .window_reference
-                .unwrap_or(TimeInstance::EPOCH_START),
             result_descriptor: out_result_descriptor,
             source,
             tiling_specification: context.tiling_specification(),
@@ -139,8 +145,6 @@ pub struct InitializedTemporalRasterAggregation {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
     aggregation_type: Aggregation,
-    window: TimeStep,
-    window_reference: TimeInstance,
     source: Box<dyn InitializedRasterOperator>,
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
@@ -175,8 +179,6 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
             TemporalRasterAggregationProcessor::new(
                 self.result_descriptor.clone(),
                 self.aggregation_type,
-                self.window,
-                self.window_reference,
                 p,
                 self.tiling_specification,
             ).boxed()
@@ -206,8 +208,6 @@ where
 {
     result_descriptor: RasterResultDescriptor,
     aggregation_type: Aggregation,
-    window: TimeStep,
-    window_reference: TimeInstance,
     source: Q,
     tiling_specification: TilingSpecification,
 }
@@ -226,29 +226,22 @@ where
     fn new(
         result_descriptor: RasterResultDescriptor,
         aggregation_type: Aggregation,
-        window: TimeStep,
-        window_reference: TimeInstance,
         source: Q,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             result_descriptor,
             aggregation_type,
-            window,
-            window_reference,
             source,
             tiling_specification,
         }
     }
 
     fn create_subquery<F: TemporalRasterPixelAggregator<P> + 'static, FoldFn>(
-        &self,
         fold_fn: FoldFn,
     ) -> super::subquery::TemporalRasterAggregationSubQuery<FoldFn, P, F> {
         super::subquery::TemporalRasterAggregationSubQuery {
             fold_fn,
-            step: self.window,
-            step_reference: self.window_reference,
             _phantom_pixel_type: PhantomData,
         }
     }
@@ -257,45 +250,35 @@ where
         F: GlobalStateTemporalRasterPixelAggregator<P> + 'static,
         FoldFn,
     >(
-        &self,
         aggregator: F,
         fold_fn: FoldFn,
     ) -> GlobalStateTemporalRasterAggregationSubQuery<FoldFn, P, F> {
         GlobalStateTemporalRasterAggregationSubQuery {
             aggregator: Arc::new(aggregator),
             fold_fn,
-            step: self.window,
-            step_reference: self.window_reference,
+
             _phantom_pixel_type: PhantomData,
         }
     }
 
-    fn create_subquery_first<F>(
-        &self,
-        fold_fn: F,
-    ) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
+    fn create_subquery_first<F>(fold_fn: F) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
         TemporalRasterAggregationSubQueryNoDataOnly {
             fold_fn,
-            step: self.window,
-            step_reference: self.window_reference,
+
             _phantom_pixel_type: PhantomData,
         }
     }
 
-    fn create_subquery_last<F>(
-        &self,
-        fold_fn: F,
-    ) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
+    fn create_subquery_last<F>(fold_fn: F) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
         TemporalRasterAggregationSubQueryNoDataOnly {
             fold_fn,
-            step: self.window,
-            step_reference: self.window_reference,
+
             _phantom_pixel_type: PhantomData,
         }
     }
 
     #[allow(clippy::too_many_lines)]
-    fn create_subquery_adapter_stream_for_single_band<'a>(
+    async fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
@@ -313,153 +296,157 @@ where
             .tiling_grid_definition(self.tiling_specification)
             .generate_data_tiling_strategy();
 
+        let time_stream = self.time_query(query.time_interval(), ctx).await?;
+
         Ok(match self.aggregation_type {
             Aggregation::Min {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        MinPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Min"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregatorIngoringNoData>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Min {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregator>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Min"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregator>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Max {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        MaxPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Max"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregatorIngoringNoData>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Max {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregator>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Max"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregator>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::First {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
+            } => {
+                Self::create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
                         FirstPixelAggregatorIngoringNoData,
                     >,
                 )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::First"),
+                .into_raster_subquery_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    tiling_strategy,
+                    time_stream,
+                )
+                .box_pin()
+            }
             Aggregation::First {
                 ignore_no_data: false,
-            } => self
-                .create_subquery_first(first_tile_fold_future::<P>)
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::First"),
+            } => Self::create_subquery_first(first_tile_fold_future::<P>)
+                .into_raster_subquery_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    tiling_strategy,
+                    time_stream,
+                )
+                .box_pin(),
             Aggregation::Last {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        LastPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Last"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, LastPixelAggregatorIngoringNoData>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Last {
                 ignore_no_data: false,
-            } => self
-                .create_subquery_last(last_tile_fold_future::<P>)
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Last"),
+            } => Self::create_subquery_last(last_tile_fold_future::<P>)
+                .into_raster_subquery_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    tiling_strategy,
+                    time_stream,
+                )
+                .box_pin(),
             Aggregation::Mean {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<true>>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Mean"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<true>>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Mean {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<false>>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Mean"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<false>>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
+
             Aggregation::Sum {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        SumPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregatorIngoringNoData>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Sum {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregator>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregator>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
+
             Aggregation::Count {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
+            } => {
+                Self::create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
                         CountPixelAggregatorIngoringNoData,
                     >,
                 )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Count"),
+                .into_raster_subquery_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    tiling_strategy,
+                    time_stream,
+                )
+                .box_pin()
+            }
             Aggregation::Count {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, CountPixelAggregator>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, CountPixelAggregator>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::PercentileEstimate {
                 ignore_no_data: true,
                 percentile,
-            } => self
-                .create_global_state_subquery(
-                    PercentileEstimateAggregator::<true>::new(percentile),
-                    super::subquery::subquery_all_tiles_global_state_fold_fn,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::PercentileEstimate"),
+            } => Self::create_global_state_subquery(
+                PercentileEstimateAggregator::<true>::new(percentile),
+                super::subquery::subquery_all_tiles_global_state_fold_fn,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::PercentileEstimate {
                 ignore_no_data: false,
                 percentile,
-            } => self
-                .create_global_state_subquery(
-                    PercentileEstimateAggregator::<false>::new(percentile),
-                    super::subquery::subquery_all_tiles_global_state_fold_fn,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy)
-                .expect("no tiles must be skipped in Aggregation::PercentileEstimate"),
+            } => Self::create_global_state_subquery(
+                PercentileEstimateAggregator::<false>::new(percentile),
+                super::subquery::subquery_all_tiles_global_state_fold_fn,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
         })
     }
 }
@@ -482,6 +469,7 @@ where
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
         stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async {
             self.create_subquery_adapter_stream_for_single_band(query, ctx)
+                .await
         })
         .await
     }
@@ -503,23 +491,16 @@ where
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
-        let start_ts = self
-            .window
-            .snap_relative_preserve_bounds(self.window_reference, query.start());
-        let end_ts = self
-            .window
-            .snap_relative_preserve_bounds(self.window_reference, query.end());
-
-        let temp_ti = TimeInterval::new_unchecked(start_ts, end_ts);
-        let steps = self.window.num_steps_in_interval_ceil(temp_ti)? + 1; // +1 to include last step if it aligns with end_ts
-        let ti_iter = TimeStepIter::new(start_ts, self.window, steps)?
-            .map_while(|ti| {
-                (ti + self.window)
-                    .and_then(|end| TimeInterval::new(ti, end))
-                    .ok()
-            })
-            .filter(move |t| query.intersects(t));
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        let ti_iter = self
+            .result_descriptor
+            .time
+            .dimension
+            .unwrap_regular()
+            .expect("must be regular as this operator only creates regular time dimensions")
+            .intersecting_intervals(query.time())?
+            .map(Ok);
         Ok(futures::stream::iter(ti_iter).boxed())
     }
 }

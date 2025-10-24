@@ -524,9 +524,7 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-            RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
-            TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+            MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator, RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TimeDescriptor, TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor
         },
         machine_learning::MlModelMetadata,
         mock::{MockPointSource, MockPointSourceParams},
@@ -1562,7 +1560,7 @@ mod tests {
         let raster_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
+            time: TimeDescriptor::new_irregular(None),
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),

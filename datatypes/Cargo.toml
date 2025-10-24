@@ -18,6 +18,7 @@ arrow-schema = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 fallible-iterator = { workspace = true }
+futures = { workspace = true }
 float-cmp = { workspace = true }
 gdal = { workspace = true }
 geo = { workspace = true }

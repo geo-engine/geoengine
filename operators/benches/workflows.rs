@@ -17,6 +17,7 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::SingleRasterOrVectorSource;
 use geoengine_operators::engine::SpatialGridDescriptor;
+use geoengine_operators::engine::TimeDescriptor;
 use geoengine_operators::processing::Reprojection;
 use geoengine_operators::processing::ReprojectionParams;
 use std::hint::black_box;
@@ -287,7 +288,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
+            .tile_information_iterator_from_pixel_bounds(query_rect.spatial_bounds());
 
         let mock_data = tile_iter
             .enumerate()
@@ -313,7 +314,7 @@ fn bench_mock_source_operator(bench_collector: &mut BenchmarkCollector) {
                 result_descriptor: RasterResultDescriptor::new(
                     RasterDataType::U8,
                     SpatialReference::epsg_4326().into(),
-                    None,
+                    TimeDescriptor::new_irregular(None),
                     SpatialGridDescriptor::source_from_parts(
                         tileing_strategy.geo_transform,
                         query_rect.spatial_bounds(),
@@ -361,7 +362,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
+            .tile_information_iterator_from_pixel_bounds(query_rect.spatial_bounds());
 
         let mock_data = tile_iter
             .enumerate()
@@ -387,7 +388,7 @@ fn bench_mock_source_operator_with_expression(bench_collector: &mut BenchmarkCol
                 result_descriptor: RasterResultDescriptor::new(
                     RasterDataType::U8,
                     SpatialReference::epsg_4326().into(),
-                    None,
+                    TimeDescriptor::new_irregular(None),
                     SpatialGridDescriptor::source_from_parts(
                         tileing_strategy.geo_transform,
                         query_rect.spatial_bounds(),
@@ -463,7 +464,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
             GeoTransform::new(Coordinate2D::new(0.0, 0.), 0.01, -0.01),
         );
         let tile_iter = tileing_strategy
-            .tile_information_iterator_from_grid_bounds(query_rect.spatial_bounds());
+            .tile_information_iterator_from_pixel_bounds(query_rect.spatial_bounds());
         let mock_data = tile_iter
             .enumerate()
             .map(|(id, tile_info)| {
@@ -488,7 +489,7 @@ fn bench_mock_source_operator_with_identity_reprojection(bench_collector: &mut B
                 result_descriptor: RasterResultDescriptor::new(
                     RasterDataType::U8,
                     SpatialReference::epsg_4326().into(),
-                    None,
+                    TimeDescriptor::new_irregular(None),
                     SpatialGridDescriptor::source_from_parts(
                         tileing_strategy.geo_transform,
                         query_rect.spatial_bounds(),

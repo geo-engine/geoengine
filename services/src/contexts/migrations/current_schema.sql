@@ -274,13 +274,33 @@ CREATE TYPE "RasterBandDescriptor" AS (
     measurement "Measurement"
 );
 
+CREATE TYPE "RegularTimeDimension" AS (
+    origin bigint,
+    step "TimeStep"
+);
+
+CREATE TYPE "TimeDimensionDiscriminator" AS ENUM (
+    'Regular',
+    'Irregular'
+);
+
+CREATE TYPE "TimeDimension" AS (
+    regular_dimension "RegularTimeDimension",
+    discriminant "TimeDimensionDiscriminator"
+);
+
+CREATE TYPE "TimeDescriptor" AS (
+    bounds "TimeInterval",
+    dimension "TimeDimension"
+);
+
 CREATE TYPE "RasterResultDescriptor" AS (
     data_type "RasterDataType",
     -- SpatialReferenceOption
     spatial_reference "SpatialReference",
-    "time" "TimeInterval",
     bands "RasterBandDescriptor" [],
-    spatial_grid "SpatialGridDescriptor"
+    spatial_grid "SpatialGridDescriptor",
+    "time" "TimeDescriptor"
 );
 
 CREATE TYPE "VectorResultDescriptor" AS (

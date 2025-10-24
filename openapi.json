@@ -9312,6 +9312,7 @@
         "required": [
           "dataType",
           "spatialReference",
+          "time",
           "spatialGrid",
           "bands"
         ],
@@ -9329,14 +9330,7 @@
             "type": "string"
           },
           "time": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TimeInterval"
-              }
-            ]
+            "$ref": "#/components/schemas/TimeDescriptor"
           }
         }
       },
@@ -9383,6 +9377,21 @@
           },
           "timeInterval": {
             "$ref": "#/components/schemas/TimeInterval"
+          }
+        }
+      },
+      "RegularTimeDimension": {
+        "type": "object",
+        "required": [
+          "origin",
+          "step"
+        ],
+        "properties": {
+          "origin": {
+            "$ref": "#/components/schemas/TimeInstance"
+          },
+          "step": {
+            "$ref": "#/components/schemas/TimeStep"
           }
         }
       },
@@ -10109,6 +10118,31 @@
           },
           "stroke": {
             "$ref": "#/components/schemas/StrokeParam"
+          }
+        }
+      },
+      "TimeDescriptor": {
+        "type": "object",
+        "properties": {
+          "bounds": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TimeInterval"
+              }
+            ]
+          },
+          "dimension": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RegularTimeDimension"
+              }
+            ]
           }
         }
       },

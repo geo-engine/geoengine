@@ -706,7 +706,9 @@ impl EdrCollectionMetaData {
         Ok(RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: Some(self.get_time_interval()?),
+            time: geoengine_operators::engine::TimeDescriptor::new_irregular(Some(
+                self.get_time_interval()?,
+            )), // TODO: can we find out if it is regular?
             spatial_grid: spatial_grid_def,
             bands: RasterBandDescriptors::new_single_band(),
         })
@@ -1873,9 +1875,8 @@ mod tests {
                 RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: Some(TimeInterval::new_unchecked(
-                        1_692_144_000_000,
-                        1_692_500_400_000
+                    time: geoengine_operators::engine::TimeDescriptor::new_irregular(Some(
+                        TimeInterval::new_unchecked(1_692_144_000_000, 1_692_500_400_000)
                     )),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new(

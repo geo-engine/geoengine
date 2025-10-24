@@ -5,7 +5,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt, future::BoxFuture};
 use geoengine_datatypes::{
-    primitives::{CacheHint, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep},
+    primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{EmptyGrid2D, Pixel, RasterTile2D, TileInformation},
 };
 use rayon::ThreadPool;
@@ -115,8 +115,6 @@ impl<T: Pixel> FoldTileAccuMut for TemporalRasterAggregationTileAccu<T> {
 #[derive(Debug, Clone)]
 pub struct TemporalRasterAggregationSubQuery<F, T: Pixel> {
     pub fold_fn: F,
-    pub step: TimeStep,
-    pub step_reference: TimeInstance,
     pub _phantom_pixel_type: PhantomData<T>,
 }
 
@@ -151,13 +149,13 @@ where
         &self,
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
+        // The time is already snapped by the operator where the time stream is created.
         Ok(Some(RasterQueryRectangle::new(
             tile_info.global_pixel_bounds(),
-            TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
+            time,
             band_idx.into(),
         )))
     }
@@ -191,8 +189,6 @@ fn build_temporal_accu<T: Pixel>(
 #[derive(Debug, Clone)]
 pub struct TemporalRasterAggregationSubQueryNoDataOnly<F, T: Pixel> {
     pub fold_fn: F,
-    pub step: TimeStep,
-    pub step_reference: TimeInstance,
     pub _phantom_pixel_type: PhantomData<T>,
 }
 
@@ -226,13 +222,12 @@ where
         &self,
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let snapped_start_time = self.step.snap_relative(self.step_reference, start_time)?;
         Ok(Some(RasterQueryRectangle::new(
             tile_info.global_pixel_bounds(),
-            TimeInterval::new(snapped_start_time, (snapped_start_time + self.step)?)?,
+            time, // The time is already snapped by the operator where the time stream is created.
             band_idx.into(),
         )))
     }

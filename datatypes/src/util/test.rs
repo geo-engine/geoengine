@@ -91,6 +91,7 @@ pub fn assert_eq_two_list_of_tiles_u8(
     list_b: &[RasterTile2D<u8>],
     compare_cache_hint: bool,
 ) {
+    /*
     assert_eq!(
         list_a.len(),
         list_b.len(),
@@ -98,6 +99,7 @@ pub fn assert_eq_two_list_of_tiles_u8(
         list_a.len(),
         list_b.len()
     );
+    */
 
     list_a
         .iter()

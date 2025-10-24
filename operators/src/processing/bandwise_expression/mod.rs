@@ -260,7 +260,7 @@ where
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.source.time_query(query, ctx).await
     }
 }

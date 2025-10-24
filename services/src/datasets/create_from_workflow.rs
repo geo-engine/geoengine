@@ -16,7 +16,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
 use geoengine_operators::engine::{
-    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, WorkflowOperatorPath,
+    ExecutionContext, InitializedRasterOperator, RasterResultDescriptor, TimeDescriptor, WorkflowOperatorPath
 };
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
@@ -128,7 +128,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
                 .tiling_grid_definition(tiling_spec)
                 .tiling_grid_bounds();
 
-            let qt = result_descriptor.time.ok_or(
+            let qt = result_descriptor.time.bounds.ok_or(
                 crate::error::Error::LayerResultDescriptorMissingFields {
                     field: "time".to_string(),
                     cause: "is None".to_string(),
@@ -317,7 +317,10 @@ async fn create_dataset<C: SessionContext>(
     let result_descriptor = RasterResultDescriptor {
         data_type: origin_result_descriptor.data_type,
         spatial_reference: origin_result_descriptor.spatial_reference,
-        time: Some(result_time_interval),
+        time: TimeDescriptor::new(
+            Some(result_time_interval),
+            origin_result_descriptor.time.dimension,
+        ),
         spatial_grid: dataset_spatial_grid,
         bands: origin_result_descriptor.bands.clone(),
     };

@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::{cmp::Ordering, convert::TryInto};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql, Hash)]
 #[repr(C)]
 pub struct TimeInterval {
     start: TimeInstance,
@@ -188,6 +188,10 @@ impl TimeInterval {
     ///
     pub fn contains(&self, other: &Self) -> bool {
         self == other || ((self.start..self.end).contains(&other.start) && (self.end >= other.end))
+    }
+
+    pub fn contains_instance(&self, instance: TimeInstance) -> bool {
+        self.start <= instance && instance < self.end
     }
 
     /// Returns whether the given interval intersects this interval

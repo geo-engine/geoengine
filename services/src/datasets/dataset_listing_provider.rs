@@ -466,7 +466,7 @@ mod tests {
         spatial_reference::SpatialReferenceOption,
     };
     use geoengine_operators::{
-        engine::{RasterBandDescriptors, SpatialGridDescriptor, StaticMetaData},
+        engine::{RasterBandDescriptors, SpatialGridDescriptor, StaticMetaData, TimeDescriptor},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, OgrSourceErrorSpec,
@@ -709,7 +709,7 @@ mod tests {
         let raster_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
+            time: TimeDescriptor::new_irregular(None),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new((0., 0.).into(), 1., -1.),
                 GridBoundingBox::new([0, 0], [0, 0]).unwrap(),

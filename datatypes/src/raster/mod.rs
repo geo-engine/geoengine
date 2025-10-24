@@ -6,10 +6,10 @@ pub use self::empty_grid::{EmptyGrid, EmptyGrid1D, EmptyGrid2D, EmptyGrid3D};
 pub use self::geo_transform::{GdalGeoTransform, GeoTransform};
 pub use self::grid::{
     Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D, GridShape3D,
-    grid_idx_iter_2d,
 };
 pub use self::grid_bounds::{
     GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D, GridBoundingBoxExt,
+    GridIdx2DIter, grid_idx_iter_2d,
 };
 pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
 pub use self::grid_or_empty::{GridOrEmpty, GridOrEmpty1D, GridOrEmpty2D, GridOrEmpty3D};
@@ -27,7 +27,7 @@ pub use self::raster_tile::{
     BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,
     RasterTile, RasterTile2D, RasterTile3D, TilesEqualIgnoringCacheHint, display_raster_tile_2d,
 };
-pub use self::tiling::{TileInformation, TilingSpecification, TilingStrategy};
+pub use self::tiling::{TileInformation, TileInformationIter, TilingSpecification, TilingStrategy};
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 pub use self::{grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess};

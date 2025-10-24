@@ -175,7 +175,8 @@ where
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
         self.query_processor.time_query(query, ctx).await
     }
 }

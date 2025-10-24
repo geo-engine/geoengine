@@ -27,7 +27,7 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
-    pub time: Option<TimeInterval>,
+    pub time: TimeDescriptor,
     pub spatial_grid: SpatialGridDescriptor,
     pub bands: RasterBandDescriptors,
 }
@@ -73,6 +73,63 @@ impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDes
         SpatialGridDescriptor {
             spatial_grid: sp.into(),
             descriptor: SpatialGridDescriptorState::Derived,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RegularTimeDimension {
+    pub origin: TimeInstance,
+    pub step: TimeStep,
+}
+
+impl From<RegularTimeDimension> for geoengine_datatypes::primitives::RegularTimeDimension {
+    fn from(value: RegularTimeDimension) -> Self {
+        geoengine_datatypes::primitives::RegularTimeDimension {
+            origin: value.origin.into(),
+            step: value.step.into(),
+        }
+    }
+}
+
+impl From<geoengine_datatypes::primitives::RegularTimeDimension> for RegularTimeDimension {
+    fn from(value: geoengine_datatypes::primitives::RegularTimeDimension) -> Self {
+        Self {
+            origin: value.origin.into(),
+            step: value.step.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeDescriptor {
+    pub bounds: Option<TimeInterval>,
+    pub dimension: Option<RegularTimeDimension>,
+}
+
+impl From<TimeDescriptor> for geoengine_operators::engine::TimeDescriptor {
+    fn from(value: TimeDescriptor) -> Self {
+        geoengine_operators::engine::TimeDescriptor::new(
+            value.bounds.map(Into::into),
+            match value.dimension {
+                Some(d) => geoengine_datatypes::primitives::TimeDimension::Regular(d.into()),
+                None => geoengine_datatypes::primitives::TimeDimension::Irregular,
+            },
+        )
+    }
+}
+
+impl From<geoengine_operators::engine::TimeDescriptor> for TimeDescriptor {
+    fn from(value: geoengine_operators::engine::TimeDescriptor) -> Self {
+        let dimension = match value.dimension {
+            geoengine_datatypes::primitives::TimeDimension::Regular(d) => Some(d.into()),
+            geoengine_datatypes::primitives::TimeDimension::Irregular => None,
+        };
+        Self {
+            bounds: value.bounds.map(Into::into),
+            dimension,
         }
     }
 }
@@ -152,7 +209,7 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            time: value.time.map(Into::into),
+            time: value.time.into(),
             spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into(),
         }
@@ -164,7 +221,7 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            time: value.time.map(Into::into),
+            time: value.time.into(),
             spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into(),
         }

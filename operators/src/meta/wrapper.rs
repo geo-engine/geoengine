@@ -339,7 +339,7 @@ where
         &'a self,
         query: TimeInterval,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, TimeInterval>> {
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
         self.processor.time_query(query, ctx).await
     }
 }

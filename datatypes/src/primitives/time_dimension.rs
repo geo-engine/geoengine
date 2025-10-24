@@ -130,8 +130,8 @@ impl RegularTimeDimension {
     /// Returns an iterator over all time steps that are fully contained in the given `time_interval`
     /// If no time steps are contained, `Ok(None)` is returned.
     ///
-    /// # panics
-    /// IF time_interval is not valid
+    /// # Panics
+    /// IF `time_interval` is not valid
     pub fn contained_intervals(
         &self,
         time_interval: TimeInterval,
@@ -150,6 +150,9 @@ impl RegularTimeDimension {
     }
 
     /// Returns an iterator over all time steps that intersect with the given `time_interval`
+    ///
+    /// # Panics
+    /// IF `time_interval` is not valid
     pub fn intersecting_intervals(
         &self,
         time_interval: TimeInterval,
@@ -197,20 +200,27 @@ impl TimeDimension {
     pub fn new_regular_with_epoch(step: TimeStep) -> Self {
         TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(step))
     }
+
+    pub fn unwrap_regular(self) -> Option<RegularTimeDimension> {
+        match self {
+            TimeDimension::Regular(r) => Some(r),
+            TimeDimension::Irregular => None,
+        }
+    }
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
-#[serde(rename_all = "camelCase")]
-pub enum TimeDimensionDiscriminant {
+#[postgres(name = "TimeDimensionDiscriminator")]
+pub enum TimeDimensionDiscriminatorDbType {
     Regular,
     Irregular,
 }
 
 #[derive(Debug, Copy, Clone, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
-#[serde(rename_all = "camelCase")]
+#[postgres(name = "TimeDimension")]
 pub struct TimeDimensionDbType {
     pub regular_dimension: Option<RegularTimeDimension>,
-    pub discriminant: TimeDimensionDiscriminant,
+    pub discriminant: TimeDimensionDiscriminatorDbType,
 }
 
 impl From<&TimeDimension> for TimeDimensionDbType {
@@ -218,11 +228,11 @@ impl From<&TimeDimension> for TimeDimensionDbType {
         match value {
             TimeDimension::Regular(r) => Self {
                 regular_dimension: Some(*r),
-                discriminant: TimeDimensionDiscriminant::Regular,
+                discriminant: TimeDimensionDiscriminatorDbType::Regular,
             },
             TimeDimension::Irregular => Self {
                 regular_dimension: None,
-                discriminant: TimeDimensionDiscriminant::Irregular,
+                discriminant: TimeDimensionDiscriminatorDbType::Irregular,
             },
         }
     }
@@ -233,12 +243,12 @@ impl TryFrom<TimeDimensionDbType> for TimeDimension {
 
     fn try_from(value: TimeDimensionDbType) -> Result<Self> {
         match value.discriminant {
-            TimeDimensionDiscriminant::Regular => Ok(TimeDimension::Regular(
+            TimeDimensionDiscriminatorDbType::Regular => Ok(TimeDimension::Regular(
                 value
                     .regular_dimension
                     .ok_or(Error::UnexpectedInvalidDbTypeConversion)?,
             )),
-            TimeDimensionDiscriminant::Irregular => Ok(TimeDimension::Irregular),
+            TimeDimensionDiscriminatorDbType::Irregular => Ok(TimeDimension::Irregular),
         }
     }
 }

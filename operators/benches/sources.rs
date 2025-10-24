@@ -12,7 +12,7 @@ use geoengine_datatypes::{
     },
     util::test::TestDefault,
 };
-use geoengine_operators::engine::{MockExecutionContext, RasterResultDescriptor};
+use geoengine_operators::engine::{MockExecutionContext, RasterResultDescriptor, TimeDescriptor};
 use geoengine_operators::{
     engine::{ChunkByteSize, RasterQueryProcessor},
     mock::MockRasterSourceProcessor,
@@ -66,6 +66,7 @@ fn setup_mock_source(tiling_spec: TilingSpecification) -> MockRasterSourceProces
             1,
             grid_bounds,
             geo_transform,
+            TimeDescriptor::new_irregular(Some(time)),
         ),
         data: vec![
             RasterTile2D::new(

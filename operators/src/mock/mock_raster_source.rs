@@ -10,12 +10,16 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BandSelection, RasterQueryRectangle, TimeFilledItem, TryIrregularTimeFillIterExt,
+    TryRegularTimeFillIterExt,
+};
 use geoengine_datatypes::primitives::{CacheExpiration, TimeInstance};
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel,
     RasterTile2D, TilingSpecification,
 };
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
@@ -197,9 +201,28 @@ where
     async fn time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
-        ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
-        unimplemented!()
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        let unique_times = self
+            .data
+            .iter()
+            .map(|tile| tile.time)
+            .unique_by(|t| *t)
+            .filter(move |t| t.intersects(&query))
+            .map(Ok);
+
+        let times = match self.result_descriptor.time.dimension {
+            geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                let times = unique_times.try_time_irregular_range_fill(query.time());
+                stream::iter(times).boxed()
+            }
+            geoengine_datatypes::primitives::TimeDimension::Regular(regular_dim) => {
+                let times = unique_times.try_time_regular_range_fill(regular_dim, query.time());
+                stream::iter(times).boxed()
+            }
+        };
+
+        Ok(times)
     }
 }
 
@@ -449,7 +472,7 @@ mod tests {
                 "resultDescriptor": {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
-                    "time": null,
+                    "time": {"bounds": {"start": -8_334_601_228_800_000_i64, "end": 8_210_266_876_799_999_i64}, "dimension": "irregular"} ,
                         "spatialGrid": {
                             "spatialGrid": {
                             "geoTransform": {

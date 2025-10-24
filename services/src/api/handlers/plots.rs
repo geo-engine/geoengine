@@ -231,6 +231,7 @@ mod tests {
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
+    use geoengine_operators::engine::TimeDescriptor;
     use geoengine_operators::engine::{
         PlotOperator, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
         SpatialGridDescriptor,
@@ -250,7 +251,7 @@ mod tests {
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new_min_max(-3, 0, 0, 2).unwrap(),
             ),
-            time: None,
+            time: TimeDescriptor::new_irregular(None),
             bands: RasterBandDescriptors::new_single_band(),
         };
 

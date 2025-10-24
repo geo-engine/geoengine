@@ -2277,6 +2277,7 @@ dependencies = [
  "criterion",
  "fallible-iterator",
  "float-cmp",
+ "futures",
  "gdal",
  "geo",
  "geojson",

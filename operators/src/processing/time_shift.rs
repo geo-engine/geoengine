@@ -542,14 +542,14 @@ where
         &'a self,
         query: TimeInterval,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, TimeInterval>> {
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
         let (time_interval, state) = self.shift.shift(query)?;
         let stream = self.processor.time_query(time_interval, ctx).await?;
 
         let stream = stream
-            .filter_map(move |ti| {
+            .map(move |ti| {
                 // reverse time shift for results
-                futures::future::ready(self.shift.reverse_shift(ti, state).ok()) // TODO: maybe we need to return Result<TimeInterval> here but that is a relatively large overhead since the Error type enum is quite big
+                ti.and_then(|t| self.shift.reverse_shift(t, state).map_err(Into::into)) // TODO: maybe we need a time_query error...
             })
             .boxed();
 

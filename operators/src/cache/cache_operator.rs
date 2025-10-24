@@ -302,12 +302,10 @@ where
 
     async fn time_query<'a>(
         &'a self,
-        _query: geoengine_datatypes::primitives::TimeInterval,
-        _ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
-        unimplemented!(
-            "RasterQueryProcessor::time_query is not implemented for CacheQueryProcessor"
-        );
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        self.processor.time_query(query, ctx).await // TODO: investigate if we can use caching here?
     }
 }
 

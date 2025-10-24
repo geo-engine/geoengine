@@ -3,8 +3,8 @@ use std::marker::PhantomData;
 use super::map_query::MapQueryProcessor;
 use crate::{
     adapters::{
-        FillerTileCacheExpirationStrategy, RasterSubQueryAdapter, TileReprojectionSubQuery,
-        TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
+        RasterSubQueryAdapter, TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo,
+        fold_by_coordinate_lookup_future,
     },
     engine::{
         CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
@@ -242,24 +242,19 @@ impl InitializedVectorOperator for InitializedVectorReprojection {
         let target_srs = self.target_srs;
         match self.source.query_processor()? {
             TypedVectorQueryProcessor::Data(source) => Ok(TypedVectorQueryProcessor::Data(
-                MapQueryProcessor::new(
-                    source,
-                    self.result_descriptor.clone(),
-                    move |query: VectorQueryRectangle| {
-                        reproject_spatial_query(query.spatial_bounds(), source_srs, target_srs)
-                            .map(|sqr| {
-                                sqr.map(|x| {
-                                    VectorQueryRectangle::new(
-                                        x,
-                                        query.time_interval(),
-                                        ColumnSelection::all(),
-                                    )
-                                })
+                MapQueryProcessor::new(source, move |query: VectorQueryRectangle| {
+                    reproject_spatial_query(query.spatial_bounds(), source_srs, target_srs)
+                        .map(|sqr| {
+                            sqr.map(|x| {
+                                VectorQueryRectangle::new(
+                                    x,
+                                    query.time_interval(),
+                                    ColumnSelection::all(),
+                                )
                             })
-                            .map_err(From::from)
-                    },
-                    (),
-                )
+                        })
+                        .map_err(From::from)
+                })
                 .boxed(),
             )),
             TypedVectorQueryProcessor::MultiPoint(source) => {
@@ -643,15 +638,18 @@ where
             .tiling_grid_definition(ctx.tiling_specification())
             .generate_data_tiling_strategy();
 
+        let time_stream = self.time_query(query.time_interval(), ctx).await?;
+
         // return the adapter which will reproject the tiles and uses the fill adapter to inject missing tiles
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+        Ok(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
             &self.source,
             query,
             tiling_strat,
             ctx,
             sub_query_spec,
+            time_stream,
         )
-        .filter_and_fill(FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles))
+        .box_pin())
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -671,7 +669,7 @@ where
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.source.time_query(query, ctx).await
     }
 }

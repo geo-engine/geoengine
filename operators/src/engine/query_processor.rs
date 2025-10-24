@@ -127,7 +127,7 @@ pub trait RasterQueryProcessor:
         &'a self,
         query: TimeInterval,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, TimeInterval>>;
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>>;
 }
 
 pub type BoxRasterQueryProcessor<P> = Box<
@@ -264,7 +264,7 @@ impl<T: Pixel> RasterQueryProcessor for BoxRasterQueryProcessor<T> {
         &'a self,
         query: TimeInterval,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, TimeInterval>> {
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
         self.as_ref().time_query(query, ctx).await
     }
 }

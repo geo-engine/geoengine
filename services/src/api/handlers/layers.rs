@@ -1361,7 +1361,8 @@ mod tests {
     use geoengine_operators::{
         engine::{
             RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-            SingleRasterOrVectorSource, SpatialGridDescriptor, TypedOperator, VectorOperator,
+            SingleRasterOrVectorSource, SpatialGridDescriptor, TimeDescriptor, TypedOperator,
+            VectorOperator,
         },
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
         processing::{TimeShift, TimeShiftParams},
@@ -2424,14 +2425,14 @@ mod tests {
             let result_descriptor = RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: if has_time {
+                time: TimeDescriptor::new_irregular(if has_time {
                     Some(TimeInterval::new_unchecked(
                         1_671_868_800_000,
                         1_672_041_600_000,
                     ))
                 } else {
                     None
-                },
+                }),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::test_default(),
                     GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),

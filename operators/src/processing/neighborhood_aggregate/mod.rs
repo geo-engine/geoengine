@@ -269,22 +269,23 @@ where
             let sub_query =
                 NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
 
+            let time_stream = self.source.time_query(query.time_interval(), ctx).await?;
+
             let tiling_strat = self
                 .source
                 .result_descriptor()
                 .tiling_grid_definition(self.tiling_specification)
                 .generate_data_tiling_strategy();
 
-            Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+            let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
                 &self.source,
                 query,
                 tiling_strat,
                 ctx,
                 sub_query,
-            )
-            .filter_and_fill(
-                crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-            ))
+                time_stream,
+            );
+            Ok(sq.box_pin())
         })
         .await
     }
@@ -308,7 +309,8 @@ where
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
         self.source.time_query(query, ctx).await
     }
 }

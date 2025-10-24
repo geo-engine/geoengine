@@ -12,9 +12,7 @@ use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
-use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
-};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution, TimeInterval};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
     GridOrEmpty, Pixel, RasterTile2D, TileInformation, TilingSpecification,
@@ -246,7 +244,7 @@ where
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
         self.source.time_query(query, ctx).await
     }
 }
@@ -293,16 +291,16 @@ where
             _phantom_pixel_type: PhantomData,
         };
 
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+        let time_stream = self.time_query(query.time_interval(), ctx).await?;
+
+        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
             &self.source,
             query,
             tiling_strategy,
             ctx,
             sub_query,
-        )
-        .filter_and_fill(
-            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-        ))
+            time_stream,
+        )))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -353,7 +351,7 @@ where
         &self,
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let out_tile_pixel_bounds = tile_info.global_pixel_bounds();
@@ -368,7 +366,7 @@ where
 
         Ok(Some(RasterQueryRectangle::new(
             input_pixel_bounds,
-            TimeInterval::new_instant(start_time)?,
+            time,
             BandSelection::new_single(band_idx),
         )))
     }

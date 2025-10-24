@@ -286,7 +286,7 @@ impl QueryProcessor for GridRasterizationQueryProcessor {
                 tiling_geo_transform.grid_to_spatial_bounds(&query_grid_bounds);
 
             let tiles = stream::iter(
-                tiling_strategy.tile_information_iterator_from_grid_bounds(query.spatial_bounds()),
+                tiling_strategy.tile_information_iterator_from_pixel_bounds(query.spatial_bounds()),
             )
             .then(move |tile_info| async move {
                 let tile_spatial_bounds = tile_info.spatial_partition();
@@ -360,12 +360,15 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
     async fn time_query<'a>(
         &'a self,
-        query: geoengine_datatypes::primitives::TimeInterval,
-        ctx: &'a dyn crate::engine::QueryContext,
+        _query: geoengine_datatypes::primitives::TimeInterval,
+        _ctx: &'a dyn crate::engine::QueryContext,
     ) -> crate::util::Result<
-        futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>,
+        futures::stream::BoxStream<
+            'a,
+            crate::util::Result<geoengine_datatypes::primitives::TimeInterval>,
+        >,
     > {
-        unimplemented!()
+        unimplemented!("This operator needs reworking of its time semantics.")
     }
 }
 
@@ -416,7 +419,7 @@ impl QueryProcessor for DensityRasterizationQueryProcessor {
                 tiling_geo_transform.grid_to_spatial_bounds(&query_grid_bounds);
 
             let tiles = stream::iter(
-                tiling_strategy.tile_information_iterator_from_grid_bounds(query.spatial_bounds()),
+                tiling_strategy.tile_information_iterator_from_pixel_bounds(query.spatial_bounds()),
             )
             .then(move |tile_info| async move {
                 let tile_spatial_bounds = tile_info.spatial_partition();
@@ -500,10 +503,13 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
     async fn time_query<'a>(
         &'a self,
-        query: geoengine_datatypes::primitives::TimeInterval,
-        ctx: &'a dyn crate::engine::QueryContext,
+        _query: geoengine_datatypes::primitives::TimeInterval,
+        _ctx: &'a dyn crate::engine::QueryContext,
     ) -> crate::util::Result<
-        futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>,
+        futures::stream::BoxStream<
+            'a,
+            crate::util::Result<geoengine_datatypes::primitives::TimeInterval>,
+        >,
     > {
         unimplemented!()
     }
@@ -521,7 +527,7 @@ fn generate_zeroed_tiles<'a>(
 
     stream::iter(
         tiling_strategy
-            .tile_information_iterator_from_grid_bounds(query.spatial_bounds())
+            .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
             .map(move |tile_info| {
                 let tile_data = vec![0.; tile_shape.number_of_elements()];
                 let tile_grid = Grid2D::new(tile_shape, tile_data)

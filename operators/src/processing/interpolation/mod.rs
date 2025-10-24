@@ -15,9 +15,7 @@ use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
-use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
-};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution, TimeInterval};
 use geoengine_datatypes::raster::{
     Bilinear, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
     InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
@@ -297,16 +295,16 @@ where
             _phantom_pixel_type: PhantomData,
         };
 
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+        let time_stream = self.time_query(query.time_interval(), ctx).await?;
+
+        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
             &self.source,
             query,
             tiling_strategy,
             ctx,
             sub_query,
-        )
-        .filter_and_fill(
-            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-        ))
+            time_stream,
+        )))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -327,7 +325,8 @@ where
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
         self.source.time_query(query, ctx).await
     }
 }
@@ -377,7 +376,7 @@ where
         &self,
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // enlarge the spatial bounds in order to have the neighbor pixels for the interpolation
@@ -403,7 +402,7 @@ where
 
         Ok(Some(RasterQueryRectangle::new(
             enlarged_input_pixel_bounds,
-            TimeInterval::new_instant(start_time)?,
+            time,
             BandSelection::new_single(band_idx),
         )))
     }

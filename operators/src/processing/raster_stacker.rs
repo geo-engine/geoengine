@@ -87,13 +87,13 @@ impl RasterOperator for RasterStacker {
                     .ok_or(crate::error::Error::CantMergeSpatialGridDescriptor { a, b })
             })?;
 
-        let time = in_descriptors.iter().skip(1).map(|rd| rd.time).try_fold(
+        let time = in_descriptors.iter().skip(1).map(|rd| rd.time).fold(
             in_descriptors
                 .first()
                 .expect("There must be at least one input")
                 .time,
-            |a, b| a.try_merge(b),
-        )?;
+            |a, b| a.merge(b),
+        );
 
         let data_type = in_descriptors[0].data_type;
         let spatial_reference = in_descriptors[0].spatial_reference;
@@ -366,8 +366,15 @@ where
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<'a, geoengine_datatypes::primitives::TimeInterval>> {
-        unimplemented!()
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        let mut time_sources = Vec::with_capacity(self.sources.len());
+        for source in &self.sources {
+            let s = source.time_query(query, ctx).await?;
+            time_sources.push(s);
+        }
+        let output = crate::adapters::TimeIntervalStreamMerge::new(time_sources);
+        Ok(Box::pin(output))
     }
 }
 
