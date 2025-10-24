@@ -53,7 +53,8 @@
         "bounds": {
           "start": "-262143-01-01T00:00:00+00:00",
           "end": "+262142-12-31T23:59:59.999+00:00"
-        }
+        },
+        "dimension": "irregular"
       },
       "spatialGrid": {
         "state": "source",
