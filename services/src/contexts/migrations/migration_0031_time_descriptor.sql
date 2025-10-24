@@ -18,8 +18,8 @@ CREATE TYPE "TimeDescriptor" AS (
     dimension "TimeDimension"
 );
 
-ALTER TYPE "RasterResultDescriptor" RENAME ATTRIBUTE "time" TO old_time;
-ALTER TYPE "RasterResultDescriptor" ADD ATTRIBUTE "time" "TimeDescriptor";
+ALTER TYPE "RasterResultDescriptor" RENAME ATTRIBUTE time TO old_time;
+ALTER TYPE "RasterResultDescriptor" ADD ATTRIBUTE time "TimeDescriptor";
 
 WITH cte AS (
     SELECT
@@ -30,7 +30,7 @@ WITH cte AS (
 )
 UPDATE datasets
 SET
-    result_descriptor.raster."time" = (
+    result_descriptor.raster.time = (
         cte.old_time,
         (NULL, 'Irregular')::"TimeDimension"
     )::"TimeDescriptor"
@@ -47,7 +47,7 @@ WITH cte AS (
 )
 UPDATE datasets
 SET
-    result_descriptor.raster."time" = (
+    result_descriptor.raster.time = (
         cte.old_time,
         (
             (
@@ -60,4 +60,4 @@ SET
 FROM cte
 WHERE datasets.id = cte.id;
 
-ALTER TYPE "RasterResultDescriptor" DROP ATTRIBUTE "old_time";
+ALTER TYPE "RasterResultDescriptor" DROP ATTRIBUTE old_time;
