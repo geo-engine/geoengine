@@ -31,14 +31,14 @@ use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
         BandSelection, CacheHint, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-        TimeInstance, TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
+        TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
     },
     raster::{
-        ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D,
-        GridIntersection, GridOrEmpty, GridOrEmpty2D, GridShapeAccess, GridSize, MapElements,
-        MaskedGrid, NoDataValueGrid, Pixel, RasterDataType, RasterProperties,
-        RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
-        SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
+        ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D, GridOrEmpty,
+        GridOrEmpty2D, GridShapeAccess, GridSize, MapElements, MaskedGrid, NoDataValueGrid, Pixel,
+        RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType,
+        RasterPropertiesKey, RasterTile2D, SpatialGridDefinition, TileInformation,
+        TilingSpecification, TilingStrategy,
     },
     util::test::TestDefault,
 };
@@ -648,28 +648,7 @@ where
         let produced_tiling_grid =
             grid_produced_by_source_desc.tiling_grid_definition(self.tiling_specification);
 
-        let tiling_based_pixel_bounds = produced_tiling_grid.tiling_grid_bounds();
-
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
-
-        let query_pixel_bounds = query.spatial_bounds();
-
-        let mut empty = false;
-
-        if !tiling_based_pixel_bounds.intersects(&query_pixel_bounds) {
-            debug!("query does not intersect spatial data bounds");
-            empty = true;
-        }
-
-        // TODO: use the time bounds to early return.
-        /*
-        if let Some(data_time_bounds) = result_descriptor.time {
-            if !data_time_bounds.intersects(&query.time_interval) {
-                debug!("query does not intersect temporal data bounds");
-                empty = true;
-            }
-        }
-        */
 
         let reader_mode = match self.original_resolution_spatial_grid {
             None => GdalReaderMode::OriginalResolution(ReaderState {
@@ -682,18 +661,7 @@ where
             }
         };
 
-        let loading_info = if empty {
-            // TODO: using this shortcut will insert one no-data element with max time validity. However, this does not honor time intervals of data in other areas!
-            GdalLoadingInfo::new(
-                GdalLoadingInfoTemporalSliceIterator::Static {
-                    parts: vec![].into_iter(),
-                },
-                TimeInstance::MIN,
-                TimeInstance::MAX,
-            )
-        } else {
-            self.meta_data.loading_info(query.clone()).await?
-        };
+        let loading_info = self.meta_data.loading_info(query.clone()).await?;
 
         debug_assert!(
             loading_info.start_time_of_output_stream < loading_info.end_time_of_output_stream,
