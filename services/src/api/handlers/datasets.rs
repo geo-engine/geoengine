@@ -44,10 +44,13 @@ use geoengine_datatypes::{
     spatial_reference::{SpatialReference, SpatialReferenceOption},
 };
 use geoengine_operators::{
-    engine::{StaticMetaData, VectorColumnInfo, VectorResultDescriptor},
+    engine::{
+        OperatorName, StaticMetaData, TypedResultDescriptor, VectorColumnInfo,
+        VectorResultDescriptor,
+    },
     source::{
-        OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
-        OgrSourceErrorSpec, OgrSourceTimeFormat,
+        MultiBandGdalSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
+        OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
     },
     util::gdal::{
         gdal_open_dataset, gdal_open_dataset_ex, gdal_parameters_from_dataset,
@@ -55,7 +58,7 @@ use geoengine_operators::{
     },
 };
 use serde::{Deserialize, Serialize};
-use snafu::ResultExt;
+use snafu::{ResultExt, ensure};
 use std::{
     collections::HashMap,
     convert::{TryFrom, TryInto},
@@ -220,15 +223,86 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
         })
         .context(CannotLoadDatasetForAddingTiles)?;
 
-    // TODO: validate that
-    //  - the dataset is a MultiBandGdal dataset
-    //  - the gdal params reference a valid file path (relative to data volume)
-    //  - the gdal dataset (in the files) are compatible with the dataset (type, spatial reference, etc.)
-    //  - the bands exist in the dataset
-    //  - the time is compatible (does not *overlap* with existing tiles, but is either same as existing or a distinct time interval)
-    //  (- on spatial overlap, the z-index is different than existing tiles for the same time step and band)
+    let dataset = db
+        .load_dataset(&dataset_id)
+        .await
+        .context(CannotLoadDatasetForAddingTiles)?;
 
-    db.add_dataset_tiles(dataset_id, tiles.into_inner())
+    ensure!(
+        dataset.source_operator == MultiBandGdalSource::TYPE_NAME,
+        DatasetIsNotGdalMultiBand
+    );
+
+    let TypedResultDescriptor::Raster(dataset_descriptor) = dataset.result_descriptor else {
+        return Err(AddDatasetTilesError::DatasetIsNotGdalMultiBand);
+    };
+
+    let tiles = tiles.into_inner();
+
+    for tile in &tiles {
+        ensure!(
+            tile.params.file_path.exists(),
+            TileFilePathDoesNotExist {
+                file_path: tile.params.file_path.to_string_lossy().to_string()
+            }
+        );
+
+        let ds = gdal_open_dataset_ex(&tile.params.file_path, DatasetOptions::default()).context(
+            CannotOpenTileFile {
+                file_path: tile.params.file_path.to_string_lossy().to_string(),
+            },
+        )?;
+
+        let rd = raster_descriptor_from_dataset(&ds, tile.params.rasterband_channel).context(
+            CannotGetRasterDescriptorFromTileFile {
+                file_path: tile.params.file_path.to_string_lossy().to_string(),
+            },
+        )?;
+
+        ensure!(
+            rd.data_type == dataset_descriptor.data_type,
+            TileFileDataTypeMismatch {
+                expected: dataset_descriptor.data_type,
+                found: rd.data_type,
+                file_path: tile.params.file_path.to_string_lossy().to_string(),
+            }
+        );
+
+        ensure!(
+            rd.spatial_reference == dataset_descriptor.spatial_reference,
+            TileFileSpatialReferenceMismatch {
+                expected: dataset_descriptor.spatial_reference,
+                found: rd.spatial_reference,
+                file_path: tile.params.file_path.to_string_lossy().to_string(),
+            }
+        );
+
+        ensure!(
+            tile.band < dataset_descriptor.bands.count(),
+            TileFileBandDoesNotExist {
+                band_count: dataset_descriptor.bands.count(),
+                found: tile.band,
+                file_path: tile.params.file_path.to_string_lossy().to_string(),
+            }
+        );
+
+        // check that the time is compatible (does not *overlap* with existing tiles, but is either same as existing or a distinct time interval)
+        // TODO: check the compatibility in the same database transaction as inserting the tile to avoid conflicts
+        ensure!(
+            db.is_dataset_tile_time_compatible(dataset_id, tile.time)
+                .await
+                .context(CannotLoadDatasetForAddingTiles)?,
+            DatasetTileTimeConflict {
+                time: tile.time,
+                file_path: tile.params.file_path.to_string_lossy().to_string(),
+            }
+        );
+
+        // TODO: check, on spatial overlap, if the z-index is different than existing tiles for the same time step and band)
+        //       OR: implement logic to stable sort overlapping tiles with same index when loading tiles
+    }
+
+    db.add_dataset_tiles(dataset_id, tiles)
         .await
         .context(CannotAddTilesToDataset)?;
 

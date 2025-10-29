@@ -5,9 +5,8 @@ use crate::engine::{
 use crate::error::{self, Optimization};
 use crate::processing::{
     DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
-    DownsamplingResolution, InitializedInterpolation, InitializedRasterReprojection, Interpolation,
-    InterpolationMethod, InterpolationParams, InterpolationResolution, Reprojection,
-    ReprojectionParams,
+    DownsamplingResolution, InitializedRasterReprojection, Interpolation, InterpolationMethod,
+    InterpolationParams, InterpolationResolution, Reprojection, ReprojectionParams,
 };
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
@@ -98,7 +97,6 @@ impl WrapWithProjectionAndResample {
         self,
         target_origin_reference: Option<Coordinate2D>,
         target_spatial_resolution: Option<SpatialResolution>,
-        tiling_spec: TilingSpecification,
         exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
         if target_origin_reference.is_none() && target_spatial_resolution.is_none() {
@@ -264,12 +262,7 @@ impl WrapWithProjectionAndResample {
         exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
         self.wrap_with_projection(target_sref, target_origin_reference, tiling_spec)?
-            .wrap_with_resample(
-                target_origin_reference,
-                target_spatial_resolution,
-                tiling_spec,
-                exe_ctx,
-            )
+            .wrap_with_resample(target_origin_reference, target_spatial_resolution, exe_ctx)
             .await
     }
 }

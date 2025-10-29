@@ -113,6 +113,37 @@ pub enum AddDatasetTilesError {
     CannotLoadDatasetForAddingTiles { source: error::Error },
     #[snafu(display("Cannot add tiles to dataset: {source}"))]
     CannotAddTilesToDataset { source: error::Error },
+    #[snafu(display("Cannot add tiles to dataset that is not a GdalMultiBand"))]
+    DatasetIsNotGdalMultiBand,
+    #[snafu(display("Tile file path does not exist: {file_path}"))]
+    TileFilePathDoesNotExist { file_path: String },
+    CannotOpenTileFile {
+        source: geoengine_operators::error::Error,
+        file_path: String,
+    },
+    CannotGetRasterDescriptorFromTileFile {
+        source: geoengine_operators::error::Error,
+        file_path: String,
+    },
+    TileFileDataTypeMismatch {
+        expected: geoengine_datatypes::raster::RasterDataType,
+        found: geoengine_datatypes::raster::RasterDataType,
+        file_path: String,
+    },
+    TileFileSpatialReferenceMismatch {
+        expected: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
+        found: geoengine_datatypes::spatial_reference::SpatialReferenceOption,
+        file_path: String,
+    },
+    TileFileBandDoesNotExist {
+        band_count: u32,
+        found: u32,
+        file_path: String,
+    },
+    DatasetTileTimeConflict {
+        time: crate::api::model::datatypes::TimeInterval,
+        file_path: String,
+    },
 }
 
 impl ResponseError for AddDatasetTilesError {

@@ -1270,6 +1270,38 @@ where
 
         Ok(())
     }
+
+    async fn is_dataset_tile_time_compatible(
+        &self,
+        dataset: DatasetId,
+        time: crate::api::model::datatypes::TimeInterval,
+    ) -> Result<bool> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        let is_compatible = tx
+            .query_one(
+                "SELECT NOT EXISTS (
+                    SELECT 1 FROM dataset_tiles 
+                    WHERE dataset_id = $1 AND 
+                        time_interval_intersects(time, $2) AND
+                        (time).start != ($2::\"TimeInterval\").start AND
+                        (time).end != ($2::\"TimeInterval\").end
+                    LIMIT 1
+                );",
+                &[&dataset, &time],
+            )
+            .await?
+            .get(0);
+
+        tx.commit().await?;
+
+        Ok(is_compatible)
+    }
 }
 
 #[async_trait]
