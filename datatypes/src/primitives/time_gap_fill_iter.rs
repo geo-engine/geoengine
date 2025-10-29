@@ -18,71 +18,6 @@ impl TimeFilledItem for TimeInterval {
     }
 }
 
-/*
-pub trait IrregularTimeFillIterExt<T: TimeFilledItem>: Iterator<Item = T>
-where
-    Self: Iterator<Item = T> + Sized,
-{
-    /// This creates an Iterator where time gaps between items are filled with a single tile inteval
-    fn time_irregular_fill(self) -> TimeGapFillIter<T, Self, TimeGapSingleFill> {
-        TimeGapFillIter::new(self, TimeGapSingleFill::new())
-    }
-
-    /// This creates an Iterator where a single fill item is prepended if the first item from the source starts after the specified start
-    fn time_irregular_prepend(
-        self,
-        first_element_start_required: TimeInstance,
-    ) -> TimeGapFillIter<T, Self, TimeSinglePrepend> {
-        TimeGapFillIter::new(self, TimeSinglePrepend::new(first_element_start_required))
-    }
-
-    /// This creates an Iterator where a single fill item is appended if the last item from the source ends after the specified end
-    fn time_irregular_append(
-        self,
-        last_element_end_required: TimeInstance,
-    ) -> TimeGapFillIter<T, Self, TimeSingleAppend> {
-        TimeGapFillIter::new(self, TimeSingleAppend::new(last_element_end_required))
-    }
-
-    /// This creates an Iterator where a single fill item is returned if the source is empty
-    fn time_irregular_empty_fill(
-        self,
-        range: TimeInterval,
-    ) -> TimeGapFillIter<T, Self, TimeEmptySingleFill> {
-        TimeGapFillIter::new(self, TimeEmptySingleFill::new(range))
-    }
-
-    /// This creates an Iterator where:
-    /// - IF the source is empty
-    ///     - a single fill item is returned covering the source is empty
-    /// - ELSE
-    ///     - a single fill item is prepended if the first item from the source starts after the specified start
-    ///     - time gaps between items are filled with a single tile inteval
-    ///     - a single fill item is appended if the last item from the source ends after the specified end
-    ///
-    fn time_irregular_range_fill(
-        self,
-        range_to_cover: TimeInterval,
-    ) -> TimeGapFillIter<
-        T,
-        TimeGapFillIter<
-            T,
-            TimeGapFillIter<T, TimeGapFillIter<T, Self, TimeSinglePrepend>, TimeGapSingleFill>,
-            TimeSingleAppend,
-        >,
-        TimeEmptySingleFill,
-    > {
-        self.time_irregular_prepend(range_to_cover.start())
-            .time_irregular_fill()
-            .time_irregular_append(range_to_cover.end())
-            .time_irregular_empty_fill(range_to_cover)
-    }
-}
-
-
-impl<T: TimeFilledItem, I: Iterator<Item = T>> IrregularTimeFillIterExt<T> for I {}
-*/
-
 type TryTimeIrregularRangeFillType<T, E, S> = TryTimeGapFillIter<
     T,
     E,
@@ -414,21 +349,6 @@ pub struct TimeGapFillRangeAdapterIter<T: TimeFilledItem, I: Iterator<Item = T>>
     pristine: bool,
 }
 
-/*
-impl<T: TimeFilledItem, I: Iterator<Item = T>> TimeGapFillRangeAdapterIter<T, I> {
-    pub fn new(source: I, range_to_cover: TimeInterval) -> Self {
-        Self {
-            source: source
-                .time_irregular_prepend(range_to_cover.start())
-                .time_irregular_fill()
-                .time_irregular_append(range_to_cover.end()),
-            range_to_cover,
-            pristine: true,
-        }
-    }
-}
-*/
-
 impl<T: TimeFilledItem, I: Iterator<Item = T>> Iterator for TimeGapFillRangeAdapterIter<T, I> {
     type Item = T;
 
@@ -445,42 +365,6 @@ impl<T: TimeFilledItem, I: Iterator<Item = T>> Iterator for TimeGapFillRangeAdap
         }
     }
 }
-
-/*
-impl<T: TimeFilledItem, I: Iterator<Item = T>> Iterator for TimeGapFillAdapterIter<T, I> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let nn = match (self.last_element_time, self.source.peek().map(T::time)) {
-            // case where no TI is availabe from source
-            (None, None) => Some(T::create_fill_element(self.req_range)),
-            // first element from source, start is later then hint
-            (None, Some(&s)) if s.start() > self.req_range.start() => Some(T::create_fill_element(
-                TimeInterval::new_unchecked(self.req_range.start(), s.start()),
-            )),
-            // first element from source, start is before or equal to hint
-            (None, Some(_)) => self.source.next(),
-            // no new element from source
-            (Some(last), None) if last.end() < self.req_range.end() => {
-                Some(T::create_fill_element(TimeInterval::new_unchecked(
-                    last.end(),
-                    self.req_range.end(),
-                )))
-            }
-            (Some(_), None) => None,
-            (Some(last), Some(&peek)) if last.end() < peek.start() => Some(T::create_fill_element(
-                TimeInterval::new_unchecked(last.end(), peek.start()),
-            )),
-            (Some(_), Some(_)) => self.source.next(),
-        };
-
-        self.last_element_time = nn.as_ref().map(|n| *n.time()); // TODO: maybe this could be done simpler
-
-        nn
-    }
-}
-
-     */
 
 pub struct TimeGapRegularFill {
     step: TimeStep,
@@ -668,77 +552,6 @@ impl TimeGapFill for TimeEmptyRegularFill {
         }
     }
 }
-
-/*
-pub trait RegularTimeFillIterExt<T: TimeFilledItem>: Iterator<Item = T>
-where
-    Self: Iterator<Item = T> + Sized,
-{
-    /// This creates an Iterator where time gaps between items are filled with a single tile inteval
-    fn time_regular_fill(self, step: TimeStep) -> TimeGapFillIter<T, Self, TimeGapRegularFill> {
-        TimeGapFillIter::new(self, TimeGapRegularFill::new(step))
-    }
-
-    /// This creates an Iterator where a single fill item is prepended if the first item from the source starts after the specified start
-    fn time_regular_prepend(
-        self,
-        step: TimeStep,
-        first_element_start_required: TimeInstance,
-    ) -> TimeGapFillIter<T, Self, TimeGapRegularPrepend> {
-        TimeGapFillIter::new(
-            self,
-            TimeGapRegularPrepend::new(step, first_element_start_required),
-        )
-    }
-
-    /// This creates an Iterator where a single fill item is appended if the last item from the source ends after the specified end
-    fn time_regular_append(
-        self,
-        step: TimeStep,
-        last_element_end_required: TimeInstance,
-    ) -> TimeGapFillIter<T, Self, TimeGapRegularAppend> {
-        TimeGapFillIter::new(
-            self,
-            TimeGapRegularAppend::new(step, last_element_end_required),
-        )
-    }
-
-    /// This creates an Iterator where empty sources are filled with regular timesteps
-    fn time_regular_empty_fill(
-        self,
-        regular_dimension: RegularTimeDimension,
-        range: TimeInterval,
-    ) -> TimeGapFillIter<T, Self, TimeEmptyRegularFill> {
-        TimeGapFillIter::new(self, TimeEmptyRegularFill::new(regular_dimension, range))
-    }
-
-    /// This creates an Iterator where:
-    /// - gaps before the first and after the last element are filled with regular step to fill the specified range
-    /// - gaps are filled with regular step intervals
-    /// - IF the source is empty nothing is filled!
-    fn time_regular_range_fill(
-        self,
-        regular_dimension: RegularTimeDimension,
-        range_to_cover: TimeInterval,
-    ) -> TimeGapFillIter<
-        T,
-        TimeGapFillIter<
-            T,
-            TimeGapFillIter<T, TimeGapFillIter<T, Self, TimeGapRegularPrepend>, TimeGapRegularFill>,
-            TimeGapRegularAppend,
-        >,
-        TimeEmptyRegularFill,
-    > {
-        // TODO: generate time steps if source is empty
-        self.time_regular_prepend(regular_dimension.step, range_to_cover.start())
-            .time_regular_fill(regular_dimension.step)
-            .time_regular_append(regular_dimension.step, range_to_cover.end())
-            .time_regular_empty_fill(regular_dimension, range_to_cover)
-    }
-}
-
-impl<T: TimeFilledItem, I: Iterator<Item = T>> RegularTimeFillIterExt<T> for I {}
- */
 
 /// Type alias for the complex nested `TryTimeGapFillIter` used in `try_time_regular_range_fill`
 pub type TryTimeRegularRangeFillType<T, E, S> = TryTimeGapFillIter<
