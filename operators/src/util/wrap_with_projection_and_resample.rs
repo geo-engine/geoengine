@@ -142,10 +142,11 @@ impl WrapWithProjectionAndResample {
         {
             self.interpolation(
                 target_spatial_resolution,
-                tiling_spec,
+                exe_ctx,
                 rd_resolution,
                 target_spatial_grid,
             )
+            .await
         } else {
             // Query resolution is larger than workflow => compute on overview level and append downsampling to increase resolution
             self.downsampling(
@@ -219,10 +220,10 @@ impl WrapWithProjectionAndResample {
         Ok(Self::new(dop, ido.boxed(), rd))
     }
 
-    fn interpolation(
+    async fn interpolation(
         self,
         target_spatial_resolution: Option<SpatialResolution>,
-        tiling_spec: TilingSpecification,
+        exe_ctx: &dyn ExecutionContext,
         rd_resolution: SpatialResolution,
         target_spatial_grid: crate::engine::SpatialGridDescriptor,
     ) -> std::result::Result<WrapWithProjectionAndResample, error::Error> {
@@ -241,20 +242,17 @@ impl WrapWithProjectionAndResample {
         let iop = Interpolation {
             params: interpolation_params.clone(),
             sources: self.operator.into(),
-        };
+        }
+        .boxed();
 
-        // TODO: update the workflow operator path in all operators of the graph!
-        let iip = InitializedInterpolation::new_with_source_and_params(
-            CanonicOperatorName::from(&iop),
-            WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
-            self.initialized_operator,
-            &interpolation_params,
-            tiling_spec,
-        )?;
+        let iip = iop
+            .clone()
+            .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+            .await?;
 
         let rd = iip.result_descriptor().clone();
 
-        Ok(Self::new(iop.boxed(), iip.boxed(), rd))
+        Ok(Self::new(iop, iip.boxed(), rd))
     }
 
     pub async fn wrap_with_projection_and_resample(
