@@ -674,10 +674,10 @@ where
                 this.sc.current_idx = wrapped_next_idx;
                 this.sc.current_band_idx = wrapped_next_band;
 
-                if this.sc.current_idx_and_band_is_first_in_grid_run() {
-                    if let Some(next_time) = this.sc.next_time_interval_from_stored_tile() {
-                        this.sc.update_current_time(next_time);
-                    }
+                if this.sc.current_idx_and_band_is_first_in_grid_run()
+                    && let Some(next_time) = this.sc.next_time_interval_from_stored_tile()
+                {
+                    this.sc.update_current_time(next_time);
                 }
 
                 Poll::Ready(res)

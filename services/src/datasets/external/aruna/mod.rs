@@ -310,10 +310,10 @@ impl ArunaDataProvider {
                     ResourceVariant::Object,
                 )
                 .ok();
-                if let Some(object_ids) = outgoing_objects {
-                    if self.get_verified_dataset_objects(object_ids).await.is_ok() {
-                        verified_datasets.push(dataset);
-                    }
+                if let Some(object_ids) = outgoing_objects
+                    && self.get_verified_dataset_objects(object_ids).await.is_ok()
+                {
+                    verified_datasets.push(dataset);
                 }
             }
         }

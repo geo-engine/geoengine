@@ -151,7 +151,7 @@ impl FeatureDataRef<'_> {
 
     /// Creates an iterator over all values as [`Option<f64>`]
     /// Null values or non-convertible values are [`None`]
-    pub fn float_options_iter(&self) -> FloatOptionsIter {
+    pub fn float_options_iter(&self) -> FloatOptionsIter<'_> {
         match self {
             FeatureDataRef::Text(data_ref) => FloatOptionsIter::Text(data_ref.float_options_iter()),
             FeatureDataRef::Float(data_ref) => {
@@ -170,7 +170,7 @@ impl FeatureDataRef<'_> {
 
     /// Creates a parallel iterator over all values as [`Option<f64>`]
     /// Null values or non-convertible values are [`None`]
-    pub fn float_options_par_iter(&self) -> FloatOptionsParIter {
+    pub fn float_options_par_iter(&self) -> FloatOptionsParIter<'_> {
         self.float_options_iter().into()
     }
 }

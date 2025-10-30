@@ -337,35 +337,6 @@ impl TimeGapFill for TimeEmptySingleFill {
     }
 }
 
-type TimeGapFillRangeAdapterIterSourceType<T, I> = TimeGapFillIter<
-    T,
-    TimeGapFillIter<T, TimeGapFillIter<T, I, TimeSinglePrepend>, TimeGapSingleFill>,
-    TimeSingleAppend,
->;
-
-pub struct TimeGapFillRangeAdapterIter<T: TimeFilledItem, I: Iterator<Item = T>> {
-    source: TimeGapFillRangeAdapterIterSourceType<T, I>,
-    range_to_cover: TimeInterval,
-    pristine: bool,
-}
-
-impl<T: TimeFilledItem, I: Iterator<Item = T>> Iterator for TimeGapFillRangeAdapterIter<T, I> {
-    type Item = T;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let is_fist_call = self.pristine;
-        self.pristine = false;
-
-        let nn = self.source.next();
-
-        if is_fist_call && nn.is_none() {
-            Some(T::create_fill_element(self.range_to_cover))
-        } else {
-            nn
-        }
-    }
-}
-
 pub struct TimeGapRegularFill {
     step: TimeStep,
     last_time: Option<TimeInstance>,

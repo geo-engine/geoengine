@@ -84,7 +84,7 @@ impl TryFrom<SerializableClassificationMeasurement> for ClassificationMeasuremen
         let classes: Result<BTreeMap<u8, String>, _> = measurement
             .classes
             .into_iter()
-            .map(|(k, v)| (k.parse::<u8>().map(|x| (x, v))))
+            .map(|(k, v)| k.parse::<u8>().map(|x| (x, v)))
             .collect();
         Ok(Self {
             measurement: measurement.measurement,

@@ -1,10 +1,12 @@
 pub use crate::contexts::migrations::{
-    current_schema::CurrentSchemaMigration, migration_0015_log_quota::Migration0015LogQuota,
+    current_schema::CurrentSchemaMigration,
     migration_0016_merge_providers::Migration0016MergeProviders,
     migration_0017_ml_model_tensor_shape::Migration0017MlModelTensorShape,
     migration_0018_wildlive_connector::Migration0018WildliveConnector,
     migration_0019_ml_model_no_data::Migration0019MlModelNoData,
     migration_0020_provider_permissions::Migration0020ProviderPermissions,
+    migration_0021_default_permissions_for_existing_providers::Migration0021DefaultPermissionsForExistingProviders,
+    migration_0022_permission_queries::Migration0022PermissionQueries,
     migration_0030_raster_result_desc::Migration0030RasterResultDesc,
     migration_0031_time_descriptor::Migration0031TimeDescriptor,
 };
@@ -14,12 +16,13 @@ pub use database_migration::{
 
 mod current_schema;
 mod database_migration;
-mod migration_0015_log_quota;
 mod migration_0016_merge_providers;
 mod migration_0017_ml_model_tensor_shape;
 mod migration_0018_wildlive_connector;
 mod migration_0019_ml_model_no_data;
 mod migration_0020_provider_permissions;
+mod migration_0021_default_permissions_for_existing_providers;
+mod migration_0022_permission_queries;
 mod migration_0030_raster_result_desc;
 mod migration_0031_time_descriptor;
 
@@ -35,12 +38,21 @@ pub(crate) use schema_info::{AssertSchemaEqPopulationConfig, assert_migration_sc
 ///
 pub fn all_migrations() -> Vec<Box<dyn Migration>> {
     vec![
-        Box::new(Migration0015LogQuota), // cf. [`migration_0015_log_quota.rs`] why we start at `0015`
+        // Upon migration `0015_log_quota`, we did a major refactoring and removed the deprecated pro migrations.
+        // Hence, we added a snapshot of the database schema at version 0015_log_quota.
+        // This is the state of the database schema at commit `071ba4e636a709f05ecb18b6f01bd19f313b0c94`.
+        // Furthermore, we deleted all prior migrations, so migrating from an earlier version is not possible.
+        //
+        // If you have a database version prior to `0015_log_quota`, you will need to migrate to `0015_log_quota` first.
+        // Use commit `071ba4e636a709f05ecb18b6f01bd19f313b0c94` as a reference.
+        // Then, you can migrate to the latest version.
         Box::new(Migration0016MergeProviders),
         Box::new(Migration0017MlModelTensorShape),
         Box::new(Migration0018WildliveConnector),
         Box::new(Migration0019MlModelNoData),
         Box::new(Migration0020ProviderPermissions),
+        Box::new(Migration0021DefaultPermissionsForExistingProviders),
+        Box::new(Migration0022PermissionQueries),
         Box::new(Migration0030RasterResultDesc),
         Box::new(Migration0031TimeDescriptor),
     ]

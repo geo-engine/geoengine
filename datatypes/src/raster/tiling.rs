@@ -85,6 +85,21 @@ impl TilingStrategy {
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
+    pub fn num_tiles_intersecting_partition(&self, partition: SpatialPartition2D) -> usize {
+        let grid_bounds = self.geo_transform.spatial_to_grid_bounds(&partition);
+        self.num_tiles_intersecting_grid_bounds(grid_bounds)
+    }
+
+    pub fn num_tiles_intersecting_grid_bounds(&self, grid_bounds: GridBoundingBox2D) -> usize {
+        let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
+
+        let GridIdx([upper_left_tile_y, upper_left_tile_x]) = tile_bounds.min_index();
+        let GridIdx([lower_right_tile_y, lower_right_tile_x]) = tile_bounds.max_index();
+
+        (((lower_right_tile_y - upper_left_tile_y) + 1)
+            * ((lower_right_tile_x - upper_left_tile_x) + 1)) as usize
+    }
+
     pub fn global_pixel_grid_bounds_to_tile_grid_bounds(
         &self,
         global_pixel_grid_bounds: GridBoundingBox2D,

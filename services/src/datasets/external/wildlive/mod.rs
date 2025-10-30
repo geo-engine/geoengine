@@ -787,9 +787,12 @@ impl TryFrom<LayerId> for WildliveLayerId {
 
 #[cfg(test)]
 mod tests {
+    use std::path::Path;
+
     use super::*;
     use crate::{
         contexts::{PostgresSessionContext, SessionContext},
+        datasets::external::wildlive::datasets::{PAGE_SIZE, SearchRequest},
         ge_context,
     };
     use geoengine_datatypes::{
@@ -800,10 +803,16 @@ mod tests {
             Measurement, TimeInterval,
         },
         spatial_reference::SpatialReference,
+        test_data,
     };
     use geoengine_operators::{
         engine::VectorColumnInfo,
         source::{OgrSourceColumnSpec, OgrSourceDatasetTimeType, OgrSourceErrorSpec},
+    };
+    use httptest::{
+        Expectation, all_of,
+        matchers::{self, request},
+        responders,
     };
     use tokio_postgres::NoTls;
 
@@ -874,17 +883,69 @@ mod tests {
         );
     }
 
+    fn json_responder(path: &Path) -> impl responders::Responder + use<> {
+        let json = std::fs::read_to_string(path).unwrap();
+        responders::status_code(200)
+            .append_header("Content-Type", "application/json")
+            .body(json)
+    }
+
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
     async fn it_shows_an_overview_of_all_projects(
         ctx: PostgresSessionContext<NoTls>,
         db_config: DatabaseConnectionConfig,
     ) {
+        let mock_server = httptest::Server::run();
+
+        mock_server.expect(
+            Expectation::matching(all_of![
+                request::method("GET"),
+                request::path("/api/search"),
+                request::query(matchers::url_decoded(matchers::contains((
+                    "query",
+                    "type:project"
+                )))),
+            ])
+            .respond_with(json_responder(test_data!(
+                "wildlive/responses/projects.json"
+            ))),
+        );
+
+        mock_server.expect(
+            Expectation::matching(all_of![
+                request::method("POST"),
+                request::path("/api/search"),
+                request::body(matchers::json_decoded(matchers::eq(SearchRequest {
+                    query: "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup".to_string(),
+                    filter: Some(
+                        [
+                            "/id",
+                            "/content/inStationsLayout",
+                            "/content/decimalLatitude",
+                            "/content/decimalLongitude",
+                        ]
+                        .map(ToString::to_string)
+                        .to_vec(),
+                    ),
+                    page_num: 0,
+                    page_size: PAGE_SIZE,
+                }))
+            ),
+            ])
+            .respond_with(json_responder(test_data!(
+                "wildlive/responses/station_coordinates.json"
+            ))),
+        );
+
+        // let api_endpoint = Url::parse("https://wildlive.senckenberg.de/api/").unwrap();
+        let api_endpoint = Url::parse(&mock_server.url_str("/api/")).unwrap();
+
         // crate::util::tests::initialize_debugging_in_test();
 
         let connector = WildliveDataConnector {
             id: DataProviderId::from_u128(12_345_678_901_234_567_890_123_456_789_012_u128),
-            api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/").unwrap(), // TODO: mock
+            api_endpoint,
             name: "WildLIVE! Portal Connector".to_string(),
             description: "WildLIVE! Portal Connector".to_string(),
             user: None,
@@ -1037,11 +1098,107 @@ mod tests {
         ctx: PostgresSessionContext<NoTls>,
         db_config: DatabaseConnectionConfig,
     ) {
+        let mock_server = httptest::Server::run();
+
+        mock_server.expect(
+            Expectation::matching(all_of![
+                request::method("GET"),
+                request::path("/api/objects/wildlive/ef7833589d61b2d2a905"),
+            ])
+            .respond_with(json_responder(test_data!(
+                "wildlive/responses/project.json"
+            ))),
+        );
+
+        mock_server.expect(
+            Expectation::matching(all_of![
+                request::method("POST"),
+                request::path("/api/search"),
+                request::body(matchers::json_decoded(matchers::eq(SearchRequest {
+                    query: "(/inStationsLayout:\"wildlive/667cc39364fd45136c7a\" OR /inStationsLayout:\"wildlive/151c43fdd5881eba0bd5\") AND type:StationSetup".to_string(),
+                    filter: Some(
+                        [
+                            "/id",
+                            "/content/id",
+                            "/content/name",
+                            "/content/location",
+                            "/content/description",
+                            "/content/decimalLatitude",
+                            "/content/decimalLongitude",
+                        ]
+                        .map(ToString::to_string)
+                        .to_vec(),
+                    ),
+                    page_num: 0,
+                    page_size: PAGE_SIZE,
+                }))
+            ),
+            ])
+            .respond_with(json_responder(test_data!(
+                "wildlive/responses/station_setups.json"
+            ))),
+        );
+
+        mock_server.expect(
+            Expectation::matching(all_of![
+                request::method("POST"),
+                request::path("/api/search"),
+                request::body(matchers::json_decoded(matchers::eq(SearchRequest {
+                    query: "type:ImageObject AND (/atStation:\"wildlive/024b9357f1e23877a243\" OR /atStation:\"wildlive/0ff0ce1ddfcfb0aff407\" OR /atStation:\"wildlive/16f3b0b65b4a58acb782\" OR /atStation:\"wildlive/229392d20de8b45e8114\" OR /atStation:\"wildlive/259cfcfd85fcb0ce276d\" OR /atStation:\"wildlive/2cd0a46deb9e47b0518f\" OR /atStation:\"wildlive/3204d6391519562525ec\" OR /atStation:\"wildlive/33516c1ce3b7e26c296d\" OR /atStation:\"wildlive/358df8fa949f35e91a64\" OR /atStation:\"wildlive/468ba2036b2a4ff004c9\" OR /atStation:\"wildlive/498ae1629861699f5323\" OR /atStation:\"wildlive/52baefeffeb2648fdaf7\" OR /atStation:\"wildlive/6bf42fa2eb245604bb31\" OR /atStation:\"wildlive/797cb6f275e9fc8afa4b\" OR /atStation:\"wildlive/79e043c3053fb39df381\" OR /atStation:\"wildlive/8ced32ac3ca4f646a53b\" OR /atStation:\"wildlive/a43254afb230ce163256\" OR /atStation:\"wildlive/c2bd44066dbda6f0d1ac\" OR /atStation:\"wildlive/de7f4396c2689d1fbf6d\" OR /atStation:\"wildlive/ea64f18b8fa1dec31196\" OR /atStation:\"wildlive/f421dc2239b8fd7a1980\")".to_string(),
+                    filter: Some(
+                        [
+                            "/id",
+                            "/content/id",
+                            "/content/captureTimeStamp",
+                            "/content/atStation",
+                            "/content/hasAnnotations",
+                            "/content/contentUrl"
+                        ]
+                        .map(ToString::to_string)
+                        .to_vec(),
+                    ),
+                    page_num: 0,
+                    page_size: PAGE_SIZE,
+                }))),
+            ])
+            .respond_with(json_responder(test_data!(
+                "wildlive/responses/image_objects.json"
+            ))),
+        );
+
+        mock_server.expect(
+            Expectation::matching(all_of![
+                request::method("POST"),
+                request::path("/api/search"),
+                request::body(matchers::json_decoded(matchers::eq(SearchRequest {
+                    query: "type:Annotation AND (/id:\"wildlive/7ef5664c43cf26299b09\" OR /id:\"wildlive/ebe8d5f722782b0bee73\" OR /id:\"wildlive/a1eaa469eec33a0d3a39\")".to_string(),
+                    filter: Some(
+                        [
+                            "/id",
+                            "/content/id",
+                            "/content/hasTarget",
+                            "/content/hasBody",
+                        ]
+                        .map(ToString::to_string)
+                        .to_vec(),
+                    ),
+                    page_num: 0,
+                    page_size: PAGE_SIZE,
+                }))),
+            ])
+            .respond_with(json_responder(test_data!(
+                "wildlive/responses/annotations.json"
+            ))),
+        );
+
+        // let api_endpoint = Url::parse("https://wildlive.senckenberg.de/api/").unwrap();
+        let api_endpoint = Url::parse(&mock_server.url_str("/api/")).unwrap();
+
         // crate::util::tests::initialize_debugging_in_test();
 
         let connector = WildliveDataConnector {
             id: DataProviderId::from_u128(12_345_678_901_234_567_890_123_456_789_012_u128),
-            api_endpoint: Url::parse("https://wildlive.senckenberg.de/api/").unwrap(), // TODO: mock
+            api_endpoint,
             name: "WildLIVE! Portal Connector".to_string(),
             description: "WildLIVE! Portal Connector".to_string(),
             user: None,

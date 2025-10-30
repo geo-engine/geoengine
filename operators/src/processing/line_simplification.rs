@@ -200,7 +200,7 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString
         use geo::Simplify;
 
         let geo_geometry = geo::MultiLineString::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplify(&epsilon);
+        let geo_geometry = geo_geometry.simplify(epsilon);
         geo_geometry.into()
     }
 }
@@ -210,7 +210,7 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for 
         use geo::Simplify;
 
         let geo_geometry = geo::MultiPolygon::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplify(&epsilon);
+        let geo_geometry = geo_geometry.simplify(epsilon);
         geo_geometry.into()
     }
 }
@@ -220,7 +220,7 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiLineStringRef<'c>, MultiLineString
         use geo::SimplifyVwPreserve;
 
         let geo_geometry = geo::MultiLineString::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplify_vw_preserve(&epsilon);
+        let geo_geometry = geo_geometry.simplify_vw_preserve(epsilon);
         geo_geometry.into()
     }
 }
@@ -230,7 +230,7 @@ impl<'c> LineSimplificationAlgorithmImpl<MultiPolygonRef<'c>, MultiPolygon> for 
         use geo::SimplifyVwPreserve;
 
         let geo_geometry = geo::MultiPolygon::<f64>::from(&geometry);
-        let geo_geometry = geo_geometry.simplify_vw_preserve(&epsilon);
+        let geo_geometry = geo_geometry.simplify_vw_preserve(epsilon);
         geo_geometry.into()
     }
 }

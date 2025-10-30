@@ -115,11 +115,9 @@ impl Node {
                         if section
                             .rectangle
                             .intersects(&new_circle.circle.buffer(epsilon_distance))
+                            && let Some(circle) = section.try_partial(&new_circle, epsilon_distance)
                         {
-                            if let Some(circle) = section.try_partial(&new_circle, epsilon_distance)
-                            {
-                                return Err((new_circle, circle));
-                            }
+                            return Err((new_circle, circle));
                         }
                     }
                 }
@@ -162,10 +160,9 @@ impl Node {
                 if section
                     .rectangle
                     .intersects(&new_circle.circle.buffer(epsilon_distance))
+                    && let Some(circle) = section.try_partial(new_circle, epsilon_distance)
                 {
-                    if let Some(circle) = section.try_partial(new_circle, epsilon_distance) {
-                        return Some(circle);
-                    }
+                    return Some(circle);
                 }
             }
         }

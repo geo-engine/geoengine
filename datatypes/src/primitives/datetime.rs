@@ -401,6 +401,7 @@ enum FormatStrLoopState {
 }
 
 impl DateTimeParseFormat {
+    #[allow(clippy::needless_pass_by_value)] // cf. replace below that could be avoided later
     pub fn custom(fmt: String) -> Self {
         let (has_tz, has_time) = {
             let mut has_tz = false;
@@ -441,6 +442,10 @@ impl DateTimeParseFormat {
 
             (has_tz, has_time)
         };
+
+        // TODO: remove when chrono supports `%.3f` again
+        // cf. <https://github.com/chronotope/chrono/issues/1732>
+        let fmt = fmt.replace("%.3f", "%.f");
 
         DateTimeParseFormat {
             fmt,

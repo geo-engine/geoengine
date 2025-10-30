@@ -1,5 +1,5 @@
 use super::database_migration::{DatabaseVersion, Migration};
-use crate::{contexts::migrations::Migration0020ProviderPermissions, error::Result};
+use crate::{contexts::migrations::Migration0022PermissionQueries, error::Result};
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
@@ -9,7 +9,7 @@ pub struct Migration0030RasterResultDesc;
 #[async_trait]
 impl Migration for Migration0030RasterResultDesc {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some(Migration0020ProviderPermissions.version())
+        Some(Migration0022PermissionQueries.version())
     }
 
     fn version(&self) -> DatabaseVersion {

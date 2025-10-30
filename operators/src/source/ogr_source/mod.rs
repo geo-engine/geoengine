@@ -592,7 +592,7 @@ enum FeaturesProvider<'a> {
 }
 
 impl FeaturesProvider<'_> {
-    fn layer_ref(&self) -> &Layer {
+    fn layer_ref(&self) -> &Layer<'_> {
         match self {
             FeaturesProvider::Layer(l) => l,
             FeaturesProvider::ResultSet(r) => r,

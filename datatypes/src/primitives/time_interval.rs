@@ -360,11 +360,11 @@ impl Display for TimeInterval {
     /// ```
     /// use geoengine_datatypes::primitives::TimeInterval;
     ///
-    /// assert_eq!(format!("{}", TimeInterval::new(0, 1).unwrap()), "[0, 1)");
+    /// assert_eq!(format!("{}", TimeInterval::new(0, 1).unwrap()), "[1970-01-01T00:00:00.000Z, 1970-01-01T00:00:00.001Z)");
     /// ```
     ///
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
-        write!(f, "[{}, {})", self.start.inner(), self.end.inner())
+        write!(f, "[{}, {})", self.start, self.end)
     }
 }
 

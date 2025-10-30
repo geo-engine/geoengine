@@ -4,6 +4,8 @@ use crate::contexts::SessionContext;
 use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
 use crate::datasets::upload::{UploadId, UploadRootPath};
+use crate::datasets::{DatasetIdAndName, DatasetName};
+use crate::tasks::TaskContext;
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use crate::{
@@ -23,18 +25,17 @@ use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
 };
 use geoengine_operators::util::raster_stream_to_geotiff::{
-    GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions,
-    raster_stream_to_geotiff,
+    GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, ToGeoTiffProgress,
+    ToGeoTiffProgressConsumer, raster_stream_to_geotiff,
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::fs;
+use tonic::async_trait;
 use utoipa::ToSchema;
 use uuid::Uuid;
-
-use super::{DatasetIdAndName, DatasetName};
 
 /// parameter for the dataset from workflow handler (body)
 #[derive(Clone, Debug, Deserialize, Serialize, ToSchema)]
@@ -85,6 +86,19 @@ pub struct RasterDatasetFromWorkflowResult {
 
 impl TaskStatusInfo for RasterDatasetFromWorkflowResult {}
 
+pub struct ToGeoTiffTaskContext<TC: TaskContext> {
+    context: TC,
+}
+
+#[async_trait]
+impl<TC: TaskContext> ToGeoTiffProgressConsumer for ToGeoTiffTaskContext<TC> {
+    async fn consume_progress(&self, status: ToGeoTiffProgress) {
+        self.context
+            .set_completion(status.percent_done(), Box::new(status.to_string()))
+            .await;
+    }
+}
+
 pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
     pub source_name: String,
 
@@ -97,7 +111,10 @@ pub struct RasterDatasetFromWorkflowTask<C: SessionContext> {
 }
 
 impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
-    async fn process(&self) -> error::Result<RasterDatasetFromWorkflowResult> {
+    async fn process(
+        &self,
+        to_geo_tiff_task_context: ToGeoTiffTaskContext<C::TaskContext>,
+    ) -> error::Result<RasterDatasetFromWorkflowResult> {
         let workflow = self.ctx.db().load_workflow(&self.workflow_id).await?;
         let exe_ctx = self.ctx.execution_context()?;
 
@@ -169,6 +186,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             },
             tile_limit,
             Box::pin(futures::future::pending()), // datasets shall continue to be built in the background and not cancelled
+            to_geo_tiff_task_context,
         ).await)?
             .map_err(crate::error::Error::from)?;
         // create the dataset
@@ -192,9 +210,9 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
 impl<C: SessionContext> Task<C::TaskContext> for RasterDatasetFromWorkflowTask<C> {
     async fn run(
         &self,
-        _ctx: C::TaskContext,
+        ctx: C::TaskContext,
     ) -> error::Result<Box<dyn crate::tasks::TaskStatusInfo>, Box<dyn ErrorSource>> {
-        let response = self.process().await;
+        let response = self.process(ToGeoTiffTaskContext { context: ctx }).await;
 
         response
             .map(TaskStatusInfo::boxed)

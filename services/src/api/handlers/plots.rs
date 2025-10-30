@@ -140,6 +140,7 @@ async fn get_plot_handler<C: ApplicationContext>(
             query_rect.spatial_bounds(),
             workflow_spatial_ref,
             request_spatial_ref,
+            true,
         )?;
         repr_spatial_query.map(|r| {
             PlotQueryRectangle::new(r, query_rect.time_interval(), *query_rect.attributes())

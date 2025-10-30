@@ -257,11 +257,11 @@ where
         {
             Ok(stmt) => stmt,
             Err(e) => {
-                if let Some(code) = e.code() {
-                    if *code == SqlState::UNDEFINED_TABLE {
-                        info!("Initializing schema.");
-                        return Ok(DatabaseStatus::Unitialized);
-                    }
+                if let Some(code) = e.code()
+                    && *code == SqlState::UNDEFINED_TABLE
+                {
+                    info!("Initializing schema.");
+                    return Ok(DatabaseStatus::Unitialized);
                 }
                 return Err(error::Error::TokioPostgres { source: e });
             }

@@ -884,7 +884,7 @@ where
                     user_permitted_providers p
                     JOIN layer_providers l ON (p.provider_id = l.id)
                 WHERE
-                    p.user_id = $3 AND priority > -1000
+                    p.user_id = $3
                 ORDER BY priority desc, name ASC
                 LIMIT $1
                 OFFSET $2;
@@ -979,8 +979,6 @@ where
 
         let old_definition = self.get_layer_provider_definition(id).await?;
         let provider = DataProviderDefinition::<Self>::update(&old_definition, provider);
-
-        println!("{:?}", provider);
 
         let prio = DataProviderDefinition::<Self>::priority(&provider);
 

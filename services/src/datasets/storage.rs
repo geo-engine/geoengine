@@ -239,7 +239,7 @@ impl MetaDataDefinition {
         }
     }
 
-    pub fn to_typed_metadata(&self) -> DatasetMetaData {
+    pub fn to_typed_metadata(&self) -> DatasetMetaData<'_> {
         match self {
             MetaDataDefinition::MockMetaData(d) => DatasetMetaData {
                 meta_data: self,
