@@ -140,10 +140,6 @@ pub enum AddDatasetTilesError {
         found: u32,
         file_path: String,
     },
-    DatasetTileTimeConflict {
-        time: crate::api::model::datatypes::TimeInterval,
-        file_path: String,
-    },
 }
 
 impl ResponseError for AddDatasetTilesError {

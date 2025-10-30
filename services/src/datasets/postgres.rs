@@ -1,4 +1,5 @@
 use crate::api::handlers::datasets::DatasetTile;
+use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::UpdateDataset;
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
@@ -29,8 +30,8 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
-    OgrSourceDataset, TileFile,
+    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
 
@@ -1017,6 +1018,24 @@ where
     }
 }
 
+#[derive(Debug, Clone, PartialEq, ToSql, FromSql)]
+struct TileKey {
+    time: crate::api::model::datatypes::TimeInterval,
+    bbox: SpatialPartition2D,
+    band: u32,
+    z_index: u32,
+}
+
+#[derive(Debug, Clone, PartialEq, ToSql, FromSql)]
+struct TileEntry {
+    dataset_id: DatasetId,
+    time: crate::api::model::datatypes::TimeInterval,
+    bbox: SpatialPartition2D,
+    band: u32,
+    z_index: u32,
+    gdal_params: GdalDatasetParameters,
+}
+
 #[async_trait]
 impl<Tls> DatasetStore for PostgresDb<Tls>
 where
@@ -1250,57 +1269,97 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        for tile in tiles {
-            tx.execute(
-                "INSERT INTO dataset_tiles (dataset_id, time, bbox, band, z_index, gdal_params)
-                VALUES ($1, $2, $3, $4, $5, $6)",
-                &[
-                    &dataset,
-                    &tile.time,
-                    &tile.spatial_partition,
-                    &tile.band,
-                    &tile.z_index,
-                    &geoengine_operators::source::GdalDatasetParameters::from(tile.params),
-                ],
+        // check if any tile conflicts with existing tiles
+        let times = tiles.iter().map(|tile| tile.time).collect::<Vec<_>>();
+
+        let incompatible_times = tx
+            .query(
+                r#"
+                SELECT DISTINCT
+                    dt.time,
+                    nt
+                FROM
+                    dataset_tiles dt JOIN
+                    unnest($2::"TimeInterval"[]) as nt
+                    ON (time_interval_intersects(dt.time, nt))
+                WHERE
+                    dataset_id = $1 AND (
+                        (dt.time).start != (nt).start OR
+                        (dt.time)."end" != (nt)."end"
+                    );
+                "#,
+                &[&dataset, &times],
             )
             .await?;
+
+        if !incompatible_times.is_empty() {
+            return Err(Error::DatasetTileTimeConflict {
+                existing_times: incompatible_times.iter().map(|row| row.get(0)).collect(),
+                times: incompatible_times.iter().map(|row| row.get(1)).collect(),
+            });
         }
+
+        let tile_keys = tiles
+            .iter()
+            .map(|tile| TileKey {
+                time: tile.time,
+                bbox: tile.spatial_partition,
+                band: tile.band,
+                z_index: tile.z_index,
+            })
+            .collect::<Vec<_>>();
+
+        // check, on spatial overlap, if the z-index is different than existing tiles for the same time step and band)
+        let incompatible_z_index = tx
+            .query(
+                r#"
+                SELECT DISTINCT
+                    (gdal_params).file_path
+                FROM
+                    dataset_tiles dt, unnest($2::"TileKey"[]) as tk
+                WHERE
+                    dataset_id = $1 AND 
+                    dt.time = tk.time AND
+                    SPATIAL_PARTITION2D_INTERSECTS(dt.bbox, tk.bbox) AND
+                    dt.band = tk.band AND
+                    dt.z_index = tk.z_index
+                ;
+                "#,
+                &[&dataset, &tile_keys],
+            )
+            .await?;
+
+        if !incompatible_z_index.is_empty() {
+            return Err(Error::DatasetTileZIndexConflict {
+                files: incompatible_z_index.iter().map(|row| row.get(0)).collect(),
+            });
+        }
+
+        // batch insert using array unnesting
+        let tile_entries = tiles
+            .into_iter()
+            .map(|tile| TileEntry {
+                dataset_id: dataset,
+                time: tile.time,
+                bbox: tile.spatial_partition,
+                band: tile.band,
+                z_index: tile.z_index,
+                gdal_params: tile.params.into(),
+            })
+            .collect::<Vec<_>>();
+
+        tx.execute(
+            r#"
+            INSERT INTO dataset_tiles (dataset_id, time, bbox, band, z_index, gdal_params)
+                SELECT * FROM unnest($1::"TileEntry"[]);
+            "#,
+            &[&tile_entries],
+        )
+        .await?;
 
         tx.commit().await?;
 
         Ok(())
-    }
-
-    async fn is_dataset_tile_time_compatible(
-        &self,
-        dataset: DatasetId,
-        time: crate::api::model::datatypes::TimeInterval,
-    ) -> Result<bool> {
-        let mut conn = self.conn_pool.get().await?;
-        let tx = conn.build_transaction().start().await?;
-
-        self.ensure_permission_in_tx(dataset.into(), Permission::Read, &tx)
-            .await
-            .boxed_context(crate::error::PermissionDb)?;
-
-        let is_compatible = tx
-            .query_one(
-                "SELECT NOT EXISTS (
-                    SELECT 1 FROM dataset_tiles 
-                    WHERE dataset_id = $1 AND 
-                        time_interval_intersects(time, $2) AND
-                        (time).start != ($2::\"TimeInterval\").start AND
-                        (time).end != ($2::\"TimeInterval\").end
-                    LIMIT 1
-                );",
-                &[&dataset, &time],
-            )
-            .await?
-            .get(0);
-
-        tx.commit().await?;
-
-        Ok(is_compatible)
     }
 }
 

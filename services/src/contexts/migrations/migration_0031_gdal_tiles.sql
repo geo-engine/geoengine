@@ -14,6 +14,23 @@ CREATE TABLE dataset_tiles (
     PRIMARY KEY (dataset_id, time, bbox, band, z_index)
 );
 
+-- helper type for batch checking tile validity
+CREATE TYPE "TileKey" AS (
+    time "TimeInterval",
+    bbox "SpatialPartition2D",
+    band oid,
+    z_index oid
+);
+
+-- helper type for batch inserting tiles
+CREATE TYPE "TileEntry" AS (
+    dataset_id uuid,
+    time "TimeInterval",
+    bbox "SpatialPartition2D",
+    band oid,
+    z_index oid,
+    gdal_params "GdalDatasetParameters"
+);
 -- Returns true if the partitions have any space in common
 CREATE OR REPLACE FUNCTION SPATIAL_PARTITION2D_INTERSECTS(
     a "SpatialPartition2D", b "SpatialPartition2D"

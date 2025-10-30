@@ -285,21 +285,6 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
                 file_path: tile.params.file_path.to_string_lossy().to_string(),
             }
         );
-
-        // check that the time is compatible (does not *overlap* with existing tiles, but is either same as existing or a distinct time interval)
-        // TODO: check the compatibility in the same database transaction as inserting the tile to avoid conflicts
-        ensure!(
-            db.is_dataset_tile_time_compatible(dataset_id, tile.time)
-                .await
-                .context(CannotLoadDatasetForAddingTiles)?,
-            DatasetTileTimeConflict {
-                time: tile.time,
-                file_path: tile.params.file_path.to_string_lossy().to_string(),
-            }
-        );
-
-        // TODO: check, on spatial overlap, if the z-index is different than existing tiles for the same time step and band)
-        //       OR: implement logic to stable sort overlapping tiles with same index when loading tiles
     }
 
     db.add_dataset_tiles(dataset_id, tiles)
@@ -4366,6 +4351,194 @@ mod tests {
                 .unwrap(),
             ).unwrap());
         }
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_checks_tile_times_before_adding_to_dataset(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        // add data
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi (tiled)".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: create_ndvi_result_descriptor().into(),
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        // add tiles
+        let tiles = create_ndvi_tiles();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        // try to insert tiles with time that conflicts with existing tiles
+        let mut tiles = tiles[..1].to_vec();
+        tiles[0].time = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-01-03T00:00:00Z").unwrap(),
+        )
+        .into();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 400, "response: {res:?}");
+
+        let read_body: ErrorResponse = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(read_body, ErrorResponse {
+            error: "CannotAddTilesToDataset".to_string(),
+            message: "Cannot add tiles to dataset: Dataset tile time `[TimeInterval [1388534400000, 1388707200000)]` conflict with existing times `[TimeInterval [1388534400000, 1391212800000)]`".to_string(),
+        });
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_checks_tile_z_indexes_before_adding_to_dataset(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        // add data
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi (tiled)".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: create_ndvi_result_descriptor().into(),
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        // add tiles
+        let tiles = create_ndvi_tiles();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        // try to insert tiles with z index that conflicts with existing tiles
+        let tiles = tiles[..1].to_vec();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 400, "response: {res:?}");
+
+        let read_body: ErrorResponse = actix_web::test::read_body_json(res).await;
+
+        let conflict_tile = test_data!("raster/modis_ndvi/tiled/MOD13A2_M_NDVI_2014-01-01_1_1.tif")
+            .to_string_lossy()
+            .to_string();
+
+        assert_eq!(
+            read_body,
+            ErrorResponse {
+                error: "CannotAddTilesToDataset".to_string(),
+                message: format!(
+                    "Cannot add tiles to dataset: Dataset tile z-index of files `[\"{conflict_tile}\"]` conflict with existing tiles with the same z-indexes",
+                ),
+            }
+        );
 
         Ok(())
     }

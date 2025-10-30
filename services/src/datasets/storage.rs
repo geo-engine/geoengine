@@ -2,7 +2,6 @@ use super::listing::Provenance;
 use super::postgres::DatasetMetaData;
 use super::{DatasetIdAndName, DatasetName};
 use crate::api::handlers::datasets::DatasetTile;
-use crate::api::model::datatypes::TimeInterval;
 use crate::api::model::services::{DataPath, UpdateDataset};
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -321,11 +320,4 @@ pub trait DatasetStore {
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 
     async fn add_dataset_tiles(&self, dataset: DatasetId, tiles: Vec<DatasetTile>) -> Result<()>;
-
-    /// check if a time interval is compatible with the dataset i.e. it must'nt conflict (partially overlap) with the time of existing tiles
-    async fn is_dataset_tile_time_compatible(
-        &self,
-        dataset: DatasetId,
-        time: TimeInterval,
-    ) -> Result<bool>;
 }

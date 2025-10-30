@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
+    DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::aruna::error::ArunaProviderError;
@@ -549,6 +549,19 @@ pub enum Error {
     #[snafu(display("WildLIVE connector error: {source}"), context(false))]
     Wildlive {
         source: crate::datasets::external::WildliveError,
+    },
+    #[snafu(display(
+        "Dataset tile time `{times:?}` conflict with existing times `{existing_times:?}`"
+    ))]
+    DatasetTileTimeConflict {
+        times: Vec<TimeInterval>,
+        existing_times: Vec<TimeInterval>,
+    },
+    #[snafu(display(
+        "Dataset tile z-index of files `{files:?}` conflict with existing tiles with the same z-indexes"
+    ))]
+    DatasetTileZIndexConflict {
+        files: Vec<String>,
     },
 }
 
