@@ -123,9 +123,10 @@ where
 
         for interval in this.current.iter_mut() {
             if let Some(iv) = interval
-                && iv.end() <= merged_interval.end() {
-                    *interval = None;
-                }
+                && iv.end() <= merged_interval.end()
+            {
+                *interval = None;
+            }
         }
 
         // Update current_time

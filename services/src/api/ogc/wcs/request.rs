@@ -154,9 +154,10 @@ impl GetCoverage {
     pub fn spatial_ref(&self) -> Result<SpatialReference> {
         let spatial_ref = self.gridbasecrs; // TODO: maybe this is something different. Lets investigate that later...
         if let Some(bbx_sref) = self.boundingbox.spatial_reference
-            && bbx_sref != spatial_ref {
-                return Err(error::Error::WcsBoundingboxCrsMustEqualGridBaseCrs);
-            }
+            && bbx_sref != spatial_ref
+        {
+            return Err(error::Error::WcsBoundingboxCrsMustEqualGridBaseCrs);
+        }
         Ok(spatial_ref)
     }
 }

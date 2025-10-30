@@ -15,7 +15,8 @@ use futures::{StreamExt, stream};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, Coordinate2D, RasterQueryRectangle,
-    SpatialPartition2D, SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
+    SpatialPartition2D, SpatialPartitioned, SpatialResolution, TimeFilledItem,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
@@ -27,6 +28,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use num_traits::FloatConst;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use tracing::warn;
 use typetag::serde;
 
 /// An operator that rasterizes vector data
@@ -360,7 +362,7 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
     async fn time_query<'a>(
         &'a self,
-        _query: geoengine_datatypes::primitives::TimeInterval,
+        query: geoengine_datatypes::primitives::TimeInterval,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> crate::util::Result<
         futures::stream::BoxStream<
@@ -368,7 +370,10 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
             crate::util::Result<geoengine_datatypes::primitives::TimeInterval>,
         >,
     > {
-        unimplemented!("This operator needs reworking of its time semantics.")
+        warn!(
+            "Time query called on Rasterization operator. This operator does not comply with the time semantics and needs to be fixed."
+        );
+        Ok(stream::iter(vec![Ok(query.time())]).boxed())
     }
 }
 
@@ -503,7 +508,7 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
 
     async fn time_query<'a>(
         &'a self,
-        _query: geoengine_datatypes::primitives::TimeInterval,
+        query: geoengine_datatypes::primitives::TimeInterval,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> crate::util::Result<
         futures::stream::BoxStream<
@@ -511,7 +516,10 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
             crate::util::Result<geoengine_datatypes::primitives::TimeInterval>,
         >,
     > {
-        unimplemented!()
+        warn!(
+            "Time query called on Rasterization operator. This operator does not comply with the time semantics and needs to be fixed."
+        );
+        Ok(stream::iter(vec![Ok(query.time())]).boxed())
     }
 }
 
