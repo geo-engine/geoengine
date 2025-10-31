@@ -223,14 +223,14 @@ impl OverviewReaderState {
 
         // must be multiple of overview level in size, unless we are at the edge of the dataset
         debug_assert!(
-            read_window.size_x % self.overview_level as usize == 0
+            read_window.size_x.is_multiple_of(self.overview_level as usize)
                 || read_window.start_x + read_window.size_x as isize
                     == actual_gdal_dataset_spatial_grid_definition
                         .grid_bounds()
                         .axis_size_x() as isize
         );
         debug_assert!(
-            read_window.size_y % self.overview_level as usize == 0
+            read_window.size_y.is_multiple_of(self.overview_level as usize)
                 || read_window.start_y + read_window.size_y as isize
                     == actual_gdal_dataset_spatial_grid_definition
                         .grid_bounds()
