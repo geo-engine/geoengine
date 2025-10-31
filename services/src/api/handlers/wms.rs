@@ -18,6 +18,8 @@ use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, CacheHint, SpatialResolution,
 };
 use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D};
+use geoengine_datatypes::raster::GridIntersection;
+use geoengine_operators::util::raster_stream_to_png::default_colorizer_gradient;
 use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{ExecutionContext, WorkflowOperatorPath},
@@ -332,9 +334,8 @@ async fn wms_map_handler<C: ApplicationContext>(
             .tiling_spatial_grid_definition()
             .spatial_bounds_to_compatible_spatial_grid(request_bounds);
 
-        debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);
-
         let attributes = raster_colorizer.as_ref().map_or_else(
+            // TODO: move this to a method of RasterColorizer
             || BandSelection::new_single(0),
             |colorizer: &RasterColorizer| {
                 RasterColorizer::band_selection(colorizer)
@@ -343,9 +344,52 @@ async fn wms_map_handler<C: ApplicationContext>(
             },
         );
 
+        let raster_colorizer: Option<geoengine_datatypes::operations::image::RasterColorizer> =
+            raster_colorizer.map(Into::into);
+
+        let raster_colorizer = match raster_colorizer {
+            Some(colorizer) => colorizer,
+            None => geoengine_datatypes::operations::image::RasterColorizer::SingleBand {
+                band: 0,
+                band_colorizer: default_colorizer_gradient::<u8>(),
+            },
+        };
+
+        let query_time = request.time.unwrap_or_else(default_time_from_config).into();
+        let result_descriptor_intersects_query_time = wrapped
+            .result_descriptor
+            .time
+            .bounds
+            .is_none_or(|b| b.intersects(&query_time));
+
+        let result_descriptor_intersects_query_space = wrapped
+            .result_descriptor
+            .spatial_grid
+            .tiling_grid_definition(tiling_spec)
+            .tiling_grid_bounds()
+            .intersects(&query_tiling_pixel_grid.grid_bounds());
+
+        if !result_descriptor_intersects_query_time || !result_descriptor_intersects_query_space {
+            debug!(
+                "WMS request does not intersect data bounds (time: {}, space: {}), returning empty image",
+                result_descriptor_intersects_query_time, result_descriptor_intersects_query_space
+            );
+
+            let empty_image =
+                geoengine_datatypes::operations::image::create_empty_no_data_color_png_bytes(
+                    request.width,
+                    request.height,
+                    raster_colorizer.no_data_color(),
+                )?;
+
+            return Ok((empty_image, CacheHint::max_duration()));
+        }
+
+        debug!("WMS re-scale-project: {:?}", query_tiling_pixel_grid);
+
         let query_rect = RasterQueryRectangle::new(
             query_tiling_pixel_grid.grid_bounds(),
-            request.time.unwrap_or_else(default_time_from_config).into(),
+            query_time,
             attributes,
         );
 
@@ -357,8 +401,9 @@ async fn wms_map_handler<C: ApplicationContext>(
         call_on_generic_raster_processor!(
             processor,
             p =>
-                raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), raster_colorizer.map(Into::into), conn_closed).await
-        ).map_err(error::Error::from)
+                raster_stream_to_png_bytes(p, query_rect, query_ctx, request.width, request.height, request.time.map(Into::into), Some(raster_colorizer), conn_closed).await // TODO: pass raster colorizer here
+        )
+        .map_err(error::Error::from)
     }
 
     match compute_result(req, workflow, &request, app_ctx, session).await {
@@ -731,7 +776,7 @@ mod tests {
         assert_image_equals(test_data!("wms/get_map_ndvi.png"), &image_bytes);
     }
 
-    ///Actix uses serde_urlencoded inside web::Query which does not support this
+    ///Actix uses `serde_urlencoded` inside `web::Query` which does not support this
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn get_map_uppercase(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();

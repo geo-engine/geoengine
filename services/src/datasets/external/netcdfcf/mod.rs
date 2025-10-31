@@ -35,8 +35,8 @@ use geoengine_datatypes::raster::{
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_datatypes::util::canonicalize_subpath;
 use geoengine_datatypes::util::gdal::ResamplingMethod;
-use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::engine::{RasterBandDescriptor, SpatialGridDescriptor};
+use geoengine_operators::engine::{RasterBandDescriptors, TimeDescriptor};
 use geoengine_operators::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
 };
@@ -546,7 +546,7 @@ impl<D: GeoEngineDb> NetCdfCfDataProvider<D> {
             )
             .context(error::CannotParseCrs)?
             .into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(None),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
                 pixel_shape.bounding_box(),
@@ -1601,6 +1601,7 @@ mod tests {
     };
     use geoengine_operators::engine::{
         MultipleRasterSources, RasterBandDescriptors, RasterOperator, SingleRasterSource,
+        TimeDescriptor,
     };
     use geoengine_operators::processing::{
         Interpolation, InterpolationMethod, InterpolationParams, RasterStacker,
@@ -1964,7 +1965,7 @@ mod tests {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
-                time: None,
+                time: TimeDescriptor::new_irregular(None),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((3_580_000.0, 2_370_000.0).into(), 1000.0, -1000.0), // FIXME: move to tiling bounds
                     GridBoundingBox2D::new(
@@ -2099,7 +2100,7 @@ mod tests {
                 data_type: RasterDataType::I16,
                 spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 3035)
                     .into(),
-                time: None,
+                time: TimeDescriptor::new_irregular(None),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((3_580_000.0, 2_370_000.0).into(), 1000.0, -1000.0),
                     GridBoundingBox2D::new(

@@ -1,10 +1,10 @@
 use crate::util::Result;
 use futures::{Stream, ready};
 use geoengine_datatypes::{
-    primitives::{CacheExpiration, CacheHint, RasterQueryRectangle, TimeInstance, TimeInterval},
+    primitives::{CacheExpiration, CacheHint, TimeInstance, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
-        Pixel, RasterTile2D, TilingStrategy,
+        Pixel, RasterTile2D,
     },
 };
 use pin_project::pin_project;
@@ -430,34 +430,6 @@ where
         }
     }
 
-    /// Creates a new `SparseTilesFillAdapter` that fills the gaps of the input stream with empty tiles.
-    /// The input stream must be sorted by `GridIdx` and `TimeInterval`.
-    /// The adaper will fill the gaps within the `query_rect_to_answer` with empty tiles.
-    ///
-    /// # Panics
-    /// If the `query_rect_to_answer` has a different `origin_coordinate` than the `tiling_spec`.
-    ///
-    pub fn new_like_subquery(
-        stream: S,
-        query_rect_to_answer: &RasterQueryRectangle,
-        tiling_strat: TilingStrategy,
-        cache_expiration: FillerTileCacheExpirationStrategy,
-        time_bounds: FillerTimeBounds,
-    ) -> Self {
-        let grid_bounds = tiling_strat
-            .raster_spatial_query_to_tiling_grid_box(query_rect_to_answer.spatial_bounds());
-        Self::new(
-            stream,
-            grid_bounds,
-            query_rect_to_answer.attributes().count(),
-            tiling_strat.geo_transform,
-            tiling_strat.tile_size_in_pixels,
-            cache_expiration,
-            query_rect_to_answer.time_interval(),
-            time_bounds,
-        )
-    }
-
     // TODO: return Result with SparseTilesFillAdapterError and map it to Error in the poll_next method if possible
     #[allow(clippy::too_many_lines, clippy::missing_panics_doc)]
     pub fn next_step(
@@ -702,10 +674,10 @@ where
                 this.sc.current_idx = wrapped_next_idx;
                 this.sc.current_band_idx = wrapped_next_band;
 
-                if this.sc.current_idx_and_band_is_first_in_grid_run() {
-                    if let Some(next_time) = this.sc.next_time_interval_from_stored_tile() {
-                        this.sc.update_current_time(next_time);
-                    }
+                if this.sc.current_idx_and_band_is_first_in_grid_run()
+                    && let Some(next_time) = this.sc.next_time_interval_from_stored_tile()
+                {
+                    this.sc.update_current_time(next_time);
                 }
 
                 Poll::Ready(res)
@@ -804,6 +776,7 @@ where
 /// It can either be a fixed value for all produced tiles, or it can be derived from the surrounding tiles that are not produced by the adapter.
 /// In the latter case it will use the cache expiration of the preceeding tile if it is available, otherwise it will use the cache expiration of the following tile.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum FillerTileCacheExpirationStrategy {
     NoCache,
     FixedValue(CacheExpiration),

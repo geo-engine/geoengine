@@ -2,10 +2,9 @@
 //!
 //! Connects to <https://portal.geobon.org/api/v1/>.
 
-use crate::datasets::external::netcdfcf::{NetCdfOverview, error};
+use crate::datasets::external::netcdfcf::error;
 use crate::error::Result;
 use error::NetCdfCf4DProviderError;
-use geoengine_datatypes::dataset::DataProviderId;
 #[allow(unused_imports)]
 use serde::{Deserialize, Serialize};
 use tracing::debug;
@@ -202,13 +201,6 @@ pub struct EbvDataset {
     pub ebv_class: String,
     pub ebv_name: String,
     pub has_scenario: bool,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct EbvHierarchy {
-    pub provider_id: DataProviderId,
-    pub tree: NetCdfOverview,
 }
 
 #[cfg(test)]

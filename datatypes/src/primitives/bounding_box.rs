@@ -551,6 +551,10 @@ impl AxisAlignedRectangle for BoundingBox2D {
         self.intersection(other)
     }
 
+    fn union(&self, other: &Self) -> Self {
+        self.union(other)
+    }
+
     fn as_bbox(&self) -> BoundingBox2D {
         *self
     }

@@ -1,4 +1,4 @@
-use crate::engine::QueryProcessor;
+use crate::engine::{BoxRasterQueryProcessor, QueryProcessor};
 use crate::error;
 use crate::source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
@@ -9,6 +9,7 @@ use crate::{
     engine::{QueryContext, RasterQueryProcessor},
     error::Error,
 };
+use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{StreamExt, TryFutureExt};
 use gdal::raster::{Buffer, GdalType, RasterBand, RasterCreationOptions};
@@ -24,6 +25,7 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::convert::TryInto;
+use std::fmt::Display;
 use std::path::Path;
 use std::path::PathBuf;
 use tracing::debug;
@@ -35,7 +37,7 @@ use super::{abortable_query_execution, spawn_blocking};
 ///       time series
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_multiband_geotiff_bytes<T, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     mut query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
@@ -213,7 +215,7 @@ where
 }
 
 async fn consume_stream_into_vec<T, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: geoengine_datatypes::primitives::RasterQueryRectangle,
     query_ctx: C,
     tile_limit: Option<usize>,
@@ -239,14 +241,19 @@ where
 }
 
 #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
-pub async fn single_timestep_raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+pub async fn single_timestep_raster_stream_to_geotiff_bytes<
+    G: ToGeoTiffProgressConsumer,
+    T,
+    C: QueryContext + 'static,
+>(
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
+    progress_consumer: G,
 ) -> Result<Vec<u8>>
 where
     T: Pixel + GdalType,
@@ -259,6 +266,7 @@ where
         gdal_tiff_options,
         tile_limit,
         conn_closed,
+        progress_consumer,
     )
     .await?;
 
@@ -275,14 +283,19 @@ where
 }
 
 #[allow(clippy::too_many_arguments)]
-pub async fn raster_stream_to_geotiff_bytes<T, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+pub async fn raster_stream_to_geotiff_bytes<
+    G: ToGeoTiffProgressConsumer,
+    T,
+    C: QueryContext + 'static,
+>(
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
+    progress_consumer: G,
 ) -> Result<Vec<Vec<u8>>>
 where
     T: Pixel + GdalType,
@@ -298,6 +311,7 @@ where
         gdal_tiff_options,
         tile_limit,
         conn_closed,
+        progress_consumer,
     )
     .await?
     .into_iter()
@@ -311,15 +325,16 @@ where
 }
 
 #[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
-pub async fn raster_stream_to_geotiff<P, C: QueryContext + 'static>(
+pub async fn raster_stream_to_geotiff<G: ToGeoTiffProgressConsumer, P, C: QueryContext + 'static>(
     file_path: &Path,
-    processor: Box<dyn RasterQueryProcessor<RasterType = P>>,
+    processor: BoxRasterQueryProcessor<P>,
     query_rect: RasterQueryRectangle,
     mut query_ctx: C,
     gdal_tiff_metadata: GdalGeoTiffDatasetMetadata,
     gdal_tiff_options: GdalGeoTiffOptions,
     tile_limit: Option<usize>,
     conn_closed: BoxFuture<'_, ()>,
+    progress_consumer: G,
 ) -> Result<Vec<GdalLoadingInfoTemporalSlice>>
 where
     P: Pixel + GdalType,
@@ -354,45 +369,50 @@ where
         None
     };
 
-    let dataset_holder: Result<GdalDatasetHolder<P>> =
-        Ok(GdalDatasetHolder::new_with_tiling_strat(
-            tiling_strategy,
-            &file_path,
-            &query_rect,
-            gdal_tiff_metadata,
-            gdal_tiff_options,
-            gdal_config_options,
-        ));
+    let mut dataset_holder: GdalDatasetHolder<P> = GdalDatasetHolder::new_with_tiling_strat(
+        tiling_strategy,
+        &file_path,
+        &query_rect,
+        gdal_tiff_metadata,
+        gdal_tiff_options,
+        gdal_config_options,
+    );
 
-    let tile_stream = processor
+    let mut tile_stream = processor
         .raster_query(query_rect.clone(), &query_ctx)
-        .await?;
+        .await?
+        .enumerate();
 
-    let mut dataset_holder = tile_stream
-        .enumerate()
-        .fold(
-            dataset_holder,
-            move |dataset_holder, (tile_index, tile)| async move {
-                if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
-                    return Err(Error::TileLimitExceeded {
-                        limit: tile_limit.expect("limit exist because it is exceeded"),
-                    });
-                }
+    let tiles_intersecting_qrect =
+        tiling_strategy.num_tiles_intersecting_grid_bounds(query_rect.spatial_bounds());
 
-                let mut dataset_holder = dataset_holder?;
-                let tile = tile?;
+    let mut tile_count = 0;
 
-                let current_interval = tile.time;
+    while let Some((tile_index, tile)) = tile_stream.next().await {
+        if tile_limit.map_or_else(|| false, |limit| tile_index >= limit) {
+            return Err(Error::TileLimitExceeded {
+                limit: tile_limit.expect("limit exist because it is exceeded"),
+            });
+        }
 
-                let dataset_holder =
-                    crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
-                        dataset_holder
-                            .update_intermediate_dataset_from_time_interval(current_interval)?;
-                        Ok(dataset_holder)
-                    })
-                    .await??;
+        tile_count = tile_index;
 
-                crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
+        let tile: geoengine_datatypes::raster::BaseTile<
+            geoengine_datatypes::raster::GridOrEmpty<
+                geoengine_datatypes::raster::GridShape<[usize; 2]>,
+                P,
+            >,
+        > = tile?;
+
+        let current_interval = tile.time;
+
+        dataset_holder = crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
+            dataset_holder.update_intermediate_dataset_from_time_interval(current_interval)?;
+            Ok(dataset_holder)
+        })
+        .await??;
+
+        dataset_holder = crate::util::spawn_blocking(move || -> Result<GdalDatasetHolder<P>> {
                     let raster_band = dataset_holder
                         .intermediate_dataset
                         .as_ref()
@@ -404,10 +424,16 @@ where
                         .write_tile_into_band(tile, raster_band)?;
                     Ok(dataset_holder)
                 })
-                .await?
-            },
-        )
-        .await?;
+                .await??;
+
+        progress_consumer
+            .consume_progress(ToGeoTiffProgress::Processing {
+                tiles_per_timestep: tiles_intersecting_qrect,
+                processed_tiles: tile_index,
+                current_time_step: current_interval,
+            })
+            .await;
+    }
 
     let intermediate_dataset = dataset_holder
         .intermediate_dataset
@@ -425,7 +451,85 @@ where
 
     abortable_query_execution(written, conn_closed, query_abort_trigger).await??;
 
+    progress_consumer
+        .consume_progress(ToGeoTiffProgress::Done {
+            tiles_per_timestep: tiles_intersecting_qrect,
+            processed_tiles: tile_count,
+        })
+        .await;
+
     Ok(result)
+}
+
+#[derive(Copy, Clone, Debug)]
+pub enum ToGeoTiffProgress {
+    Processing {
+        tiles_per_timestep: usize,
+        current_time_step: TimeInterval,
+        processed_tiles: usize,
+    },
+    Done {
+        tiles_per_timestep: usize,
+        processed_tiles: usize,
+    },
+}
+
+impl ToGeoTiffProgress {
+    pub fn percent_done(&self) -> f64 {
+        match *self {
+            Self::Done { .. } => 1.0,
+            Self::Processing { .. } => 0.0,
+        }
+    }
+
+    pub fn percent_done_current_timestep(&self) -> f64 {
+        match *self {
+            Self::Done { .. } => 1.0,
+            Self::Processing {
+                tiles_per_timestep,
+                current_time_step: _,
+                processed_tiles,
+            } => (processed_tiles % tiles_per_timestep) as f64 / tiles_per_timestep as f64,
+        }
+    }
+}
+
+impl Display for ToGeoTiffProgress {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match *self {
+            Self::Done {
+                processed_tiles,
+                tiles_per_timestep,
+            } => write!(
+                f,
+                "Done: Total tiles processed: {processed_tiles}; Tiles per time step: {tiles_per_timestep}",
+            ),
+            Self::Processing {
+                tiles_per_timestep,
+                current_time_step,
+                processed_tiles,
+            } => write!(
+                f,
+                "Processing: Total tiles processed: {}; Tiles per time step: {}; Current {} @ {:.3}%",
+                processed_tiles,
+                tiles_per_timestep,
+                current_time_step,
+                (self.percent_done_current_timestep() * 100.)
+            ),
+        }
+    }
+}
+
+#[async_trait]
+pub trait ToGeoTiffProgressConsumer {
+    async fn consume_progress(&self, status: ToGeoTiffProgress);
+}
+
+#[async_trait]
+impl ToGeoTiffProgressConsumer for () {
+    async fn consume_progress(&self, _status: ToGeoTiffProgress) {
+        // No-op
+    }
 }
 
 const COG_BLOCK_SIZE: &str = "512";
@@ -958,19 +1062,17 @@ mod tests {
     use std::marker::PhantomData;
     use std::ops::Add;
 
-    use crate::engine::{MockExecutionContext, RasterResultDescriptor};
+    use crate::engine::{MockExecutionContext, RasterResultDescriptor, TimeDescriptor};
     use crate::mock::MockRasterSourceProcessor;
     use crate::util::gdal::gdal_open_dataset;
     use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
     use geoengine_datatypes::primitives::{
-        BandSelection, CacheHint, DateTime, Duration, TimeInterval,
+        BandSelection, CacheHint, DateTime, Duration, SpatialPartition2D, TimeInterval,
     };
     use geoengine_datatypes::raster::{Grid, GridBoundingBox2D, RasterDataType};
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::util::{
-        ImageFormat, assert_image_equals, assert_image_equals_with_format,
-    };
+    use geoengine_datatypes::util::{ImageFormat, assert_image_equals_with_format};
 
     use super::*;
 
@@ -1010,6 +1112,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            (),
         )
         .await
         .unwrap();
@@ -1062,13 +1165,15 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            (),
         )
         .await
         .unwrap();
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/geotiff_with_mask_from_stream_compressed.tiff"),
             &bytes,
+            ImageFormat::Tiff,
         );
     }
 
@@ -1108,6 +1213,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            (),
         )
         .await
         .unwrap();
@@ -1160,6 +1266,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            (),
         )
         .await
         .unwrap();
@@ -1214,6 +1321,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            (),
         )
         .await
         .unwrap();
@@ -1223,9 +1331,10 @@ mod tests {
         //     "../test_data/raster/cloud_optimized_geotiff_from_stream_compressed.tiff",
         // );
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/cloud_optimized_geotiff_from_stream_compressed.tiff"),
             &bytes,
+            ImageFormat::Tiff,
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1267,6 +1376,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            (),
         )
         .await
         .unwrap();
@@ -1284,19 +1394,22 @@ mod tests {
         //     );
         // }
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/cloud_optimized_geotiff_timestep_0_from_stream_compressed.tiff"),
             bytes.pop().expect("bytes should have length 3").as_slice(),
+            ImageFormat::Tiff,
         );
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/cloud_optimized_geotiff_timestep_1_from_stream_compressed.tiff"),
             bytes.pop().expect("bytes should have length 3").as_slice(),
+            ImageFormat::Tiff,
         );
 
-        assert_image_equals(
+        assert_image_equals_with_format(
             test_data!("raster/cloud_optimized_geotiff_timestep_2_from_stream_compressed.tiff"),
             bytes.pop().expect("bytes should have length 3").as_slice(),
+            ImageFormat::Tiff,
         );
 
         // TODO: check programmatically that intermediate file is gone
@@ -1338,6 +1451,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            (),
         )
         .await;
 
@@ -1380,10 +1494,64 @@ mod tests {
             },
             Some(1),
             Box::pin(futures::future::pending()),
+            (),
         )
         .await;
 
         assert!(bytes.is_err());
+    }
+
+    #[tokio::test]
+    async fn geotiff_from_stream_in_range_of_window() {
+        let ecx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
+        let ctx = ecx.mock_query_context_test_default();
+
+        let metadata = create_ndvi_meta_data();
+
+        let query_bbox =
+            SpatialPartition2D::new((-180., -66.227_224_576_271_84).into(), (180., -90.).into())
+                .unwrap();
+
+        let query_grid_bounds = metadata
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .tiling_geo_transform()
+            .spatial_to_grid_bounds(&query_bbox);
+
+        let gdal_source = GdalSourceProcessor::<u8> {
+            produced_result_descriptor: metadata.result_descriptor.clone(),
+            tiling_specification: ctx.tiling_specification(),
+            overview_level: 0,
+            meta_data: Box::new(metadata),
+            original_resolution_spatial_grid: None,
+            _phantom_data: PhantomData,
+        };
+
+        let bytes = single_timestep_raster_stream_to_geotiff_bytes(
+            gdal_source.boxed(),
+            RasterQueryRectangle::new(
+                query_grid_bounds,
+                TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+                BandSelection::first(),
+            ),
+            ctx,
+            GdalGeoTiffDatasetMetadata {
+                no_data_value: Some(0.),
+                spatial_reference: SpatialReference::epsg_4326(),
+            },
+            GdalGeoTiffOptions {
+                as_cog: false,
+                compression_num_threads: GdalCompressionNumThreads::AllCpus,
+                force_big_tiff: false,
+            },
+            None,
+            Box::pin(futures::future::pending()),
+            (),
+        )
+        .await;
+
+        assert!(bytes.is_ok());
     }
 
     fn generate_time_intervals(
@@ -1433,6 +1601,9 @@ mod tests {
             },
         ];
 
+        let time_bounds =
+            TimeInterval::new(data[0].time.start(), data.last().unwrap().time.end()).unwrap();
+
         let ecx =
             MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([600, 600].into()));
         let ctx = ecx.mock_query_context_test_default();
@@ -1442,6 +1613,7 @@ mod tests {
             1,
             GridBoundingBox2D::new([-4, -4], [4, 4]).unwrap(),
             GeoTransform::test_default(),
+            TimeDescriptor::new_regular(Some(time_bounds), time_bounds.start(), time_step.into()),
         );
 
         let query_time = TimeInterval::new(data[0].time.start(), data[1].time.end()).unwrap();
@@ -1453,7 +1625,10 @@ mod tests {
         }
         .boxed();
 
-        let query_rectangle = RasterQueryRectangle::new(
+        let query_rectangle: geoengine_datatypes::primitives::QueryRectangle<
+            geoengine_datatypes::raster::GridBoundingBox<[isize; 2]>,
+            BandSelection,
+        > = RasterQueryRectangle::new(
             GridBoundingBox2D::new([-2, -1], [0, 1]).unwrap(),
             query_time,
             BandSelection::first(),
@@ -1480,6 +1655,7 @@ mod tests {
             },
             None,
             Box::pin(futures::future::pending()),
+            (),
         )
         .await
         .unwrap();

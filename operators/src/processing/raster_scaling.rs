@@ -1,7 +1,8 @@
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, Operator, OperatorName, QueryProcessor, RasterBandDescriptor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
@@ -210,7 +211,7 @@ fn create_boxed_processor<Q, P, S>(
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     source: Q,
-) -> Box<dyn RasterQueryProcessor<RasterType = P>>
+) -> BoxRasterQueryProcessor<P>
 where
     Q: RasterQueryProcessor<RasterType = P> + 'static,
     P: Pixel + FromPrimitive + 'static + Default,
@@ -270,6 +271,34 @@ where
 }
 
 #[async_trait]
+impl<Q, P, S> QueryProcessor for RasterTransformationProcessor<Q, P, S>
+where
+    P: Pixel + FromPrimitive + 'static + Default,
+    f64: AsPrimitive<P>,
+    Q: RasterQueryProcessor<RasterType = P> + 'static,
+    S: Send + Sync + 'static + ScalingTransformation<P>,
+{
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = Q::SpatialBounds;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = Q::Selection;
+
+    async fn _query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
+        let src = self.source.raster_query(query, ctx).await?;
+        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
+        Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+}
+
+#[async_trait]
 impl<Q, P, S> RasterQueryProcessor for RasterTransformationProcessor<Q, P, S>
 where
     P: Pixel + FromPrimitive + 'static + Default,
@@ -279,23 +308,13 @@ where
 {
     type RasterType = P;
 
-    async fn raster_query<'a>(
+    async fn time_query<'a>(
         &'a self,
-        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<
-        futures::stream::BoxStream<
-            'a,
-            Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>,
-        >,
-    > {
-        let src = self.source.raster_query(query, ctx).await?;
-        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
-        Ok(rs.boxed())
-    }
-
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        self.source.time_query(query, ctx).await
     }
 }
 
@@ -305,6 +324,7 @@ mod tests {
     use crate::{
         engine::{
             ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
+            TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
@@ -327,7 +347,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),
@@ -438,7 +458,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 tile_size_in_pixels.bounding_box(),

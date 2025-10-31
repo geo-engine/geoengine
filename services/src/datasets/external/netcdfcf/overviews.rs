@@ -774,7 +774,7 @@ mod tests {
         test_data,
         util::gdal::hide_gdal_errors,
     };
-    use geoengine_operators::engine::SpatialGridDescriptor;
+    use geoengine_operators::engine::{SpatialGridDescriptor, TimeDescriptor};
     use geoengine_operators::{
         engine::{RasterBandDescriptors, RasterResultDescriptor},
         source::{
@@ -827,7 +827,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_irregular(None),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((50., 55.).into(), 1., -1.),
                         GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
@@ -1001,7 +1001,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_irregular(None),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((50., 55.).into(), 1., -1.),
                         GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),

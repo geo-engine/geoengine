@@ -202,6 +202,39 @@ impl<const N: usize> TryFrom<[u32; N]> for BandSelection {
 
 impl QueryAttributeSelection for BandSelection {}
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct BandSelectionIter {
+    band_selection: BandSelection,
+    next_index: usize,
+}
+
+impl BandSelectionIter {
+    pub fn new(band_selection: BandSelection) -> Self {
+        Self {
+            band_selection,
+            next_index: 0,
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.next_index = 0;
+    }
+}
+
+impl Iterator for BandSelectionIter {
+    type Item = u32;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.next_index >= self.band_selection.0.len() {
+            return None;
+        }
+
+        let item = self.band_selection.0[self.next_index];
+        self.next_index += 1;
+        Some(item)
+    }
+}
+
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ColumnSelection {}
 

@@ -66,7 +66,7 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    fn to_typed_metadata(&self) -> Result<DatasetMetaData>;
+    fn to_typed_metadata(&self) -> Result<DatasetMetaData<'_>>;
 }
 
 pub struct DatasetMetaData<'m> {
@@ -1240,7 +1240,7 @@ where
             user_permitted_datasets p JOIN datasets d 
                 ON (p.dataset_id = d.id)
         WHERE 
-            d.id = $1 AND p.user_id = $2 AND p.permission = 'Owner';",
+            d.id = $1 AND p.user_id = $2 AND p.max_permission = 'Owner';",
             )
             .await?;
 
@@ -1437,8 +1437,7 @@ mod tests {
 
     use super::*;
     use crate::{
-        contexts::PostgresContext,
-        contexts::{ApplicationContext, SessionContext},
+        contexts::{ApplicationContext, PostgresContext, SessionContext},
         ge_context,
         permissions::PermissionDb,
         users::{UserAuth, UserSession},

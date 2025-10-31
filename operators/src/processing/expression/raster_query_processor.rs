@@ -1,6 +1,9 @@
 use super::RasterExpressionError;
 use crate::{
-    engine::{BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterResultDescriptor},
+    engine::{
+        BoxRasterQueryProcessor, QueryContext, QueryProcessor, RasterQueryProcessor,
+        RasterResultDescriptor,
+    },
     util::Result,
 };
 use async_trait::async_trait;
@@ -117,6 +120,23 @@ where
 }
 
 #[async_trait]
+impl<TO, Tuple> RasterQueryProcessor for ExpressionQueryProcessor<TO, Tuple>
+where
+    TO: Pixel,
+    Tuple: ExpressionTupleProcessor<TO>,
+{
+    type RasterType = TO;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        self.sources.time_query(query, ctx).await
+    }
+}
+
+#[async_trait]
 trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
     type Tuple: Send + 'static;
 
@@ -147,6 +167,12 @@ trait ExpressionTupleProcessor<TO: Pixel>: Send + Sync {
     ) -> Result<GridOrEmpty2D<TO>>;
 
     fn num_bands() -> u32;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>;
 }
 
 #[async_trait]
@@ -228,6 +254,14 @@ where
 
     fn num_bands() -> u32 {
         1
+    }
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        self.raster.time_query(query, ctx).await
     }
 }
 
@@ -348,6 +382,14 @@ where
 
     fn num_bands() -> u32 {
         2
+    }
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        self.raster.time_query(query, ctx).await
     }
 }
 
@@ -503,7 +545,17 @@ macro_rules! impl_expression_tuple_processor {
             fn num_bands() -> u32 {
                 $N
             }
+
+            async fn time_query<'a>(
+                &'a self,
+                query: geoengine_datatypes::primitives::TimeInterval,
+                ctx: &'a dyn QueryContext,
+                ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+                    self.raster.time_query(query, ctx).await
+                }
         }
+
+
     };
 
     // For any input, generate `f64, bool`

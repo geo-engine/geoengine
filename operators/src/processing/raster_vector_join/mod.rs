@@ -415,6 +415,7 @@ mod tests {
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, QueryProcessor, RasterBandDescriptor,
         RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+        TimeDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -799,7 +800,9 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: crate::engine::TimeDescriptor::new_irregular(Some(
+                        TimeInterval::default(),
+                    )),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::test_default(),
                         GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
@@ -820,7 +823,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::test_default(),
                         GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),

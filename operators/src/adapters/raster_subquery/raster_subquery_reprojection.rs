@@ -22,7 +22,7 @@ use geoengine_datatypes::{
     spatial_reference::SpatialReference,
 };
 use geoengine_datatypes::{
-    primitives::{Coordinate2D, TimeInstance},
+    primitives::Coordinate2D,
     raster::{CoordinatePixelAccess, GridIdx2D, Pixel, RasterTile2D, TileInformation},
 };
 use num;
@@ -86,7 +86,7 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // this are the pixels we are interested in
@@ -119,7 +119,7 @@ where
                         .in_spatial_grid
                         .geo_transform()
                         .spatial_to_grid_bounds(&pb),
-                    TimeInterval::new_instant(start_time)?,
+                    time,
                     band_idx.into(),
                 ))),
                 // In some strange cases the reprojection can return an empty box.
@@ -374,26 +374,26 @@ impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::BandSelection,
+        primitives::{BandSelection, TimeStep},
         raster::{
             BoundedGrid, GeoTransform, Grid, GridBoundingBox2D, GridShape, GridShape2D,
-            RasterDataType, SpatialGridDefinition, TilesEqualIgnoringCacheHint,
-            TilingSpecification,
+            RasterDataType, SpatialGridDefinition, TilingSpecification,
         },
-        util::test::TestDefault,
+        util::test::{TestDefault, assert_eq_two_list_of_tiles_u8},
     };
 
     use crate::{
         adapters::RasterSubQueryAdapter,
         engine::{
             MockExecutionContext, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-            SpatialGridDescriptor, WorkflowOperatorPath,
+            SpatialGridDescriptor, TimeDescriptor, WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
     use super::*;
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn identity_projection() {
         let projection = SpatialReference::epsg_4326();
@@ -446,7 +446,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
             spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
                 GeoTransform::new(Coordinate2D::new(0., 2.), 1., -1.),
                 GridShape::new_2d(2, 4).bounding_box(),
@@ -495,12 +495,22 @@ mod tests {
             },
             _phantom_data: PhantomData,
         };
-        let a = RasterSubQueryAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
-        let res = a
-            .map(Result::unwrap)
-            .map(Option::unwrap)
-            .collect::<Vec<_>>()
-            .await;
-        assert!(data.tiles_equal_ignoring_cache_hint(&res));
+
+        let time_stream = qp
+            .time_query(query_rect.time_interval(), &query_ctx)
+            .await
+            .unwrap();
+
+        let a = RasterSubQueryAdapter::new(
+            &qp,
+            query_rect,
+            tiling_strat,
+            &query_ctx,
+            state_gen,
+            time_stream,
+        );
+        let res = a.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq_two_list_of_tiles_u8(&data, &res, false);
     }
 }

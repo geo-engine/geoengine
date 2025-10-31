@@ -41,7 +41,7 @@ use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterResultDescriptor, ResultDescriptor, SpatialGridDescriptor, TypedOperator,
+    RasterResultDescriptor, ResultDescriptor, SpatialGridDescriptor, TimeDescriptor, TypedOperator,
     VectorColumnInfo, VectorOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
@@ -310,10 +310,10 @@ impl ArunaDataProvider {
                     ResourceVariant::Object,
                 )
                 .ok();
-                if let Some(object_ids) = outgoing_objects {
-                    if self.get_verified_dataset_objects(object_ids).await.is_ok() {
-                        verified_datasets.push(dataset);
-                    }
+                if let Some(object_ids) = outgoing_objects
+                    && self.get_verified_dataset_objects(object_ids).await.is_ok()
+                {
+                    verified_datasets.push(dataset);
                 }
             }
         }
@@ -534,7 +534,7 @@ impl ArunaDataProvider {
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
-            time: Some(info.time_interval),
+            time: TimeDescriptor::new_irregular(Some(info.time_interval)),
             spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, shape),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),

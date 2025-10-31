@@ -5,7 +5,7 @@ use crate::adapters::FeatureCollectionChunkMerger;
 use crate::cache::shared_cache::{AsyncCache, SharedCache};
 use crate::engine::{
     CanonicOperatorName, ChunkByteSize, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
+    QueryContext, QueryProcessor, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
     TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::Error;
@@ -15,9 +15,10 @@ use futures::stream::{BoxStream, FusedStream};
 use futures::{Stream, StreamExt, TryStreamExt, ready};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
-    Geometry, QueryAttributeSelection, QueryRectangle, VectorQueryRectangle,
+    BandSelection, Geometry, QueryAttributeSelection, QueryRectangle, RasterQueryRectangle,
+    VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::{Pixel, RasterTile2D};
+use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterTile2D};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use geoengine_datatypes::util::helpers::ge_report;
 use pin_project::{pin_project, pinned_drop};
@@ -293,6 +294,34 @@ where
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
         self.processor.result_descriptor()
+    }
+}
+
+#[async_trait]
+impl<T, P> RasterQueryProcessor
+    for CacheQueryProcessor<
+        P,
+        RasterTile2D<T>,
+        GridBoundingBox2D,
+        BandSelection,
+        RasterResultDescriptor,
+    >
+where
+    P: RasterQueryProcessor<RasterType = T> + Sized,
+    SharedCache: AsyncCache<RasterTile2D<T>>,
+    T: Pixel + Send + Sync + 'static,
+    RasterTile2D<T>: CacheElement<Query = RasterQueryRectangle> + Send + Sync + 'static,
+    <RasterTile2D<T> as CacheElement>::ResultStream:
+        Stream<Item = Result<RasterTile2D<T>, CacheError>> + Send + Sync + 'static,
+{
+    type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        self.processor.time_query(query, ctx).await // TODO: investigate if we can use caching here?
     }
 }
 

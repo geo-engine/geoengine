@@ -293,8 +293,19 @@
         "measurement": "vegetation"
       },
       "time": {
-        "start": "2014-01-01T00:00:00.000Z",
-        "end": "2014-02-01T00:00:00.000Z"
+        "bounds": {
+          "start": "2025-01-01T00:00:00.000Z",
+          "end": "2025-05-01T00:00:00.000Z"
+        },
+        "dimension": {
+          "regular": {
+            "origin": "2025-01-01T00:00:00.000Z",
+            "step": {
+              "granularity": "months",
+              "step": 1
+            }
+          }
+        }
       },
       "spatialGrid": {
         "state": "source",

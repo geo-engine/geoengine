@@ -2,7 +2,7 @@ use super::{
     BoundedGrid, GridBounds, GridContains, GridIdx, GridIntersection, GridShape, GridShapeAccess,
     GridSize, GridSpaceToLinearSpace,
 };
-use crate::{error, util::Result};
+use crate::{error, raster::GridIdx2D, util::Result};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::ops::Add;
@@ -490,6 +490,68 @@ impl core::fmt::Display for GridBoundingBox2D {
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct GridIdx2DIter {
+    pub grid_bounds: GridBoundingBox2D,
+    pub x_pos: isize,
+    pub y_pos: isize,
+}
+
+impl GridIdx2DIter {
+    pub fn new<B>(grid_bounds: &B) -> Self
+    where
+        B: GridBounds<IndexArray = [isize; 2]>,
+    {
+        let grid_bounds =
+            GridBoundingBox2D::new_unchecked(grid_bounds.min_index(), grid_bounds.max_index());
+
+        Self {
+            grid_bounds,
+            x_pos: grid_bounds.x_min(),
+            y_pos: grid_bounds.y_min(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.x_pos = self.grid_bounds.x_min();
+        self.y_pos = self.grid_bounds.y_min();
+    }
+}
+
+impl Iterator for GridIdx2DIter {
+    type Item = GridIdx2D;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.x_pos > self.grid_bounds.x_max() {
+            self.x_pos = self.grid_bounds.x_min();
+            self.y_pos += 1;
+        }
+
+        if self.y_pos > self.grid_bounds.y_max() {
+            return None;
+        }
+
+        let current = GridIdx2D::new_y_x(self.y_pos, self.x_pos);
+
+        self.x_pos += 1;
+
+        Some(current)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.grid_bounds.number_of_elements();
+        (size, Some(size))
+    }
+}
+
+/// Method to generate an `Iterator` over all `GridIdx2D` in `GridBounds`
+pub fn grid_idx_iter_2d<B>(bounds: &B) -> GridIdx2DIter
+where
+    B: GridBounds<IndexArray = [isize; 2]>,
+{
+    GridIdx2DIter::new(bounds)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -656,5 +718,34 @@ mod tests {
         let b = GridBoundingBox::new([3, 2, 1], [69, 666, 42]).unwrap();
         a.extend(&b);
         assert_eq!(a, GridBoundingBox::new([1, 2, 1], [69, 666, 666]).unwrap());
+    }
+
+    #[test]
+    fn grid_idx_iter_2d() {
+        let grid_bounds_2d = GridBoundingBox2D::new_unchecked([-1, 1], [2, 4]);
+        let grid_idx_iter = GridIdx2DIter::new(&grid_bounds_2d);
+        let res: Vec<_> = grid_idx_iter.collect();
+
+        assert_eq!(
+            res,
+            vec![
+                GridIdx2D::new_y_x(-1, 1),
+                GridIdx2D::new_y_x(-1, 2),
+                GridIdx2D::new_y_x(-1, 3),
+                GridIdx2D::new_y_x(-1, 4),
+                GridIdx2D::new_y_x(0, 1),
+                GridIdx2D::new_y_x(0, 2),
+                GridIdx2D::new_y_x(0, 3),
+                GridIdx2D::new_y_x(0, 4),
+                GridIdx2D::new_y_x(1, 1),
+                GridIdx2D::new_y_x(1, 2),
+                GridIdx2D::new_y_x(1, 3),
+                GridIdx2D::new_y_x(1, 4),
+                GridIdx2D::new_y_x(2, 1),
+                GridIdx2D::new_y_x(2, 2),
+                GridIdx2D::new_y_x(2, 3),
+                GridIdx2D::new_y_x(2, 4)
+            ]
+        );
     }
 }

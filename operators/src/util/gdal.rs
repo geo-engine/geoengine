@@ -1,7 +1,8 @@
 use crate::{
     engine::{
         MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
-        SpatialGridDescriptor, StaticMetaData, VectorColumnInfo, VectorResultDescriptor,
+        SpatialGridDescriptor, StaticMetaData, TimeDescriptor, VectorColumnInfo,
+        VectorResultDescriptor,
     },
     error::{self, Error},
     source::{
@@ -49,17 +50,20 @@ pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds() -> GdalMetaDa
 #[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
+    let time_bounds = TimeInterval::new_unchecked(
+        TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+            .expect("it should only be used in tests"),
+        TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+            .expect("it should only be used in tests"),
+    );
+    let time_step = TimeStep {
+        granularity: TimeGranularity::Months,
+        step: 1,
+    };
+
     GdalMetaDataRegular {
-        data_time: TimeInterval::new_unchecked(
-            TimeInstance::from_str("2014-01-01T00:00:00.000Z")
-                .expect("it should only be used in tests"),
-            TimeInstance::from_str("2014-07-01T00:00:00.000Z")
-                .expect("it should only be used in tests"),
-        ),
-        step: TimeStep {
-            granularity: TimeGranularity::Months,
-            step: 1,
-        },
+        data_time: time_bounds,
+        step: time_step,
         time_placeholders: hashmap! {
             "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
                 format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
@@ -91,15 +95,20 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
 
 #[allow(clippy::missing_panics_doc)]
 pub fn create_ndvi_result_descriptor() -> RasterResultDescriptor {
+    let time_bounds = TimeInterval::new_unchecked(
+        TimeInstance::from_str("2014-01-01T00:00:00.000Z")
+            .expect("it should only be used in tests"),
+        TimeInstance::from_str("2014-07-01T00:00:00.000Z")
+            .expect("it should only be used in tests"),
+    );
+    let time_step = TimeStep {
+        granularity: TimeGranularity::Months,
+        step: 1,
+    };
     RasterResultDescriptor {
         data_type: RasterDataType::U8,
         spatial_reference: SpatialReference::epsg_4326().into(),
-        time: Some(TimeInterval::new_unchecked(
-            TimeInstance::from_str("2014-01-01T00:00:00.000Z")
-                .expect("it should only be used in tests"),
-            TimeInstance::from_str("2014-07-01T00:00:00.000Z")
-                .expect("it should only be used in tests"),
-        )),
+        time: TimeDescriptor::new_regular_with_epoch(Some(time_bounds), time_step),
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
             GridBoundingBox2D::new([0, 0], [1799, 3599]).expect("should only be used in tests"),
@@ -121,17 +130,17 @@ pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
     cache_ttl: CacheTtlSeconds,
 ) -> GdalMetaDataRegular {
     let no_data_value = Some(0.); // TODO: is it really 0?
+    let time_bounds = TimeInterval::new_unchecked(
+        TimeInstance::from_str("2014-01-01T00:00:00.000Z").expect("should only be used in tests"),
+        TimeInstance::from_str("2014-07-01T00:00:00.000Z").expect("should only be used in tests"),
+    );
+    let time_step = TimeStep {
+        granularity: TimeGranularity::Months,
+        step: 1,
+    };
     GdalMetaDataRegular {
-        data_time: TimeInterval::new_unchecked(
-            TimeInstance::from_str("2014-01-01T00:00:00.000Z")
-                .expect("should only be used in tests"),
-            TimeInstance::from_str("2014-07-01T00:00:00.000Z")
-                .expect("should only be used in tests"),
-        ),
-        step: TimeStep {
-            granularity: TimeGranularity::Months,
-            step: 1,
-        },
+        data_time: time_bounds,
+        step: time_step,
         time_placeholders: hashmap! {
             "%_START_TIME_%".to_string() => GdalSourceTimePlaceholder {
                 format: DateTimeParseFormat::custom("%Y-%m-%d".to_string()),
@@ -164,12 +173,7 @@ pub fn create_ndvi_meta_data_cropped_to_valid_webmercator_bounds_with_cache_ttl(
                 GridBoundingBox2D::new([-850, -1800], [-845, -1799])
                     .expect("should only be used in tests"),
             ),
-            time: Some(TimeInterval::new_unchecked(
-                TimeInstance::from_str("2014-01-01T00:00:00.000Z")
-                    .expect("should only be used in tests"),
-                TimeInstance::from_str("2014-07-01T00:00:00.000Z")
-                    .expect("should only be used in tests"),
-            )),
+            time: TimeDescriptor::new_regular_with_epoch(Some(time_bounds), time_step),
             bands: vec![RasterBandDescriptor {
                 name: "ndvi".to_string(),
                 measurement: Measurement::Continuous(ContinuousMeasurement {
@@ -206,6 +210,14 @@ pub fn create_ndvi_downscaled_3x_meta_data_with_cache_ttl(
     cache_ttl: CacheTtlSeconds,
 ) -> GdalMetaDataRegular {
     let no_data_value = Some(0.);
+    let time_bounds = TimeInterval::new_unchecked(
+        TimeInstance::from_str("2014-01-01T00:00:00.000Z").expect("should only be used in tests"),
+        TimeInstance::from_str("2014-07-01T00:00:00.000Z").expect("should only be used in tests"),
+    );
+    let time_step = TimeStep {
+        granularity: TimeGranularity::Months,
+        step: 1,
+    };
     GdalMetaDataRegular {
         data_time: TimeInterval::new_unchecked(
             TimeInstance::from_str("2014-01-01T00:00:00.000Z")
@@ -247,12 +259,7 @@ pub fn create_ndvi_downscaled_3x_meta_data_with_cache_ttl(
         result_descriptor: RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: Some(TimeInterval::new_unchecked(
-                TimeInstance::from_str("2014-01-01T00:00:00.000Z")
-                    .expect("it should only be used in tests"),
-                TimeInstance::from_str("2014-07-01T00:00:00.000Z")
-                    .expect("it should only be used in tests"),
-            )),
+            time: TimeDescriptor::new_regular_with_epoch(Some(time_bounds), time_step),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new((-180., 90.).into(), 0.3, -0.3),
                 GridBoundingBox2D::new([0, 0], [599, 1199]).expect("should only be used in tests"),
@@ -413,7 +420,7 @@ pub fn raster_descriptor_from_dataset(
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
-        time: None,
+        time: TimeDescriptor::new_irregular(None), // TODO: can we parse the time info from the dataset?
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             data_geo_transfrom,
             data_shape.bounding_box(),
@@ -442,7 +449,7 @@ pub fn raster_descriptor_from_dataset_and_sref(
     Ok(RasterResultDescriptor {
         data_type,
         spatial_reference: spatial_ref.into(),
-        time: None,
+        time: TimeDescriptor::new_irregular(None), // TODO: can we parse the time info from the dataset?
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             data_geo_transfrom,
             data_shape.bounding_box(),

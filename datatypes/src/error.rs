@@ -18,11 +18,11 @@ pub trait ErrorSource: std::error::Error + Send + Sync + Any + 'static + AsError
         Box::new(self)
     }
 
-    fn into_any_arc(self: Arc<Self>) -> Arc<(dyn Any + Send + Sync)>;
+    fn into_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync>;
 }
 
 impl ErrorSource for dyn std::error::Error + Send + Sync + 'static {
-    fn into_any_arc(self: Arc<Self>) -> Arc<(dyn Any + Send + Sync)> {
+    fn into_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
         Arc::new(self)
     }
 }
@@ -31,7 +31,7 @@ impl<T> ErrorSource for T
 where
     T: std::error::Error + Send + Sync + 'static,
 {
-    fn into_any_arc(self: Arc<Self>) -> Arc<(dyn Any + Send + Sync)> {
+    fn into_any_arc(self: Arc<Self>) -> Arc<dyn Any + Send + Sync> {
         self
     }
 }

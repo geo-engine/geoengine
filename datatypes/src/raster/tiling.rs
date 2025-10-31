@@ -4,7 +4,7 @@ use super::{
 };
 use crate::{
     primitives::{Coordinate2D, SpatialPartition2D, SpatialPartitioned},
-    raster::GridBounds,
+    raster::{GridBounds, GridIdx2DIter},
     util::test::TestDefault,
 };
 use serde::{Deserialize, Serialize};
@@ -85,6 +85,21 @@ impl TilingStrategy {
         GridBoundingBox2D::new_unchecked(start, end)
     }
 
+    pub fn num_tiles_intersecting_partition(&self, partition: SpatialPartition2D) -> usize {
+        let grid_bounds = self.geo_transform.spatial_to_grid_bounds(&partition);
+        self.num_tiles_intersecting_grid_bounds(grid_bounds)
+    }
+
+    pub fn num_tiles_intersecting_grid_bounds(&self, grid_bounds: GridBoundingBox2D) -> usize {
+        let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
+
+        let GridIdx([upper_left_tile_y, upper_left_tile_x]) = tile_bounds.min_index();
+        let GridIdx([lower_right_tile_y, lower_right_tile_x]) = tile_bounds.max_index();
+
+        (((lower_right_tile_y - upper_left_tile_y) + 1)
+            * ((lower_right_tile_x - upper_left_tile_x) + 1)) as usize
+    }
+
     pub fn global_pixel_grid_bounds_to_tile_grid_bounds(
         &self,
         global_pixel_grid_bounds: GridBoundingBox2D,
@@ -121,26 +136,20 @@ impl TilingStrategy {
         // TODO: indicate that this uses pixel bounds!
         &self,
         grid_bounds: GridBoundingBox2D,
-    ) -> impl Iterator<Item = GridIdx2D> + use<> {
+    ) -> GridIdx2DIter {
         let tile_bounds = self.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
 
-        let y_range = tile_bounds.y_min()..=tile_bounds.y_max();
-        let x_range = tile_bounds.x_min()..=tile_bounds.x_max();
-
-        y_range.flat_map(move |y| x_range.clone().map(move |x| [y, x].into()))
+        GridIdx2DIter::new(&tile_bounds)
     }
 
     /// generates the tile information for the tiles intersecting the bounding box
     /// the iterator moves once along the x-axis and then increases the y-axis
-    pub fn tile_information_iterator_from_grid_bounds(
+    pub fn tile_information_iterator_from_pixel_bounds(
         // TODO: indicate that this uses pixel bounds!
         &self,
         grid_bounds: GridBoundingBox2D,
-    ) -> impl Iterator<Item = TileInformation> + use<> {
-        let tile_pixel_size = self.tile_size_in_pixels;
-        let geo_transform = self.geo_transform;
-        self.tile_idx_iterator_from_grid_bounds(grid_bounds)
-            .map(move |idx| TileInformation::new(idx, tile_pixel_size, geo_transform))
+    ) -> TileInformationIter {
+        TileInformationIter::new_with_pixel_bounds(*self, &grid_bounds)
     }
 }
 
@@ -253,6 +262,53 @@ impl SpatialPartitioned for TileInformation {
     }
 }
 
+#[derive(Clone, Debug, Serialize)]
+pub struct TileInformationIter {
+    tile_idx_iter: GridIdx2DIter,
+    tiling_strategy: TilingStrategy,
+}
+
+impl TileInformationIter {
+    pub fn new_with_pixel_bounds(
+        tiling_strategy: TilingStrategy,
+        pixel_bounds: &GridBoundingBox2D,
+    ) -> Self {
+        let tile_idx_iter = tiling_strategy.tile_idx_iterator_from_grid_bounds(*pixel_bounds);
+
+        Self {
+            tile_idx_iter,
+            tiling_strategy,
+        }
+    }
+
+    /// Access the used `TilingStategy`.
+    pub fn tiling_strategy(&self) -> TilingStrategy {
+        self.tiling_strategy
+    }
+
+    pub fn reset(&mut self) {
+        self.tile_idx_iter.reset();
+    }
+}
+
+impl Iterator for TileInformationIter {
+    type Item = TileInformation;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        self.tile_idx_iter.next().map(|idx| {
+            TileInformation::new(
+                idx,
+                self.tiling_strategy.tile_size_in_pixels,
+                self.tiling_strategy.geo_transform,
+            )
+        })
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        self.tile_idx_iter.size_hint()
+    }
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -285,7 +341,7 @@ mod tests {
         let grid_bounds = GridBoundingBox2D::new_unchecked(ul_idx, lr_idx);
 
         let tiles = strat
-            .tile_information_iterator_from_grid_bounds(grid_bounds)
+            .tile_information_iterator_from_pixel_bounds(grid_bounds)
             .collect::<Vec<_>>();
 
         assert_eq!(tiles.len(), 2);

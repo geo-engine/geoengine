@@ -135,14 +135,13 @@ where
             return MaskedGrid::from(n.inner_grid).into();
         }
 
-        if let Some(ref no_data_value) = n.no_data_value {
-            if n.inner_grid
+        if let Some(ref no_data_value) = n.no_data_value
+            && n.inner_grid
                 .data
                 .iter()
                 .all(|p| equals_or_both_nan(p, no_data_value))
-            {
-                return EmptyGrid::new(n.inner_grid.shape).into();
-            }
+        {
+            return EmptyGrid::new(n.inner_grid.shape).into();
         }
 
         MaskedGrid::from(n).into()

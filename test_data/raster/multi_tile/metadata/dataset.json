@@ -17,7 +17,19 @@
       "resultDescriptor": {
         "dataType": "U16",
         "spatialReference": "EPSG:4326",
-        "time": null,
+        "time": {
+          "bounds": {
+            "start": "2025-01-01T00:00:00.000Z",
+            "end": "2025-05-01T00:00:00.000Z"
+          },
+          "dimension": {
+            "origin": "2014-01-01T00:00:00.000Z",
+            "step": {
+              "granularity": "months",
+              "step": 1
+            }
+          }
+        },
         "spatialGrid": {
           "spatialGrid": {
             "geoTransform": {

@@ -1037,7 +1037,7 @@ impl<'de> Deserialize<'de> for SerializableClasses {
         let tree: BTreeMap<String, String> = Deserialize::deserialize(deserializer)?;
         let classes: Result<BTreeMap<u8, String>, _> = tree
             .into_iter()
-            .map(|(k, v)| (k.parse::<u8>().map(|x| (x, v))))
+            .map(|(k, v)| k.parse::<u8>().map(|x| (x, v)))
             .collect();
         Ok(SerializableClasses(
             classes.map_err(serde::de::Error::custom)?,

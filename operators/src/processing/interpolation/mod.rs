@@ -19,9 +19,7 @@ use futures::future::BoxFuture;
 use futures::stream::BoxStream;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{BandSelection, CacheHint, Coordinate2D};
-use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
-};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution, TimeInterval};
 use geoengine_datatypes::raster::{
     Bilinear, ChangeGridBounds, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
     InterpolationAlgorithm, NearestNeighbor, Pixel, RasterTile2D, TileInformation,
@@ -344,12 +342,7 @@ where
 #[async_trait]
 impl<Q, P, I> QueryProcessor for InterploationProcessor<Q, P, I>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
     P: Pixel,
     I: InterpolationAlgorithm<GridBoundingBox2D, P>,
 {
@@ -395,20 +388,39 @@ where
             _phantom_pixel_type: PhantomData,
         };
 
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+        let time_stream = self.time_query(query.time_interval(), ctx).await?;
+
+        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
             &self.source,
             query,
             tiling_strategy,
             ctx,
             sub_query,
-        )
-        .filter_and_fill(
-            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-        ))
+            time_stream,
+        )))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.out_result_descriptor
+    }
+}
+
+#[async_trait]
+impl<Q, P, I> RasterQueryProcessor for InterploationProcessor<Q, P, I>
+where
+    P: Pixel,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
+    I: InterpolationAlgorithm<GridBoundingBox2D, P>,
+{
+    type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        self.source.time_query(query, ctx).await
     }
 }
 
@@ -457,7 +469,7 @@ where
         &self,
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         // enlarge the spatial bounds in order to have the neighbor pixels for the interpolation
@@ -483,7 +495,7 @@ where
 
         Ok(Some(RasterQueryRectangle::new(
             enlarged_input_pixel_bounds,
-            TimeInterval::new_instant(start_time)?,
+            time,
             BandSelection::new_single(band_idx),
         )))
     }
@@ -659,7 +671,9 @@ mod tests {
     use super::*;
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval},
+        primitives::{
+            Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval, TimeStep,
+        },
         raster::{
             Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, RenameBands, TileInformation,
             TilingSpecification,
@@ -671,7 +685,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, SpatialGridDescriptor,
+            RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -835,19 +849,30 @@ mod tests {
             ),
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::I8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(
+                    TimeInterval::new(
+                        raster_tiles.first().unwrap().time.start(),
+                        raster_tiles.last().unwrap().time.end(),
+                    )
+                    .unwrap(),
+                ),
+                TimeStep::millis(10),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
+                GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::I8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),
-                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
-                    ),
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed()

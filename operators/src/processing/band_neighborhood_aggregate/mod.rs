@@ -4,9 +4,10 @@ use std::task::{Context, Poll};
 
 use crate::adapters::RasterStreamExt;
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    ResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 
 use crate::optimization::OptimizationError;
@@ -14,9 +15,10 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{FutureExt, Stream};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution};
+use geoengine_datatypes::primitives::{{BandSelection, RasterQueryRectangle, SpatialResolution}};
 use geoengine_datatypes::raster::{
-    GridIdx2D, GridIndexAccess, MapElements, MapIndexedElements, RasterDataType, RasterTile2D,
+    GridBoundingBox2D, GridIdx2D, GridIndexAccess, MapElements, MapIndexedElements, RasterDataType,
+    RasterTile2D,
 };
 use pin_project::pin_project;
 use serde::{Deserialize, Serialize};
@@ -205,14 +207,14 @@ impl InitializedRasterOperator for InitializedBandNeighborhoodAggregate {
 }
 
 pub(crate) struct BandNeighborhoodAggregateProcessor {
-    source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
+    source: BoxRasterQueryProcessor<f64>,
     result_descriptor: RasterResultDescriptor,
     aggregate: NeighborhoodAggregate,
 }
 
 impl BandNeighborhoodAggregateProcessor {
     pub fn new(
-        source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
+        source: BoxRasterQueryProcessor<f64>,
         result_descriptor: RasterResultDescriptor,
         aggregate: NeighborhoodAggregate,
     ) -> Self {
@@ -225,10 +227,13 @@ impl BandNeighborhoodAggregateProcessor {
 }
 
 #[async_trait]
-impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
-    type RasterType = f64;
+impl QueryProcessor for BandNeighborhoodAggregateProcessor {
+    type Output = RasterTile2D<f64>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
 
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -283,8 +288,21 @@ impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
         }
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl RasterQueryProcessor for BandNeighborhoodAggregateProcessor {
+    type RasterType = f64;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        self.source.time_query(query, ctx).await
     }
 }
 
@@ -761,14 +779,16 @@ impl Accu for MovingAverageAccu {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{BandSelection, CacheHint, TimeInterval},
+        primitives::{BandSelection, CacheHint, TimeInterval, TimeStep},
         raster::{Grid, GridBoundingBox2D, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
     use crate::{
-        engine::{MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor},
+        engine::{
+            MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor,
+        },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
@@ -1194,7 +1214,16 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        Some(
+                            TimeInterval::new(
+                                data.first().unwrap().time.start(),
+                                data.last().unwrap().time.end(),
+                            )
+                            .unwrap(),
+                        ),
+                        TimeStep::millis(5),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
@@ -1337,7 +1366,16 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        Some(
+                            TimeInterval::new(
+                                data.first().unwrap().time.start(),
+                                data.last().unwrap().time.end(),
+                            )
+                            .unwrap(),
+                        ),
+                        TimeStep::millis(5),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),

@@ -1,5 +1,5 @@
 use super::abortable_query_execution;
-use crate::engine::{QueryAbortTrigger, QueryContext, QueryProcessor, RasterQueryProcessor};
+use crate::engine::{BoxRasterQueryProcessor, QueryAbortTrigger, QueryContext, QueryProcessor};
 use crate::util::Result;
 use futures::TryStreamExt;
 use futures::{StreamExt, future::BoxFuture};
@@ -20,7 +20,7 @@ use tracing::{Level, span};
 /// Panics if not three bands were queried.
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     mut query_ctx: C,
     width: u32,
@@ -116,7 +116,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
 #[allow(clippy::too_many_arguments)]
 async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
     width: u32,
@@ -154,7 +154,7 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
 
 #[allow(clippy::too_many_arguments)]
 async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
     width: u32,
@@ -341,7 +341,7 @@ pub enum PngCreationError {
 mod tests {
     use std::marker::PhantomData;
 
-    use crate::engine::MockExecutionContext;
+    use crate::engine::{MockExecutionContext, RasterQueryProcessor};
     use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
     use geoengine_datatypes::primitives::{DateTime, TimeInstance};
     use geoengine_datatypes::{

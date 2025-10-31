@@ -15,9 +15,7 @@ use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::primitives::{
     BandSelection, CacheHint, Coordinate2D, find_next_best_overview_level_resolution,
 };
-use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialResolution, TimeInstance, TimeInterval,
-};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution, TimeInterval};
 use geoengine_datatypes::raster::{
     ChangeGridBounds, GeoTransform, GridBoundingBox2D, GridContains, GridIdx2D, GridIndexAccess,
     GridOrEmpty, Pixel, RasterTile2D, TileInformation, TilingSpecification,
@@ -308,14 +306,26 @@ where
 }
 
 #[async_trait]
+impl<Q, P> RasterQueryProcessor for DownsampleProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+{
+    type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        self.source.time_query(query, ctx).await
+    }
+}
+
+#[async_trait]
 impl<Q, P> QueryProcessor for DownsampleProcessor<Q, P>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
@@ -354,16 +364,16 @@ where
             _phantom_pixel_type: PhantomData,
         };
 
-        Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+        let time_stream = self.time_query(query.time_interval(), ctx).await?;
+
+        Ok(Box::pin(RasterSubQueryAdapter::<'a, P, _, _, _>::new(
             &self.source,
             query,
             tiling_strategy,
             ctx,
             sub_query,
-        )
-        .filter_and_fill(
-            crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-        ))
+            time_stream,
+        )))
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -414,7 +424,7 @@ where
         &self,
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let out_tile_pixel_bounds = tile_info.global_pixel_bounds();
@@ -429,7 +439,7 @@ where
 
         Ok(Some(RasterQueryRectangle::new(
             input_pixel_bounds,
-            TimeInterval::new_instant(start_time)?,
+            time,
             BandSelection::new_single(band_idx),
         )))
     }
@@ -582,9 +592,11 @@ mod tests {
     use super::*;
     use crate::engine::{
         ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
+        TimeDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
+    use geoengine_datatypes::primitives::TimeStep;
     use geoengine_datatypes::raster::{Grid, GridShape2D, RasterDataType};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -696,7 +708,16 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(
+                    TimeInterval::new(
+                        data.first().unwrap().time.start(),
+                        data.last().unwrap().time.end(),
+                    )
+                    .unwrap(),
+                ),
+                TimeStep::millis(5),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 7, 0, 7).unwrap(),
@@ -929,7 +950,16 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(
+                    TimeInterval::new(
+                        data.first().unwrap().time.start(),
+                        data.last().unwrap().time.end(),
+                    )
+                    .unwrap(),
+                ),
+                TimeStep::millis(5),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
                 GridBoundingBox2D::new_min_max(0, 8, 0, 8).unwrap(),

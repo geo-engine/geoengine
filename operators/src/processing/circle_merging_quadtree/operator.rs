@@ -36,8 +36,9 @@ use super::quadtree::CircleMergingQuadtree;
 #[derive(Debug, Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct VisualPointClusteringParams {
-    pub min_radius: f64,
-    pub delta: f64,
+    pub min_radius_px: f64,
+    pub delta_px: f64,
+    pub resolution: f64,
     radius_column: String,
     count_column: String,
     column_aggregates: HashMap<String, AttributeAggregateDef>,
@@ -68,17 +69,24 @@ impl VectorOperator for VisualPointClustering {
         context: &dyn ExecutionContext,
     ) -> Result<Box<dyn InitializedVectorOperator>> {
         ensure!(
-            self.params.min_radius > 0.0,
+            self.params.min_radius_px > 0.0,
             error::InputMustBeGreaterThanZero {
                 scope: "VisualPointClustering",
-                name: "min_radius"
+                name: "minRadius"
             }
         );
         ensure!(
-            self.params.delta >= 0.0,
+            self.params.delta_px >= 0.0,
             error::InputMustBeZeroOrPositive {
                 scope: "VisualPointClustering",
-                name: "delta"
+                name: "deltaPx"
+            }
+        );
+        ensure!(
+            self.params.resolution >= 0.0,
+            error::InputMustBeZeroOrPositive {
+                scope: "VisualPointClustering",
+                name: "resolution"
             }
         );
         ensure!(!self.params.radius_column.is_empty(), error::EmptyInput);
@@ -89,7 +97,7 @@ impl VectorOperator for VisualPointClustering {
 
         let name = CanonicOperatorName::from(&self);
 
-        let radius_model = LogScaledRadius::new(self.params.min_radius, self.params.delta)?;
+        let radius_model = LogScaledRadius::new(self.params.min_radius_px, self.params.delta_px)?;
 
         let initialized_sources = self
             .sources
@@ -190,6 +198,7 @@ impl VectorOperator for VisualPointClustering {
             radius_column: self.params.radius_column,
             count_column: self.params.count_column,
             attribute_mapping: self.params.column_aggregates,
+            resolution: self.params.resolution,
         }
         .boxed())
     }
@@ -207,6 +216,7 @@ pub struct InitializedVisualPointClustering {
     radius_column: String,
     count_column: String,
     attribute_mapping: HashMap<String, AttributeAggregateDef>,
+    resolution: f64,
 }
 
 impl InitializedVectorOperator for InitializedVisualPointClustering {
@@ -221,6 +231,7 @@ impl InitializedVectorOperator for InitializedVisualPointClustering {
                         self.count_column.clone(),
                         self.result_descriptor.clone(),
                         self.attribute_mapping.clone(),
+                        self.resolution,
                     )
                     .boxed(),
                 ))
@@ -277,6 +288,7 @@ pub struct VisualPointClusteringProcessor {
     count_column: String,
     result_descriptor: VectorResultDescriptor,
     attribute_mapping: HashMap<String, AttributeAggregateDef>,
+    resolution: f64,
 }
 
 impl VisualPointClusteringProcessor {
@@ -287,6 +299,7 @@ impl VisualPointClusteringProcessor {
         count_column: String,
         result_descriptor: VectorResultDescriptor,
         attribute_mapping: HashMap<String, AttributeAggregateDef>,
+        resolution: f64,
     ) -> Self {
         Self {
             source,
@@ -295,6 +308,7 @@ impl VisualPointClusteringProcessor {
             count_column,
             result_descriptor,
             attribute_mapping,
+            resolution,
         }
     }
 
@@ -304,6 +318,7 @@ impl VisualPointClusteringProcessor {
         count_column: &str,
         columns: &HashMap<String, FeatureDataType>,
         cache_hint: CacheHint,
+        resolution: f64,
     ) -> Result<MultiPointCollection> {
         let mut builder = MultiPointCollection::builder();
 
@@ -322,7 +337,7 @@ impl VisualPointClusteringProcessor {
 
             builder.push_data(
                 radius_column,
-                FeatureDataValue::Float(circle_of_points.circle.radius()),
+                FeatureDataValue::Float(circle_of_points.circle.radius() / resolution),
             )?;
             builder.push_data(
                 count_column,
@@ -411,7 +426,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
             .iter()
             .map(|(name, column_info)| (name.clone(), column_info.data_type))
             .collect();
-        let scaled_radius_model = self.radius_model;
+        let scaled_radius_model = self.radius_model.with_scaled_radii(self.resolution)?;
 
         let initial_grid_fold_state = Result::<GridFoldState>::Ok(GridFoldState {
             grid: Grid::new(query.spatial_bounds().spatial_bounds(), scaled_radius_model),
@@ -504,6 +519,7 @@ impl QueryProcessor for VisualPointClusteringProcessor {
                 &self.count_column,
                 &column_schema,
                 cache_hint,
+                self.resolution,
             )
         });
 
@@ -543,8 +559,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius: 8.,
-                delta: 1.,
+                min_radius_px: 8.,
+                delta_px: 1.,
+                resolution: 0.1,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: Default::default(),
@@ -590,7 +607,7 @@ mod tests {
                         ("count", FeatureData::Int(vec![9, 1])),
                         (
                             "radius",
-                            FeatureData::Float(vec![10.197_224_577_336_22, 8.])
+                            FeatureData::Float(vec![10.197_224_577_336_218, 8.])
                         )
                     ],
                 )
@@ -616,8 +633,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius: 8.,
-                delta: 1.,
+                min_radius_px: 8.,
+                delta_px: 1.,
+                resolution: 0.1,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -673,7 +691,7 @@ mod tests {
                         ("count", FeatureData::Int(vec![9, 1])),
                         (
                             "radius",
-                            FeatureData::Float(vec![10.197_224_577_336_22, 8.])
+                            FeatureData::Float(vec![10.197_224_577_336_218, 8.])
                         ),
                         ("bar", FeatureData::Float(vec![5., 10.]))
                     ],
@@ -700,8 +718,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius: 8.,
-                delta: 1.,
+                min_radius_px: 8.,
+                delta_px: 1.,
+                resolution: 0.1,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -792,8 +811,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius: 8.,
-                delta: 1.,
+                min_radius_px: 8.,
+                delta_px: 1.,
+                resolution: 0.1,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(
@@ -899,8 +919,9 @@ mod tests {
 
         let operator = VisualPointClustering {
             params: VisualPointClusteringParams {
-                min_radius: 8.,
-                delta: 1.,
+                min_radius_px: 8.,
+                delta_px: 1.,
+                resolution: 0.1,
                 radius_column: "radius".to_string(),
                 count_column: "count".to_string(),
                 column_aggregates: [(

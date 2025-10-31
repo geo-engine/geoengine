@@ -1,7 +1,7 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSingleRasterOrVectorOperator, InitializedSources, InitializedVectorOperator,
-    Operator, OperatorName, QueryContext, RasterOperator, RasterQueryProcessor,
+    Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
     RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource,
     TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
@@ -526,19 +526,22 @@ where
 }
 
 #[async_trait]
-impl<Q, P, Shift> RasterQueryProcessor for RasterTimeShiftProcessor<Q, P, Shift>
+impl<Q, P, Shift> QueryProcessor for RasterTimeShiftProcessor<Q, P, Shift>
 where
     Q: RasterQueryProcessor<RasterType = P>,
     P: Pixel,
     Shift: TimeShiftOperation,
 {
-    type RasterType = P;
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = Q::SpatialBounds;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = Q::Selection;
 
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>> {
+    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let (time_interval, state) = self.shift.shift(query.time_interval())?;
         let query = query.select_time_interval(time_interval);
         let stream = self.processor.raster_query(query, ctx).await?;
@@ -555,8 +558,36 @@ where
         Ok(Box::pin(stream))
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl<Q, P, Shift> RasterQueryProcessor for RasterTimeShiftProcessor<Q, P, Shift>
+where
+    P: Pixel,
+    Q: RasterQueryProcessor<RasterType = P>,
+    Shift: TimeShiftOperation,
+{
+    type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+        let (time_interval, state) = self.shift.shift(query)?;
+        let stream = self.processor.time_query(time_interval, ctx).await?;
+
+        let stream = stream
+            .map(move |ti| {
+                // reverse time shift for results
+                ti.and_then(|t| self.shift.reverse_shift(t, state).map_err(Into::into)) // TODO: maybe we need a time_query error...
+            })
+            .boxed();
+
+        Ok(stream)
     }
 }
 
@@ -567,7 +598,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, SingleRasterSource,
-            SpatialGridDescriptor,
+            SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams, RasterStacker, RasterStackerParams},
@@ -881,7 +912,13 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
+                )),
+                TimeStep::years(1),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
                 GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1057,7 +1094,13 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(
+                    DateTime::new_utc(2010, 1, 1, 0, 0, 0),
+                    DateTime::new_utc(2013, 1, 1, 0, 0, 0),
+                )),
+                TimeStep::years(1),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([-3, 0], [0, 4]).unwrap(),

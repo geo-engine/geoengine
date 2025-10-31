@@ -61,7 +61,7 @@ pub fn downcast_dyn_array_builder<T: Any>(array: &dyn ArrayBuilder) -> &T {
 
 /// Helper function to calculate the padded byte size of a buffer
 pub fn padded_buffer_size(size: usize, padding: usize) -> usize {
-    if size % padding != 0 {
+    if !size.is_multiple_of(padding) {
         return ((size / padding) + 1) * padding;
     }
     size

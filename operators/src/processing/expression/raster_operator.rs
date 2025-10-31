@@ -247,6 +247,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         MockExecutionContext, MultipleRasterSources, QueryProcessor, SpatialGridDescriptor,
+        TimeDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::{RasterStacker, RasterStackerParams};
@@ -885,7 +886,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
                         GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),

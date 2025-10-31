@@ -1,7 +1,7 @@
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedRasterOperator,
-    InitializedSources, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, QueryProcessor, RasterQueryProcessor, SingleRasterSource,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedPlotOperator,
+    InitializedRasterOperator, InitializedSources, Operator, OperatorName, PlotOperator,
+    PlotQueryProcessor, PlotResultDescriptor, QueryContext, QueryProcessor, SingleRasterSource,
     TypedPlotQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
@@ -140,7 +140,7 @@ impl InitializedPlotOperator for InitializedMeanRasterPixelValuesOverTime {
 
 /// A query processor that calculates the `TemporalRasterMeanPlot` about its input.
 pub struct MeanRasterPixelValuesOverTimeQueryProcessor<P: Pixel> {
-    raster: Box<dyn RasterQueryProcessor<RasterType = P>>,
+    raster: BoxRasterQueryProcessor<P>,
     time_position: MeanRasterPixelValuesOverTimePosition,
     measurement: Measurement,
     draw_area: bool,
@@ -281,7 +281,7 @@ mod tests {
     use crate::{
         engine::{
             ChunkByteSize, MockExecutionContext, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, SpatialGridDescriptor,
+            RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
         },
         source::GdalSource,
     };
@@ -456,19 +456,28 @@ mod tests {
             ));
         }
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            // TODO: find out if this can handle regular time as well
+            time: TimeDescriptor::new_irregular(Some(
+                TimeInterval::new(
+                    tiles.first().unwrap().time.start(),
+                    tiles.last().unwrap().time.end(),
+                )
+                .unwrap(),
+            )),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridShape2D::new_2d(3, 2).bounding_box(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                        GridShape2D::new_2d(3, 2).bounding_box(),
-                    ),
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed()

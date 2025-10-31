@@ -2,9 +2,9 @@ use crate::adapters::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
 };
 use crate::engine::{
-    CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, SourceOperator,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator, OperatorData,
+    OperatorName, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError};
 use crate::processing::{
@@ -14,12 +14,15 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{CacheExpiration, TimeInstance};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialResolution};
-use geoengine_datatypes::raster::{
-    GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
-    TilingSpecification,
+use geoengine_datatypes::primitives::{
+    BandSelection, CacheExpiration, RasterQueryRectangle, SpatialResolution, TimeFilledItem,
+    TimeInstance, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
 };
+use geoengine_datatypes::raster::{
+    GridBoundingBox2D, GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel,
+    RasterTile2D, TilingSpecification,
+};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
@@ -103,17 +106,20 @@ where
 }
 
 #[async_trait]
-impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
+impl<T> QueryProcessor for MockRasterSourceProcessor<T>
 where
     T: Pixel,
 {
-    type RasterType = T;
-    async fn raster_query<'a>(
+    type Output = RasterTile2D<T>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
+
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<crate::util::Result<RasterTile2D<Self::RasterType>>>>
-    {
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
         let mut known_time_start: Option<TimeInstance> = None;
         let mut known_time_end: Option<TimeInstance> = None;
         let qt = query.time_interval();
@@ -183,8 +189,43 @@ where
         .boxed())
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
+where
+    T: Pixel,
+{
+    type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        let unique_times = self
+            .data
+            .iter()
+            .map(|tile| tile.time)
+            .unique_by(|t| *t)
+            .filter(move |t| t.intersects(&query))
+            .map(Ok);
+
+        let times = match self.result_descriptor.time.dimension {
+            geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                let times = unique_times.try_time_irregular_range_fill(query.time());
+                stream::iter(times).boxed()
+            }
+            geoengine_datatypes::primitives::TimeDimension::Regular(regular_dim) => {
+                let times = unique_times.try_time_regular_range_fill(regular_dim, query.time());
+                stream::iter(times).boxed()
+            }
+        };
+
+        Ok(times)
     }
 }
 
@@ -305,7 +346,7 @@ pub struct InitializedMockRasterSource<T: Pixel> {
 
 impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T>
 where
-    TypedRasterQueryProcessor: From<std::boxed::Box<dyn RasterQueryProcessor<RasterType = T>>>,
+    TypedRasterQueryProcessor: From<BoxRasterQueryProcessor<T>>,
     SourceOperator<MockRasterSourceParams<T>>: RasterOperator,
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
@@ -372,8 +413,9 @@ mod tests {
     use super::*;
     use crate::engine::{
         MockExecutionContext, QueryProcessor, RasterBandDescriptors, SpatialGridDescriptor,
+        TimeDescriptor,
     };
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval, TimeStep};
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, MaskedGrid, RasterDataType,
         RasterProperties, TileInformation,
@@ -406,7 +448,7 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., 0.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 2).bounding_box(),
@@ -463,7 +505,7 @@ mod tests {
                 "resultDescriptor": {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
-                    "time": null,
+                    "time": {"bounds": {"start": -8_334_601_228_800_000_i64, "end": 8_210_266_876_799_999_i64}, "dimension": "irregular"} ,
                         "spatialGrid": {
                             "spatialGrid": {
                             "geoTransform": {
@@ -568,7 +610,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        Some(TimeInterval::new_unchecked(1, 3)),
+                        TimeStep::millis(1),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),

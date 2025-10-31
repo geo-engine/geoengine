@@ -1180,3 +1180,113 @@ CREATE TABLE quota_log (
 );
 
 CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
+
+
+-- Data
+
+INSERT INTO geoengine (clear_database_on_start, database_version) VALUES (
+    FALSE, '0015_log_quota'
+);
+
+INSERT INTO layer_collections (
+    id,
+    name,
+    description,
+    properties
+)
+VALUES (
+    '05102bb3-a855-4a37-8a8a-30026a91fef1',
+    'Layers',
+    'All available Geo Engine layers',
+    ARRAY[]::"PropertyType" []
+);
+
+INSERT INTO layer_collections (
+    id,
+    name,
+    description,
+    properties
+)
+VALUES (
+    'ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f',
+    'Unsorted',
+    'Unsorted Layers',
+    ARRAY[]::"PropertyType" []
+);
+
+INSERT INTO collection_children (
+    parent,
+    child
+)
+VALUES (
+    '05102bb3-a855-4a37-8a8a-30026a91fef1',
+    'ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f'
+);
+
+INSERT INTO roles (id, name)
+VALUES ('d5328854-6190-4af9-ad69-4e74b0961ac9', 'admin'),
+('4e8081b6-8aa6-4275-af0c-2fa2da557d28', 'user'),
+(
+    'fd8e87bf-515c-4f36-8da6-1a53702ff102',
+    'anonymous'
+);
+
+
+INSERT INTO users (
+    id,
+    email,
+    password_hash,
+    real_name,
+    quota_available,
+    active
+)
+VALUES (
+    'd5328854-6190-4af9-ad69-4e74b0961ac9',
+    'admin@localhost',
+    '$2a$12$leX8lZRDZS6JDf/6m.0QU.xBpAglyTZyAzMcgGF5swFd1CBHn1eHC',
+    'admin',
+    9223372036854775807,
+    TRUE
+);
+
+INSERT INTO user_roles (
+    user_id,
+    role_id
+)
+VALUES (
+    'd5328854-6190-4af9-ad69-4e74b0961ac9',
+    'd5328854-6190-4af9-ad69-4e74b0961ac9'
+);
+
+INSERT INTO permissions
+(role_id, layer_collection_id, permission)
+VALUES (
+    'd5328854-6190-4af9-ad69-4e74b0961ac9',
+    '05102bb3-a855-4a37-8a8a-30026a91fef1',
+    'Owner'
+),
+(
+    '4e8081b6-8aa6-4275-af0c-2fa2da557d28',
+    '05102bb3-a855-4a37-8a8a-30026a91fef1',
+    'Read'
+),
+(
+    'fd8e87bf-515c-4f36-8da6-1a53702ff102',
+    '05102bb3-a855-4a37-8a8a-30026a91fef1',
+    'Read'
+),
+(
+    'd5328854-6190-4af9-ad69-4e74b0961ac9',
+    'ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f',
+    'Owner'
+),
+(
+    '4e8081b6-8aa6-4275-af0c-2fa2da557d28',
+    'ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f',
+    'Read'
+),
+(
+    'fd8e87bf-515c-4f36-8da6-1a53702ff102',
+    'ffb2dd9e-f5ad-427c-b7f1-c9a0c7a0ae3f',
+    'Read'
+);

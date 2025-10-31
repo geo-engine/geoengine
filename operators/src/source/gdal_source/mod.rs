@@ -1,6 +1,3 @@
-use crate::adapters::{
-    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
-};
 use crate::engine::{
     CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
@@ -36,14 +33,14 @@ use geoengine_datatypes::{
     dataset::NamedData,
     primitives::{
         BandSelection, CacheHint, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-        TimeInstance, TimeInterval,
+        TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
     },
     raster::{
-        ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D,
-        GridIntersection, GridOrEmpty, GridOrEmpty2D, GridShapeAccess, GridSize, MapElements,
-        MaskedGrid, NoDataValueGrid, Pixel, RasterDataType, RasterProperties,
-        RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
-        SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
+        ChangeGridBounds, EmptyGrid, GeoTransform, Grid, GridBlit, GridBoundingBox2D, GridOrEmpty,
+        GridOrEmpty2D, GridShapeAccess, GridSize, MapElements, MaskedGrid, NoDataValueGrid, Pixel,
+        RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType,
+        RasterPropertiesKey, RasterTile2D, SpatialGridDefinition, TileInformation,
+        TilingSpecification, TilingStrategy,
     },
     util::test::TestDefault,
 };
@@ -309,14 +306,6 @@ impl GdalDatasetParameters {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct TilingInformation {
-    pub x_axis_tiles: usize,
-    pub y_axis_tiles: usize,
-    pub x_axis_tile_size: usize,
-    pub y_axis_tile_size: usize,
-}
-
 pub struct GdalSourceProcessor<T>
 where
     T: Pixel,
@@ -545,7 +534,7 @@ impl GdalRasterLoader {
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
         stream::iter(
             tiling_strategy
-                .tile_information_iterator_from_grid_bounds(spatial_query)
+                .tile_information_iterator_from_pixel_bounds(spatial_query)
                 .map(move |tile| {
                     GdalRasterLoader::load_tile_async(
                         info.params.clone(),
@@ -653,28 +642,7 @@ where
         let produced_tiling_grid =
             grid_produced_by_source_desc.tiling_grid_definition(self.tiling_specification);
 
-        let tiling_based_pixel_bounds = produced_tiling_grid.tiling_grid_bounds();
-
         let tiling_strategy = produced_tiling_grid.generate_data_tiling_strategy();
-
-        let query_pixel_bounds = query.spatial_bounds();
-
-        let mut empty = false;
-
-        if !tiling_based_pixel_bounds.intersects(&query_pixel_bounds) {
-            debug!("query does not intersect spatial data bounds");
-            empty = true;
-        }
-
-        // TODO: use the time bounds to early return.
-        /*
-        if let Some(data_time_bounds) = result_descriptor.time {
-            if !data_time_bounds.intersects(&query.time_interval) {
-                debug!("query does not intersect temporal data bounds");
-                empty = true;
-            }
-        }
-        */
 
         let reader_mode = match self.original_resolution_spatial_grid {
             None => GdalReaderMode::OriginalResolution(ReaderState {
@@ -687,18 +655,7 @@ where
             }
         };
 
-        let loading_info = if empty {
-            // TODO: using this shortcut will insert one no-data element with max time validity. However, this does not honor time intervals of data in other areas!
-            GdalLoadingInfo::new(
-                GdalLoadingInfoTemporalSliceIterator::Static {
-                    parts: vec![].into_iter(),
-                },
-                TimeInstance::MIN,
-                TimeInstance::MAX,
-            )
-        } else {
-            self.meta_data.loading_info(query.clone()).await?
-        };
+        let loading_info = self.meta_data.loading_info(query.clone()).await?;
 
         debug_assert!(
             loading_info.start_time_of_output_stream < loading_info.end_time_of_output_stream,
@@ -707,59 +664,92 @@ where
             loading_info.end_time_of_output_stream
         );
 
-        let time_bounds = match (
-            loading_info.start_time_of_output_stream,
-            loading_info.end_time_of_output_stream,
-        ) {
-            (Some(start), Some(end)) => FillerTimeBounds::new(start, end),
-            (None, None) => {
-                tracing::debug!(
-                    "The provider did not provide a time range that covers the query. Falling back to query time range. "
-                );
-                FillerTimeBounds::new(query.time_interval().start(), query.time_interval().end())
-            }
-            (Some(start), None) => {
-                tracing::debug!(
-                    "The provider did only provide a time range start that covers the query. Falling back to query time end. "
-                );
-                FillerTimeBounds::new(start, query.time_interval().end())
-            }
-            (None, Some(end)) => {
-                tracing::debug!(
-                    "The provider did only provide a time range end that covers the query. Falling back to query time start. "
-                );
-                FillerTimeBounds::new(query.time_interval().start(), end)
-            }
-        };
+        let time_bounds = TimeInterval::new_unchecked(
+            loading_info
+                .start_time_of_output_stream
+                .expect("must exist"),
+            loading_info.end_time_of_output_stream.expect("must exist"),
+        );
 
         let query_time = query.time_interval();
         let skipping_loading_info = loading_info
             .info
             .filter_ok(move |s: &GdalLoadingInfoTemporalSlice| s.time.intersects(&query_time)); // Check that the time slice intersects the query time
 
+        let filled_loading_info_stream = match self.result_descriptor().time.dimension {
+            geoengine_datatypes::primitives::TimeDimension::Regular(regular_time_dimension) => {
+                let times_fill_iter = skipping_loading_info
+                    .try_time_regular_range_fill(regular_time_dimension, time_bounds);
+                stream::iter(times_fill_iter).boxed()
+            }
+            geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                let times_fill_iter =
+                    skipping_loading_info.try_time_irregular_range_fill(time_bounds);
+                stream::iter(times_fill_iter).boxed()
+            }
+        };
+
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
-            stream::iter(skipping_loading_info),
+            filled_loading_info_stream,
             query.spatial_bounds(),
             tiling_strategy,
             reader_mode,
         );
 
-        // use SparseTilesFillAdapter to fill all the gaps
-        let filled_stream = SparseTilesFillAdapter::new(
-            source_stream,
-            tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(query_pixel_bounds),
-            query.attributes().count(),
-            tiling_strategy.geo_transform,
-            tiling_strategy.tile_size_in_pixels,
-            FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-            query.time_interval(),
-            time_bounds,
-        );
-        Ok(filled_stream.boxed())
+        Ok(source_stream.boxed())
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.produced_result_descriptor
+    }
+}
+
+#[async_trait]
+impl<T> RasterQueryProcessor for GdalSourceProcessor<T>
+where
+    T: Pixel + gdal::raster::GdalType + FromPrimitive,
+{
+    type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+        let rdt = self.raster_result_descriptor().time;
+
+        let q_bounds = self
+            .raster_result_descriptor()
+            .tiling_grid_definition(ctx.tiling_specification())
+            .tiling_grid_bounds();
+        let q_rect = RasterQueryRectangle::new(q_bounds, query, BandSelection::first());
+        let ldif = self.meta_data.loading_info(q_rect).await?;
+        let unique_times = ldif.info.map(|s| s.map(|s| s.time));
+
+        match rdt.dimension {
+            geoengine_datatypes::primitives::TimeDimension::Regular(regular_time_dimension) => {
+                let times_fill_iter = unique_times.try_time_regular_range_fill(
+                    regular_time_dimension,
+                    TimeInterval::new_unchecked(
+                        ldif.start_time_of_output_stream
+                            .expect("start time must be set for irregular time dimension"), // TODO: make this a requirement of the meta data trait
+                        ldif.end_time_of_output_stream
+                            .expect("end time must be set for irregular time dimension"),
+                    ),
+                );
+                Ok(stream::iter(times_fill_iter).boxed())
+            }
+            geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                let times_fill_iter =
+                    unique_times.try_time_irregular_range_fill(TimeInterval::new_unchecked(
+                        ldif.start_time_of_output_stream
+                            .expect("start time must be set for regular time dimension"), // TODO: make this a requirement of the meta data trait
+                        ldif.end_time_of_output_stream
+                            .expect("end time must be set for regular time dimension"),
+                    ));
+                Ok(stream::iter(times_fill_iter).boxed())
+            }
+        }
     }
 }
 
@@ -1557,7 +1547,7 @@ mod tests {
         };
 
         let vres: Vec<TileInformation> = origin_split_tileing_strategy
-            .tile_information_iterator_from_grid_bounds(grid_bounds)
+            .tile_information_iterator_from_pixel_bounds(grid_bounds)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(

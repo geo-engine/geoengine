@@ -6,7 +6,8 @@ use geoengine_datatypes::operations::reproject::{CoordinateProjection, Reproject
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, Coordinate2D,
     FeatureDataType, Measurement, PlotSeriesSelection, QueryAttributeSelection, QueryRectangle,
-    SpatialPartition2D, SpatialResolution, TimeInterval,
+    RegularTimeDimension, SpatialPartition2D, SpatialResolution, TimeDimension, TimeInstance,
+    TimeInterval, TimeStep,
 };
 use geoengine_datatypes::raster::{
     GeoTransform, GeoTransformAccess, Grid, GridBoundingBox2D, GridShape2D, GridShapeAccess,
@@ -287,13 +288,99 @@ impl SpatialGridDescriptor {
     }
 }
 
+#[derive(Debug, Copy, Clone, Serialize, Deserialize, ToSql, FromSql, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeDescriptor {
+    pub bounds: Option<TimeInterval>,
+    pub dimension: TimeDimension,
+}
+
+impl TimeDescriptor {
+    /// Create a new `TimeDescriptor`
+    pub fn new(bounds: Option<TimeInterval>, dimension: TimeDimension) -> Self {
+        Self { bounds, dimension }
+    }
+
+    /// Create a new `TimeDescriptor` with an irregular time dimension
+    pub fn new_irregular(bounds: Option<TimeInterval>) -> Self {
+        Self {
+            bounds,
+            dimension: TimeDimension::Irregular,
+        }
+    }
+
+    /// Create a new `TimeDescriptor` with a regular time dimension
+    pub fn new_regular(bounds: Option<TimeInterval>, origin: TimeInstance, step: TimeStep) -> Self {
+        Self {
+            bounds,
+            dimension: TimeDimension::Regular(RegularTimeDimension { origin, step }),
+        }
+    }
+
+    /// Create a new `TimeDescriptor` with a regular time dimension and an epoch origin
+    pub fn new_regular_with_epoch(bounds: Option<TimeInterval>, step: TimeStep) -> Self {
+        Self {
+            bounds,
+            dimension: TimeDimension::Regular(RegularTimeDimension::new_with_epoch_origin(step)),
+        }
+    }
+
+    /// Create a new `TimeDescriptor` with a regular time dimension and an origin at the start of the bounds
+    pub fn new_regular_with_origin_at_start(bounds: TimeInterval, step: TimeStep) -> Self {
+        Self {
+            bounds: Some(bounds),
+            dimension: TimeDimension::Regular(RegularTimeDimension {
+                origin: bounds.start(),
+                step,
+            }),
+        }
+    }
+
+    #[must_use]
+    pub fn merge(&self, other: Self) -> Self {
+        let bounds = match (self.bounds, other.bounds) {
+            (Some(a), Some(b)) => Some(a.extend(&b)),
+            (Some(a), None) => Some(a),
+            (None, Some(b)) => Some(b),
+            (None, None) => None,
+        };
+
+        let dimension = match (&self.dimension, other.dimension) {
+            (TimeDimension::Irregular, _) | (_, TimeDimension::Irregular) => {
+                TimeDimension::Irregular
+            }
+            (TimeDimension::Regular(a), TimeDimension::Regular(b)) => match a.merge(b) {
+                Some(merged) => TimeDimension::Regular(merged),
+                None => TimeDimension::Irregular,
+            },
+        };
+
+        Self { bounds, dimension }
+    }
+
+    /// Is the time dimension regular?
+    pub fn is_regular(&self) -> bool {
+        self.dimension.is_regular()
+    }
+
+    fn map_time_bounds<F>(&self, f: F) -> Self
+    where
+        F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
+    {
+        Self {
+            bounds: f(&self.bounds),
+            ..*self
+        }
+    }
+}
+
 /// A `ResultDescriptor` for raster queries
 #[derive(Debug, Clone, Serialize, Deserialize, ToSql, FromSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     pub spatial_reference: SpatialReferenceOption,
-    pub time: Option<TimeInterval>,
+    pub time: TimeDescriptor,
     pub spatial_grid: SpatialGridDescriptor,
     pub bands: RasterBandDescriptors,
 }
@@ -338,7 +425,7 @@ impl ResultDescriptor for RasterResultDescriptor {
         F: Fn(&Option<TimeInterval>) -> Option<TimeInterval>,
     {
         Self {
-            time: f(&self.time),
+            time: self.time.map_time_bounds(f), // FIXME: remove this extra function and use TimeDescriptor::map_time_bounds
             bands: self.bands.clone(),
             ..*self
         }
@@ -366,7 +453,7 @@ impl RasterResultDescriptor {
     pub fn new(
         data_type: RasterDataType,
         spatial_reference: SpatialReferenceOption,
-        time: Option<TimeInterval>,
+        time: TimeDescriptor,
         spatial_grid: SpatialGridDescriptor,
         bands: RasterBandDescriptors,
     ) -> Self {
@@ -401,11 +488,12 @@ impl RasterResultDescriptor {
         num_bands: u32,
         pixel_bounds: GridBoundingBox2D,
         geo_transform: GeoTransform,
+        time: TimeDescriptor,
     ) -> Self {
         Self {
             data_type,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
+            time,
             spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
                 geo_transform,
                 pixel_bounds,
@@ -593,7 +681,7 @@ impl From<RasterResultDescriptor> for PlotResultDescriptor {
     fn from(descriptor: RasterResultDescriptor) -> Self {
         Self {
             spatial_reference: descriptor.spatial_reference,
-            time: descriptor.time,
+            time: descriptor.time.bounds,
             // converting `SpatialPartition2D` to `BoundingBox2D` is ok here, because is makes the covered area only larger
             bbox: Some(descriptor.spatial_bounds().as_bbox()),
         }

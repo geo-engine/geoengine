@@ -29,8 +29,9 @@ lto = true
 inherits = "test"
 strip = "debuginfo"
 
-[workspace.lints.clippy]
 # configure default clippy lints
+[workspace.lints.clippy]
+cargo = { level = "warn", priority = 0 }
 complexity = { level = "warn", priority = 0 }
 style = { level = "warn", priority = 0 }
 perf = { level = "warn", priority = 0 }
@@ -61,6 +62,9 @@ print_stdout = { level = "warn", priority = 1 }
 unimplemented = { level = "warn", priority = 1 }
 unwrap_used = { level = "warn", priority = 1 }
 
+# disable some cargo lints
+multiple_crate_versions = { level = "allow", priority = 1 }
+
 [workspace.dependencies]
 actix = { version = "0.13", default-features = false }
 actix-files = "0.6"
@@ -73,11 +77,11 @@ actix-ws = "0.3"
 aes-gcm = "0.10.3"
 anyhow = "1.0"
 approx = "0.5"
-arrow = { version = "55.2", features = ["ipc_compression"] }
-arrow-array = "55.2"
-arrow-ord = "55.2"
-arrow-schema = { version = "55.2", features = ["serde"] }
-aruna-rust-api = "2.0.0-beta.12"
+arrow = { version = "56.2", features = ["ipc_compression"] }
+arrow-array = "56.2"
+arrow-ord = "56.2"
+arrow-schema = { version = "56.2", features = ["serde"] }
+aruna-rust-api = "2.0.2"
 assert_cmd = "2.0"
 async-stream = "0.3"
 async-trait = "0.1"
@@ -93,7 +97,7 @@ clap = { version = "4.5", features = ["derive"] }
 clap_derive = "4.5"
 config = "0.15"
 convert_case = "0.8"
-criterion = "0.6"
+criterion = "0.7"
 csv = "1.3"
 erased-serde = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
@@ -104,8 +108,8 @@ futures-util = "0.3"
 gdal = "0.18"
 gdal-sys = "0.11"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
-geo = "0.30.0"
-geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.30.0"} # TODO: revert back to "0.5" when it is released
+geo = "0.31.0"
+geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.31.0" } # TODO: revert back to "0.5" when it is released
 geo-types = "0.7.17"                                                       # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
@@ -120,13 +124,13 @@ num = "0.4"
 num-traits = "0.2"
 oauth2 = "5.0"
 openidconnect = "4.0"
-ordered-float = { version = "5.0", features = ["serde"] }
+ordered-float = { version = "5.1", features = ["serde"] }
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
-opentelemetry = { version = "0.30", default-features = false, features = [
+opentelemetry = { version = "0.31", default-features = false, features = [
     "trace",
 ] }
-opentelemetry_sdk = { version = "0.30", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.30", features = ["grpc-tonic"] }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
 ort = { version = "2.0.0-rc.10", features = ["ndarray"] }
 ouroboros = "0.18"
 paste = "1.0"
@@ -165,14 +169,14 @@ serde_with = "3.14"
 serial_test = "3.0"
 sha2 = "0.10"
 snafu = "0.8"
-stac = "0.12"
+stac = "0.13"
 stream-cancel = "0.8"
 strum = { version = "0.27", features = ["derive"] }
 strum_macros = "0.27"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-tempfile = "3.18"
+tempfile = "3.23"
 time = "0.3"
-tokio = { version = "1.46", features = [
+tokio = { version = "1.47", features = [
     "fs",
     "macros",
     "signal",
@@ -186,9 +190,9 @@ tonic = { version = "0.11", features = [
     "tls",
     "tls-roots",
 ] } # must be compatible with `aruna-rust-api`
-tracing = {version="0.1", features = ["release_max_level_debug"]}
+tracing = { version = "0.1", features = ["release_max_level_debug"] }
 tracing-actix-web = "0.7"
-tracing-opentelemetry = "0.31" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
+tracing-opentelemetry = "0.32" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
 tracing-subscriber = { version = "0.3", features = [
     "local-time",
     "ansi",
@@ -215,5 +219,5 @@ vergen = "9.0"
 vergen-gitcl = "1.0"
 walkdir = "2.4"
 wkt = "0.14"
-xml-rs = "0.8"
-zip = "4.2"
+xml = "1.0"
+zip = "5.1"

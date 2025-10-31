@@ -264,12 +264,7 @@ where
 #[async_trait]
 impl<Q, P, A> QueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
     P: Pixel,
     f64: AsPrimitive<P>,
     A: AggregateFunction + 'static,
@@ -288,28 +283,49 @@ where
             let sub_query =
                 NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
 
+            let time_stream = self.source.time_query(query.time_interval(), ctx).await?;
+
             let tiling_strat = self
                 .source
                 .result_descriptor()
                 .tiling_grid_definition(self.tiling_specification)
                 .generate_data_tiling_strategy();
 
-            Ok(RasterSubQueryAdapter::<'a, P, _, _>::new(
+            let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
                 &self.source,
                 query,
                 tiling_strat,
                 ctx,
                 sub_query,
-            )
-            .filter_and_fill(
-                crate::adapters::FillerTileCacheExpirationStrategy::DerivedFromSurroundingTiles,
-            ))
+                time_stream,
+            );
+            Ok(sq.box_pin())
         })
         .await
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         self.source.result_descriptor()
+    }
+}
+
+#[async_trait]
+impl<Q, P, A> RasterQueryProcessor for NeighborhoodAggregateProcessor<Q, P, A>
+where
+    P: Pixel,
+    f64: AsPrimitive<P>,
+    A: AggregateFunction + 'static,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
+{
+    type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        self.source.time_query(query, ctx).await
     }
 }
 
@@ -320,7 +336,7 @@ mod tests {
     use crate::{
         engine::{
             MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, SpatialGridDescriptor,
+            RasterResultDescriptor, SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -333,7 +349,7 @@ mod tests {
         operations::image::{Colorizer, RgbaColor},
         primitives::{
             CacheHint, Coordinate2D, DateTime, RasterQueryRectangle, SpatialPartition2D,
-            TimeInstance, TimeInterval,
+            TimeInstance, TimeInterval, TimeStep,
         },
         raster::{
             GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty, RasterDataType, RasterTile2D,
@@ -665,19 +681,27 @@ mod tests {
             ),
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::I8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(
+                    raster_tiles.first().unwrap().time.start(),
+                    raster_tiles.last().unwrap().time.end(),
+                )),
+                TimeStep::millis(10),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::I8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    spatial_grid: SpatialGridDescriptor::source_from_parts(
-                        GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
-                        GridBoundingBox2D::new([-3, 0], [0, 6]).unwrap(),
-                    ),
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed()

@@ -1,5 +1,5 @@
 use crate::engine::{
-    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryProcessor,
+    CanonicOperatorName, MetaData, OperatorData, OperatorName, QueryContext, QueryProcessor,
     SpatialGridDescriptor, WorkflowOperatorPath,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
@@ -120,14 +120,6 @@ fn raster_query_rectangle_to_loading_info_query_rectangle(
         raster_query_rectangle.time_interval(),
         raster_query_rectangle.attributes().clone(),
     )
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct TilingInformation {
-    pub x_axis_tiles: usize,
-    pub y_axis_tiles: usize,
-    pub x_axis_tile_size: usize,
-    pub y_axis_tile_size: usize,
 }
 
 pub struct GdalSourceProcessor<T>
@@ -439,7 +431,7 @@ where
         let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes().clone().as_vec();
         let spatial_tiles = tiling_strategy
-            .tile_information_iterator_from_grid_bounds(query.spatial_bounds())
+            .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
             .collect::<Vec<_>>();
 
         debug!(
@@ -474,6 +466,22 @@ where
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.produced_result_descriptor
+    }
+}
+
+#[async_trait]
+impl<P> RasterQueryProcessor for GdalSourceProcessor<P>
+where
+    P: Pixel + gdal::raster::GdalType + FromPrimitive,
+{
+    type RasterType = P;
+
+    async fn time_query<'a>(
+        &'a self,
+        _query: TimeInterval,
+        _ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+        todo!()
     }
 }
 
@@ -953,6 +961,7 @@ mod tests {
     use super::*;
     use crate::engine::{
         ExecutionContext, MockExecutionContext, RasterBandDescriptor, StaticMetaData,
+        TimeDescriptor,
     };
     use crate::test_data;
     use crate::util::test::raster_tile_from_file;
@@ -1117,7 +1126,7 @@ mod tests {
         };
 
         let vres: Vec<TileInformation> = origin_split_tileing_strategy
-            .tile_information_iterator_from_grid_bounds(grid_bounds)
+            .tile_information_iterator_from_pixel_bounds(grid_bounds)
             .collect();
         assert_eq!(vres.len(), 4 * 6);
         assert_eq!(
@@ -1625,12 +1634,17 @@ mod tests {
             .to_path_buf();
         }
 
+        let time = TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(
+            time_steps.first().unwrap().start(),
+            time_steps.last().unwrap().end(),
+        )));
+
         let meta: MultiBandGdalMetaData = Box::new(StaticMetaData {
             loading_info: MultiBandGdalLoadingInfo::new(time_steps, files, CacheHint::default()),
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U16,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: None,
+                time,
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180.0, 90.0).into(), 0.2, -0.2),
                     GridBoundingBox2D::new([0, 0], [899, 1799]).unwrap(),

@@ -1,9 +1,9 @@
 use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, MultipleRasterSources, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
@@ -12,10 +12,10 @@ use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, SpatialResolution, time_interval_extent,
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
+use geoengine_datatypes::raster::{
+    DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands,
 };
-use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -88,7 +88,13 @@ impl RasterOperator for RasterStacker {
                     .ok_or(crate::error::Error::CantMergeSpatialGridDescriptor { a, b })
             })?;
 
-        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
+        let time = in_descriptors.iter().skip(1).map(|rd| rd.time).fold(
+            in_descriptors
+                .first()
+                .expect("There must be at least one input")
+                .time,
+            |a, b| a.merge(b),
+        );
 
         let data_type = in_descriptors[0].data_type;
         let spatial_reference = in_descriptors[0].spatial_reference;
@@ -288,14 +294,14 @@ impl InitializedRasterOperator for InitializedRasterStacker {
 }
 
 pub(crate) struct RasterStackerProcessor<T> {
-    sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
+    sources: Vec<BoxRasterQueryProcessor<T>>,
     result_descriptor: RasterResultDescriptor,
     bands_per_source: Vec<u32>,
 }
 
 impl<T> RasterStackerProcessor<T> {
     pub fn new(
-        sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
+        sources: Vec<BoxRasterQueryProcessor<T>>,
         result_descriptor: RasterResultDescriptor,
         bands_per_source: Vec<u32>,
     ) -> Self {
@@ -332,12 +338,16 @@ fn map_query_bands_to_source_bands(
 }
 
 #[async_trait]
-impl<T> RasterQueryProcessor for RasterStackerProcessor<T>
+impl<T> QueryProcessor for RasterStackerProcessor<T>
 where
     T: Pixel,
 {
-    type RasterType = T;
-    async fn raster_query<'a>(
+    type Output = RasterTile2D<T>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
+
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -362,8 +372,31 @@ where
         Ok(Box::pin(output))
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl<T> RasterQueryProcessor for RasterStackerProcessor<T>
+where
+    T: Pixel,
+{
+    type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        let mut time_sources = Vec::with_capacity(self.sources.len());
+        for source in &self.sources {
+            let s = source.time_query(query, ctx).await?;
+            time_sources.push(s);
+        }
+        let output = crate::adapters::TimeIntervalStreamMerge::new(time_sources);
+        Ok(Box::pin(output))
     }
 }
 
@@ -373,7 +406,7 @@ mod tests {
 
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, TimeInstance, TimeInterval},
+        primitives::{CacheHint, TimeInstance, TimeInterval, TimeStep},
         raster::{
             GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType,
             TilesEqualIgnoringCacheHint,
@@ -511,7 +544,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: Some(TimeInterval::new_unchecked(0, 10)),
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 5)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -761,7 +797,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -940,7 +979,10 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: None,
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(10),
+            ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),

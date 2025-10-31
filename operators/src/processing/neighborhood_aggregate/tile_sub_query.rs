@@ -10,7 +10,7 @@ use geoengine_datatypes::raster::{
     GridIdx2D, GridIndexAccess, GridOrEmpty, GridSize,
 };
 use geoengine_datatypes::{
-    primitives::{RasterQueryRectangle, TimeInstance, TimeInterval},
+    primitives::{RasterQueryRectangle, TimeInterval},
     raster::{Pixel, RasterTile2D, TileInformation},
 };
 use num_traits::AsPrimitive;
@@ -85,7 +85,7 @@ where
         &self,
         tile_info: TileInformation,
         _query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
         let pixel_bounds = tile_info.global_pixel_bounds();
@@ -102,7 +102,7 @@ where
 
         Ok(Some(RasterQueryRectangle::new(
             larger_bounds,
-            TimeInterval::new_instant(start_time)?,
+            time,
             band_idx.into(),
         )))
     }
@@ -351,7 +351,7 @@ mod tests {
         },
     };
     use geoengine_datatypes::{
-        primitives::BandSelection,
+        primitives::{BandSelection, TimeInstance},
         raster::{
             GeoTransform, GridBoundingBox2D, SpatialGridDefinition, TilingSpecification,
             TilingStrategy,
@@ -376,7 +376,7 @@ mod tests {
         );
 
         let tile_info = tiling_strategy
-            .tile_information_iterator_from_grid_bounds(spatial_grid.grid_bounds())
+            .tile_information_iterator_from_pixel_bounds(spatial_grid.grid_bounds())
             .next()
             .unwrap();
 
@@ -393,7 +393,7 @@ mod tests {
         );
 
         let tile_query_rectangle = aggregator
-            .tile_query_rectangle(tile_info, qrect.clone(), qrect.time_interval().start(), 0)
+            .tile_query_rectangle(tile_info, qrect.clone(), qrect.time_interval(), 0)
             .unwrap()
             .unwrap();
 

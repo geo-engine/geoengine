@@ -77,7 +77,7 @@ mod cmp_by_name {
 
     impl PartialOrd for Function {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-            Some(self.name.cmp(&other.name))
+            Some(self.cmp(other))
         }
     }
 
@@ -228,6 +228,7 @@ pub fn init_functions() -> HashMap<&'static str, FunctionGenerator> {
     add_1_num!("floor", functions, f64::floor);
     add_1_num!("to_radians", functions, f64::to_radians);
     add_1_num!("to_degrees", functions, f64::to_degrees);
+    add_1_num!("tanh", functions, f64::tanh);
 
     add_const_num!("pi", functions, std::f64::consts::PI);
     add_const_num!("e", functions, std::f64::consts::E);

@@ -16,7 +16,10 @@ use geoengine_datatypes::{
     spatial_reference::{SpatialReference, SpatialReferenceAuthority},
 };
 use geoengine_operators::{
-    engine::{MetaData, RasterBandDescriptor, RasterResultDescriptor, SpatialGridDescriptor},
+    engine::{
+        MetaData, RasterBandDescriptor, RasterResultDescriptor, SpatialGridDescriptor,
+        TimeDescriptor,
+    },
     source::{
         GdalDatasetParameters, GdalLoadingInfo, GdalLoadingInfoTemporalSlice,
         GdalLoadingInfoTemporalSliceIterator,
@@ -294,10 +297,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
             // first image:
             // $ s3cmd -c .s3cfg ls s3://eodata/Sentinel-2/MSI/L1C/2015/07/04/
             // DIR  s3://eodata/Sentinel-2/MSI/L1C/2015/07/04/S2A_MSIL1C_20150704T101006_N0204_R022_T32SKB_20150704T101337.SAFE/
-            time: Some(TimeInterval::new_unchecked(
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(
                 DateTime::new_utc(2015, 7, 4, 10, 10, 6),
                 DateTime::now(),
-            )),
+            ))),
             spatial_grid: spatial_grid_desc,
             bands: vec![RasterBandDescriptor::new_unitless(
                 self.product_band.band_name(),

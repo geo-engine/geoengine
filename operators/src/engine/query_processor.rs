@@ -14,7 +14,8 @@ use geoengine_datatypes::collections::{
 use geoengine_datatypes::plots::{PlotData, PlotOutputFormat};
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, ColumnSelection, PlotQueryRectangle,
-    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, VectorQueryRectangle,
+    QueryAttributeSelection, QueryRectangle, RasterQueryRectangle, TimeInterval,
+    VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{DynamicRasterDataType, GridBoundingBox2D, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
@@ -82,40 +83,17 @@ impl<Q> QueryProcessorExt for Q where Q: QueryProcessor {}
 
 /// An instantiation of a raster operator that produces a stream of raster results for a query
 #[async_trait]
-pub trait RasterQueryProcessor: Sync + Send {
+pub trait RasterQueryProcessor:
+    QueryProcessor<
+        Output = RasterTile2D<Self::RasterType>,
+        SpatialBounds = GridBoundingBox2D,
+        Selection = BandSelection,
+        ResultDescription = RasterResultDescriptor,
+    > + Sync
+    + Send
+{
     type RasterType: Pixel;
 
-    async fn raster_query<'a>(
-        &'a self,
-        query: RasterQueryRectangle, // TODO: query by reference
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<RasterTile2D<Self::RasterType>>>>;
-
-    fn boxed(self) -> Box<dyn RasterQueryProcessor<RasterType = Self::RasterType>>
-    where
-        Self: Sized + 'static,
-    {
-        Box::new(self)
-    }
-
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor;
-}
-
-pub type BoxRasterQueryProcessor<P> = Box<dyn RasterQueryProcessor<RasterType = P>>;
-
-#[async_trait]
-impl<S, T> RasterQueryProcessor for S
-where
-    S: QueryProcessor<
-            Output = RasterTile2D<T>,
-            SpatialBounds = GridBoundingBox2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        > + Sync
-        + Send,
-    T: Pixel,
-{
-    type RasterType = T;
     async fn raster_query<'a>(
         &'a self,
         query: RasterQueryRectangle, // TODO: query by reference
@@ -124,10 +102,43 @@ where
         self.query(query, ctx).await
     }
 
+    fn boxed(
+        self,
+    ) -> Box<
+        dyn RasterQueryProcessor<
+                RasterType = Self::RasterType,
+                Output = RasterTile2D<Self::RasterType>,
+                SpatialBounds = GridBoundingBox2D,
+                Selection = BandSelection,
+                ResultDescription = RasterResultDescriptor,
+            >,
+    >
+    where
+        Self: Sized + 'static,
+    {
+        Box::new(self)
+    }
+
     fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
         self.result_descriptor()
     }
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>>;
 }
+
+pub type BoxRasterQueryProcessor<P> = Box<
+    dyn RasterQueryProcessor<
+            RasterType = P,
+            Output = RasterTile2D<P>,
+            SpatialBounds = GridBoundingBox2D,
+            Selection = BandSelection,
+            ResultDescription = RasterResultDescriptor,
+        >,
+>;
 
 /// An instantiation of a vector operator that produces a stream of vector results for a query
 #[async_trait]
@@ -223,7 +234,7 @@ where
 }
 
 #[async_trait]
-impl<T> QueryProcessor for Box<dyn RasterQueryProcessor<RasterType = T>>
+impl<T> QueryProcessor for BoxRasterQueryProcessor<T>
 where
     T: Pixel,
 {
@@ -242,6 +253,19 @@ where
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
         self.as_ref().raster_result_descriptor()
+    }
+}
+
+#[async_trait]
+impl<T: Pixel> RasterQueryProcessor for BoxRasterQueryProcessor<T> {
+    type RasterType = T;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+        self.as_ref().time_query(query, ctx).await
     }
 }
 
@@ -270,16 +294,16 @@ where
 
 /// An enum to differentiate between outputs of raster processors
 pub enum TypedRasterQueryProcessor {
-    U8(Box<dyn RasterQueryProcessor<RasterType = u8>>),
-    U16(Box<dyn RasterQueryProcessor<RasterType = u16>>),
-    U32(Box<dyn RasterQueryProcessor<RasterType = u32>>),
-    U64(Box<dyn RasterQueryProcessor<RasterType = u64>>),
-    I8(Box<dyn RasterQueryProcessor<RasterType = i8>>),
-    I16(Box<dyn RasterQueryProcessor<RasterType = i16>>),
-    I32(Box<dyn RasterQueryProcessor<RasterType = i32>>),
-    I64(Box<dyn RasterQueryProcessor<RasterType = i64>>),
-    F32(Box<dyn RasterQueryProcessor<RasterType = f32>>),
-    F64(Box<dyn RasterQueryProcessor<RasterType = f64>>),
+    U8(BoxRasterQueryProcessor<u8>),
+    U16(BoxRasterQueryProcessor<u16>),
+    U32(BoxRasterQueryProcessor<u32>),
+    U64(BoxRasterQueryProcessor<u64>),
+    I8(BoxRasterQueryProcessor<i8>),
+    I16(BoxRasterQueryProcessor<i16>),
+    I32(BoxRasterQueryProcessor<i32>),
+    I64(BoxRasterQueryProcessor<i64>),
+    F32(BoxRasterQueryProcessor<f32>),
+    F64(BoxRasterQueryProcessor<f64>),
 }
 
 impl DynamicRasterDataType for TypedRasterQueryProcessor {
@@ -318,61 +342,61 @@ impl std::fmt::Debug for TypedRasterQueryProcessor {
 }
 
 impl TypedRasterQueryProcessor {
-    pub fn get_u8(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = u8>>> {
+    pub fn get_u8(self) -> Option<BoxRasterQueryProcessor<u8>> {
         match self {
             Self::U8(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_u16(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = u16>>> {
+    pub fn get_u16(self) -> Option<BoxRasterQueryProcessor<u16>> {
         match self {
             Self::U16(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_u32(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = u32>>> {
+    pub fn get_u32(self) -> Option<BoxRasterQueryProcessor<u32>> {
         match self {
             Self::U32(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_u64(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = u64>>> {
+    pub fn get_u64(self) -> Option<BoxRasterQueryProcessor<u64>> {
         match self {
             Self::U64(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_i8(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = i8>>> {
+    pub fn get_i8(self) -> Option<BoxRasterQueryProcessor<i8>> {
         match self {
             Self::I8(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_i16(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = i16>>> {
+    pub fn get_i16(self) -> Option<BoxRasterQueryProcessor<i16>> {
         match self {
             Self::I16(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_i32(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = i32>>> {
+    pub fn get_i32(self) -> Option<BoxRasterQueryProcessor<i32>> {
         match self {
             Self::I32(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_i64(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = i64>>> {
+    pub fn get_i64(self) -> Option<BoxRasterQueryProcessor<i64>> {
         match self {
             Self::I64(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_f32(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = f32>>> {
+    pub fn get_f32(self) -> Option<BoxRasterQueryProcessor<f32>> {
         match self {
             Self::F32(r) => Some(r),
             _ => None,
         }
     }
-    pub fn get_f64(self) -> Option<Box<dyn RasterQueryProcessor<RasterType = f64>>> {
+    pub fn get_f64(self) -> Option<BoxRasterQueryProcessor<f64>> {
         match self {
             Self::F64(r) => Some(r),
             _ => None,
@@ -545,59 +569,59 @@ impl TypedRasterQueryProcessor {
     }
 }
 
-impl From<Box<dyn RasterQueryProcessor<RasterType = u8>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = u8>>) -> Self {
+impl From<BoxRasterQueryProcessor<u8>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<u8>) -> Self {
         TypedRasterQueryProcessor::U8(value)
     }
 }
 
-impl From<Box<dyn RasterQueryProcessor<RasterType = i8>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = i8>>) -> Self {
+impl From<BoxRasterQueryProcessor<i8>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<i8>) -> Self {
         TypedRasterQueryProcessor::I8(value)
     }
 }
 
-impl From<Box<dyn RasterQueryProcessor<RasterType = u16>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = u16>>) -> Self {
+impl From<BoxRasterQueryProcessor<u16>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<u16>) -> Self {
         TypedRasterQueryProcessor::U16(value)
     }
 }
 
-impl From<Box<dyn RasterQueryProcessor<RasterType = i16>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = i16>>) -> Self {
+impl From<BoxRasterQueryProcessor<i16>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<i16>) -> Self {
         TypedRasterQueryProcessor::I16(value)
     }
 }
 
-impl From<Box<dyn RasterQueryProcessor<RasterType = u32>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = u32>>) -> Self {
+impl From<BoxRasterQueryProcessor<u32>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<u32>) -> Self {
         TypedRasterQueryProcessor::U32(value)
     }
 }
 
-impl From<Box<dyn RasterQueryProcessor<RasterType = i32>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = i32>>) -> Self {
+impl From<BoxRasterQueryProcessor<i32>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<i32>) -> Self {
         TypedRasterQueryProcessor::I32(value)
     }
 }
 
-impl From<Box<dyn RasterQueryProcessor<RasterType = u64>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = u64>>) -> Self {
+impl From<BoxRasterQueryProcessor<u64>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<u64>) -> Self {
         TypedRasterQueryProcessor::U64(value)
     }
 }
-impl From<Box<dyn RasterQueryProcessor<RasterType = i64>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = i64>>) -> Self {
+impl From<BoxRasterQueryProcessor<i64>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<i64>) -> Self {
         TypedRasterQueryProcessor::I64(value)
     }
 }
-impl From<Box<dyn RasterQueryProcessor<RasterType = f32>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = f32>>) -> Self {
+impl From<BoxRasterQueryProcessor<f32>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<f32>) -> Self {
         TypedRasterQueryProcessor::F32(value)
     }
 }
-impl From<Box<dyn RasterQueryProcessor<RasterType = f64>>> for TypedRasterQueryProcessor {
-    fn from(value: Box<dyn RasterQueryProcessor<RasterType = f64>>) -> Self {
+impl From<BoxRasterQueryProcessor<f64>> for TypedRasterQueryProcessor {
+    fn from(value: BoxRasterQueryProcessor<f64>) -> Self {
         TypedRasterQueryProcessor::F64(value)
     }
 }

@@ -257,11 +257,11 @@ where
         {
             Ok(stmt) => stmt,
             Err(e) => {
-                if let Some(code) = e.code() {
-                    if *code == SqlState::UNDEFINED_TABLE {
-                        info!("Initializing schema.");
-                        return Ok(DatabaseStatus::Unitialized);
-                    }
+                if let Some(code) = e.code()
+                    && *code == SqlState::UNDEFINED_TABLE
+                {
+                    info!("Initializing schema.");
+                    return Ok(DatabaseStatus::Unitialized);
                 }
                 return Err(error::Error::TokioPostgres { source: e });
             }
@@ -525,8 +525,9 @@ mod tests {
     use geoengine_operators::{
         engine::{
             MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-            RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
-            TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+            RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TimeDescriptor,
+            TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
+            VectorResultDescriptor,
         },
         machine_learning::MlModelMetadata,
         mock::{MockPointSource, MockPointSourceParams},
@@ -1562,7 +1563,7 @@ mod tests {
         let raster_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
+            time: TimeDescriptor::new_irregular(None),
             spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
                 GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),

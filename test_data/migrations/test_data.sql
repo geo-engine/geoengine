@@ -1,10 +1,12 @@
 -- Test data for initial database schema which will be subjected to migrations 
 -- and verified to be loadable in the latest database version.
-INSERT INTO projects (id) VALUES ('6a272e75-7ea2-43d7-804d-d84308e0f0fe');
+INSERT INTO projects (id)
+VALUES ('6a272e75-7ea2-43d7-804d-d84308e0f0fe');
 
 INSERT INTO project_versions (
     id, project_id, name, description, bounds, time_step, changed
-) VALUES (
+)
+VALUES (
     '516db5fa-854e-493f-b17d-bc5379d712bc',
     '6a272e75-7ea2-43d7-804d-d84308e0f0fe',
     'Test Project',
@@ -18,17 +20,18 @@ INSERT INTO project_versions (
     TIMESTAMP '2014-01-01 00:00:00'
 );
 
-INSERT INTO workflows (id, workflow) VALUES (
+INSERT INTO workflows (id, workflow)
+VALUES (
     '38ddfc17-016e-4910-8adf-b1af36a8590c',
     '{
-    "type": "Raster",
-    "operator": {
-        "type": "GdalSource",
-        "params": {
-            "data": "ndvi"
-        }
-    }
-}'
+          "type": "Raster",
+          "operator": {
+            "type": "GdalSource",
+            "params": {
+              "data": "ndvi"
+            }
+          }
+        }'
 );
 
 INSERT INTO layers (
@@ -39,7 +42,8 @@ INSERT INTO layers (
     symbology,
     properties,
     metadata
-) VALUES (
+)
+VALUES (
     '78aaa2b2-7d6b-4e6a-86bf-b3cd1b63553a',
     'Test Layer',
     'Test Layer Description',
@@ -83,7 +87,8 @@ INSERT INTO datasets (
     result_descriptor,
     meta_data,
     symbology
-) VALUES (
+)
+VALUES (
     '6cc80129-eea4-4140-b09c-6bcfbd76ad5f',
     (NULL, 'test')::"DatasetName",
     'Test Dataset',
@@ -194,7 +199,8 @@ INSERT INTO layer_providers (
     type_name,
     name,
     definition
-) VALUES (
+)
+VALUES (
     '1c01dbb9-e3ab-f9a2-06f5-228ba4b6bf7a',
     'GBIF',
     'GBIF',
@@ -229,20 +235,23 @@ INSERT INTO layer_providers (
 -- Test data for initial database schema which will be subjected to migrations 
 -- and verified to be loadable in the latest database version.
 
-INSERT INTO sessions (id, project_id, view) VALUES (
+INSERT INTO sessions (id, project_id, view)
+VALUES (
     'e11c7674-7ca5-4e07-840c-260835d3fc8d',
     NULL,
     NULL
 );
 
-INSERT INTO roles (id, name) VALUES (
+INSERT INTO roles (id, name)
+VALUES (
     'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
     'foobar@example.org'
 );
 
 INSERT INTO users (
     id, email, password_hash, real_name, active, quota_available, quota_used
-) VALUES (
+)
+VALUES (
     'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
     'foobar@example.org',
     'xyz',
@@ -252,19 +261,22 @@ INSERT INTO users (
     0
 );
 
-INSERT INTO user_roles (user_id, role_id) VALUES (
+INSERT INTO user_roles (user_id, role_id)
+VALUES (
     'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
     'b589a590-9c0c-4b55-9aa2-d178a5f42a78'
 );
 
-INSERT INTO user_sessions (user_id, session_id, created, valid_until) VALUES (
+INSERT INTO user_sessions (user_id, session_id, created, valid_until)
+VALUES (
     'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
     'e11c7674-7ca5-4e07-840c-260835d3fc8d',
     TIMESTAMP '2023-01-01 00:00:00',
     TIMESTAMP '9999-01-01 00:00:00'
 );
 
-INSERT INTO permissions (role_id, permission, project_id) VALUES (
+INSERT INTO permissions (role_id, permission, project_id)
+VALUES (
     'b589a590-9c0c-4b55-9aa2-d178a5f42a78',
     ('Owner'),
     '6a272e75-7ea2-43d7-804d-d84308e0f0fe'

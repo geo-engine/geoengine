@@ -10,7 +10,7 @@ use std::collections::{BTreeMap, HashMap};
 use tracing::debug;
 use url::Url;
 
-const PAGE_SIZE: usize = 10_000; // TODO: pagination
+pub(super) const PAGE_SIZE: usize = 10_000; // TODO: pagination
 const MAX_QUERY_LENGTH: usize = 40_000;
 
 #[derive(Debug, serde::Deserialize)]
@@ -62,13 +62,6 @@ struct StationSetup {
     pub decimal_latitude: f64,
     #[serde(rename = "decimalLongitude")]
     pub decimal_longitude: f64,
-}
-
-#[derive(Debug, serde::Deserialize, PartialEq)]
-pub(super) struct StationName {
-    pub id: String,
-    pub name: String,
-    pub description: String,
 }
 
 #[derive(Debug, Clone, serde::Deserialize)]
@@ -255,11 +248,11 @@ async fn project(api_endpoint: &Url, api_token: Option<&str>, project_id: &str) 
 }
 
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
-struct SearchRequest {
-    query: String,
-    filter: Option<Vec<String>>,
-    page_num: usize,
-    page_size: usize,
+pub(super) struct SearchRequest {
+    pub query: String,
+    pub filter: Option<Vec<String>>,
+    pub page_num: usize,
+    pub page_size: usize,
 }
 
 pub(super) async fn project_stations_dataset(

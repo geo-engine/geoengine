@@ -1520,7 +1520,7 @@ mod tests {
         ge_context,
         projects::{PointSymbology, RasterSymbology, Symbology},
         test_data,
-        users::UserAuth,
+        users::{RoleDb, UserAuth},
         util::tests::{
             MockQueryContext, SetMultipartBody, TestDataUploads, add_file_definition_to_datasets,
             admin_login, read_body_json, read_body_string, send_test_request,
@@ -1980,10 +1980,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
-            }
+            columns.text.sort();
         }
 
         assert_eq!(
@@ -2079,10 +2078,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.datetime.sort();
-            }
+            columns.datetime.sort();
         }
 
         assert_eq!(
@@ -2158,10 +2156,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.datetime.sort();
-            }
+            columns.datetime.sort();
         }
 
         assert_eq!(
@@ -2237,10 +2234,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.datetime.sort();
-            }
+            columns.datetime.sort();
         }
 
         assert_eq!(
@@ -2385,10 +2381,9 @@ mod tests {
         let mut meta_data = crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data);
 
         if let crate::datasets::storage::MetaDataDefinition::OgrMetaData(meta_data) = &mut meta_data
+            && let Some(columns) = &mut meta_data.loading_info.columns
         {
-            if let Some(columns) = &mut meta_data.loading_info.columns {
-                columns.text.sort();
-            }
+            columns.text.sort();
         }
 
         assert_eq!(
@@ -3263,6 +3258,60 @@ mod tests {
             .unwrap();
 
         assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        assert!(db.load_dataset(&dataset_id).await.is_err());
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_deletes_dataset_with_additional_read_permission(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let mut test_data = TestDataUploads::default(); // remember created folder and remove them on drop
+
+        let session = app_ctx.create_anonymous_session().await.unwrap();
+        let session_id = session.id();
+        let ctx = app_ctx.session_context(session);
+
+        let upload_id = upload_ne_10m_ports_files(app_ctx.clone(), session_id).await?;
+        test_data.uploads.push(upload_id);
+
+        let dataset_name =
+            construct_dataset_from_upload(app_ctx.clone(), upload_id, session_id).await;
+
+        let db = ctx.db();
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        let admin_session = admin_login(&app_ctx).await;
+        let admin_ctx = app_ctx.session_context(admin_session);
+        let admin_db = admin_ctx.db();
+
+        let role_id = admin_db.add_role("test_role").await.unwrap();
+        admin_db
+            .assign_role(&role_id, &ctx.session().user.id)
+            .await
+            .unwrap();
+
+        db.add_permission(role_id, dataset_id, Permission::Read)
+            .await
+            .unwrap();
 
         let req = actix_web::test::TestRequest::delete()
             .uri(&format!("/dataset/{dataset_name}"))

@@ -46,6 +46,16 @@ impl From<Colorizer> for RasterColorizer {
     }
 }
 
+impl RasterColorizer {
+    /// Returns the no data color of this raster colorizer
+    pub fn no_data_color(&self) -> RgbaColor {
+        match self {
+            RasterColorizer::SingleBand { band_colorizer, .. } => band_colorizer.no_data_color(),
+            RasterColorizer::MultiBand { rgb_params, .. } => rgb_params.no_data_color,
+        }
+    }
+}
+
 /// The parameters for the RGBA colorizer
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -333,7 +343,7 @@ impl Colorizer {
     ///
     /// assert_eq!(logarithmic_color_mapper.call(5.5), RgbaColor::new(189, 189, 189, 255));
     /// ```
-    pub fn create_color_mapper(&self) -> ColorMapper {
+    pub fn create_color_mapper(&self) -> ColorMapper<'_> {
         const COLOR_TABLE_SIZE: usize = 254; // use 256 colors with no data and default colors
 
         let (min_value, max_value) = (self.min_value(), self.max_value());

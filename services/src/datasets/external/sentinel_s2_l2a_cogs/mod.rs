@@ -815,7 +815,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 self.zone.epsg_code(),
             )
             .into(),
-            time: None,
+            time: geoengine_operators::engine::TimeDescriptor::new_irregular(None), // TODO: can we get the time bounds?
             spatial_grid: SpatialGridDescriptor::new_source(spatial_grid),
             bands: RasterBandDescriptors::new_single_band(),
         })

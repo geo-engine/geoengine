@@ -1361,7 +1361,8 @@ mod tests {
     use geoengine_operators::{
         engine::{
             RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-            SingleRasterOrVectorSource, SpatialGridDescriptor, TypedOperator, VectorOperator,
+            SingleRasterOrVectorSource, SpatialGridDescriptor, TimeDescriptor, TypedOperator,
+            VectorOperator,
         },
         mock::{MockPointSource, MockPointSourceParams, MockRasterSource, MockRasterSourceParams},
         processing::{TimeShift, TimeShiftParams},
@@ -2046,6 +2047,175 @@ mod tests {
     }
 
     #[ge_context::test]
+    async fn test_list_providers(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        ctx.db()
+            .add_layer_provider(
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone(),
+                ),
+            )
+            .await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/layerDb/providers?limit=5&offset=0")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let response_provider =
+            serde_json::from_str::<Vec<LayerProviderListing>>(&read_body_string(response).await)
+                .unwrap();
+
+        let listing = LayerProviderListing {
+            id: DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85).into(),
+            name: "User Data Listing".to_string(),
+            priority: 0,
+        };
+
+        assert_eq!(response_provider, vec![listing.clone()]);
+
+        let dataset_listing_provider = DatasetLayerListingProviderDefinition {
+            priority: Some(-1000),
+            ..dataset_listing_provider
+        };
+
+        ctx.db()
+            .update_layer_provider_definition(
+                DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider,
+                ),
+            )
+            .await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/layerDb/providers?limit=5&offset=0")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let response_provider =
+            serde_json::from_str::<Vec<LayerProviderListing>>(&read_body_string(response).await)
+                .unwrap();
+
+        let listing = LayerProviderListing {
+            priority: -1000,
+            ..listing
+        };
+
+        // No filtering for priority is applied here
+        assert_eq!(response_provider, vec![listing]);
+    }
+
+    #[ge_context::test]
+    async fn test_list_root_collections(app_ctx: PostgresContext<NoTls>) {
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = session.id();
+
+        let dataset_listing_provider = default_dataset_layer_listing_provider_definition();
+
+        ctx.db()
+            .add_layer_provider(
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider.clone(),
+                ),
+            )
+            .await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/layers/collections?limit=5&offset=0")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let response_collection =
+            serde_json::from_str::<LayerCollection>(&read_body_string(response).await).unwrap();
+
+        let data_catalog_item = CollectionItem::Collection(LayerCollectionListing {
+            r#type: Default::default(),
+            id: ProviderLayerCollectionId {
+                provider_id: INTERNAL_PROVIDER_ID,
+                collection_id: LayerCollectionId(
+                    crate::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+                ),
+            },
+            name: "Data Catalog".to_string(),
+            description: "Catalog of data and workflows".to_string(),
+            properties: vec![],
+        });
+
+        let collection = LayerCollection {
+            id: ProviderLayerCollectionId {
+                provider_id: ROOT_PROVIDER_ID,
+                collection_id: LayerCollectionId(ROOT_COLLECTION_ID.to_string()),
+            },
+            name: "Layer Providers".to_string(),
+            description: "All available Geo Engine layer providers".to_string(),
+            items: vec![
+                data_catalog_item.clone(),
+                CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
+                    id: ProviderLayerCollectionId {
+                        provider_id: dataset_listing_provider.id,
+                        collection_id: LayerCollectionId("root".to_string()),
+                    },
+                    name: dataset_listing_provider.name.clone(),
+                    description: dataset_listing_provider.description.clone(),
+                    properties: Default::default(),
+                }),
+            ],
+            entry_label: None,
+            properties: vec![],
+        };
+
+        assert_eq!(response_collection, collection.clone());
+
+        let dataset_listing_provider = DatasetLayerListingProviderDefinition {
+            priority: Some(-1000),
+            ..dataset_listing_provider
+        };
+
+        ctx.db()
+            .update_layer_provider_definition(
+                DataProviderId::from_u128(0xcbb2_1ee3_d15d_45c5_a175_6696_4adf_4e85),
+                crate::layers::external::TypedDataProviderDefinition::DatasetLayerListingProviderDefinition(
+                    dataset_listing_provider,
+                ),
+            )
+            .await.unwrap();
+
+        let req = test::TestRequest::get()
+            .uri("/layers/collections?limit=5&offset=0")
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+        let response = send_test_request(req, app_ctx.clone()).await;
+
+        assert!(response.status().is_success(), "{response:?}");
+
+        let response_collection =
+            serde_json::from_str::<LayerCollection>(&read_body_string(response).await).unwrap();
+
+        let collection = LayerCollection {
+            items: vec![data_catalog_item],
+            ..collection
+        };
+
+        // Provider with priority -1000 is filtered out
+        assert_eq!(response_collection, collection);
+    }
+
+    #[ge_context::test]
     async fn test_get_provider_definition(app_ctx: PostgresContext<NoTls>) {
         let session = admin_login(&app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
@@ -2424,14 +2594,14 @@ mod tests {
             let result_descriptor = RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: if has_time {
+                time: TimeDescriptor::new_irregular(if has_time {
                     Some(TimeInterval::new_unchecked(
                         1_671_868_800_000,
                         1_672_041_600_000,
                     ))
                 } else {
                     None
-                },
+                }),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::test_default(),
                     GridBoundingBox2D::new_min_max(-2, 0, 0, 2).unwrap(),
