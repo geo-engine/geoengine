@@ -4825,4 +4825,93 @@ mod tests {
 
         Ok(())
     }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_answers_multiband_time_queries(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
+
+        let operator = MultiBandGdalSource {
+            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+        }
+        .boxed();
+
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?;
+
+        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let processor = processor.get_u16().unwrap();
+
+        let time_stream = processor
+            .time_query(
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2024-12-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-15T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap(),
+                &query_ctx,
+            )
+            .await?;
+
+        let times: Vec<TimeInterval> = time_stream.try_collect().await?;
+
+        assert_eq!(
+            times,
+            vec![
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::MIN,
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap(),
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-01-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap(),
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-02-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-03-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap(),
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-03-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-04-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap(),
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-04-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap(),
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-05-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::MAX
+                )
+                .unwrap()
+            ]
+        );
+
+        Ok(())
+    }
 }

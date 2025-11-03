@@ -107,11 +107,43 @@ type MultiBandGdalMetaData = Box<
         >,
 >;
 
-pub type MultiBandGdalLoadingInfoQueryRectangle = QueryRectangle<SpatialPartition2D, BandSelection>;
+/// A query rectangle on rasters in coordinate (instead of pixel) space. This is used to request tiles that are anchored in coordinates space.
+/// Additionaly you can also specify to fetch tiles (with gdal params).
+/// Set `fetch_tiles` to false if you only want to access the time steps.
+#[derive(Clone, Debug)]
+pub struct MultiBandGdalLoadingInfoQueryRectangle {
+    pub query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
+    pub fetch_tiles: bool,
+}
+
+impl MultiBandGdalLoadingInfoQueryRectangle {
+    pub fn new(
+        spatial_bounds: SpatialPartition2D,
+        time_interval: TimeInterval,
+        attributes: BandSelection,
+        fetch_tiles: bool,
+    ) -> Self {
+        Self {
+            query_rectangle: QueryRectangle::new(spatial_bounds, time_interval, attributes),
+            fetch_tiles,
+        }
+    }
+
+    pub fn with_query_rectangle(
+        query_rectangle: QueryRectangle<SpatialPartition2D, BandSelection>,
+        fetch_tiles: bool,
+    ) -> Self {
+        Self {
+            query_rectangle,
+            fetch_tiles,
+        }
+    }
+}
 
 fn raster_query_rectangle_to_loading_info_query_rectangle(
     raster_query_rectangle: &RasterQueryRectangle,
     tiling_spatial_grid: TilingSpatialGridDefinition,
+    fetch_tiles: bool,
 ) -> MultiBandGdalLoadingInfoQueryRectangle {
     MultiBandGdalLoadingInfoQueryRectangle::new(
         tiling_spatial_grid
@@ -119,6 +151,7 @@ fn raster_query_rectangle_to_loading_info_query_rectangle(
             .grid_to_spatial_bounds(&raster_query_rectangle.spatial_bounds()),
         raster_query_rectangle.time_interval(),
         raster_query_rectangle.attributes().clone(),
+        fetch_tiles,
     )
 }
 
@@ -425,6 +458,7 @@ where
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
                 &query,
                 produced_tiling_grid,
+                true,
             ))
             .await?;
 
@@ -478,11 +512,35 @@ where
 
     async fn time_query<'a>(
         &'a self,
-        _query: TimeInterval,
-        _ctx: &'a dyn QueryContext,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
-        // TODO: how to get DB connection here? self.meta_data....
-        todo!()
+        let result_descriptor = self.result_descriptor();
+
+        let grid_produced_by_source_desc = result_descriptor.spatial_grid;
+
+        let produced_tiling_grid =
+            grid_produced_by_source_desc.tiling_grid_definition(self.tiling_specification);
+
+        let q_bounds = self
+            .raster_result_descriptor()
+            .tiling_grid_definition(ctx.tiling_specification())
+            .tiling_grid_bounds();
+        let query = RasterQueryRectangle::new(q_bounds, query, BandSelection::first());
+
+        let qrect = raster_query_rectangle_to_loading_info_query_rectangle(
+            &query,
+            produced_tiling_grid,
+            false,
+        );
+
+        let loading_info = self.meta_data.loading_info(qrect).await?;
+
+        let time_steps = loading_info.time_steps().to_vec();
+
+        let stream = stream::iter(time_steps).map(Result::Ok).boxed();
+
+        Ok(stream)
     }
 }
 

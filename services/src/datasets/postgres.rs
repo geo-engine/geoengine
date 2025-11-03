@@ -717,22 +717,23 @@ where
     // determine the regularity of the dataset
     let time_dim = resolve_time_dim(dataset_id, conn).await?;
 
-    // query all time steps inside the query, across all spatial tiles and bands
-    let time_steps = collect_timesteps_in_query(dataset_id, query_time, conn)
-        .await?
-        .into_iter()
-        .map(Result::Ok)
-        .collect::<Vec<Result<TimeInterval>>>();
-
     // fill the gaps before, between and after the data tiles to fully cover the query time range
     match time_dim {
         TimeDimension::Regular(regular_time_dimension) => {
-            return time_steps
+            // we do not even need to know the existing tile's time steps here, since the steps are regular
+            vec![]
                 .into_iter()
                 .try_time_regular_range_fill(regular_time_dimension, query_time)
-                .collect();
+                .collect()
         }
         TimeDimension::Irregular => {
+            // query all time steps inside the query, across all spatial tiles and bands
+            let time_steps = collect_timesteps_in_query(dataset_id, query_time, conn)
+                .await?
+                .into_iter()
+                .map(Result::Ok)
+                .collect::<Vec<Result<TimeInterval>>>();
+
             // determine the time range to cover by finding the last tile before, and the first tile after the `time_steps`
             let (start, end) = if let Some(Ok(first_time)) = time_steps.first()
                 && let Some(Ok(last_time)) = time_steps.last()
@@ -759,10 +760,10 @@ where
                 (start, end)
             };
 
-            return time_steps
+            time_steps
                 .into_iter()
                 .try_time_irregular_range_fill(TimeInterval::new(start, end)?)
-                .collect();
+                .collect()
         }
     }
 }
@@ -923,10 +924,11 @@ where
             }
         })?;
 
-        // query the files
-        let rows = conn
-            .query(
-                "
+        let files = if query.fetch_tiles {
+            // query the files
+            let rows = conn
+                .query(
+                    "
             SELECT
                 bbox, time, band, z_index, gdal_params
             FROM
@@ -938,34 +940,44 @@ where
                 band = ANY($4)
             ORDER BY
                 (time).start, band, z_index",
-                &[
-                    &self.dataset_id,
-                    &query.spatial_bounds(),
-                    &query.time_interval(),
-                    &query.attributes().as_slice(),
-                ],
-            )
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?;
+                    &[
+                        &self.dataset_id,
+                        &query.query_rectangle.spatial_bounds(),
+                        &query.query_rectangle.time_interval(),
+                        &query.query_rectangle.attributes().as_slice(),
+                    ],
+                )
+                .await
+                .map_err(|e| geoengine_operators::error::Error::MetaData {
+                    source: Box::new(e),
+                })?;
 
-        let files: Vec<TileFile> = rows
-            .into_iter()
-            .map(|row| TileFile {
-                spatial_partition: row.get(0),
-                time: row.get(1),
-                band: row.get(2),
-                z_index: row.get(3),
-                params: row.get(4),
-            })
-            .collect();
+            let files: Vec<TileFile> = rows
+                .into_iter()
+                .map(|row| TileFile {
+                    spatial_partition: row.get(0),
+                    time: row.get(1),
+                    band: row.get(2),
+                    z_index: row.get(3),
+                    params: row.get(4),
+                })
+                .collect();
 
-        let time_steps = create_gap_free_time_steps(self.dataset_id, query.time_interval(), &conn)
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?;
+            files
+        } else {
+            // TODO: configure the resulting loading info to return an error on accessing the files
+            vec![]
+        };
+
+        let time_steps = create_gap_free_time_steps(
+            self.dataset_id,
+            query.query_rectangle.time_interval(),
+            &conn,
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
 
         Ok(MultiBandGdalLoadingInfo::new(
             time_steps,
