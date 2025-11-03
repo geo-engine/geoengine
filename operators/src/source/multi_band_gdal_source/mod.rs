@@ -458,7 +458,7 @@ where
                     band_idx,
                 )
             })
-            .buffered(1) // TODO: make configurable
+            .buffered(16) // TODO: make configurable
             .boxed();
 
         return Ok(stream);
