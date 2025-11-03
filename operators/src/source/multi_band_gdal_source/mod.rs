@@ -481,6 +481,7 @@ where
         _query: TimeInterval,
         _ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+        // TODO: how to get DB connection here? self.meta_data....
         todo!()
     }
 }

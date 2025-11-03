@@ -1,0 +1,67 @@
+{
+  "dataPath": {
+    "volume": "test_data"
+  },
+  "definition": {
+    "properties": {
+      "name": null,
+      "displayName": "multi tile multi band",
+      "description": "",
+      "sourceOperator": "MultiBandGdalSource",
+      "symbology": null,
+      "provenance": null,
+      "tags": ["upload", "test"]
+    },
+    "metaData": {
+      "type": "GdalMultiBand",
+      "resultDescriptor": {
+        "dataType": "U16",
+        "spatialReference": "EPSG:4326",
+        "time": {
+          "bounds": {
+            "start": "2025-01-01T00:00:00.000Z",
+            "end": "2025-05-01T00:00:00.000Z"
+          },
+          "dimension": null
+        },
+        "spatialGrid": {
+          "spatialGrid": {
+            "geoTransform": {
+              "originCoordinate": {
+                "x": -180.0,
+                "y": 90.0
+              },
+              "xPixelSize": 0.2,
+              "yPixelSize": -0.2
+            },
+            "gridBounds": {
+              "topLeftIdx": {
+                "yIdx": 0,
+                "xIdx": 0
+              },
+              "bottomRightIdx": {
+                "yIdx": 899,
+                "xIdx": 1799
+              }
+            }
+          },
+          "descriptor": "source"
+        },
+        "bands": [
+          {
+            "name": "band 0",
+            "measurement": {
+              "type": "unitless"
+            }
+          },
+          {
+            "name": "band 1",
+            "measurement": {
+              "type": "unitless"
+            }
+          }
+        ]
+      }
+    }
+  }
+}

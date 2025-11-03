@@ -21,7 +21,10 @@ use bb8_postgres::tokio_postgres::Socket;
 use bb8_postgres::tokio_postgres::tls::{MakeTlsConnect, TlsConnect};
 use geoengine_datatypes::dataset::{DataId, DatasetId};
 use geoengine_datatypes::error::BoxedResultExt;
-use geoengine_datatypes::primitives::{CacheHint, RasterQueryRectangle, TimeInstance};
+use geoengine_datatypes::primitives::{
+    CacheHint, RasterQueryRectangle, TimeDimension, TimeInstance, TryIrregularTimeFillIterExt,
+    TryRegularTimeFillIterExt,
+};
 use geoengine_datatypes::primitives::{TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::TypedResultDescriptor;
@@ -711,86 +714,109 @@ where
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
+    // determine the regularity of the dataset
+    let time_dim = resolve_time_dim(dataset_id, conn).await?;
+
     // query all time steps inside the query, across all spatial tiles and bands
-    let time_steps = collect_timesteps_in_query(dataset_id, query_time, conn).await?;
+    let time_steps = collect_timesteps_in_query(dataset_id, query_time, conn)
+        .await?
+        .into_iter()
+        .map(Result::Ok)
+        .collect::<Vec<Result<TimeInterval>>>();
 
-    // handle case where no time steps are found
-    if time_steps.is_empty() {
-        // Query for the closest time step before the query time
-        let time =
-            resolve_time_from_first_tile_before_and_after_query(dataset_id, query_time, conn)
-                .await?;
-
-        return Ok(vec![time]);
-    }
-
-    // fill the gaps in the returned time steps
-    let mut filled_time_steps = vec![];
-
-    for time_step in time_steps {
-        let Some(last_step) = filled_time_steps.last() else {
-            filled_time_steps.push(time_step);
-            continue;
-        };
-
-        if last_step.end() < time_step.start() {
-            // gap, add the gap
-            filled_time_steps.push(
-                TimeInterval::new(last_step.end(), time_step.start())
-                    .expect("start must be before end"),
-            );
+    // fill the gaps before, between and after the data tiles to fully cover the query time range
+    match time_dim {
+        TimeDimension::Regular(regular_time_dimension) => {
+            return time_steps
+                .into_iter()
+                .try_time_regular_range_fill(regular_time_dimension, query_time)
+                .collect();
         }
+        TimeDimension::Irregular => {
+            // determine the time range to cover by finding the last tile before, and the first tile after the `time_steps`
+            let (start, end) = if let Some(Ok(first_time)) = time_steps.first()
+                && let Some(Ok(last_time)) = time_steps.last()
+            {
+                let start = if first_time.start() > query_time.start() {
+                    resolve_first_time_end_before(dataset_id, conn, first_time.start()).await?
+                } else {
+                    query_time.start()
+                };
 
-        filled_time_steps.push(time_step);
+                let end = if last_time.end() < query_time.end() {
+                    resolve_first_time_start_after(dataset_id, conn, last_time.end()).await?
+                } else {
+                    query_time.end()
+                };
+
+                (start, end)
+            } else {
+                let start =
+                    resolve_first_time_end_before(dataset_id, conn, query_time.start()).await?;
+                let end =
+                    resolve_first_time_start_after(dataset_id, conn, query_time.end()).await?;
+
+                (start, end)
+            };
+
+            return time_steps
+                .into_iter()
+                .try_time_irregular_range_fill(TimeInterval::new(start, end)?)
+                .collect();
+        }
     }
+}
 
-    // fill the gaps before and after the data/query time
-    let (time_start, time_end) = match (filled_time_steps.first(), filled_time_steps.last()) {
-        (Some(first), Some(last)) => (first.start(), last.end()),
-        _ => (query_time.start(), query_time.end()),
-    };
+async fn resolve_first_time_end_before<Tls>(
+    dataset_id: DatasetId,
+    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    start: TimeInstance,
+) -> Result<TimeInstance>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let rows = conn
+        .query(
+            "
+                SELECT DISTINCT
+                    (time).end
+                FROM
+                    dataset_tiles
+                WHERE
+                    dataset_id = $1 AND (time).end < $2
+                ORDER BY
+                (time).end DESC
+                LIMIT 1",
+            &[&dataset_id, &start],
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
+    Ok(if let Some(row) = rows.first() {
+        row.get(0)
+    } else {
+        TimeInstance::MIN
+    })
+}
 
-    // fill possible gaps at the beginning and end of the data/query time
-
-    if time_start > query_time.start() {
-        // last tile before query
-        let rows = conn
-            .query(
-                "
-            SELECT DISTINCT
-                (time).end
-            FROM
-                dataset_tiles
-            WHERE
-                dataset_id = $1 AND (time).end < $2
-            ORDER BY
-               (time).end DESC
-            LIMIT 1",
-                &[&dataset_id, &time_start],
-            )
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?;
-
-        let start = if let Some(row) = rows.first() {
-            row.get(0)
-        } else {
-            TimeInstance::MIN
-        };
-
-        filled_time_steps.insert(
-            0,
-            TimeInterval::new(start, time_start).expect("start must be before end"),
-        );
-    }
-
-    if time_end < query_time.end() {
-        // first tile after query
-
-        let rows = conn
-            .query(
-                "
+async fn resolve_first_time_start_after<Tls>(
+    dataset_id: DatasetId,
+    conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
+    end: TimeInstance,
+) -> Result<TimeInstance>
+where
+    Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
+    <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
+    <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
+    <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
+{
+    let rows = conn
+        .query(
+            "
             SELECT DISTINCT
                 (time).start
             FROM
@@ -798,95 +824,44 @@ where
             WHERE
                 dataset_id = $1 AND (time).start > $2
             ORDER BY
-               (time).start ASC
+            (time).start ASC
             LIMIT 1",
-                &[
-                    &dataset_id,
-                    &filled_time_steps
-                        .last()
-                        .expect("at least one time step")
-                        .start(),
-                ],
-            )
-            .await
-            .map_err(|e| geoengine_operators::error::Error::MetaData {
-                source: Box::new(e),
-            })?;
+            &[&dataset_id, &end],
+        )
+        .await
+        .map_err(|e| geoengine_operators::error::Error::MetaData {
+            source: Box::new(e),
+        })?;
 
-        let end = if let Some(row) = rows.first() {
-            row.get(0)
-        } else {
-            TimeInstance::MAX
-        };
-
-        filled_time_steps.push(TimeInterval::new(time_end, end).expect("start must be before end"));
-    }
-
-    Ok(filled_time_steps)
+    Ok(if let Some(row) = rows.first() {
+        row.get(0)
+    } else {
+        TimeInstance::MAX
+    })
 }
 
-async fn resolve_time_from_first_tile_before_and_after_query<Tls>(
+async fn resolve_time_dim<Tls>(
     dataset_id: DatasetId,
-    query_time: TimeInterval,
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
-) -> Result<TimeInterval>
+) -> Result<TimeDimension>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
     <Tls as MakeTlsConnect<Socket>>::Stream: Send + Sync,
     <Tls as MakeTlsConnect<Socket>>::TlsConnect: Send,
     <<Tls as MakeTlsConnect<Socket>>::TlsConnect as TlsConnect<Socket>>::Future: Send,
 {
-    let before_rows = conn
-        .query(
-            "
-                SELECT
-                    (time).end
-                FROM
-                    dataset_tiles
-                WHERE
-                    dataset_id = $1 AND (time).end <= $2
-                ORDER BY
-                   (time).end DESC
-                LIMIT 1",
-            &[&dataset_id, &query_time.start()],
+    let time_dim: TimeDimension = conn
+        .query_one(
+            r#"
+        SELECT (result_descriptor).raster."time".dimension
+        FROM datasets
+        WHERE id = $1;
+    "#,
+            &[&dataset_id],
         )
-        .await
-        .map_err(|e| geoengine_operators::error::Error::MetaData {
-            source: Box::new(e),
-        })?;
-
-    let after_rows = conn
-        .query(
-            "
-                SELECT
-                    (time).start
-                FROM
-                    dataset_tiles
-                WHERE
-                    dataset_id = $1 AND (time).start >= $2
-                ORDER BY
-                   (time).start ASC
-                LIMIT 1",
-            &[&dataset_id, &query_time.end()],
-        )
-        .await
-        .map_err(|e| geoengine_operators::error::Error::MetaData {
-            source: Box::new(e),
-        })?;
-
-    let start = if let Some(row) = before_rows.first() {
-        row.get(0)
-    } else {
-        TimeInstance::MIN
-    };
-
-    let end = if let Some(row) = after_rows.first() {
-        row.get(0)
-    } else {
-        TimeInstance::MAX
-    };
-
-    Ok(TimeInterval::new(start, end).expect("start must be before end"))
+        .await?
+        .get(0);
+    Ok(time_dim)
 }
 
 async fn collect_timesteps_in_query<Tls>(
