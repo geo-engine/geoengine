@@ -20,6 +20,7 @@ use geoengine_datatypes::primitives::{
 use geoengine_datatypes::raster::{DynamicRasterDataType, GridBoundingBox2D, Pixel};
 use geoengine_datatypes::{collections::MultiPointCollection, raster::RasterTile2D};
 use ouroboros::self_referencing;
+use tracing::debug;
 
 /// An instantiation of an operator that produces a stream of results for a query
 #[async_trait]
@@ -123,11 +124,31 @@ pub trait RasterQueryProcessor:
         self.result_descriptor()
     }
 
-    async fn time_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
         query: TimeInterval,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<TimeInterval>>>;
+
+    async fn time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+        let rdt = self.raster_result_descriptor().time;
+        if let Some(regular_time) = rdt.dimension.unwrap_regular() {
+            debug!("Using time query shortcut for regular time dimension");
+            let iter = regular_time.intersecting_intervals(query)?.map(Result::Ok);
+            return Ok(futures::StreamExt::boxed(futures::stream::iter(iter)));
+        }
+
+        debug!(
+            "Delegating time query to the {} query processors implementation",
+            std::any::type_name::<Self>()
+        );
+        #[allow(clippy::used_underscore_items)] // TODO: maybe rename?
+        self._time_query(query, ctx).await
+    }
 }
 
 pub type BoxRasterQueryProcessor<P> = Box<
@@ -260,7 +281,7 @@ where
 impl<T: Pixel> RasterQueryProcessor for BoxRasterQueryProcessor<T> {
     type RasterType = T;
 
-    async fn time_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
         query: TimeInterval,
         ctx: &'a dyn QueryContext,

@@ -26,7 +26,7 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, RasterQueryRectangle, RegularTimeDimension, SpatialResolution, TimeFilledItem,
     TimeInstance,
@@ -323,7 +323,16 @@ where
             .tiling_grid_definition(self.tiling_specification)
             .generate_data_tiling_strategy();
 
-        let time_stream = self.time_query(query.time_interval(), ctx).await?;
+        let time_stream: std::pin::Pin<
+            Box<
+                dyn Stream<
+                        Item = std::result::Result<
+                            geoengine_datatypes::primitives::TimeInterval,
+                            error::Error,
+                        >,
+                    > + Send,
+            >,
+        > = self.time_query(query.time_interval(), ctx).await?;
 
         Ok(match self.aggregation_type {
             Aggregation::Min {
@@ -514,7 +523,7 @@ where
 {
     type RasterType = P;
 
-    async fn time_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         _ctx: &'a dyn crate::engine::QueryContext,

@@ -432,7 +432,7 @@ where
 {
     type RasterType = TOut;
 
-    async fn time_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
         query: TimeInterval,
         ctx: &'a dyn QueryContext,

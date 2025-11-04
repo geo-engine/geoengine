@@ -313,7 +313,7 @@ where
 {
     type RasterType = P;
 
-    async fn time_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn QueryContext,
