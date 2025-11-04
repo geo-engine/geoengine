@@ -12,7 +12,7 @@ use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{{BandSelection, RasterQueryRectangle, SpatialResolution}};
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridOrEmpty2D, MapElementsParallel, Pixel, RasterDataType, RasterTile2D,
 };

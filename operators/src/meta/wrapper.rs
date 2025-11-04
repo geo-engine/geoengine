@@ -1,16 +1,18 @@
 use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor,
-    WorkflowOperatorPath,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    ResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{QueryAttributeSelection, QueryRectangle, SpatialResolution, TimeInterval};
+use geoengine_datatypes::primitives::{
+    QueryAttributeSelection, QueryRectangle, SpatialResolution, TimeInterval,
+};
 use geoengine_datatypes::raster::RasterTile2D;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{Level, span};

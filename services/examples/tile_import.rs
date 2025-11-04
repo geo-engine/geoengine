@@ -114,9 +114,10 @@ fn collect_files(dir: &Path, extension: &str, recursive: bool, files: &mut Vec<P
                 collect_files(&path, extension, recursive, files);
             } else if path.is_file()
                 && let Some(ext) = path.extension().and_then(|e| e.to_str())
-                    && ext.eq_ignore_ascii_case(extension) {
-                        files.push(path);
-                    }
+                && ext.eq_ignore_ascii_case(extension)
+            {
+                files.push(path);
+            }
         }
     }
 }

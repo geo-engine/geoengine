@@ -17,8 +17,7 @@ use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BandSelection, BoundingBox2D, Coordinate2D, RasterQueryRectangle,
     SpatialPartition2D, SpatialPartitioned, SpatialResolution, TimeFilledItem,
-    VectorQueryRectangle,
-    find_next_best_overview_level_resolution,
+    VectorQueryRectangle, find_next_best_overview_level_resolution,
 };
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
