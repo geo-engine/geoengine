@@ -360,7 +360,7 @@ impl QueryProcessor for GridRasterizationQueryProcessor {
 impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     type RasterType = f64;
 
-    async fn time_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         _ctx: &'a dyn crate::engine::QueryContext,
@@ -506,7 +506,7 @@ impl QueryProcessor for DensityRasterizationQueryProcessor {
 impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
     type RasterType = f64;
 
-    async fn time_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
         query: geoengine_datatypes::primitives::TimeInterval,
         _ctx: &'a dyn crate::engine::QueryContext,
