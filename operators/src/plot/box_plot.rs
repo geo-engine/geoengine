@@ -156,7 +156,7 @@ impl PlotOperator for BoxPlot {
                         }
                         None => {
                             return Err(Error::ColumnDoesNotExist {
-                                column: cn.to_string(),
+                                column: cn.clone(),
                             });
                         }
                     }

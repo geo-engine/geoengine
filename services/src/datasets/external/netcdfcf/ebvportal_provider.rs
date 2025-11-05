@@ -404,7 +404,7 @@ impl<D: GeoEngineDb> EbvPortalDataProvider<D> {
                 provider_id: EBV_PROVIDER_ID,
                 collection_id: collection.clone(),
             },
-            name: dataset.name.to_string(),
+            name: dataset.name.clone(),
             description: dataset.description,
             items,
             entry_label: dataset

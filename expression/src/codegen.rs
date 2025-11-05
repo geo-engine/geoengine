@@ -235,7 +235,7 @@ impl From<&str> for Identifier {
 
 impl From<&String> for Identifier {
     fn from(s: &String) -> Self {
-        Self(s.to_string())
+        Self(s.clone())
     }
 }
 

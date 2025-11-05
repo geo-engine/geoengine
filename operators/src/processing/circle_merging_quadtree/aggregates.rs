@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 
 const MAX_STRINGS_IN_SAMPLE: usize = 3;
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Default)]
 pub enum AttributeAggregate {
     MeanNumber(MeanAggregator),
     StringSample(StringSampler),
+    #[default]
     Null, // Representing a missing aggregate
 }
 
@@ -35,12 +36,6 @@ pub struct MeanAggregator {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StringSampler {
     pub strings: Vec<String>,
-}
-
-impl Default for AttributeAggregate {
-    fn default() -> Self {
-        Self::Null
-    }
 }
 
 impl MeanAggregator {

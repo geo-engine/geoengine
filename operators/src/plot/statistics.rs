@@ -167,7 +167,7 @@ impl PlotOperator for Statistics {
                             }
                             None => {
                                 return Err(Error::ColumnDoesNotExist {
-                                    column: cn.to_string(),
+                                    column: cn.clone(),
                                 });
                             }
                         }

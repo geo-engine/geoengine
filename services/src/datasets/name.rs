@@ -111,7 +111,7 @@ impl Serialize for DatasetName {
     {
         let d = geoengine_datatypes::dataset::NAME_DELIMITER;
         let serialized = match (&self.namespace, &self.name) {
-            (None, name) => name.to_string(),
+            (None, name) => name.clone(),
             (Some(namespace), name) => {
                 format!("{namespace}{d}{name}")
             }

@@ -1252,14 +1252,14 @@ pub(crate) mod mock_oidc {
                 .expect("Cannot create mock of RSA private key"),
             CoreJwsSigningAlgorithm::RsaSsaPssSha256,
             Some(&AccessToken::new(
-                mock_token_config.access_for_id.to_string(),
+                mock_token_config.access_for_id.clone(),
             )),
             None,
         )
         .expect("Cannot create mock of ID Token");
 
         let mut result = CoreTokenResponse::new(
-            AccessToken::new(mock_token_config.access.to_string()),
+            AccessToken::new(mock_token_config.access.clone()),
             CoreTokenType::Bearer,
             CoreIdTokenFields::new(Some(id_token), EmptyExtraTokenFields {}),
         );

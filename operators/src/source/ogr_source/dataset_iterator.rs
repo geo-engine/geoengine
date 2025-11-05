@@ -98,14 +98,14 @@ impl OgrDatasetIterator {
                         // Build reverse mapping
                         let r_mapping = mapping
                             .iter()
-                            .map(|(k, v)| (v.to_string(), k.to_string()))
+                            .map(|(k, v)| (v.clone(), k.clone()))
                             .collect::<HashMap<_, _>>();
 
                         attribute_filters
                             .into_iter()
                             .map(|f| match r_mapping.get(&f.attribute) {
                                 Some(name) => AttributeFilter {
-                                    attribute: name.to_string(),
+                                    attribute: name.clone(),
                                     ranges: f.ranges,
                                     keep_nulls: f.keep_nulls,
                                 },
