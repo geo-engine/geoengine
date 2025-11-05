@@ -38,16 +38,41 @@ fn _output_openapi_json() -> Result<(), anyhow::Error> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use assert_cmd::cargo::CommandCargoExt;
     use std::{
         path::{Path, PathBuf},
         process::{Command, Stdio},
     };
 
+    /// Adapted from `https://docs.rs/assert_cmd/latest/src/assert_cmd/cargo.rs.html#222-233`
+    // TODO: find out proper function from `assert_cmd` crate
+    fn cargo_bin_str(name: &str) -> PathBuf {
+        use std::env;
+
+        // Adapted from
+        // https://github.com/rust-lang/cargo/blob/485670b3983b52289a2f353d589c57fae2f60f82/tests/testsuite/support/mod.rs#L507
+        fn target_dir() -> PathBuf {
+            env::current_exe()
+                .ok()
+                .map(|mut path| {
+                    path.pop();
+                    if path.ends_with("deps") {
+                        path.pop();
+                    }
+                    path
+                })
+                .expect("this should only be used where a `current_exe` can be set")
+        }
+
+        let env_var = format!("CARGO_BIN_EXE_{name}");
+        env::var_os(env_var).map_or_else(
+            || target_dir().join(format!("{}{}", name, env::consts::EXE_SUFFIX)),
+            std::convert::Into::into,
+        )
+    }
+
     #[test]
     fn it_generates_json() {
-        let cli_result = Command::cargo_bin("geoengine-cli")
-            .unwrap()
+        let cli_result = Command::new(cargo_bin_str("geoengine-cli"))
             .arg("openapi")
             .current_dir(workspace_dir())
             .stdout(Stdio::piped())
