@@ -47,15 +47,10 @@ pub enum CsvGeometrySpecification {
     XY { x: String, y: String },
 }
 
-#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Default)]
 pub enum CsvTimeSpecification {
+    #[default]
     None,
-}
-
-impl Default for CsvTimeSpecification {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 enum ReaderState {

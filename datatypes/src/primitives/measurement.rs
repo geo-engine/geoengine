@@ -4,9 +4,10 @@ use std::collections::BTreeMap;
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
+    #[default]
     Unitless,
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
@@ -30,12 +31,6 @@ impl Measurement {
 
     pub fn is_continuous(&self) -> bool {
         matches!(self, Self::Continuous(_))
-    }
-}
-
-impl Default for Measurement {
-    fn default() -> Self {
-        Self::Unitless
     }
 }
 

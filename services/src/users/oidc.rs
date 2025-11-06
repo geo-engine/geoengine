@@ -150,8 +150,8 @@ impl OidcManager {
         use crate::util::tests::mock_oidc::{SINGLE_NONCE, SINGLE_STATE};
 
         let request_db = OidcRequestDb {
-            issuer: value.issuer.to_string(),
-            client_id: value.client_id.to_string(),
+            issuer: value.issuer.clone(),
+            client_id: value.client_id.clone(),
             client_secret: value.client_secret.clone(),
             scopes: value.scopes,
             users: Arc::new(Default::default()),
@@ -337,7 +337,7 @@ impl From<ParseError> for OidcError {
 
 impl OidcRequestDb {
     async fn get_client(&self, redirect_uri: Option<String>) -> Result<DefaultClient> {
-        let issuer_url = IssuerUrl::new(self.issuer.to_string())?;
+        let issuer_url = IssuerUrl::new(self.issuer.clone())?;
 
         //TODO: Provider meta data could be added as a fixed field in the DB, making discovery a one-time process. This would have implications for server startup.
         let provider_metadata: DefaultProviderMetadata =
@@ -391,7 +391,7 @@ impl OidcRequestDb {
 
         let mut client = DefaultClient::from_provider_metadata(
             provider_metadata,
-            ClientId::new(self.client_id.to_string()),
+            ClientId::new(self.client_id.clone()),
             self.client_secret
                 .as_ref()
                 .map(|s| ClientSecret::new(s.clone())),
@@ -588,8 +588,8 @@ impl TryFrom<Oidc> for OidcRequestDb {
     fn try_from(value: Oidc) -> Result<Self, Self::Error> {
         if value.enabled {
             let db = OidcRequestDb {
-                issuer: value.issuer.to_string(),
-                client_id: value.client_id.to_string(),
+                issuer: value.issuer.clone(),
+                client_id: value.client_id.clone(),
                 client_secret: value.client_secret.clone(),
                 scopes: value.scopes,
                 users: Arc::new(Default::default()),

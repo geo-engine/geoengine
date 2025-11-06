@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in tests
 
-use assert_cmd::cargo::CommandCargoExt;
+use assert_cmd::cargo_bin;
 use geoengine_services::test_data;
 use pretty_assertions::assert_eq;
 use std::process::{Command, Stdio};
@@ -10,8 +10,7 @@ async fn it_has_the_latest_openapi_schema_stored_in_the_repository() {
     // change cwd s.t. the config file can be found
     std::env::set_current_dir(test_data!("..")).expect("failed to set current directory");
 
-    let startup_result = Command::cargo_bin("geoengine-cli")
-        .unwrap()
+    let startup_result = Command::new(cargo_bin!("geoengine-cli"))
         .args(["openapi"])
         .stdout(Stdio::piped())
         .output()

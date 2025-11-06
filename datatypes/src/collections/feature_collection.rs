@@ -428,7 +428,7 @@ where
                     .clone(),
             );
 
-            types.insert(column_name.to_string(), self.types[column_name]);
+            types.insert(column_name.clone(), self.types[column_name]);
         }
 
         Ok(Self::new_from_internals(
@@ -869,7 +869,7 @@ where
                     .filter(|x| !FeatureCollection::<CollectionType>::is_reserved_name(x))
                     .map(|x| {
                         (
-                            x.to_string(),
+                            x.clone(),
                             collection.data(x).expect("reserved columns were filtered"),
                         )
                     })
