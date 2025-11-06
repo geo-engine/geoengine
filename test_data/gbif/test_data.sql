@@ -1,5 +1,5 @@
 CREATE TABLE gbif_datasets (
-    key uuid PRIMARY KEY,
+    key uuid PRIMARY KEY, -- noqa: references.keywords
     citation text,
     license text,
     uri text
@@ -46,9 +46,9 @@ CREATE TABLE occurrences (
     depth double precision,
     depthaccuracy text,
     eventdate timestamp without time zone,
-    day integer,
-    month integer,
-    year integer,
+    day integer, -- noqa: references.keywords
+    month integer, -- noqa: references.keywords
+    year integer, -- noqa: references.keywords
     taxonkey bigint,
     specieskey text,
     basisofrecord text,

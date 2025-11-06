@@ -60,16 +60,12 @@ impl VectorQueryProcessor for MockPointSourceProcessor {
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
+#[derive(Default)]
 pub enum SpatialBoundsDerive {
     Derive,
     Bounds(BoundingBox2D),
+    #[default]
     None,
-}
-
-impl Default for SpatialBoundsDerive {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

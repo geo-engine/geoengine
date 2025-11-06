@@ -953,7 +953,7 @@ CREATE TABLE ebv_provider_entities (
 CREATE TABLE ebv_provider_timestamps (
     provider_id uuid NOT NULL,
     file_name text NOT NULL,
-    time bigint NOT NULL,
+    time bigint NOT NULL, -- noqa: references.keywords
 
     -- TODO: check if we need it
     PRIMARY KEY (provider_id, file_name, time) DEFERRABLE,
@@ -1134,7 +1134,7 @@ CREATE TABLE user_uploads (
 CREATE TABLE sessions (
     id uuid PRIMARY KEY,
     project_id uuid REFERENCES projects (id) ON DELETE SET NULL,
-    view "STRectangle",
+    view "STRectangle",  -- noqa: references.keywords
     user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
     created timestamp with time zone NOT NULL,
     valid_until timestamp with time zone NOT NULL
@@ -1300,7 +1300,8 @@ INNER JOIN permissions AS p
 GROUP BY r.user_id, p.ml_model_id;
 
 CREATE TABLE quota_log (
-    timestamp timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    timestamp timestamp with time zone -- noqa: references.keywords
+    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     user_id uuid NOT NULL,
     workflow_id uuid NOT NULL,
     computation_id uuid NOT NULL,

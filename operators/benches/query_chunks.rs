@@ -179,7 +179,7 @@ fn run_benchmarks(
         );
 
         for header in result.keys() {
-            element_headers.insert(header.to_string());
+            element_headers.insert(header.clone());
         }
 
         results.push((name, result));

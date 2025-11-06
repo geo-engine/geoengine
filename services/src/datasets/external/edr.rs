@@ -455,7 +455,7 @@ impl EdrCollectionMetaData {
     fn select_output_format(&self) -> Result<String, geoengine_operators::error::Error> {
         for format in &self.output_formats {
             if ALLOWED_FILETYPES.contains(&format.as_str()) {
-                return Ok(format.to_string());
+                return Ok(format.clone());
             }
         }
         Err(geoengine_operators::error::Error::DatasetMetaData {
@@ -558,14 +558,14 @@ impl EdrCollectionMetaData {
                 };
                 match data_type.as_str() {
                     "STRING" => (
-                        parameter_name.to_string(),
+                        parameter_name.clone(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Text,
                             measurement: Measurement::Unitless,
                         },
                     ),
                     "INTEGER" => (
-                        parameter_name.to_string(),
+                        parameter_name.clone(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Int,
                             measurement: Measurement::Continuous(ContinuousMeasurement {
@@ -575,7 +575,7 @@ impl EdrCollectionMetaData {
                         },
                     ),
                     _ => (
-                        parameter_name.to_string(),
+                        parameter_name.clone(),
                         VectorColumnInfo {
                             data_type: FeatureDataType::Float,
                             measurement: Measurement::Continuous(ContinuousMeasurement {

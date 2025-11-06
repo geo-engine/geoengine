@@ -445,7 +445,7 @@ impl GbifDataProvider {
                     name: name.clone(),
                     description: format!(
                         "{rank}, {num_points} occurrences",
-                        rank = rank[..1].to_ascii_uppercase().to_string() + &rank[1..]
+                        rank = rank[..1].to_ascii_uppercase().clone() + &rank[1..]
                     ),
                     properties: vec![],
                 })

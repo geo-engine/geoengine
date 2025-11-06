@@ -1,3 +1,7 @@
+// "warning: use of deprecated struct `sha2::digest::generic_array::GenericArray`: please upgrade to generic-array 1.x"
+// This warning appears because aes-gcm depends on an older version of generic-array.
+#![allow(deprecated)]
+
 use crate::error::Result;
 use aes_gcm::aead::consts::U12;
 use aes_gcm::aead::generic_array::GenericArray;
