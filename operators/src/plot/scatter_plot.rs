@@ -73,9 +73,7 @@ impl PlotOperator for ScatterPlot {
                     // OK
                 }
                 None => {
-                    return Err(Error::ColumnDoesNotExist {
-                        column: cn.clone(),
-                    });
+                    return Err(Error::ColumnDoesNotExist { column: cn.clone() });
                 }
             }
         }
