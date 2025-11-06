@@ -1,6 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in tests
 
-use assert_cmd::cargo::CommandCargoExt;
+use assert_cmd::cargo_bin;
 use geoengine_services::test_data;
 use std::process::{ChildStderr, Command, Stdio};
 
@@ -16,8 +16,7 @@ impl Drop for DroppingServer {
 
 impl DroppingServer {
     fn new(schema_name: &str) -> Self {
-        let process = Command::cargo_bin("geoengine-server")
-            .unwrap()
+        let process = Command::new(cargo_bin!("geoengine-server"))
             .env("GEOENGINE_WEB__BACKEND", "postgres")
             .env("GEOENGINE_POSTGRES__SCHEMA", schema_name)
             .stderr(Stdio::piped())
@@ -42,8 +41,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
         let mut server = DroppingServer::new(SCHEMA_NAME);
 
         // read log output and check for warnings
-        let startup_result = Command::cargo_bin("geoengine-cli")
-            .unwrap()
+        let startup_result = Command::new(cargo_bin!("geoengine-cli"))
             .args([
                 "check-successful-startup",
                 "--max-lines",
@@ -60,8 +58,7 @@ async fn it_starts_without_warnings_and_accepts_connections() {
         );
 
         // once log outputs stop, perform a test request
-        let heartbeat_result = Command::cargo_bin("geoengine-cli")
-            .unwrap()
+        let heartbeat_result = Command::new(cargo_bin!("geoengine-cli"))
             .args(["heartbeat", "--server-url", "http://127.0.0.1:3030/api"])
             .output()
             .unwrap();
