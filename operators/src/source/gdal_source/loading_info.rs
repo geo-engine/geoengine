@@ -682,7 +682,7 @@ mod tests {
                         TimeInstance::from_millis_unchecked(0),
                         TimeInstance::from_millis_unchecked(33),
                     )),
-                    TimeStep::millis(11),
+                    TimeStep::millis(11).unwrap(),
                 ),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180., -90.).into(), 1., -1.),
@@ -714,7 +714,7 @@ mod tests {
                 TimeInstance::from_millis_unchecked(0),
                 TimeInstance::from_millis_unchecked(33),
             ),
-            step: TimeStep::millis(11),
+            step: TimeStep::millis(11).unwrap(),
             cache_ttl: CacheTtlSeconds::default(),
         }
     }
@@ -733,7 +733,7 @@ mod tests {
                         TimeInstance::from_millis_unchecked(0),
                         TimeInstance::from_millis_unchecked(33),
                     )),
-                    TimeStep::millis(11),
+                    TimeStep::millis(11).unwrap(),
                 ),
                 spatial_grid: SpatialGridDescriptor::source_from_parts(
                     GeoTransform::new((-180., -90.).into(), 1., -1.),

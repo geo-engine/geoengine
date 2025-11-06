@@ -579,7 +579,7 @@ mod tests {
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeDescriptor::new_regular_with_epoch(
                         Some(TimeInterval::new_unchecked(1, 3)),
-                        TimeStep::millis(1),
+                        TimeStep::millis(1).unwrap(),
                     ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),

@@ -36,37 +36,43 @@ impl TimeStep {
     /// Creates a new `TimeStep`.
     /// # Panics
     ///  This method panics if `step` is 0.
-    pub fn new(granularity: TimeGranularity, step: u32) -> Self {
+    pub fn new_unchecked(granularity: TimeGranularity, step: u32) -> Self {
         // TODO: try and new_unchecked?
         assert!(step > 0, "step must be greater than 0");
         Self { granularity, step }
     }
 
-    pub fn years(step: u32) -> Self {
+    pub fn new(granularity: TimeGranularity, step: u32) -> Result<Self> {
+        ensure!(step > 0, error::TimeStepStepMustBeGreaterThanZero { step });
+
+        Ok(Self { granularity, step })
+    }
+
+    pub fn years(step: u32) -> Result<Self> {
         Self::new(TimeGranularity::Years, step)
     }
 
-    pub fn months(step: u32) -> Self {
+    pub fn months(step: u32) -> Result<Self> {
         Self::new(TimeGranularity::Months, step)
     }
 
-    pub fn days(step: u32) -> Self {
+    pub fn days(step: u32) -> Result<Self> {
         Self::new(TimeGranularity::Days, step)
     }
 
-    pub fn hours(step: u32) -> Self {
+    pub fn hours(step: u32) -> Result<Self> {
         Self::new(TimeGranularity::Hours, step)
     }
 
-    pub fn minutes(step: u32) -> Self {
+    pub fn minutes(step: u32) -> Result<Self> {
         Self::new(TimeGranularity::Minutes, step)
     }
 
-    pub fn seconds(step: u32) -> Self {
+    pub fn seconds(step: u32) -> Result<Self> {
         Self::new(TimeGranularity::Seconds, step)
     }
 
-    pub fn millis(step: u32) -> Self {
+    pub fn millis(step: u32) -> Result<Self> {
         Self::new(TimeGranularity::Millis, step)
     }
 
@@ -453,8 +459,10 @@ impl Mul<u32> for TimeStep {
     }
 }
 
-impl From<Duration> for TimeStep {
-    fn from(value: Duration) -> Self {
+impl TryFrom<Duration> for TimeStep {
+    type Error = Error;
+
+    fn try_from(value: Duration) -> Result<Self> {
         match [
             value.num_days(),
             value.num_hours(),

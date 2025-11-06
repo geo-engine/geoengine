@@ -902,7 +902,7 @@ mod tests {
                 TimeInstance::from_millis(30).unwrap(),
             ),
         ];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let iter = intervals
             .into_iter()
             .map(|t| -> Result<TimeInterval, &str> { Ok(t) })
@@ -940,7 +940,7 @@ mod tests {
                 TimeInstance::from_millis(40).unwrap(),
             ),
         ];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let iter = intervals
             .into_iter()
             .map(|t| -> Result<TimeInterval, &str> { Ok(t) })
@@ -976,7 +976,7 @@ mod tests {
             TimeInstance::from_millis(20).unwrap(),
             TimeInstance::from_millis(30).unwrap(),
         )];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let start = TimeInstance::from_millis(0).unwrap();
         let iter = intervals
             .into_iter()
@@ -1015,7 +1015,7 @@ mod tests {
                 TimeInstance::from_millis(20).unwrap(),
             ),
         ];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let start = TimeInstance::from_millis(5).unwrap();
         let iter = intervals
             .into_iter()
@@ -1044,7 +1044,7 @@ mod tests {
             TimeInstance::from_millis(0).unwrap(),
             TimeInstance::from_millis(10).unwrap(),
         )];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let start = TimeInstance::from_millis(0).unwrap();
         let iter = intervals
             .into_iter()
@@ -1073,7 +1073,7 @@ mod tests {
                 TimeInstance::from_millis(20).unwrap(),
             ),
         ];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let start = TimeInstance::from_millis(0).unwrap();
         let iter = intervals
             .into_iter()
@@ -1102,7 +1102,7 @@ mod tests {
             TimeInstance::from_millis(0).unwrap(),
             TimeInstance::from_millis(10).unwrap(),
         )];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let end = TimeInstance::from_millis(30).unwrap();
         let iter = intervals
             .into_iter()
@@ -1141,7 +1141,7 @@ mod tests {
                 TimeInstance::from_millis(40).unwrap(),
             ),
         ];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let end = TimeInstance::from_millis(35).unwrap();
         let iter = intervals
             .into_iter()
@@ -1170,7 +1170,7 @@ mod tests {
             TimeInstance::from_millis(20).unwrap(),
             TimeInstance::from_millis(30).unwrap(),
         )];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let end = TimeInstance::from_millis(30).unwrap();
         let iter = intervals
             .into_iter()
@@ -1199,7 +1199,7 @@ mod tests {
                 TimeInstance::from_millis(40).unwrap(),
             ),
         ];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let end = TimeInstance::from_millis(40).unwrap();
         let iter = intervals
             .into_iter()
@@ -1228,7 +1228,7 @@ mod tests {
             TimeInstance::from_millis(20).unwrap(),
             TimeInstance::from_millis(30).unwrap(),
         )];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let start = TimeInstance::from_millis(10).unwrap();
         let end = TimeInstance::from_millis(40).unwrap();
         let iter = intervals
@@ -1260,7 +1260,7 @@ mod tests {
     #[test]
     fn test_regular_time_gap_fill_empty_source() {
         let intervals: Vec<TimeInterval> = vec![];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let iter = intervals
             .into_iter()
             .map(|t| -> Result<TimeInterval, &str> { Ok(t) })
@@ -1281,7 +1281,7 @@ mod tests {
                 TimeInstance::from_millis(30).unwrap(),
             ),
         ];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let start = TimeInstance::from_millis(10).unwrap();
         let end = TimeInstance::from_millis(30).unwrap();
         let iter = intervals
@@ -1320,7 +1320,7 @@ mod tests {
                 TimeInstance::from_millis(60).unwrap(),
             ),
         ];
-        let step = TimeStep::millis(10);
+        let step = TimeStep::millis(10).unwrap();
         let start = TimeInstance::from_millis(10).unwrap();
         let end = TimeInstance::from_millis(70).unwrap();
         let iter = intervals

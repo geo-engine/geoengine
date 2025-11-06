@@ -551,7 +551,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -679,7 +679,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -807,7 +807,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -935,7 +935,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1061,7 +1061,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1156,7 +1156,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1264,7 +1264,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1371,7 +1371,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1479,7 +1479,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1587,7 +1587,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1695,7 +1695,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1804,7 +1804,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -1931,7 +1931,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -2039,7 +2039,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -2148,7 +2148,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -2299,7 +2299,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -2426,7 +2426,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -2534,7 +2534,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -2642,7 +2642,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
@@ -2926,7 +2926,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
@@ -3121,7 +3121,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 40)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),

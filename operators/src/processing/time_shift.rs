@@ -883,7 +883,7 @@ mod tests {
                     DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 )),
-                TimeStep::years(1),
+                TimeStep::years(1).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., -3.), 1., -1.),
@@ -1065,7 +1065,7 @@ mod tests {
                     DateTime::new_utc(2010, 1, 1, 0, 0, 0),
                     DateTime::new_utc(2013, 1, 1, 0, 0, 0),
                 )),
-                TimeStep::years(1),
+                TimeStep::years(1).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),

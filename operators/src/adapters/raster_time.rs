@@ -638,7 +638,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -871,7 +874,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1104,7 +1110,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1166,7 +1175,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1299,7 +1311,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1361,7 +1376,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1472,7 +1490,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(10)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1636,7 +1657,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(10)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -1821,7 +1845,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(10)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -2007,7 +2034,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(10)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),
@@ -2237,7 +2267,10 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(10)),
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),

@@ -264,26 +264,26 @@ mod tests {
 
     #[test]
     fn test_compatible() {
-        let dim1 = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
-        let dim2 = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim1 = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
+        let dim2 = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         assert!(dim1.compatible_with(dim2));
         assert!(dim2.compatible_with(dim1));
         let dim3 = RegularTimeDimension::new(
             DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
-            TimeStep::years(1),
+            TimeStep::years(1).unwrap(),
         );
         assert!(dim1.compatible_with(dim3));
         assert!(dim3.compatible_with(dim1));
         let dim4 = RegularTimeDimension::new(
             DateTime::new_utc(2021, 2, 1, 0, 0, 0).into(),
-            TimeStep::years(1),
+            TimeStep::years(1).unwrap(),
         );
         assert!(!dim1.compatible_with(dim4));
         assert!(!dim4.compatible_with(dim1));
 
         let dim5 = RegularTimeDimension::new(
             DateTime::new_utc(2021, 2, 1, 0, 0, 0).into(),
-            TimeStep::years(7),
+            TimeStep::years(7).unwrap(),
         );
         assert!(!dim1.compatible_with(dim5));
         assert!(!dim5.compatible_with(dim1));
@@ -291,24 +291,24 @@ mod tests {
 
     #[test]
     fn test_merge() {
-        let dim1 = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
-        let dim2 = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim1 = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
+        let dim2 = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         assert_eq!(dim1.merge(dim2).unwrap(), dim1);
         let dim3 = RegularTimeDimension::new(
             DateTime::new_utc(2020, 1, 1, 0, 0, 0).into(),
-            TimeStep::years(1),
+            TimeStep::years(1).unwrap(),
         );
         assert_eq!(dim1.merge(dim3).unwrap(), dim1);
         let dim4 = RegularTimeDimension::new(
             DateTime::new_utc(2021, 1, 1, 0, 0, 0).into(),
-            TimeStep::years(2),
+            TimeStep::years(2).unwrap(),
         );
         assert!(dim1.merge(dim4).is_none());
     }
 
     #[test]
     fn test_snap() {
-        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         let time = DateTime::new_utc(2023, 6, 15, 12, 0, 0).into();
         let snapped_prev = dim.snap_prev(time).unwrap();
         assert_eq!(snapped_prev, DateTime::new_utc(2023, 1, 1, 0, 0, 0).into());
@@ -318,7 +318,7 @@ mod tests {
 
     #[test]
     fn test_contained_interval() {
-        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         let interval = TimeInterval::new(
             DateTime::new_utc(2020, 6, 15, 0, 0, 0),
             DateTime::new_utc(2023, 6, 15, 0, 0, 0),
@@ -337,7 +337,7 @@ mod tests {
 
     #[test]
     fn test_intersected_interval() {
-        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         let interval = TimeInterval::new(
             DateTime::new_utc(2020, 6, 15, 0, 0, 0),
             DateTime::new_utc(2023, 6, 15, 0, 0, 0),
@@ -356,7 +356,7 @@ mod tests {
 
     #[test]
     fn test_steps_contained_in() {
-        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         let interval = TimeInterval::new(
             DateTime::new_utc(2020, 6, 15, 0, 0, 0),
             DateTime::new_utc(2023, 6, 15, 0, 0, 0),
@@ -368,7 +368,7 @@ mod tests {
 
     #[test]
     fn test_steps_intersecting() {
-        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         let interval = TimeInterval::new(
             DateTime::new_utc(2020, 6, 15, 0, 0, 0),
             DateTime::new_utc(2023, 6, 15, 0, 0, 0),
@@ -380,7 +380,7 @@ mod tests {
 
     #[test]
     fn test_contained_intervals() {
-        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         let interval = TimeInterval::new(
             DateTime::new_utc(2020, 6, 15, 0, 0, 0),
             DateTime::new_utc(2023, 6, 15, 0, 0, 0),
@@ -407,7 +407,7 @@ mod tests {
 
     #[test]
     fn test_intersecting_intervals() {
-        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1));
+        let dim = RegularTimeDimension::new_with_epoch_origin(TimeStep::years(1).unwrap());
         let interval = TimeInterval::new(
             DateTime::new_utc(2020, 6, 15, 0, 0, 0),
             DateTime::new_utc(2023, 6, 15, 0, 0, 0),

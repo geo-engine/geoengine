@@ -1206,7 +1206,7 @@ mod tests {
                             )
                             .unwrap(),
                         ),
-                        TimeStep::millis(5),
+                        TimeStep::millis(5).unwrap(),
                     ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),
@@ -1358,7 +1358,7 @@ mod tests {
                             )
                             .unwrap(),
                         ),
-                        TimeStep::millis(5),
+                        TimeStep::millis(5).unwrap(),
                     ),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         TestDefault::test_default(),

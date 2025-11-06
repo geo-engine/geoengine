@@ -524,7 +524,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: crate::engine::TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 5)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
@@ -777,7 +777,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: crate::engine::TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
@@ -959,7 +959,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: crate::engine::TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
