@@ -1414,26 +1414,29 @@ mod tests {
     fn regularr_non_zero_origin() {
         let intervals = vec![
             TimeInterval::new_unchecked(
-                TimeInstance::from_millis(1735689600000).unwrap(),
-                TimeInstance::from_millis(1738368000000).unwrap(),
+                TimeInstance::from_millis(1_735_689_600_000).unwrap(),
+                TimeInstance::from_millis(1_738_368_000_000).unwrap(),
             ),
             TimeInterval::new_unchecked(
-                TimeInstance::from_millis(1738368000000).unwrap(),
-                TimeInstance::from_millis(1740787200000).unwrap(),
+                TimeInstance::from_millis(1_738_368_000_000).unwrap(),
+                TimeInstance::from_millis(1_740_787_200_000).unwrap(),
             ),
             TimeInterval::new_unchecked(
-                TimeInstance::from_millis(1743465600000).unwrap(),
-                TimeInstance::from_millis(1746057600000).unwrap(),
+                TimeInstance::from_millis(1_743_465_600_000).unwrap(),
+                TimeInstance::from_millis(1_746_057_600_000).unwrap(),
             ),
         ];
         let step = TimeStep::months(1);
-        let start = TimeInstance::from_millis(1733011200000).unwrap();
-        let end = TimeInstance::from_millis(1747267200000).unwrap();
+        let start = TimeInstance::from_millis(1_733_011_200_000).unwrap();
+        let end = TimeInstance::from_millis(1_747_267_200_000).unwrap();
         let iter = intervals
             .into_iter()
             .map(|t| -> Result<TimeInterval, &str> { Ok(t) })
             .try_time_regular_range_fill(
-                RegularTimeDimension::new(TimeInstance::from_millis(1388534400000).unwrap(), step),
+                RegularTimeDimension::new(
+                    TimeInstance::from_millis(1_388_534_400_000).unwrap(),
+                    step,
+                ),
                 TimeInterval::new_unchecked(start, end),
             );
         let result: Result<Vec<TimeInterval>, _> = iter.collect::<Result<Vec<_>, _>>();
@@ -1442,28 +1445,28 @@ mod tests {
             result.unwrap(),
             vec![
                 TimeInterval::new_unchecked(
-                    TimeInstance::from_millis(1733011200000).unwrap(),
-                    TimeInstance::from_millis(1735689600000).unwrap()
+                    TimeInstance::from_millis(1_733_011_200_000).unwrap(),
+                    TimeInstance::from_millis(1_735_689_600_000).unwrap()
                 ),
                 TimeInterval::new_unchecked(
-                    TimeInstance::from_millis(1735689600000).unwrap(),
-                    TimeInstance::from_millis(1738368000000).unwrap()
+                    TimeInstance::from_millis(1_735_689_600_000).unwrap(),
+                    TimeInstance::from_millis(1_738_368_000_000).unwrap()
                 ),
                 TimeInterval::new_unchecked(
-                    TimeInstance::from_millis(1738368000000).unwrap(),
-                    TimeInstance::from_millis(1740787200000).unwrap()
+                    TimeInstance::from_millis(1_738_368_000_000).unwrap(),
+                    TimeInstance::from_millis(1_740_787_200_000).unwrap()
                 ),
                 TimeInterval::new_unchecked(
-                    TimeInstance::from_millis(1740787200000).unwrap(),
-                    TimeInstance::from_millis(1743465600000).unwrap()
+                    TimeInstance::from_millis(1_740_787_200_000).unwrap(),
+                    TimeInstance::from_millis(1_743_465_600_000).unwrap()
                 ),
                 TimeInterval::new_unchecked(
-                    TimeInstance::from_millis(1743465600000).unwrap(),
-                    TimeInstance::from_millis(1746057600000).unwrap()
+                    TimeInstance::from_millis(1_743_465_600_000).unwrap(),
+                    TimeInstance::from_millis(1_746_056_000_000).unwrap()
                 ),
                 TimeInterval::new_unchecked(
-                    TimeInstance::from_millis(1746057600000).unwrap(),
-                    TimeInstance::from_millis(1748736000000).unwrap()
+                    TimeInstance::from_millis(1_746_056_000_000).unwrap(),
+                    TimeInstance::from_millis(1_748_736_000_000).unwrap()
                 ),
             ]
         );
