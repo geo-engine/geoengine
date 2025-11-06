@@ -146,7 +146,7 @@ fn add_dataset_and_tiles_to_geoengine(
             },
             meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                 r#type: geoengine_services::api::model::operators::GdalMultiBandTypeTag::GdalMultiBandTypeTag,
-                result_descriptor: files[0].result_descriptor.clone().into(), // TODO: merge result descriptors of all files/bands
+                result_descriptor: files[0].result_descriptor.clone().into(),
             }),
         },
     };

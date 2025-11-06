@@ -201,7 +201,7 @@ async fn add_ndvi_multi_tile_dataset(app_ctx: &PostgresContext<NoTls>) -> Datase
             tags: Some(vec!["raster".to_owned(), "test".to_owned()]),
         },
         meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
-            result_descriptor: create_ndvi_result_descriptor().into(),
+            result_descriptor: create_ndvi_result_descriptor(true).into(),
             r#type: geoengine_services::api::model::operators::GdalMultiBandTypeTag::GdalMultiBandTypeTag,
         }),
     };

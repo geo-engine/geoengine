@@ -259,6 +259,7 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
             },
         )?;
 
+        // TODO: move this inside the db?
         ensure!(
             rd.data_type == dataset_descriptor.data_type,
             TileFileDataTypeMismatch {
@@ -1505,8 +1506,16 @@ mod tests {
     use super::*;
     use crate::{
         api::model::{
-            datatypes::{NamedData, SingleBandRasterColorizer, TimeInstance},
-            operators::{FileNotFoundHandling, GdalMultiBand},
+            datatypes::{
+                Coordinate2D, DataId, GeoTransform, GridBoundingBox2D, GridIdx2D, InternalDataId,
+                NamedData, RasterDataType, SingleBandRasterColorizer, SpatialGridDefinition,
+                TimeInstance,
+            },
+            operators::{
+                FileNotFoundHandling, GdalDatasetGeoTransform, GdalMultiBand, RasterBandDescriptor,
+                RasterBandDescriptors, RasterResultDescriptor, SpatialGridDescriptor,
+                SpatialGridDescriptorState, TimeDescriptor,
+            },
             responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
         },
@@ -1544,12 +1553,14 @@ mod tests {
     };
     use geoengine_operators::{
         engine::{
-            ExecutionContext, InitializedVectorOperator, QueryProcessor, RasterOperator,
-            StaticMetaData, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
+            ExecutionContext, InitializedVectorOperator, MetaData, MetaDataProvider,
+            QueryProcessor, RasterOperator, StaticMetaData, VectorOperator, VectorResultDescriptor,
+            WorkflowOperatorPath,
         },
         source::{
-            MultiBandGdalSource, MultiBandGdalSourceParameters, OgrSource, OgrSourceDataset,
-            OgrSourceErrorSpec, OgrSourceParameters,
+            MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle, MultiBandGdalSource,
+            MultiBandGdalSourceParameters, OgrSource, OgrSourceDataset, OgrSourceErrorSpec,
+            OgrSourceParameters,
         },
         util::{
             gdal::{create_ndvi_meta_data, create_ndvi_result_descriptor},
@@ -3410,7 +3421,7 @@ mod tests {
                 },
                 meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                     r#type: Default::default(),
-                    result_descriptor: create_ndvi_result_descriptor().into(),
+                    result_descriptor: create_ndvi_result_descriptor(true).into(),
                 }),
             },
         };
@@ -4640,7 +4651,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_checks_tile_times_before_adding_to_dataset(
+    async fn it_checks_tile_times_regular_before_adding_to_dataset(
         app_ctx: PostgresContext<NoTls>,
     ) -> Result<()> {
         let volume = VolumeName("test_data".to_string());
@@ -4660,7 +4671,99 @@ mod tests {
                 },
                 meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                     r#type: Default::default(),
-                    result_descriptor: create_ndvi_result_descriptor().into(),
+                    result_descriptor: create_ndvi_result_descriptor(true).into(),
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        // add tiles
+        let tiles = create_ndvi_tiles();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        // try to insert tiles with time that conflicts with existing tiles
+        let mut tiles = tiles[..1].to_vec();
+        tiles[0].time = TimeInterval::new_unchecked(
+            TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
+            TimeInstance::from_str("2014-01-03T00:00:00Z").unwrap(),
+        )
+        .into();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        assert_eq!(res.status(), 400, "response: {res:?}");
+
+        let read_body: ErrorResponse = actix_web::test::read_body_json(res).await;
+
+        assert_eq!(read_body, ErrorResponse {
+            error: "CannotAddTilesToDataset".to_string(),
+            message: "Cannot add tiles to dataset: Dataset tile times `[TimeInterval [1388534400000, 1388707200000)]` conflict with dataset regularity RegularTimeDimension { origin: TimeInstance(0), step: TimeStep { granularity: Months, step: 1 } }".to_string(),
+        });
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_checks_tile_times_irregular_before_adding_to_dataset(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        // add data
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi (tiled)".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: create_ndvi_result_descriptor(false).into(),
                 }),
             },
         };
@@ -4752,7 +4855,7 @@ mod tests {
                 },
                 meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
                     r#type: Default::default(),
-                    result_descriptor: create_ndvi_result_descriptor().into(),
+                    result_descriptor: create_ndvi_result_descriptor(true).into(),
                 }),
             },
         };
@@ -4821,6 +4924,269 @@ mod tests {
                     "Cannot add tiles to dataset: Dataset tile z-index of files `[\"{conflict_tile}\"]` conflict with existing tiles with the same z-indexes",
                 ),
             }
+        );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_extends_dataset_bounds_when_inserting_new_tiles(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "fake dataset".to_string(),
+                    description: "fake".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: RasterDataType::U8,
+                        spatial_reference: SpatialReferenceOption::SpatialReference(
+                            SpatialReference::epsg_4326(),
+                        )
+                        .into(),
+                        time: TimeDescriptor {
+                            bounds: Some(
+                                TimeInterval::new_unchecked(
+                                    TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
+                                    TimeInstance::from_str("2014-01-02T00:00:00Z").unwrap(),
+                                )
+                                .into(),
+                            ),
+                            dimension: None,
+                        },
+                        spatial_grid: SpatialGridDescriptor {
+                            spatial_grid: SpatialGridDefinition {
+                                geo_transform: GeoTransform {
+                                    origin_coordinate: Coordinate2D { x: 0., y: 0. },
+                                    x_pixel_size: 1.,
+                                    y_pixel_size: -1.,
+                                },
+                                grid_bounds: GridBoundingBox2D {
+                                    top_left_idx: GridIdx2D { y_idx: 0, x_idx: 0 },
+                                    bottom_right_idx: GridIdx2D {
+                                        y_idx: 100,
+                                        x_idx: 100,
+                                    },
+                                },
+                            },
+                            descriptor: SpatialGridDescriptorState::Source,
+                        },
+                        bands: RasterBandDescriptors::new(vec![RasterBandDescriptor {
+                            name: "band_1".to_string(),
+                            measurement: Measurement::Unitless.into(),
+                        }])
+                        .unwrap(),
+                    },
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let id_and_name = db
+            .add_dataset(
+                create.definition.properties.into(),
+                create.definition.meta_data.into(),
+            )
+            .await
+            .unwrap();
+
+        let tile = DatasetTile {
+            time: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
+                TimeInstance::from_str("2014-01-02T00:00:00Z").unwrap(),
+            )
+            .into(),
+            spatial_partition: SpatialPartition2D::new_unchecked(
+                (50., -50.).into(),
+                (150., -150.).into(),
+            )
+            .into(),
+            band: 0,
+            z_index: 0,
+            params: GdalDatasetParameters {
+                file_path: "fake_path".into(),
+                rasterband_channel: 0,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: Coordinate2D { x: 0., y: 0. },
+                    x_pixel_size: 1.,
+                    y_pixel_size: -1.,
+                },
+                width: 100,
+                height: 100,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: false,
+            },
+        };
+
+        db.add_dataset_tiles(id_and_name.id, vec![tile]).await?;
+
+        let ds = db.load_dataset(&id_and_name.id).await?;
+        let TypedResultDescriptor::Raster(dataset_rd) = ds.result_descriptor else {
+            panic!("expected raster dataset");
+        };
+
+        let meta_data: Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: id_and_name.id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+        let metadata_rd = meta_data.result_descriptor().await?;
+
+        assert_eq!(metadata_rd, dataset_rd);
+
+        assert_eq!(
+            dataset_rd.spatial_grid,
+            SpatialGridDescriptor {
+                spatial_grid: SpatialGridDefinition {
+                    geo_transform: GeoTransform {
+                        origin_coordinate: Coordinate2D { x: 0., y: 0. },
+                        x_pixel_size: 1.,
+                        y_pixel_size: -1.,
+                    },
+                    grid_bounds: GridBoundingBox2D {
+                        top_left_idx: GridIdx2D { y_idx: 0, x_idx: 0 },
+                        bottom_right_idx: GridIdx2D {
+                            y_idx: 100,
+                            x_idx: 100,
+                        },
+                    },
+                },
+                descriptor: SpatialGridDescriptorState::Source,
+            }
+            .into()
+        );
+
+        assert_eq!(
+            dataset_rd.time.bounds,
+            TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
+                TimeInstance::from_str("2014-01-02T00:00:00Z").unwrap(),
+            )
+            .into()
+        );
+
+        let tile = DatasetTile {
+            time: TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-03T00:00:00Z").unwrap(),
+                TimeInstance::from_str("2014-01-04T00:00:00Z").unwrap(),
+            )
+            .into(),
+            spatial_partition: SpatialPartition2D::new_unchecked(
+                (50., -50.).into(),
+                (150., -150.).into(),
+            )
+            .into(),
+            band: 0,
+            z_index: 0,
+            params: GdalDatasetParameters {
+                file_path: "fake_path".into(),
+                rasterband_channel: 0,
+                geo_transform: GdalDatasetGeoTransform {
+                    origin_coordinate: Coordinate2D { x: -50., y: 50. },
+                    x_pixel_size: 1.,
+                    y_pixel_size: -1.,
+                },
+                width: 50,
+                height: 50,
+                file_not_found_handling: FileNotFoundHandling::NoData,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: false,
+            },
+        };
+
+        db.add_dataset_tiles(id_and_name.id, vec![tile]).await?;
+
+        let ds = db.load_dataset(&id_and_name.id).await?;
+        let TypedResultDescriptor::Raster(dataset_rd) = ds.result_descriptor else {
+            panic!("expected raster dataset");
+        };
+
+        let meta_data: Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    geoengine_operators::engine::RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        > = db
+            .meta_data(
+                &DataId::Internal(InternalDataId {
+                    dataset_id: id_and_name.id.into(),
+                    r#type:
+                        crate::api::model::datatypes::InternalDataIdTypeTag::InternalDataIdTypeTag,
+                })
+                .into(),
+            )
+            .await?;
+        let metadata_rd = meta_data.result_descriptor().await?;
+
+        assert_eq!(metadata_rd, dataset_rd);
+
+        assert_eq!(
+            dataset_rd.spatial_grid,
+            SpatialGridDescriptor {
+                spatial_grid: SpatialGridDefinition {
+                    geo_transform: GeoTransform {
+                        origin_coordinate: Coordinate2D { x: 0., y: 0. },
+                        x_pixel_size: 1.,
+                        y_pixel_size: -1.,
+                    },
+                    grid_bounds: GridBoundingBox2D {
+                        top_left_idx: GridIdx2D {
+                            y_idx: -50,
+                            x_idx: -50
+                        },
+                        bottom_right_idx: GridIdx2D {
+                            y_idx: 100,
+                            x_idx: 100,
+                        },
+                    },
+                },
+                descriptor: SpatialGridDescriptorState::Source,
+            }
+            .into()
+        );
+
+        assert_eq!(
+            dataset_rd.time.bounds,
+            TimeInterval::new_unchecked(
+                TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
+                TimeInstance::from_str("2014-01-04T00:00:00Z").unwrap(),
+            )
+            .into()
         );
 
         Ok(())

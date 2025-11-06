@@ -197,16 +197,26 @@ impl OverviewReaderState {
         let (actual_gdal_dataset_spatial_grid_definition, flip_y) =
             self.normalize_y_axis(actual_gdal_dataset_spatial_grid_definition);
 
-        let (
+        let Some((
             tile_with_original_resolution_in_actual_space,
             tile_intersection_original_resolution_actual_space,
             tile_intersection_for_read_window,
             tile_intersection_for_read_window_snapped_to_overview_level,
-        ) = self.intersect_tile_and_dataset(
+        )) = self.intersect_tile_and_dataset(
             tile,
             actual_gdal_dataset_spatial_grid_definition,
             flip_y,
-        )?;
+        )
+        else {
+            trace!(
+                "no intersection between tile {:?} and dataset grid {:?}, skipping read advise generation, grid: {:?}, overview level: {}",
+                tile,
+                actual_gdal_dataset_spatial_grid_definition,
+                self.original_dataset_grid,
+                self.overview_level
+            );
+            return None;
+        };
 
         // generate the read window for GDAL --> This is what we can read in any case.
         let read_window = GdalReadWindow::new(
@@ -545,7 +555,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::Coordinate2D,
         raster::{
-            BoundedGrid, GeoTransform, GridBoundingBox2D, GridIdx2D, GridShape2D,
+            BoundedGrid, GeoTransform, GridBoundingBox, GridBoundingBox2D, GridIdx2D, GridShape2D,
             SpatialGridDefinition,
         },
     };
@@ -1085,5 +1095,61 @@ mod tests {
             read_advise.read_window_bounds,
             GridBoundingBox2D::new_unchecked([-56, -113], [-1, -1])
         );
+    }
+
+    #[test]
+    fn intersection_same_in_db_and_rust() {
+        // 2025-11-06T17:46:48.718196Z TRACE Request{request_id=4db6b530-dc97-4d99-b69b-19f0b65afcac}:raster_stream_to_png_bytes:Query{query_id=966f57d7-e079-4e81-8dfb-8760f8ffc530}:
+        //Downsampling{path=[] query_counter=0}:Downsampling{path=[0] query_counter=0}:Reprojection{path=[0, 0] query_counter=2}:MultiBandGdalSource{path=[0, 0, 0] query_counter=0}:spawn_blocking:
+        //geoengine_operators::source::multi_band_gdal_source::reader:
+        //no intersection between tile
+        //SpatialGridDefinition { geo_transform: GeoTransform { origin_coordinate: Coordinate2D { x: 106.36304165050387, y: 39.60796480439603 }, x_pixel_size: 240.0, y_pixel_size: -240.0 }, grid_bounds: GridBoundingBox { min: [-13312, 17408], max: [-12801, 17919] } }
+        // and dataset grid SpatialGridDefinition
+        //{ geo_transform: GeoTransform { origin_coordinate: Coordinate2D { x: 4226026.3630416505, y: 3074919.6079648044 }, x_pixel_size: 30.0, y_pixel_size: -30.0 }, grid_bounds: GridBoundingBox { min: [0, 0], max: [999, 999] } },
+        //skipping read advise generation,
+        //grid: SpatialGridDefinition { geo_transform: GeoTransform { origin_coordinate: Coordinate2D { x: 4226026.3630416505, y: 3104919.6079648044 }, x_pixel_size: 30.0, y_pixel_size: -30.0 }, grid_bounds: GridBoundingBox { min: [0, 0], max: [999, 999] } }, overview level: 8
+
+        let tile = SpatialGridDefinition {
+            geo_transform: GeoTransform::new(
+                Coordinate2D {
+                    x: 106.36304165050387,
+                    y: 39.60796480439603,
+                },
+                240.0,
+                -240.0,
+            ),
+            grid_bounds: GridBoundingBox::new_unchecked([-13312, 17408], [-12801, 17919]),
+        };
+
+        let actual_dataset_definition = SpatialGridDefinition {
+            geo_transform: GeoTransform::new(
+                Coordinate2D {
+                    x: 4226026.3630416505,
+                    y: 3074919.6079648044,
+                },
+                30.0,
+                -30.0,
+            ),
+            grid_bounds: GridBoundingBox::new_unchecked([0, 0], [999, 999]),
+        };
+
+        let o = OverviewReaderState {
+            original_dataset_grid: SpatialGridDefinition {
+                geo_transform: GeoTransform::new(
+                    Coordinate2D {
+                        x: 4226026.3630416505,
+                        y: 3104919.6079648044,
+                    },
+                    30.0,
+                    -30.0,
+                ),
+                grid_bounds: GridBoundingBox::new_unchecked([0, 0], [999, 999]),
+            },
+            overview_level: 8,
+        };
+
+        let r = o.intersect_tile_and_dataset(&tile, actual_dataset_definition, false);
+
+        assert!(r.is_some());
     }
 }

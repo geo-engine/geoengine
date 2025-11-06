@@ -288,6 +288,10 @@ impl GdalRasterLoader {
         );
 
         let Some(gdal_read_advise) = gdal_read_advise else {
+            trace!(
+                "no read advise returned for tile {:?}, skipping file.",
+                tile_information.global_tile_position.inner(),
+            );
             return Ok(None);
         };
 
@@ -510,7 +514,7 @@ where
 {
     type RasterType = P;
 
-    async fn time_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
         query: TimeInterval,
         ctx: &'a dyn QueryContext,

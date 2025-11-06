@@ -26,6 +26,7 @@ use geoengine_datatypes::primitives::{
     TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::primitives::{TimeInterval, VectorQueryRectangle};
+use geoengine_datatypes::raster::{GridBoundingBox2D, SpatialGridDefinition};
 use geoengine_datatypes::util::Identifier;
 use geoengine_operators::engine::TypedResultDescriptor;
 use geoengine_operators::engine::{
@@ -33,10 +34,11 @@ use geoengine_operators::engine::{
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
+    GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo, MultiBandGdalLoadingInfo,
     MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
+use tracing::trace;
 
 pub async fn resolve_dataset_name_to_id<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
@@ -1256,12 +1258,43 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        // check if any tile conflicts with existing tiles
-        let times = tiles.iter().map(|tile| tile.time).collect::<Vec<_>>();
+        // TODO: check pixels of tiles align with dataset grid
 
-        let incompatible_times = tx
-            .query(
+        // validate the time of the tiles
+        let time_dim: TimeDimension = tx
+            .query_one(
                 r#"
+                    SELECT (result_descriptor).raster."time".dimension
+                    FROM datasets
+                    WHERE id = $1;
+                "#,
+                &[&dataset],
+            )
+            .await?
+            .get(0);
+
+        match time_dim {
+            TimeDimension::Regular(regular_time_dimension) => {
+                // check all tiles if they fit to time step
+                let invalid_tiles = tiles
+                    .iter()
+                    .filter(|tile| !regular_time_dimension.valid_interval(tile.time.into()))
+                    .collect::<Vec<_>>();
+
+                if !invalid_tiles.is_empty() {
+                    return Err(Error::DatasetTileRegularTimeConflict {
+                        times: invalid_tiles.iter().map(|tile| tile.time).collect(),
+                        time_dim: regular_time_dimension,
+                    });
+                }
+            }
+            TimeDimension::Irregular => {
+                // check if any tile conflicts with time of existing tiles. there must be no overlaps.
+                let times = tiles.iter().map(|tile| tile.time).collect::<Vec<_>>();
+
+                let incompatible_times = tx
+                    .query(
+                        r#"
                 SELECT DISTINCT
                     dt.time,
                     nt
@@ -1275,15 +1308,17 @@ where
                         (dt.time)."end" != (nt)."end"
                     );
                 "#,
-                &[&dataset, &times],
-            )
-            .await?;
+                        &[&dataset, &times],
+                    )
+                    .await?;
 
-        if !incompatible_times.is_empty() {
-            return Err(Error::DatasetTileTimeConflict {
-                existing_times: incompatible_times.iter().map(|row| row.get(0)).collect(),
-                times: incompatible_times.iter().map(|row| row.get(1)).collect(),
-            });
+                if !incompatible_times.is_empty() {
+                    return Err(Error::DatasetTileTimeConflict {
+                        existing_times: incompatible_times.iter().map(|row| row.get(0)).collect(),
+                        times: incompatible_times.iter().map(|row| row.get(1)).collect(),
+                    });
+                }
+            }
         }
 
         let tile_keys = tiles
@@ -1324,14 +1359,14 @@ where
 
         // batch insert using array unnesting
         let tile_entries = tiles
-            .into_iter()
+            .iter()
             .map(|tile| TileEntry {
                 dataset_id: dataset,
                 time: tile.time,
                 bbox: tile.spatial_partition,
                 band: tile.band,
                 z_index: tile.z_index,
-                gdal_params: tile.params.into(),
+                gdal_params: tile.params.clone().into(),
             })
             .collect::<Vec<_>>();
 
@@ -1341,6 +1376,62 @@ where
                 SELECT * FROM unnest($1::"TileEntry"[]);
             "#,
             &[&tile_entries],
+        )
+        .await?;
+
+        // update the dataset extents
+        let row = tx
+            .query_one(
+                r#"
+            SELECT
+                (result_descriptor).raster.spatial_grid.spatial_grid,
+                (result_descriptor).raster."time".bounds
+            FROM
+                datasets
+            WHERE
+                id = $1;
+            "#,
+                &[&dataset],
+            )
+            .await?;
+
+        let (mut dataset_grid, mut time_bounds): (SpatialGridDefinition, Option<TimeInterval>) =
+            (row.get(0), row.get(1));
+
+        trace!("Updating dataset grid: {:?}", dataset_grid);
+
+        for tile in &tiles {
+            // TODO: handle datasets with flipped y axis?
+            let tile_grid = SpatialGridDefinition::new(
+                GdalDatasetGeoTransform::from(tile.params.geo_transform).try_into()?,
+                GridBoundingBox2D::new_unchecked(
+                    [0, 0],
+                    [tile.params.height as isize, tile.params.width as isize],
+                ),
+            );
+
+            dataset_grid = dataset_grid
+                .merge(&tile_grid)
+                .expect("grids should be compatible because the compatibility was checked before inserting tiles");
+
+            if let Some(time_bounds) = &mut time_bounds {
+                *time_bounds = time_bounds.extend(&tile.time.into());
+            }
+        }
+
+        trace!("Updated dataset grid: {:?}", dataset_grid);
+
+        tx.execute(
+            r#"
+            UPDATE datasets
+            SET 
+                result_descriptor.raster.spatial_grid.spatial_grid = $2,
+                result_descriptor.raster."time".bounds = $3,
+                meta_data.gdal_multi_band.result_descriptor.spatial_grid.spatial_grid = $2,
+                meta_data.gdal_multi_band.result_descriptor."time".bounds = $3
+            WHERE id = $1;
+            "#,
+            &[&dataset, &dataset_grid, &time_bounds],
         )
         .await?;
 

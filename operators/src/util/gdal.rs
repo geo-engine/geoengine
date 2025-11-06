@@ -88,13 +88,13 @@ pub fn create_ndvi_meta_data_with_cache_ttl(cache_ttl: CacheTtlSeconds) -> GdalM
             allow_alphaband_as_mask: true,
             retry: None,
         },
-        result_descriptor: create_ndvi_result_descriptor(),
+        result_descriptor: create_ndvi_result_descriptor(true),
         cache_ttl,
     }
 }
 
 #[allow(clippy::missing_panics_doc)]
-pub fn create_ndvi_result_descriptor() -> RasterResultDescriptor {
+pub fn create_ndvi_result_descriptor(as_regular_timeseries: bool) -> RasterResultDescriptor {
     let time_bounds = TimeInterval::new_unchecked(
         TimeInstance::from_str("2014-01-01T00:00:00.000Z")
             .expect("it should only be used in tests"),
@@ -108,7 +108,11 @@ pub fn create_ndvi_result_descriptor() -> RasterResultDescriptor {
     RasterResultDescriptor {
         data_type: RasterDataType::U8,
         spatial_reference: SpatialReference::epsg_4326().into(),
-        time: TimeDescriptor::new_regular_with_epoch(Some(time_bounds), time_step),
+        time: if as_regular_timeseries {
+            TimeDescriptor::new_regular_with_epoch(Some(time_bounds), time_step)
+        } else {
+            TimeDescriptor::new_irregular(Some(time_bounds))
+        },
         spatial_grid: SpatialGridDescriptor::source_from_parts(
             GeoTransform::new((-180., 90.).into(), 0.1, -0.1),
             GridBoundingBox2D::new([0, 0], [1799, 3599]).expect("should only be used in tests"),

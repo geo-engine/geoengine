@@ -777,8 +777,8 @@ impl From<SpatialGridDefinition> for geoengine_datatypes::raster::SpatialGridDef
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,
-    x_pixel_size: f64,
-    y_pixel_size: f64,
+    pub x_pixel_size: f64,
+    pub y_pixel_size: f64,
 }
 
 impl From<geoengine_datatypes::raster::GeoTransform> for GeoTransform {
@@ -804,8 +804,8 @@ impl From<GeoTransform> for geoengine_datatypes::raster::GeoTransform {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GridIdx2D {
-    y_idx: isize,
-    x_idx: isize,
+    pub y_idx: isize,
+    pub x_idx: isize,
 }
 
 impl From<geoengine_datatypes::raster::GridIdx2D> for GridIdx2D {
@@ -826,8 +826,8 @@ impl From<GridIdx2D> for geoengine_datatypes::raster::GridIdx2D {
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GridBoundingBox2D {
-    top_left_idx: GridIdx2D,
-    bottom_right_idx: GridIdx2D,
+    pub top_left_idx: GridIdx2D,
+    pub bottom_right_idx: GridIdx2D,
 }
 
 impl From<geoengine_datatypes::raster::GridBoundingBox2D> for GridBoundingBox2D {
@@ -1361,8 +1361,8 @@ impl From<TimeStep> for geoengine_datatypes::primitives::TimeStep {
 /// Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql, ToSchema)]
 pub struct TimeInterval {
-    start: TimeInstance,
-    end: TimeInstance,
+    pub start: TimeInstance,
+    pub end: TimeInstance,
 }
 
 impl From<TimeInterval> for geoengine_datatypes::primitives::TimeInterval {

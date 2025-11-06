@@ -9,6 +9,7 @@ use actix_web::HttpResponse;
 use actix_web::http::StatusCode;
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::ErrorSource;
+use geoengine_datatypes::primitives::RegularTimeDimension;
 use geoengine_datatypes::util::helpers::ge_report;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
@@ -556,6 +557,13 @@ pub enum Error {
     DatasetTileTimeConflict {
         times: Vec<TimeInterval>,
         existing_times: Vec<TimeInterval>,
+    },
+    #[snafu(display(
+        "Dataset tile times `{times:?}` conflict with dataset regularity {time_dim:?}"
+    ))]
+    DatasetTileRegularTimeConflict {
+        times: Vec<TimeInterval>,
+        time_dim: RegularTimeDimension,
     },
     #[snafu(display(
         "Dataset tile z-index of files `{files:?}` conflict with existing tiles with the same z-indexes"
