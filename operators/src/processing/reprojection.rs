@@ -37,14 +37,11 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
+#[derive(Default)]
 pub enum DeriveOutRasterSpecsSource {
     DataBounds,
+    #[default]
     ProjectionBounds,
-}
-impl Default for DeriveOutRasterSpecsSource {
-    fn default() -> Self {
-        Self::ProjectionBounds
-    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
