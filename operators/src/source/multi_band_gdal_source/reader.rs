@@ -555,7 +555,7 @@ mod tests {
     use geoengine_datatypes::{
         primitives::Coordinate2D,
         raster::{
-            BoundedGrid, GeoTransform, GridBoundingBox, GridBoundingBox2D, GridIdx2D, GridShape2D,
+            BoundedGrid, GeoTransform, GridBoundingBox2D, GridIdx2D, GridShape2D,
             SpatialGridDefinition,
         },
     };

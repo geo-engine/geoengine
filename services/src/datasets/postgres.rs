@@ -38,7 +38,7 @@ use geoengine_operators::source::{
     MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset, TileFile,
 };
 use postgres_types::{FromSql, ToSql};
-use tracing::trace;
+use tokio_postgres::Transaction;
 
 pub async fn resolve_dataset_name_to_id<Tls>(
     conn: &PooledConnection<'_, PostgresConnectionManager<Tls>>,
@@ -1258,41 +1258,60 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        // validate the time of the tiles
-        let time_dim: TimeDimension = tx
-            .query_one(
-                r#"
+        validate_time(&tx, dataset, &tiles).await?;
+
+        validate_z_index(&tx, dataset, &tiles).await?;
+
+        batch_insert_tiles(&tx, dataset, &tiles).await?;
+
+        update_dataset_extents(&tx, dataset, &tiles).await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+}
+
+async fn validate_time(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    tiles: &[DatasetTile],
+) -> Result<()> {
+    // validate the time of the tiles
+    let time_dim: TimeDimension = tx
+        .query_one(
+            r#"
                     SELECT (result_descriptor).raster."time".dimension
                     FROM datasets
                     WHERE id = $1;
                 "#,
-                &[&dataset],
-            )
-            .await?
-            .get(0);
+            &[&dataset],
+        )
+        .await?
+        .get(0);
 
-        match time_dim {
-            TimeDimension::Regular(regular_time_dimension) => {
-                // check all tiles if they fit to time step
-                let invalid_tiles = tiles
-                    .iter()
-                    .filter(|tile| !regular_time_dimension.valid_interval(tile.time.into()))
-                    .collect::<Vec<_>>();
+    match time_dim {
+        TimeDimension::Regular(regular_time_dimension) => {
+            // check all tiles if they fit to time step
+            let invalid_tiles = tiles
+                .iter()
+                .filter(|tile| !regular_time_dimension.valid_interval(tile.time.into()))
+                .collect::<Vec<_>>();
 
-                if !invalid_tiles.is_empty() {
-                    return Err(Error::DatasetTileRegularTimeConflict {
-                        times: invalid_tiles.iter().map(|tile| tile.time).collect(),
-                        time_dim: regular_time_dimension,
-                    });
-                }
+            if !invalid_tiles.is_empty() {
+                return Err(Error::DatasetTileRegularTimeConflict {
+                    times: invalid_tiles.iter().map(|tile| tile.time).collect(),
+                    time_dim: regular_time_dimension,
+                });
             }
-            TimeDimension::Irregular => {
-                // check if any tile conflicts with time of existing tiles. there must be no overlaps.
-                let times = tiles.iter().map(|tile| tile.time).collect::<Vec<_>>();
+        }
+        TimeDimension::Irregular => {
+            // check if any tile conflicts with time of existing tiles. there must be no overlaps.
+            let times = tiles.iter().map(|tile| tile.time).collect::<Vec<_>>();
 
-                let incompatible_times = tx
-                    .query(
-                        r#"
+            let incompatible_times = tx
+                .query(
+                    r#"
                 SELECT DISTINCT
                     dt.time,
                     nt
@@ -1306,33 +1325,40 @@ where
                         (dt.time)."end" != (nt)."end"
                     );
                 "#,
-                        &[&dataset, &times],
-                    )
-                    .await?;
+                    &[&dataset, &times],
+                )
+                .await?;
 
-                if !incompatible_times.is_empty() {
-                    return Err(Error::DatasetTileTimeConflict {
-                        existing_times: incompatible_times.iter().map(|row| row.get(0)).collect(),
-                        times: incompatible_times.iter().map(|row| row.get(1)).collect(),
-                    });
-                }
+            if !incompatible_times.is_empty() {
+                return Err(Error::DatasetTileTimeConflict {
+                    existing_times: incompatible_times.iter().map(|row| row.get(0)).collect(),
+                    times: incompatible_times.iter().map(|row| row.get(1)).collect(),
+                });
             }
         }
+    }
 
-        let tile_keys = tiles
-            .iter()
-            .map(|tile| TileKey {
-                time: tile.time,
-                bbox: tile.spatial_partition,
-                band: tile.band,
-                z_index: tile.z_index,
-            })
-            .collect::<Vec<_>>();
+    Ok(())
+}
 
-        // check, on spatial overlap, if the z-index is different than existing tiles for the same time step and band)
-        let incompatible_z_index = tx
-            .query(
-                r#"
+async fn validate_z_index(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    tiles: &[DatasetTile],
+) -> Result<()> {
+    // check, on spatial overlap, if the z-index is different than existing tiles for the same time step and band)
+    let tile_keys = tiles
+        .iter()
+        .map(|tile| TileKey {
+            time: tile.time,
+            bbox: tile.spatial_partition,
+            band: tile.band,
+            z_index: tile.z_index,
+        })
+        .collect::<Vec<_>>();
+    let incompatible_z_index = tx
+        .query(
+            r#"
                 SELECT DISTINCT
                     (gdal_params).file_path
                 FROM
@@ -1345,42 +1371,58 @@ where
                     dt.z_index = tk.z_index
                 ;
                 "#,
-                &[&dataset, &tile_keys],
-            )
-            .await?;
-
-        if !incompatible_z_index.is_empty() {
-            return Err(Error::DatasetTileZIndexConflict {
-                files: incompatible_z_index.iter().map(|row| row.get(0)).collect(),
-            });
-        }
-
-        // batch insert using array unnesting
-        let tile_entries = tiles
-            .iter()
-            .map(|tile| TileEntry {
-                dataset_id: dataset,
-                time: tile.time,
-                bbox: tile.spatial_partition,
-                band: tile.band,
-                z_index: tile.z_index,
-                gdal_params: tile.params.clone().into(),
-            })
-            .collect::<Vec<_>>();
-
-        tx.execute(
-            r#"
-            INSERT INTO dataset_tiles (dataset_id, time, bbox, band, z_index, gdal_params)
-                SELECT * FROM unnest($1::"TileEntry"[]);
-            "#,
-            &[&tile_entries],
+            &[&dataset, &tile_keys],
         )
         .await?;
 
-        // update the dataset extents
-        let row = tx
-            .query_one(
-                r#"
+    if !incompatible_z_index.is_empty() {
+        return Err(Error::DatasetTileZIndexConflict {
+            files: incompatible_z_index.iter().map(|row| row.get(0)).collect(),
+        });
+    }
+
+    Ok(())
+}
+
+async fn batch_insert_tiles(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    tiles: &[DatasetTile],
+) -> Result<()> {
+    // batch insert using array unnesting
+    let tile_entries = tiles
+        .iter()
+        .map(|tile| TileEntry {
+            dataset_id: dataset,
+            time: tile.time,
+            bbox: tile.spatial_partition,
+            band: tile.band,
+            z_index: tile.z_index,
+            gdal_params: tile.params.clone().into(),
+        })
+        .collect::<Vec<_>>();
+
+    tx.execute(
+        r#"
+            INSERT INTO dataset_tiles (dataset_id, time, bbox, band, z_index, gdal_params)
+                SELECT * FROM unnest($1::"TileEntry"[]);
+            "#,
+        &[&tile_entries],
+    )
+    .await?;
+
+    Ok(())
+}
+
+async fn update_dataset_extents(
+    tx: &Transaction<'_>,
+    dataset: DatasetId,
+    tiles: &[DatasetTile],
+) -> Result<()> {
+    // update the dataset extents
+    let row = tx
+        .query_one(
+            r#"
             SELECT
                 (result_descriptor).raster.spatial_grid.spatial_grid,
                 (result_descriptor).raster."time".bounds
@@ -1389,38 +1431,34 @@ where
             WHERE
                 id = $1;
             "#,
-                &[&dataset],
-            )
-            .await?;
+            &[&dataset],
+        )
+        .await?;
 
-        let (mut dataset_grid, mut time_bounds): (SpatialGridDefinition, Option<TimeInterval>) =
-            (row.get(0), row.get(1));
+    let (mut dataset_grid, mut time_bounds): (SpatialGridDefinition, Option<TimeInterval>) =
+        (row.get(0), row.get(1));
 
-        trace!("Updating dataset grid: {:?}", dataset_grid);
+    for tile in tiles {
+        // TODO: handle datasets with flipped y axis?
+        let tile_grid = SpatialGridDefinition::new(
+            GdalDatasetGeoTransform::from(tile.params.geo_transform).try_into()?,
+            GridBoundingBox2D::new_unchecked(
+                [0, 0],
+                [tile.params.height as isize, tile.params.width as isize],
+            ),
+        );
 
-        for tile in &tiles {
-            // TODO: handle datasets with flipped y axis?
-            let tile_grid = SpatialGridDefinition::new(
-                GdalDatasetGeoTransform::from(tile.params.geo_transform).try_into()?,
-                GridBoundingBox2D::new_unchecked(
-                    [0, 0],
-                    [tile.params.height as isize, tile.params.width as isize],
-                ),
-            );
-
-            dataset_grid = dataset_grid
+        dataset_grid = dataset_grid
                 .merge(&tile_grid)
                 .expect("grids should be compatible because the compatibility was checked before inserting tiles");
 
-            if let Some(time_bounds) = &mut time_bounds {
-                *time_bounds = time_bounds.extend(&tile.time.into());
-            }
+        if let Some(time_bounds) = &mut time_bounds {
+            *time_bounds = time_bounds.extend(&tile.time.into());
         }
+    }
 
-        trace!("Updated dataset grid: {:?}", dataset_grid);
-
-        tx.execute(
-            r#"
+    tx.execute(
+        r#"
             UPDATE datasets
             SET 
                 result_descriptor.raster.spatial_grid.spatial_grid = $2,
@@ -1429,14 +1467,11 @@ where
                 meta_data.gdal_multi_band.result_descriptor."time".bounds = $3
             WHERE id = $1;
             "#,
-            &[&dataset, &dataset_grid, &time_bounds],
-        )
-        .await?;
+        &[&dataset, &dataset_grid, &time_bounds],
+    )
+    .await?;
 
-        tx.commit().await?;
-
-        Ok(())
-    }
+    Ok(())
 }
 
 #[async_trait]
