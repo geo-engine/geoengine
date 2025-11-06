@@ -6,7 +6,7 @@ ALTER TYPE "MetaDataDefinition" ADD ATTRIBUTE gdal_multi_band "GdalMultiBand";
 
 CREATE TABLE dataset_tiles (
     dataset_id uuid NOT NULL,
-    time "TimeInterval" NOT NULL,
+    time "TimeInterval" NOT NULL, -- noqa: references.keywords
     bbox "SpatialPartition2D" NOT NULL,
     band oid NOT NULL,
     z_index oid NOT NULL,
