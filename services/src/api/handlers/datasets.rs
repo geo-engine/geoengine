@@ -259,7 +259,7 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
             },
         )?;
 
-        // TODO: move this inside the db?
+        // TODO: move this inside the db? we do not want to open datasets while keeping a database transaction, though
         ensure!(
             rd.data_type == dataset_descriptor.data_type,
             TileFileDataTypeMismatch {
@@ -283,6 +283,25 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
             TileFileBandDoesNotExist {
                 band_count: dataset_descriptor.bands.count(),
                 found: tile.band,
+                file_path: tile.params.file_path.to_string_lossy().to_string(),
+            }
+        );
+
+        // TODO: also check that the tiles bbox (from the tile definition, and not the actual gdal dataset of the tile's file) fits into the dataset's spatial grid?
+        let tile_geotransform = geoengine_datatypes::raster::GeoTransform::try_from(
+            geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
+        )
+        .map_err(|_| AddDatasetTilesError::InvalidTileFileGeoTransform {
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        })?;
+        ensure!(
+            dataset_descriptor
+                .spatial_grid
+                .geo_transform()
+                .is_compatible_grid(tile_geotransform),
+            TileFileGeoTransformMismatch {
+                expected: dataset_descriptor.spatial_grid.geo_transform(),
+                found: tile_geotransform,
                 file_path: tile.params.file_path.to_string_lossy().to_string(),
             }
         );

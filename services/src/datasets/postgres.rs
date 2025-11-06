@@ -1258,8 +1258,6 @@ where
             .await
             .boxed_context(crate::error::PermissionDb)?;
 
-        // TODO: check pixels of tiles align with dataset grid
-
         // validate the time of the tiles
         let time_dim: TimeDimension = tx
             .query_one(

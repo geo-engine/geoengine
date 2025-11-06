@@ -110,13 +110,19 @@ impl fmt::Debug for UpdateDatasetError {
 #[snafu(context(suffix(false)))] // disables default `Snafu` suffix
 pub enum AddDatasetTilesError {
     #[snafu(display("Cannot load dataset for adding tiles"))]
-    CannotLoadDatasetForAddingTiles { source: error::Error },
+    CannotLoadDatasetForAddingTiles {
+        source: error::Error,
+    },
     #[snafu(display("Cannot add tiles to dataset: {source}"))]
-    CannotAddTilesToDataset { source: error::Error },
+    CannotAddTilesToDataset {
+        source: error::Error,
+    },
     #[snafu(display("Cannot add tiles to dataset that is not a GdalMultiBand"))]
     DatasetIsNotGdalMultiBand,
     #[snafu(display("Tile file path does not exist: {file_path}"))]
-    TileFilePathDoesNotExist { file_path: String },
+    TileFilePathDoesNotExist {
+        file_path: String,
+    },
     CannotOpenTileFile {
         source: geoengine_operators::error::Error,
         file_path: String,
@@ -138,6 +144,14 @@ pub enum AddDatasetTilesError {
     TileFileBandDoesNotExist {
         band_count: u32,
         found: u32,
+        file_path: String,
+    },
+    TileFileGeoTransformMismatch {
+        expected: geoengine_datatypes::raster::GeoTransform,
+        found: geoengine_datatypes::raster::GeoTransform,
+        file_path: String,
+    },
+    InvalidTileFileGeoTransform {
         file_path: String,
     },
 }
