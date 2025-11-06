@@ -1462,10 +1462,10 @@ mod tests {
                 ),
                 TimeInterval::new_unchecked(
                     TimeInstance::from_millis(1_743_465_600_000).unwrap(),
-                    TimeInstance::from_millis(1_746_056_000_000).unwrap()
+                    TimeInstance::from_millis(1_746_057_600_000).unwrap()
                 ),
                 TimeInterval::new_unchecked(
-                    TimeInstance::from_millis(1_746_056_000_000).unwrap(),
+                    TimeInstance::from_millis(1_746_057_600_000).unwrap(),
                     TimeInstance::from_millis(1_748_736_000_000).unwrap()
                 ),
             ]
