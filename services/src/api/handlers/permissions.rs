@@ -41,12 +41,12 @@ where
 }
 
 /// Request for adding a new permission to the given role on the given resource
-#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionRequest {
-    resource: Resource,
-    role_id: RoleId,
-    permission: Permission,
+    pub resource: Resource,
+    pub role_id: RoleId,
+    pub permission: Permission,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]

@@ -2,28 +2,42 @@
 
 use chrono::{NaiveDate, TimeZone};
 use gdal::Dataset as GdalDataset;
+use geoengine_datatypes::dataset::{NamedData};
 use geoengine_datatypes::primitives::{
     Coordinate2D, DateTime, Measurement, SpatialPartition2D, TimeInstance, TimeInterval,
 };
 use geoengine_datatypes::raster::GdalGeoTransform;
-use geoengine_operators::engine::{RasterBandDescriptor, RasterResultDescriptor};
-use geoengine_operators::source::GdalDatasetGeoTransform;
+use geoengine_operators::engine::{RasterBandDescriptor, RasterOperator, RasterResultDescriptor};
+use geoengine_operators::source::{
+    GdalDatasetGeoTransform, MultiBandGdalSource, MultiBandGdalSourceParameters,
+};
 use geoengine_operators::util::gdal::{
     measurement_from_rasterband, raster_descriptor_from_dataset,
 };
 use geoengine_services::api::handlers::datasets::DatasetTile;
+use geoengine_services::api::handlers::permissions::{
+    LayerCollectionResource, LayerResource, PermissionRequest,
+};
+use geoengine_services::api::model::datatypes::LayerId;
 use geoengine_services::api::model::operators::{GdalDatasetParameters, GdalMultiBand};
+use geoengine_services::api::model::responses::IdResponse;
 use geoengine_services::api::model::services::{
     AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
 };
 use geoengine_services::datasets::DatasetName;
 use geoengine_services::datasets::upload::VolumeName;
+use geoengine_services::layers::layer::{AddLayer, AddLayerCollection};
+use geoengine_services::layers::listing::LayerCollectionId;
+use geoengine_services::layers::storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
+use geoengine_services::permissions::{Permission, Role};
+use geoengine_services::workflows::workflow::Workflow;
 use regex::Regex;
 use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 use std::str::FromStr;
+use uuid::Uuid;
 
 /// A simple importer of tiled datasets that have
 ///  * multiple time steps
@@ -33,9 +47,14 @@ use std::str::FromStr;
 ///
 /// One example is the FORCE dataset where the rasters are stored in multiple tiles for each time step and the files look like this
 /// `/geodata/force/marburg/X0059_Y0049/20000124_LEVEL2_LND07_BOA.tif`
+///
+/// The datasets are inserted into a Geo Engine instance via its REST API.
+/// The files are scanned from a given local directory.
+/// If the files on the Geo Engine instance are in a different file path, specify the remote data dir.
 fn main() {
     // TODO: turn into cli arguments
-    const DATA_DIR: &str = "/home/michael/geodata/force/marburg";
+    const LOCAL_DATA_DIR: &str = "/home/michael/geodata/force/marburg"; // where the files are scanned
+    const REMOTE_DATA_DIR: Option<&str> = None; // Some("/geodata/force/marburg"); // path of the same files on the Geo Engine instance, if different
     const FILE_EXTENSION: &str = "tif";
     const RECURSIVE_SCAN: bool = true;
     const TIME_REGEX: &str = r"(\d{8})_LEVEL2";
@@ -45,13 +64,27 @@ fn main() {
     const GEO_ENGINE_URL: &str = "http://localhost:3030/api";
     const GEO_ENGINE_EMAIL: &str = "admin@localhost";
     const GEO_ENGINE_PASSWORD: &str = "adminadmin";
+    const PARENT_LAYER_COLLECTION_ID: Uuid = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID;
+    const LAYER_COLLECTION_NAME: &str = "FORCE";
+    const SHARE_LAYERS: bool = true;
 
     let time_regex = Regex::new(TIME_REGEX).expect("Invalid time regex");
     let product_regex = Regex::new(PRODUCT_NAME_REGEX).expect("Invalid product regex");
 
+    let (client, session_id) = login(GEO_ENGINE_URL, GEO_ENGINE_EMAIL, GEO_ENGINE_PASSWORD);
+
+    let layer_collection_id = create_layer_collection_if_not_exists(
+        &session_id,
+        &client,
+        GEO_ENGINE_URL,
+        PARENT_LAYER_COLLECTION_ID,
+        LAYER_COLLECTION_NAME,
+        SHARE_LAYERS,
+    );
+
     let mut files = Vec::new();
     collect_files(
-        Path::new(DATA_DIR),
+        Path::new(LOCAL_DATA_DIR),
         FILE_EXTENSION,
         RECURSIVE_SCAN,
         &mut files,
@@ -74,15 +107,187 @@ fn main() {
             product.1.len()
         );
 
-        add_dataset_and_tiles_to_geoengine(
+        let dataset_name = add_dataset_and_tiles_to_geoengine(
+            &session_id,
+            &client,
             &product.0,
             &product.1,
             TILE_DURATION_SECONDS,
             GEO_ENGINE_URL,
-            GEO_ENGINE_EMAIL,
-            GEO_ENGINE_PASSWORD,
+            LOCAL_DATA_DIR,
+            REMOTE_DATA_DIR,
         );
+
+        if let Some(dataset_name) = dataset_name {
+            add_dataset_to_collection(
+                &session_id,
+                &client,
+                &dataset_name,
+                &layer_collection_id,
+                &product.0,
+                GEO_ENGINE_URL,
+                SHARE_LAYERS,
+            );
+        }
     }
+}
+
+fn add_dataset_to_collection(
+    session_id: &str,
+    client: &reqwest::blocking::Client,
+    dataset_name: &str,
+    layer_collection_id: &str,
+    layer_name: &str,
+    geo_engine_url: &str,
+    share_layer: bool,
+) {
+    let add_layer = AddLayer {
+        name: layer_name.to_string(),
+        description: "".to_string(),
+        workflow: Workflow {
+            operator: geoengine_operators::engine::TypedOperator::Raster(
+                MultiBandGdalSource {
+                    params: MultiBandGdalSourceParameters {
+                        data: NamedData {
+                            namespace: None,
+                            provider: None,
+                            name: dataset_name.to_string(),
+                        },
+                        overview_level: None,
+                    },
+                }
+                .boxed(),
+            ),
+        },
+        symbology: None, // TODO: add symbology
+        properties: vec![],
+        metadata: Default::default(),
+    };
+
+    let response: IdResponse<LayerId> = client
+        .post(format!(
+            "{geo_engine_url}/layerDb/collections/{layer_collection_id}/layers"
+        ))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {session_id}"))
+        .json(&add_layer)
+        .send()
+        .expect("Failed to add layer to collection")
+        .json()
+        .expect("Failed to parse response");
+
+    if share_layer {
+        let permissions = vec![
+            PermissionRequest {
+                resource: geoengine_services::api::handlers::permissions::Resource::Layer(
+                    LayerResource {
+                        id:response.id.clone(), 
+                        r#type: geoengine_services::api::handlers::permissions::LayerResourceTypeTag::LayerResourceTypeTag
+                 },
+                ),
+                role_id: Role::registered_user_role_id(),
+                permission: Permission::Read,
+            },
+            PermissionRequest {
+                resource: geoengine_services::api::handlers::permissions::Resource::Layer(
+                    LayerResource {
+                        id:response.id.clone(),
+                         r#type: geoengine_services::api::handlers::permissions::LayerResourceTypeTag::LayerResourceTypeTag 
+                    },
+                ),
+                role_id: Role::anonymous_role_id(),
+                permission: Permission::Read,
+            },
+        ];
+
+        for permission in &permissions {
+          let response = client
+                .put(format!("{geo_engine_url}/permissions"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {session_id}"))
+                .json(&permission)
+                .send()
+                .expect("Failed to add permission");
+
+            println!(
+                "Layer '{}' shared with role {}: {}",
+                layer_name, permission.role_id, response.text().unwrap_or_default()
+            );
+        }
+    }
+}
+
+fn create_layer_collection_if_not_exists(
+    session_id: &str,
+    client: &reqwest::blocking::Client,
+    geo_engine_url: &str,
+    parent_layer_collection_id: Uuid,
+    layer_collection_name: &str,
+    share_layer: bool,
+) -> String {
+    let add_collection = AddLayerCollection {
+        name: layer_collection_name.to_string(),
+        description: format!("Layer collection for {}", layer_collection_name),
+        properties: vec![],
+    };
+
+    let response: IdResponse<LayerCollectionId> = client
+        .post(format!(
+            "{geo_engine_url}/layerDb/collections/{parent_layer_collection_id}/collections"
+        ))
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {session_id}"))
+        .json(&add_collection)
+        .send()
+        .expect("Failed to add dataset")
+        .json()
+        .expect("Failed to parse response");
+
+    // TODO: handle case where collection already exists, but there is no API to get collection by name
+
+    println!(
+        "Layer collection '{}' created with id {}",
+        layer_collection_name, response.id.0
+    );
+
+    if share_layer {
+        let permissions = vec![PermissionRequest {
+            resource: geoengine_services::api::handlers::permissions::Resource::LayerCollection(
+                LayerCollectionResource {
+                    id: response.id.clone(),
+                    r#type: geoengine_services::api::handlers::permissions::LayerCollectionResourceTypeTag::LayerCollectionResourceTypeTag,
+                },
+            ),
+            role_id: Role::registered_user_role_id(),
+            permission: Permission::Read,
+        }, PermissionRequest {
+            resource: geoengine_services::api::handlers::permissions::Resource::LayerCollection(
+                LayerCollectionResource {
+                    id: response.id.clone(),
+                    r#type: geoengine_services::api::handlers::permissions::LayerCollectionResourceTypeTag::LayerCollectionResourceTypeTag,
+                },
+            ),
+            role_id: Role::anonymous_role_id(),
+            permission: Permission::Read,
+        }];
+
+        for permission in &permissions {
+            let response = client
+                .put(format!("{geo_engine_url}/permissions"))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {session_id}"))
+                .json(&permission)
+                .send()
+                .expect("Failed to add permission");
+
+            println!(
+                "Layer collection '{}' shared with role {}: {}",
+                layer_collection_name, permission.role_id, response.text().unwrap_or_default()
+            );
+        }
+    }
+
+    response.id.0
 }
 
 struct ProductFile {
@@ -123,13 +328,15 @@ fn collect_files(dir: &Path, extension: &str, recursive: bool, files: &mut Vec<P
 }
 
 fn add_dataset_and_tiles_to_geoengine(
+    session_id: &str,
+    client: &reqwest::blocking::Client,
     product_name: &str,
     files: &[ProductFile],
     tile_duration_seconds: u32,
     geo_engine_url: &str,
-    geo_engine_email: &str,
-    geo_engine_password: &str,
-) {
+    local_data_dir: &str,
+    remote_data_dir: Option<&str>,
+) -> Option<String> {
     let create_dataset = CreateDataset {
         data_path: DataPath::Volume(VolumeName("test_data".to_string())),
         definition: DatasetDefinition {
@@ -151,22 +358,6 @@ fn add_dataset_and_tiles_to_geoengine(
         },
     };
 
-    let client = reqwest::blocking::Client::new();
-    let session_id = client
-        .post(format!("{geo_engine_url}/login"))
-        .header("Content-Type", "application/json")
-        .json(&serde_json::json!({
-            "email": geo_engine_email,
-            "password": geo_engine_password,
-        }))
-        .send()
-        .expect("Failed to authenticate")
-        .json::<serde_json::Value>()
-        .expect("Failed to parse auth response")["id"]
-        .as_str()
-        .expect("No session id in response")
-        .to_string();
-
     let response = client
         .post(format!("{geo_engine_url}/dataset"))
         .header("Content-Type", "application/json")
@@ -181,11 +372,11 @@ fn add_dataset_and_tiles_to_geoengine(
             id.to_string()
         } else {
             println!("Failed to get dataset id from response: {json:?}");
-            return;
+            return None;
         }
     } else {
         println!("Failed to parse dataset creation response as JSON");
-        return;
+        return None;
     };
 
     let mut tiles = Vec::new();
@@ -200,7 +391,17 @@ fn add_dataset_and_tiles_to_geoengine(
                 band: band_idx as u32,
                 z_index: 0, // TODO: implement z-index calculation
                 params: GdalDatasetParameters {
-                    file_path: file.path.clone(),
+                    file_path: {
+                        let new_path = if let Some(remote) = remote_data_dir {
+                            match file.path.strip_prefix(local_data_dir) {
+                                Ok(suffix) => Path::new(remote).join(suffix),
+                                Err(_) => file.path.clone(),
+                            }
+                        } else {
+                            file.path.clone()
+                        };
+                        new_path
+                    },
                     rasterband_channel: band_idx + 1,
                     geo_transform: file.geo_transform.into(),
                     width: file.width,
@@ -232,10 +433,35 @@ fn add_dataset_and_tiles_to_geoengine(
             "Failed to add tile to dataset: {}",
             response.text().unwrap_or_default()
         );
-        return;
+        return dataset_name.into();
     }
 
     println!("Dataset tiles added successfully for product: {product_name}");
+
+    dataset_name.into()
+}
+
+fn login(
+    geo_engine_url: &str,
+    geo_engine_email: &str,
+    geo_engine_password: &str,
+) -> (reqwest::blocking::Client, String) {
+    let client = reqwest::blocking::Client::new();
+    let session_id = client
+        .post(format!("{geo_engine_url}/login"))
+        .header("Content-Type", "application/json")
+        .json(&serde_json::json!({
+            "email": geo_engine_email,
+            "password": geo_engine_password,
+        }))
+        .send()
+        .expect("Failed to authenticate")
+        .json::<serde_json::Value>()
+        .expect("Failed to parse auth response")["id"]
+        .as_str()
+        .expect("No session id in response")
+        .to_string();
+    (client, session_id)
 }
 
 fn extract_products_from_files(
