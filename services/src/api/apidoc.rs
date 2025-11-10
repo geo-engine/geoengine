@@ -1,7 +1,7 @@
 #![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
 
 use crate::api::handlers;
-use crate::api::handlers::datasets::{DatasetTile, VolumeFileLayersResponse};
+use crate::api::handlers::datasets::{AddDatasetTile, VolumeFileLayersResponse};
 use crate::api::handlers::permissions::{
     PermissionListOptions, PermissionListing, PermissionRequest, Resource,
 };
@@ -417,7 +417,7 @@ use utoipa::{Modify, OpenApi};
             Volume,
             VolumeName,
             DataPath,
-            DatasetTile,
+            AddDatasetTile,
 
             PlotOutputFormat,
             WrappedPlotOutput,

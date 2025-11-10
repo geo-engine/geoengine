@@ -1313,13 +1313,21 @@ CREATE TABLE quota_log (
 CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
 
 CREATE TABLE dataset_tiles (
+    id uuid NOT NULL PRIMARY KEY,
     dataset_id uuid NOT NULL,
     time "TimeInterval" NOT NULL, -- noqa: references.keywords
     bbox "SpatialPartition2D" NOT NULL,
     band oid NOT NULL,
     z_index oid NOT NULL,
-    gdal_params "GdalDatasetParameters" NOT NULL,
-    PRIMARY KEY (dataset_id, time, bbox, band, z_index)
+    gdal_params "GdalDatasetParameters" NOT NULL
+);
+
+CREATE UNIQUE INDEX dataset_tiles_unique_idx ON dataset_tiles (
+    dataset_id,
+    time,
+    bbox,
+    band,
+    z_index
 );
 
 -- helper type for batch checking tile validity
@@ -1332,6 +1340,7 @@ CREATE TYPE "TileKey" AS (
 
 -- helper type for batch inserting tiles
 CREATE TYPE "TileEntry" AS (
+    id uuid,
     dataset_id uuid,
     time "TimeInterval",
     bbox "SpatialPartition2D",

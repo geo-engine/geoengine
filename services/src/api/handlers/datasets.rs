@@ -206,7 +206,7 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
     dataset: web::Path<DatasetName>,
-    tiles: Json<Vec<DatasetTile>>,
+    tiles: Json<Vec<AddDatasetTile>>,
 ) -> Result<HttpResponse, AddDatasetTilesError> {
     let db = app_ctx.session_context(session).db();
 
@@ -315,7 +315,7 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
-pub struct DatasetTile {
+pub struct AddDatasetTile {
     pub time: crate::api::model::datatypes::TimeInterval,
     pub spatial_partition: SpatialPartition2D,
     pub band: u32,
@@ -3551,7 +3551,7 @@ mod tests {
         Ok(())
     }
 
-    pub fn create_ndvi_tiles() -> Vec<DatasetTile> {
+    pub fn create_ndvi_tiles() -> Vec<AddDatasetTile> {
         let no_data_value = Some(0.); // TODO: is it really 0?
 
         let starts: Vec<TimeInstance> = vec![
@@ -3582,7 +3582,7 @@ mod tests {
                 .format(&DateTimeParseFormat::custom("%Y-%m-%d".to_string()));
 
             // left
-            tiles.push(DatasetTile {
+            tiles.push(AddDatasetTile {
                 time: TimeInterval::new_unchecked(*start, *end).into(),
                 spatial_partition:
                     geoengine_datatypes::primitives::SpatialPartition2D::new_unchecked(
@@ -3616,7 +3616,7 @@ mod tests {
             });
 
             // right
-            tiles.push(DatasetTile {
+            tiles.push(AddDatasetTile {
                 time: TimeInterval::new_unchecked(*start, *end).into(),
                 spatial_partition:
                     geoengine_datatypes::primitives::SpatialPartition2D::new_unchecked(
@@ -3692,7 +3692,7 @@ mod tests {
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         // add tiles
-        let mut tiles: Vec<DatasetTile> = if reverse_z_order {
+        let mut tiles: Vec<AddDatasetTile> = if reverse_z_order {
             serde_json::from_str(&std::fs::read_to_string(test_data!(
                 "raster/multi_tile/metadata/loading_info_rev.json"
             ))?)?
@@ -5025,7 +5025,7 @@ mod tests {
             .await
             .unwrap();
 
-        let tile = DatasetTile {
+        let tile = AddDatasetTile {
             time: TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2014-01-02T00:00:00Z").unwrap(),
@@ -5115,7 +5115,7 @@ mod tests {
             .into()
         );
 
-        let tile = DatasetTile {
+        let tile = AddDatasetTile {
             time: TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-03T00:00:00Z").unwrap(),
                 TimeInstance::from_str("2014-01-04T00:00:00Z").unwrap(),
@@ -5294,6 +5294,64 @@ mod tests {
                     geoengine_datatypes::primitives::TimeInstance::MAX
                 )
                 .unwrap()
+            ]
+        );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    async fn it_loads_time_gap_in_multi_band_multi_file_mosaics(
+        app_ctx: PostgresContext<NoTls>,
+    ) -> Result<()> {
+        let (ctx, dataset_name) = add_multi_tile_dataset(&app_ctx, false, false).await?;
+
+        let operator = MultiBandGdalSource {
+            params: MultiBandGdalSourceParameters::new(dataset_name.into()),
+        }
+        .boxed();
+
+        let execution_context = ctx.execution_context()?;
+
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized = operator
+            .clone()
+            .initialize(workflow_operator_path_root, &execution_context)
+            .await?;
+
+        let processor = initialized.query_processor()?;
+
+        let query_ctx = ctx.query_context(Uuid::new_v4(), Uuid::new_v4())?;
+
+        let times = processor
+            .get_u16()
+            .unwrap()
+            .time_query(
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-03-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-04-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap(),
+                &query_ctx,
+            )
+            .await
+            .unwrap()
+            .try_collect::<Vec<_>>()
+            .await?;
+
+        assert_eq!(
+            times,
+            vec![
+                TimeInterval::new(
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-03-01T00:00:00Z")
+                        .unwrap(),
+                    geoengine_datatypes::primitives::TimeInstance::from_str("2025-04-01T00:00:00Z")
+                        .unwrap(),
+                )
+                .unwrap(),
             ]
         );
 

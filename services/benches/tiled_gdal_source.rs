@@ -14,7 +14,7 @@ use geoengine_operators::{
 };
 use geoengine_services::{
     api::{
-        handlers::datasets::DatasetTile,
+        handlers::datasets::AddDatasetTile,
         model::{
             datatypes::{Coordinate2D, SpatialPartition2D},
             operators::{
@@ -229,9 +229,9 @@ async fn add_ndvi_multi_tile_dataset(app_ctx: &PostgresContext<NoTls>) -> Datase
         ("2014-06-01T00:00:00Z", "2014-07-01T00:00:00Z"),
     ];
 
-    let tiles: Vec<DatasetTile> = time_steps
+    let tiles: Vec<AddDatasetTile> = time_steps
         .iter()
-        .map(|(start, end)| DatasetTile {
+        .map(|(start, end)| AddDatasetTile {
             time: TimeInterval::new(
                 TimeInstance::from_str(start).unwrap(),
                 TimeInstance::from_str(end).unwrap(),

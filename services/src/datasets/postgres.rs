@@ -1,4 +1,4 @@
-use crate::api::handlers::datasets::DatasetTile;
+use crate::api::handlers::datasets::AddDatasetTile;
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::UpdateDataset;
 use crate::contexts::PostgresDb;
@@ -10,6 +10,7 @@ use crate::datasets::upload::FileId;
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
+use crate::identifier;
 use crate::permissions::TxPermissionDb;
 use crate::permissions::{Permission, RoleId};
 use crate::projects::Symbology;
@@ -789,7 +790,7 @@ where
                 FROM
                     dataset_tiles
                 WHERE
-                    dataset_id = $1 AND (time).end < $2
+                    dataset_id = $1 AND (time).end <= $2
                 ORDER BY
                 (time).end DESC
                 LIMIT 1",
@@ -825,7 +826,7 @@ where
             FROM
                 dataset_tiles
             WHERE
-                dataset_id = $1 AND (time).start > $2
+                dataset_id = $1 AND (time).start >= $2
             ORDER BY
             (time).start ASC
             LIMIT 1",
@@ -1015,8 +1016,11 @@ struct TileKey {
     z_index: u32,
 }
 
+identifier!(DatasetTileId);
+
 #[derive(Debug, Clone, PartialEq, ToSql, FromSql)]
 struct TileEntry {
+    id: DatasetTileId,
     dataset_id: DatasetId,
     time: crate::api::model::datatypes::TimeInterval,
     bbox: SpatialPartition2D,
@@ -1250,7 +1254,11 @@ where
         Ok(())
     }
 
-    async fn add_dataset_tiles(&self, dataset: DatasetId, tiles: Vec<DatasetTile>) -> Result<()> {
+    async fn add_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        tiles: Vec<AddDatasetTile>,
+    ) -> Result<()> {
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
@@ -1275,7 +1283,7 @@ where
 async fn validate_time(
     tx: &Transaction<'_>,
     dataset: DatasetId,
-    tiles: &[DatasetTile],
+    tiles: &[AddDatasetTile],
 ) -> Result<()> {
     // validate the time of the tiles
     let time_dim: TimeDimension = tx
@@ -1344,7 +1352,7 @@ async fn validate_time(
 async fn validate_z_index(
     tx: &Transaction<'_>,
     dataset: DatasetId,
-    tiles: &[DatasetTile],
+    tiles: &[AddDatasetTile],
 ) -> Result<()> {
     // check, on spatial overlap, if the z-index is different than existing tiles for the same time step and band)
     let tile_keys = tiles
@@ -1387,12 +1395,13 @@ async fn validate_z_index(
 async fn batch_insert_tiles(
     tx: &Transaction<'_>,
     dataset: DatasetId,
-    tiles: &[DatasetTile],
+    tiles: &[AddDatasetTile],
 ) -> Result<()> {
     // batch insert using array unnesting
     let tile_entries = tiles
         .iter()
         .map(|tile| TileEntry {
+            id: DatasetTileId::new(),
             dataset_id: dataset,
             time: tile.time,
             bbox: tile.spatial_partition,
@@ -1404,7 +1413,7 @@ async fn batch_insert_tiles(
 
     tx.execute(
         r#"
-            INSERT INTO dataset_tiles (dataset_id, time, bbox, band, z_index, gdal_params)
+            INSERT INTO dataset_tiles (id, dataset_id, time, bbox, band, z_index, gdal_params)
                 SELECT * FROM unnest($1::"TileEntry"[]);
             "#,
         &[&tile_entries],
@@ -1417,7 +1426,7 @@ async fn batch_insert_tiles(
 async fn update_dataset_extents(
     tx: &Transaction<'_>,
     dataset: DatasetId,
-    tiles: &[DatasetTile],
+    tiles: &[AddDatasetTile],
 ) -> Result<()> {
     // update the dataset extents
     let row = tx

@@ -1,8 +1,8 @@
 #![allow(clippy::print_stdout)]
 
 use chrono::{NaiveDate, TimeZone};
-use gdal::Dataset as GdalDataset;
-use geoengine_datatypes::dataset::{NamedData};
+use gdal::{Dataset as GdalDataset, Metadata};
+use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{
     Coordinate2D, DateTime, Measurement, SpatialPartition2D, TimeInstance, TimeInterval,
 };
@@ -14,7 +14,7 @@ use geoengine_operators::source::{
 use geoengine_operators::util::gdal::{
     measurement_from_rasterband, raster_descriptor_from_dataset,
 };
-use geoengine_services::api::handlers::datasets::DatasetTile;
+use geoengine_services::api::handlers::datasets::AddDatasetTile;
 use geoengine_services::api::handlers::permissions::{
     LayerCollectionResource, LayerResource, PermissionRequest,
 };
@@ -143,7 +143,7 @@ fn add_dataset_to_collection(
 ) {
     let add_layer = AddLayer {
         name: layer_name.to_string(),
-        description: "".to_string(),
+        description: String::new(),
         workflow: Workflow {
             operator: geoengine_operators::engine::TypedOperator::Raster(
                 MultiBandGdalSource {
@@ -181,7 +181,7 @@ fn add_dataset_to_collection(
             PermissionRequest {
                 resource: geoengine_services::api::handlers::permissions::Resource::Layer(
                     LayerResource {
-                        id:response.id.clone(), 
+                        id:response.id.clone(),
                         r#type: geoengine_services::api::handlers::permissions::LayerResourceTypeTag::LayerResourceTypeTag
                  },
                 ),
@@ -201,7 +201,7 @@ fn add_dataset_to_collection(
         ];
 
         for permission in &permissions {
-          let response = client
+            let response = client
                 .put(format!("{geo_engine_url}/permissions"))
                 .header("Content-Type", "application/json")
                 .header("Authorization", format!("Bearer {session_id}"))
@@ -211,7 +211,9 @@ fn add_dataset_to_collection(
 
             println!(
                 "Layer '{}' shared with role {}: {}",
-                layer_name, permission.role_id, response.text().unwrap_or_default()
+                layer_name,
+                permission.role_id,
+                response.text().unwrap_or_default()
             );
         }
     }
@@ -227,7 +229,7 @@ fn create_layer_collection_if_not_exists(
 ) -> String {
     let add_collection = AddLayerCollection {
         name: layer_collection_name.to_string(),
-        description: format!("Layer collection for {}", layer_collection_name),
+        description: format!("Layer collection for {layer_collection_name}",),
         properties: vec![],
     };
 
@@ -282,7 +284,9 @@ fn create_layer_collection_if_not_exists(
 
             println!(
                 "Layer collection '{}' shared with role {}: {}",
-                layer_collection_name, permission.role_id, response.text().unwrap_or_default()
+                layer_collection_name,
+                permission.role_id,
+                response.text().unwrap_or_default()
             );
         }
     }
@@ -327,6 +331,7 @@ fn collect_files(dir: &Path, extension: &str, recursive: bool, files: &mut Vec<P
     }
 }
 
+#[allow(clippy::too_many_lines, clippy::too_many_arguments)]
 fn add_dataset_and_tiles_to_geoengine(
     session_id: &str,
     client: &reqwest::blocking::Client,
@@ -383,24 +388,24 @@ fn add_dataset_and_tiles_to_geoengine(
 
     for file in files {
         for (band_idx, _band) in file.result_descriptor.bands.iter().enumerate() {
-            let tile = DatasetTile {
-                time: TimeInterval::new(file.time, file.time + i64::from(tile_duration_seconds))
-                    .expect("Failed to create time interval")
-                    .into(),
+            let tile = AddDatasetTile {
+                time: TimeInterval::new(
+                    file.time,
+                    file.time + i64::from(tile_duration_seconds * 1000),
+                )
+                .expect("Failed to create time interval")
+                .into(),
                 spatial_partition: file.spatial_partition.into(),
                 band: band_idx as u32,
                 z_index: 0, // TODO: implement z-index calculation
                 params: GdalDatasetParameters {
-                    file_path: {
-                        let new_path = if let Some(remote) = remote_data_dir {
-                            match file.path.strip_prefix(local_data_dir) {
-                                Ok(suffix) => Path::new(remote).join(suffix),
-                                Err(_) => file.path.clone(),
-                            }
-                        } else {
-                            file.path.clone()
-                        };
-                        new_path
+                    file_path: if let Some(remote) = remote_data_dir {
+                        match file.path.strip_prefix(local_data_dir) {
+                            Ok(suffix) => Path::new(remote).join(suffix),
+                            Err(_) => file.path.clone(),
+                        }
+                    } else {
+                        file.path.clone()
                     },
                     rasterband_channel: band_idx + 1,
                     geo_transform: file.geo_transform.into(),
@@ -540,7 +545,11 @@ fn extract_product_from_file(
         .enumerate()
         .map(|(idx, measurement)| {
             RasterBandDescriptor::new(
-                format!("band {idx}"),
+                gdal_dataset
+                    .rasterband(idx + 1)
+                    .expect("Failed to get raster band")
+                    .description()
+                    .unwrap_or_else(|_| format!("band {}", idx + 1)),
                 measurement.unwrap_or(Measurement::Unitless),
             )
         })

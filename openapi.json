@@ -5556,6 +5556,37 @@
           }
         }
       },
+      "AddDatasetTile": {
+        "type": "object",
+        "required": [
+          "time",
+          "spatial_partition",
+          "band",
+          "z_index",
+          "params"
+        ],
+        "properties": {
+          "band": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
+          },
+          "spatial_partition": {
+            "$ref": "#/components/schemas/SpatialPartition2D"
+          },
+          "time": {
+            "$ref": "#/components/schemas/TimeInterval"
+          },
+          "z_index": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
       "AddLayer": {
         "type": "object",
         "required": [
@@ -6486,37 +6517,6 @@
             "enum": [
               "dataset"
             ]
-          }
-        }
-      },
-      "DatasetTile": {
-        "type": "object",
-        "required": [
-          "time",
-          "spatial_partition",
-          "band",
-          "z_index",
-          "params"
-        ],
-        "properties": {
-          "band": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "params": {
-            "$ref": "#/components/schemas/GdalDatasetParameters"
-          },
-          "spatial_partition": {
-            "$ref": "#/components/schemas/SpatialPartition2D"
-          },
-          "time": {
-            "$ref": "#/components/schemas/TimeInterval"
-          },
-          "z_index": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
           }
         }
       },
