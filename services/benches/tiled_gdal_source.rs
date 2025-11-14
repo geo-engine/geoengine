@@ -211,7 +211,7 @@ async fn add_ndvi_multi_tile_dataset(app_ctx: &PostgresContext<NoTls>) -> Datase
     let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
-        .add_dataset(ndvi.properties.into(), ndvi.meta_data.into())
+        .add_dataset(ndvi.properties.into(), ndvi.meta_data.into(), None)
         .await
         .expect("dataset db access")
         .id;

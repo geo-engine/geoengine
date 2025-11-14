@@ -1082,6 +1082,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data,
+                None,
             )
             .await
             .unwrap();
@@ -1278,7 +1279,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let _id = db1.add_dataset(ds, meta.into()).await.unwrap();
+        let _id = db1.add_dataset(ds, meta.into(), None).await.unwrap();
 
         let list1 = db1
             .list_datasets(DatasetListOptions {
@@ -1352,7 +1353,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into(), None).await.unwrap().id;
 
         assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -1404,7 +1405,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into(), None).await.unwrap().id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1462,7 +1463,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into(), None).await.unwrap().id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1520,7 +1521,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into(), None).await.unwrap().id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1629,7 +1630,11 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db.add_dataset(vector_ds, meta.into()).await.unwrap().id;
+        let id = db
+            .add_dataset(vector_ds, meta.into(), None)
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1650,7 +1655,7 @@ mod tests {
         };
 
         let id = db
-            .add_dataset(raster_ds.clone(), meta.into())
+            .add_dataset(raster_ds.clone(), meta.into(), None)
             .await
             .unwrap()
             .id;
@@ -1669,7 +1674,7 @@ mod tests {
         };
 
         let id = db
-            .add_dataset(raster_ds.clone(), meta.into())
+            .add_dataset(raster_ds.clone(), meta.into(), None)
             .await
             .unwrap()
             .id;
@@ -1686,7 +1691,7 @@ mod tests {
         };
 
         let id = db
-            .add_dataset(raster_ds.clone(), meta.into())
+            .add_dataset(raster_ds.clone(), meta.into(), None)
             .await
             .unwrap()
             .id;
@@ -1711,7 +1716,7 @@ mod tests {
         };
 
         let id = db
-            .add_dataset(raster_ds.clone(), meta.into())
+            .add_dataset(raster_ds.clone(), meta.into(), None)
             .await
             .unwrap()
             .id;
@@ -3997,6 +4002,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data,
+                None,
             )
             .await
             .unwrap()
@@ -4088,6 +4094,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data,
+                None,
             )
             .await
             .unwrap()
@@ -4777,6 +4784,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data.clone(),
+                None,
             )
             .await
             .unwrap();
@@ -4803,6 +4811,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data,
+                None,
             )
             .await
             .unwrap();

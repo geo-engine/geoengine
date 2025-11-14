@@ -1,12 +1,14 @@
+use std::path::PathBuf;
+
 use crate::api::handlers::datasets::AddDatasetTile;
 use crate::api::model::datatypes::SpatialPartition2D;
-use crate::api::model::services::UpdateDataset;
+use crate::api::model::services::{DataPath, UpdateDataset};
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
 use crate::datasets::listing::{OrderBy, ProvenanceOutput};
 use crate::datasets::storage::{Dataset, DatasetDb, DatasetStore, MetaDataDefinition};
-use crate::datasets::upload::FileId;
+use crate::datasets::upload::{FileId, UploadRootPath, Volumes};
 use crate::datasets::upload::{Upload, UploadDb, UploadId};
 use crate::datasets::{AddDataset, DatasetIdAndName, DatasetName};
 use crate::error::{self, Error, Result};
@@ -272,7 +274,8 @@ where
                 d.source_operator,
                 d.symbology,
                 d.provenance,
-                d.tags
+                d.tags,
+                d.data_path
             FROM 
                 user_permitted_datasets p JOIN datasets d 
                     ON (p.dataset_id = d.id)
@@ -299,6 +302,7 @@ where
             symbology: row.get(6),
             provenance: row.get(7),
             tags: row.get(8),
+            data_path: row.get(9),
         })
     }
 
@@ -657,7 +661,7 @@ where
             .prepare(
                 "
             SELECT
-                d.meta_data
+                d.meta_data, d.data_path
             FROM
                 user_permitted_datasets p JOIN datasets d
                     ON (p.dataset_id = d.id)
@@ -685,9 +689,37 @@ where
             _ => return Err(geoengine_operators::error::Error::DataIdTypeMissMatch),
         };
 
+        let data_path: DataPath = row.get(1);
+
+        let data_path =
+            match data_path {
+                DataPath::Volume(volume_name) =>
+                // TODO: after Volume management is implemented, this needs to be adapted
+                {
+                    Volumes::default()
+                        .volumes
+                        .iter()
+                        .find(|v| v.name == volume_name)
+                        .ok_or(Error::UnknownVolumeName {
+                            volume_name: volume_name.0.clone(),
+                        })
+                        .map_err(|e| geoengine_operators::error::Error::MetaData {
+                            source: Box::new(e),
+                        })?
+                        .path
+                        .clone()
+                }
+                DataPath::Upload(upload_id) => upload_id.root_path().map_err(|e| {
+                    geoengine_operators::error::Error::MetaData {
+                        source: Box::new(e),
+                    }
+                })?,
+            };
+
         Ok(Box::new(MultiBandGdalLoadingInfoProvider {
             dataset_id: id,
             result_descriptor,
+            data_path,
             db: self.clone(),
         }))
     }
@@ -703,6 +735,7 @@ where
 {
     dataset_id: DatasetId,
     result_descriptor: RasterResultDescriptor,
+    data_path: PathBuf,
     db: PostgresDb<Tls>,
 }
 
@@ -962,7 +995,12 @@ where
                     time: row.get(1),
                     band: row.get(2),
                     z_index: row.get(3),
-                    params: row.get(4),
+                    params: {
+                        let mut params: GdalDatasetParameters = row.get(4);
+                        // at some point we need to turn the relative file paths of tiles into absolute paths
+                        params.file_path = self.data_path.join(&params.file_path);
+                        params
+                    },
                 })
                 .collect();
 
@@ -1041,6 +1079,7 @@ where
         &self,
         dataset: AddDataset,
         meta_data: MetaDataDefinition,
+        data_path: Option<DataPath>,
     ) -> Result<DatasetIdAndName> {
         let id = DatasetId::new();
         let name = dataset.name.unwrap_or_else(|| DatasetName {
@@ -1055,6 +1094,8 @@ where
         );
 
         self.check_dataset_namespace(&name)?;
+
+        // TODO: check `data_path` exists?
 
         let typed_meta_data = meta_data.to_typed_metadata();
 
@@ -1074,9 +1115,10 @@ where
                     meta_data,
                     symbology,
                     provenance,
-                    tags
+                    tags,
+                    data_path
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[])",
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10::text[], $11)",
             &[
                 &id,
                 &name,
@@ -1088,6 +1130,7 @@ where
                 &dataset.symbology,
                 &dataset.provenance,
                 &dataset.tags,
+                &data_path,
             ],
         )
         .await
@@ -1715,6 +1758,7 @@ mod tests {
                 tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
             },
             meta_data,
+            None,
         )
         .await
         .unwrap()

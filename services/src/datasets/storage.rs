@@ -37,6 +37,7 @@ pub struct Dataset {
     pub symbology: Option<Symbology>,
     pub provenance: Option<Vec<Provenance>>,
     pub tags: Option<Vec<String>>,
+    pub data_path: Option<DataPath>,
 }
 
 impl Dataset {
@@ -295,6 +296,7 @@ pub trait DatasetStore {
         &self,
         dataset: AddDataset,
         meta_data: MetaDataDefinition,
+        data_path: Option<DataPath>, // TODO: make mandatory when implementing Volumes RFC
     ) -> Result<DatasetIdAndName>;
 
     async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()>;

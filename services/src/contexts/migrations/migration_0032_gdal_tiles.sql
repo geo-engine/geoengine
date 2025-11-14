@@ -4,6 +4,15 @@ CREATE TYPE "GdalMultiBand" AS (
 
 ALTER TYPE "MetaDataDefinition" ADD ATTRIBUTE gdal_multi_band "GdalMultiBand";
 
+CREATE TYPE "DataPath" AS (
+    -- oneOf
+    volume_name text,
+    upload_id uuid
+);
+
+-- TODO: NOT NULL for GdalMultiBand?
+ALTER TABLE datasets ADD COLUMN data_path "DataPath";
+
 CREATE TABLE dataset_tiles (
     id uuid NOT NULL PRIMARY KEY,
     dataset_id uuid NOT NULL,

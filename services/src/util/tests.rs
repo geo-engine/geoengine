@@ -210,7 +210,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl(
     let ctx = app_ctx.session_context(session);
     let dataset_id = ctx
         .db()
-        .add_dataset(ndvi.properties, ndvi.meta_data)
+        .add_dataset(ndvi.properties, ndvi.meta_data, None)
         .await
         .expect("dataset db access")
         .id;
@@ -337,7 +337,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
         }),
     };
 
-    db.add_dataset(ndvi.properties, ndvi.meta_data)
+    db.add_dataset(ndvi.properties, ndvi.meta_data, None)
         .await
         .expect("dataset db access")
         .name
@@ -475,7 +475,7 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
     };
 
     let dataset = db
-        .add_dataset(def.properties.clone(), def.meta_data.clone())
+        .add_dataset(def.properties.clone(), def.meta_data.clone(), None)
         .await
         .unwrap();
 
@@ -880,7 +880,7 @@ pub async fn add_ndvi_to_datasets2<C: ApplicationContext<Session = UserSession>>
     let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
-        .add_dataset(ndvi.properties, ndvi.meta_data)
+        .add_dataset(ndvi.properties, ndvi.meta_data, None)
         .await
         .expect("dataset db access")
         .id;
@@ -937,7 +937,7 @@ pub async fn add_ports_to_datasets<C: ApplicationContext<Session = UserSession>>
     let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
-        .add_dataset(ndvi.properties, ndvi.meta_data)
+        .add_dataset(ndvi.properties, ndvi.meta_data, None)
         .await
         .expect("dataset db access")
         .id;

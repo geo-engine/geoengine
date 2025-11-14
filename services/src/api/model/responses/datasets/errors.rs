@@ -122,6 +122,11 @@ pub enum AddDatasetTilesError {
     #[snafu(display("Tile file path does not exist: {file_path}"))]
     TileFilePathDoesNotExist {
         file_path: String,
+        absolute_path: String,
+    },
+    DatasetIsMissingDataPath,
+    TileFilePathNotRelative {
+        file_path: String,
     },
     CannotOpenTileFile {
         source: geoengine_operators::error::Error,

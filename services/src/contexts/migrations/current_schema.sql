@@ -639,6 +639,12 @@ CREATE TABLE workflows (
 
 -- TODO: add length constraints
 
+CREATE TYPE "DataPath" AS (
+    -- oneOf
+    volume_name text,
+    upload_id uuid
+);
+
 CREATE TABLE datasets (
     id uuid PRIMARY KEY,
     name "DatasetName" UNIQUE NOT NULL,
@@ -649,7 +655,8 @@ CREATE TABLE datasets (
     result_descriptor "ResultDescriptor" NOT NULL,
     meta_data "MetaDataDefinition" NOT NULL,
     symbology "Symbology",
-    provenance "Provenance" []
+    provenance "Provenance" [],
+    data_path "DataPath" -- TODO: NOT NULL for GdalMultiBand?
 );
 
 -- TODO: add constraint not null

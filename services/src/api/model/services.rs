@@ -11,6 +11,7 @@ use crate::datasets::storage::validate_tags;
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::projects::Symbology;
 use crate::util::parsing::deserialize_base_url;
+use geoengine_datatypes::util::test::TestDefault;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
@@ -148,7 +149,7 @@ pub struct DatasetDefinition {
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateDataset {
-    pub data_path: DataPath,
+    pub data_path: DataPath, // TODO: move into `AddDataset`?
     pub definition: DatasetDefinition,
 }
 
@@ -157,6 +158,12 @@ pub struct CreateDataset {
 pub enum DataPath {
     Volume(VolumeName),
     Upload(UploadId),
+}
+
+impl TestDefault for DataPath {
+    fn test_default() -> Self {
+        DataPath::Volume(VolumeName("test_data".to_string()))
+    }
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema, Validate)]
@@ -1068,6 +1075,7 @@ pub struct Dataset {
     pub symbology: Option<Symbology>,
     pub provenance: Option<Vec<Provenance>>,
     pub tags: Option<Vec<String>>,
+    pub data_path: Option<DataPath>,
 }
 
 impl From<Dataset> for crate::datasets::storage::Dataset {
@@ -1084,6 +1092,7 @@ impl From<Dataset> for crate::datasets::storage::Dataset {
                 .provenance
                 .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>()),
             tags: value.tags,
+            data_path: value.data_path,
         }
     }
 }
@@ -1102,6 +1111,7 @@ impl From<crate::datasets::storage::Dataset> for Dataset {
                 .provenance
                 .map(|v| v.into_iter().map(Into::into).collect::<Vec<_>>()),
             tags: value.tags,
+            data_path: value.data_path,
         }
     }
 }

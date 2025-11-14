@@ -17,7 +17,7 @@
     "band": 0,
     "z_index": 3,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x0_y0_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-01-01_tile_x0_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -55,7 +55,7 @@
     "band": 0,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x0_y1_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-01-01_tile_x0_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -93,7 +93,7 @@
     "band": 0,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x1_y0_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-01-01_tile_x1_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -131,7 +131,7 @@
     "band": 0,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x1_y1_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-01-01_tile_x1_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -169,7 +169,7 @@
     "band": 1,
     "z_index": 3,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x0_y0_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-01-01_tile_x0_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -207,7 +207,7 @@
     "band": 1,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x0_y1_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-01-01_tile_x0_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -245,7 +245,7 @@
     "band": 1,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x1_y0_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-01-01_tile_x1_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -283,7 +283,7 @@
     "band": 1,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-01-01_tile_x1_y1_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-01-01_tile_x1_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -321,7 +321,7 @@
     "band": 0,
     "z_index": 3,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x0_y0_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-02-01_tile_x0_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -359,7 +359,7 @@
     "band": 0,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x0_y1_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-02-01_tile_x0_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -397,7 +397,7 @@
     "band": 0,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x1_y0_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-02-01_tile_x1_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -435,7 +435,7 @@
     "band": 0,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x1_y1_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-02-01_tile_x1_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -473,7 +473,7 @@
     "band": 1,
     "z_index": 3,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x0_y0_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-02-01_tile_x0_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -511,7 +511,7 @@
     "band": 1,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x0_y1_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-02-01_tile_x0_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -549,7 +549,7 @@
     "band": 1,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x1_y0_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-02-01_tile_x1_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -587,7 +587,7 @@
     "band": 1,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-02-01_tile_x1_y1_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-02-01_tile_x1_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -625,7 +625,7 @@
     "band": 0,
     "z_index": 3,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x0_y0_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-04-01_tile_x0_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -663,7 +663,7 @@
     "band": 0,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x0_y1_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-04-01_tile_x0_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -701,7 +701,7 @@
     "band": 0,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x1_y0_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-04-01_tile_x1_y0_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -739,7 +739,7 @@
     "band": 0,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x1_y1_b0.tif",
+      "filePath": "raster/multi_tile/data/2025-04-01_tile_x1_y1_b0.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -777,7 +777,7 @@
     "band": 1,
     "z_index": 3,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x0_y0_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-04-01_tile_x0_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -815,7 +815,7 @@
     "band": 1,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x0_y1_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-04-01_tile_x0_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -853,7 +853,7 @@
     "band": 1,
     "z_index": 2,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x1_y0_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-04-01_tile_x1_y0_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {
@@ -891,7 +891,7 @@
     "band": 1,
     "z_index": 1,
     "params": {
-      "filePath": "test_data/raster/multi_tile/data/2025-04-01_tile_x1_y1_b1.tif",
+      "filePath": "raster/multi_tile/data/2025-04-01_tile_x1_y1_b1.tif",
       "rasterbandChannel": 1,
       "geoTransform": {
         "originCoordinate": {

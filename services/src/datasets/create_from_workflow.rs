@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::RasterToDatasetQueryRectangle;
-use crate::api::model::services::AddDataset;
+use crate::api::model::services::{AddDataset, DataPath};
 use crate::contexts::SessionContext;
 use crate::datasets::listing::DatasetProvider;
 use crate::datasets::storage::{DatasetDefinition, DatasetStore, MetaDataDefinition};
@@ -196,6 +196,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
             result_descriptor,
             &query_rect,
             self.ctx.as_ref(),
+            DataPath::Upload(self.upload),
         )
         .await?;
 
@@ -300,6 +301,7 @@ async fn create_dataset<C: SessionContext>(
     origin_result_descriptor: &RasterResultDescriptor,
     query_rectangle: &geoengine_datatypes::primitives::RasterQueryRectangle,
     ctx: &C,
+    data_path: DataPath,
 ) -> error::Result<DatasetIdAndName> {
     ensure!(!slice_info.is_empty(), error::EmptyDatasetCannotBeImported);
 
@@ -380,7 +382,11 @@ async fn create_dataset<C: SessionContext>(
 
     let db = ctx.db();
     let result = db
-        .add_dataset(dataset_definition.properties, dataset_definition.meta_data)
+        .add_dataset(
+            dataset_definition.properties,
+            dataset_definition.meta_data,
+            Some(data_path),
+        )
         .await?;
 
     Ok(result)

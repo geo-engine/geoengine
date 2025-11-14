@@ -819,10 +819,13 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let _ = db.add_dataset(vector_ds, vector_meta.into()).await.unwrap();
+        let _ = db
+            .add_dataset(vector_ds, vector_meta.into(), None)
+            .await
+            .unwrap();
 
         let _ = db
-            .add_dataset(raster_ds.clone(), raster_meta.into())
+            .add_dataset(raster_ds.clone(), raster_meta.into(), None)
             .await
             .unwrap();
     }

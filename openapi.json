@@ -6307,6 +6307,16 @@
           "sourceOperator"
         ],
         "properties": {
+          "dataPath": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/DataPath"
+              }
+            ]
+          },
           "description": {
             "type": "string"
           },

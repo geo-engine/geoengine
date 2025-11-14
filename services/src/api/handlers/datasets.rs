@@ -11,7 +11,6 @@ use crate::{
             MetaDataSuggestion, Provenances, UpdateDataset, Volume,
         },
     },
-    config::{Data, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
         DatasetName,
@@ -45,8 +44,8 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        OperatorName, StaticMetaData, TypedResultDescriptor, VectorColumnInfo,
-        VectorResultDescriptor,
+        OperatorName, RasterResultDescriptor, StaticMetaData, TypedResultDescriptor,
+        VectorColumnInfo, VectorResultDescriptor,
     },
     source::{
         MultiBandGdalSource, OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType,
@@ -208,7 +207,8 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
     dataset: web::Path<DatasetName>,
     tiles: Json<Vec<AddDatasetTile>>,
 ) -> Result<HttpResponse, AddDatasetTilesError> {
-    let db = app_ctx.session_context(session).db();
+    let session_context = app_ctx.session_context(session);
+    let db = session_context.db();
 
     let dataset = dataset.into_inner();
     let dataset_id = db
@@ -239,72 +239,16 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
 
     let tiles = tiles.into_inner();
 
+    let data_path_file_path = file_path_from_data_path(
+        &dataset
+            .data_path
+            .ok_or(AddDatasetTilesError::DatasetIsMissingDataPath)?,
+        &session_context,
+    )
+    .context(CannotAddTilesToDataset)?;
+
     for tile in &tiles {
-        ensure!(
-            tile.params.file_path.exists(),
-            TileFilePathDoesNotExist {
-                file_path: tile.params.file_path.to_string_lossy().to_string()
-            }
-        );
-
-        let ds = gdal_open_dataset_ex(&tile.params.file_path, DatasetOptions::default()).context(
-            CannotOpenTileFile {
-                file_path: tile.params.file_path.to_string_lossy().to_string(),
-            },
-        )?;
-
-        let rd = raster_descriptor_from_dataset(&ds, tile.params.rasterband_channel).context(
-            CannotGetRasterDescriptorFromTileFile {
-                file_path: tile.params.file_path.to_string_lossy().to_string(),
-            },
-        )?;
-
-        // TODO: move this inside the db? we do not want to open datasets while keeping a database transaction, though
-        ensure!(
-            rd.data_type == dataset_descriptor.data_type,
-            TileFileDataTypeMismatch {
-                expected: dataset_descriptor.data_type,
-                found: rd.data_type,
-                file_path: tile.params.file_path.to_string_lossy().to_string(),
-            }
-        );
-
-        ensure!(
-            rd.spatial_reference == dataset_descriptor.spatial_reference,
-            TileFileSpatialReferenceMismatch {
-                expected: dataset_descriptor.spatial_reference,
-                found: rd.spatial_reference,
-                file_path: tile.params.file_path.to_string_lossy().to_string(),
-            }
-        );
-
-        ensure!(
-            tile.band < dataset_descriptor.bands.count(),
-            TileFileBandDoesNotExist {
-                band_count: dataset_descriptor.bands.count(),
-                found: tile.band,
-                file_path: tile.params.file_path.to_string_lossy().to_string(),
-            }
-        );
-
-        // TODO: also check that the tiles bbox (from the tile definition, and not the actual gdal dataset of the tile's file) fits into the dataset's spatial grid?
-        let tile_geotransform = geoengine_datatypes::raster::GeoTransform::try_from(
-            geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
-        )
-        .map_err(|_| AddDatasetTilesError::InvalidTileFileGeoTransform {
-            file_path: tile.params.file_path.to_string_lossy().to_string(),
-        })?;
-        ensure!(
-            dataset_descriptor
-                .spatial_grid
-                .geo_transform()
-                .is_compatible_grid(tile_geotransform),
-            TileFileGeoTransformMismatch {
-                expected: dataset_descriptor.spatial_grid.geo_transform(),
-                found: tile_geotransform,
-                file_path: tile.params.file_path.to_string_lossy().to_string(),
-            }
-        );
+        validate_tile(tile, &data_path_file_path, &dataset_descriptor)?;
     }
 
     db.add_dataset_tiles(dataset_id, tiles)
@@ -312,6 +256,112 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
         .context(CannotAddTilesToDataset)?;
 
     Ok(HttpResponse::Ok().finish())
+}
+
+fn validate_tile(
+    tile: &AddDatasetTile,
+    data_path_file_path: &Path,
+    dataset_descriptor: &RasterResultDescriptor,
+) -> Result<(), AddDatasetTilesError> {
+    ensure!(
+        tile.params.file_path.is_relative(),
+        TileFilePathNotRelative {
+            file_path: tile.params.file_path.to_string_lossy().to_string()
+        }
+    );
+
+    let absolute_path = data_path_file_path.join(&tile.params.file_path);
+
+    ensure!(
+        absolute_path.exists(),
+        TileFilePathDoesNotExist {
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+            absolute_path: absolute_path.to_string_lossy().to_string(),
+        }
+    );
+
+    let ds = gdal_open_dataset_ex(&absolute_path, DatasetOptions::default()).context(
+        CannotOpenTileFile {
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        },
+    )?;
+
+    let rd = raster_descriptor_from_dataset(&ds, tile.params.rasterband_channel).context(
+        CannotGetRasterDescriptorFromTileFile {
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        },
+    )?;
+
+    // TODO: move this inside the db? we do not want to open datasets while keeping a database transaction, though
+    ensure!(
+        rd.data_type == dataset_descriptor.data_type,
+        TileFileDataTypeMismatch {
+            expected: dataset_descriptor.data_type,
+            found: rd.data_type,
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        }
+    );
+
+    ensure!(
+        rd.spatial_reference == dataset_descriptor.spatial_reference,
+        TileFileSpatialReferenceMismatch {
+            expected: dataset_descriptor.spatial_reference,
+            found: rd.spatial_reference,
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        }
+    );
+
+    ensure!(
+        tile.band < dataset_descriptor.bands.count(),
+        TileFileBandDoesNotExist {
+            band_count: dataset_descriptor.bands.count(),
+            found: tile.band,
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        }
+    );
+
+    // TODO: also check that the tiles bbox (from the tile definition, and not the actual gdal dataset of the tile's file) fits into the dataset's spatial grid?
+    let tile_geotransform = geoengine_datatypes::raster::GeoTransform::try_from(
+        geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
+    )
+    .map_err(|_| AddDatasetTilesError::InvalidTileFileGeoTransform {
+        file_path: tile.params.file_path.to_string_lossy().to_string(),
+    })?;
+    ensure!(
+        dataset_descriptor
+            .spatial_grid
+            .geo_transform()
+            .is_compatible_grid(tile_geotransform),
+        TileFileGeoTransformMismatch {
+            expected: dataset_descriptor.spatial_grid.geo_transform(),
+            found: tile_geotransform,
+            file_path: tile.params.file_path.to_string_lossy().to_string(),
+        }
+    );
+
+    Ok(())
+}
+
+fn file_path_from_data_path<T: SessionContext>(
+    data_path: &DataPath,
+    session_context: &T,
+) -> Result<std::path::PathBuf> {
+    Ok(match data_path {
+        DataPath::Volume(volume_name) => session_context
+            .volumes()?
+            .iter()
+            .find(|v| v.name == volume_name.0)
+            .ok_or(Error::UnknownVolumeName {
+                volume_name: volume_name.0.clone(),
+            })?
+            .path
+            .clone()
+            .ok_or(Error::CannotAccessVolumePath {
+                volume_name: volume_name.0.clone(),
+            })?
+            .into(),
+        DataPath::Upload(upload_id) => upload_id.root_path()?,
+    })
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
@@ -637,7 +687,11 @@ pub async fn create_upload_dataset<C: ApplicationContext>(
         .context(CannotResolveUploadFilePath)?;
 
     let result = db
-        .add_dataset(definition.properties.into(), definition.meta_data.into())
+        .add_dataset(
+            definition.properties.into(),
+            definition.meta_data.into(),
+            Some(DataPath::Upload(upload_id)),
+        )
         .await
         .context(CannotCreateDataset)?;
 
@@ -759,7 +813,13 @@ pub async fn auto_create_dataset_handler<C: ApplicationContext>(
         tags: Some(vec!["upload".to_owned(), "auto".to_owned()]),
     };
 
-    let result = db.add_dataset(properties.into(), meta_data).await?;
+    let result = db
+        .add_dataset(
+            properties.into(),
+            meta_data,
+            Some(DataPath::Upload(upload.id)),
+        )
+        .await?;
 
     Ok(web::Json(result.name.into()))
 }
@@ -1476,27 +1536,23 @@ async fn create_system_dataset<C: ApplicationContext>(
     volume_name: VolumeName,
     mut definition: DatasetDefinition,
 ) -> Result<web::Json<DatasetNameResponse>, CreateDatasetError> {
-    let volumes = get_config_element::<Data>()
-        .context(CannotAccessConfig)?
-        .volumes;
-    let volume_path = volumes
-        .get(&volume_name)
+    let volumes = Volumes::default().volumes;
+    let volume = volumes
+        .iter()
+        .find(|v| v.name == volume_name)
         .ok_or(CreateDatasetError::UnknownVolume)?;
-    let volume = Volume {
-        name: volume_name.to_string(),
-        path: Some(volume_path.to_string_lossy().into()),
-    };
 
-    adjust_meta_data_path(
-        &mut definition.meta_data,
-        &crate::datasets::upload::Volume::from(&volume),
-    )
-    .context(CannotResolveUploadFilePath)?;
+    adjust_meta_data_path(&mut definition.meta_data, volume)
+        .context(CannotResolveUploadFilePath)?;
 
     let db = app_ctx.session_context(session).db();
 
     let dataset = db
-        .add_dataset(definition.properties.into(), definition.meta_data.into())
+        .add_dataset(
+            definition.properties.into(),
+            definition.meta_data.into(),
+            Some(DataPath::Volume(volume_name)),
+        )
         .await
         .context(CannotCreateDataset)?;
 
@@ -1634,7 +1690,8 @@ mod tests {
         });
 
         let db = ctx.db();
-        let DatasetIdAndName { id: id1, name: _ } = db.add_dataset(ds.into(), meta).await.unwrap();
+        let DatasetIdAndName { id: id1, name: _ } =
+            db.add_dataset(ds.into(), meta, None).await.unwrap();
 
         let ds = AddDataset {
             name: Some(DatasetName::new(None, "My_Dataset2")),
@@ -1665,7 +1722,8 @@ mod tests {
             phantom: Default::default(),
         });
 
-        let DatasetIdAndName { id: id2, name: _ } = db.add_dataset(ds.into(), meta).await.unwrap();
+        let DatasetIdAndName { id: id2, name: _ } =
+            db.add_dataset(ds.into(), meta, None).await.unwrap();
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!(
@@ -2530,7 +2588,7 @@ mod tests {
         let DatasetIdAndName {
             id,
             name: dataset_name,
-        } = db.add_dataset(ds.into(), meta).await?;
+        } = db.add_dataset(ds.into(), meta, None).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{dataset_name}"))
@@ -2561,6 +2619,7 @@ mod tests {
                 "symbology": null,
                 "provenance": null,
                 "tags": ["upload", "test"],
+                "dataPath": null,
             })
         );
 
@@ -2814,7 +2873,7 @@ mod tests {
         let DatasetIdAndName {
             id: _,
             name: dataset_name,
-        } = db.add_dataset(ds.into(), meta).await?;
+        } = db.add_dataset(ds.into(), meta, None).await?;
 
         let req = actix_web::test::TestRequest::get()
             .uri(&format!("/dataset/{dataset_name}/loadingInfo"))
@@ -2905,7 +2964,7 @@ mod tests {
         let DatasetIdAndName {
             id,
             name: dataset_name,
-        } = db.add_dataset(ds.into(), meta).await?;
+        } = db.add_dataset(ds.into(), meta, None).await?;
 
         let update: MetaDataDefinition =
             crate::datasets::storage::MetaDataDefinition::OgrMetaData(StaticMetaData {
@@ -3593,10 +3652,8 @@ mod tests {
                 band: 0,
                 z_index: 0,
                 params: GdalDatasetParameters {
-                    file_path: test_data!(format!(
-                        "raster/modis_ndvi/tiled/MOD13A2_M_NDVI_{time_str}_1_1.tif"
-                    ))
-                    .into(),
+                    file_path: format!("raster/modis_ndvi/tiled/MOD13A2_M_NDVI_{time_str}_1_1.tif")
+                        .into(),
                     rasterband_channel: 1,
                     geo_transform: geoengine_operators::source::GdalDatasetGeoTransform {
                         origin_coordinate: (-180., 90.).into(),
@@ -3627,10 +3684,8 @@ mod tests {
                 band: 0,
                 z_index: 0,
                 params: GdalDatasetParameters {
-                    file_path: test_data!(format!(
-                        "raster/modis_ndvi/tiled/MOD13A2_M_NDVI_{time_str}_1_2.tif"
-                    ))
-                    .into(),
+                    file_path: format!("raster/modis_ndvi/tiled/MOD13A2_M_NDVI_{time_str}_1_2.tif")
+                        .into(),
                     rasterband_channel: 1,
                     geo_transform: geoengine_operators::source::GdalDatasetGeoTransform {
                         origin_coordinate: (0., 90.).into(),
@@ -3692,7 +3747,7 @@ mod tests {
         assert!(db.load_dataset(&dataset_id).await.is_ok());
 
         // add tiles
-        let mut tiles: Vec<AddDatasetTile> = if reverse_z_order {
+        let tiles: Vec<AddDatasetTile> = if reverse_z_order {
             serde_json::from_str(&std::fs::read_to_string(test_data!(
                 "raster/multi_tile/metadata/loading_info_rev.json"
             ))?)?
@@ -3701,17 +3756,6 @@ mod tests {
                 "raster/multi_tile/metadata/loading_info.json"
             ))?)?
         };
-
-        // fix the file path because the test runs with a different working directory than the server
-        for tile in &mut tiles {
-            tile.params.file_path = test_data!(
-                tile.params
-                    .file_path
-                    .to_string_lossy()
-                    .replace("test_data/", "")
-            )
-            .to_path_buf();
-        }
 
         let req = actix_web::test::TestRequest::post()
             .uri(&format!("/dataset/{dataset_name}/tiles"))
@@ -4931,9 +4975,7 @@ mod tests {
 
         let read_body: ErrorResponse = actix_web::test::read_body_json(res).await;
 
-        let conflict_tile = test_data!("raster/modis_ndvi/tiled/MOD13A2_M_NDVI_2014-01-01_1_1.tif")
-            .to_string_lossy()
-            .to_string();
+        let conflict_tile = "raster/modis_ndvi/tiled/MOD13A2_M_NDVI_2014-01-01_1_1.tif";
 
         assert_eq!(
             read_body,
@@ -5021,6 +5063,7 @@ mod tests {
             .add_dataset(
                 create.definition.properties.into(),
                 create.definition.meta_data.into(),
+                Some(DataPath::Volume(volume.clone())),
             )
             .await
             .unwrap();

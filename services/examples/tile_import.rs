@@ -50,11 +50,11 @@ use uuid::Uuid;
 ///
 /// The datasets are inserted into a Geo Engine instance via its REST API.
 /// The files are scanned from a given local directory.
-/// If the files on the Geo Engine instance are in a different file path, specify the remote data dir.
+/// On the server, the files are expected to be available via a volume mapping.
 fn main() {
     // TODO: turn into cli arguments
     const LOCAL_DATA_DIR: &str = "/home/michael/geodata/force/marburg"; // where the files are scanned
-    const REMOTE_DATA_DIR: Option<&str> = None; // Some("/geodata/force/marburg"); // path of the same files on the Geo Engine instance, if different
+    const VOLUME_NAME: &str = "force"; // volume on the server that points to the path of the same files
     const FILE_EXTENSION: &str = "tif";
     const RECURSIVE_SCAN: bool = true;
     const TIME_REGEX: &str = r"(\d{8})_LEVEL2";
@@ -115,7 +115,7 @@ fn main() {
             TILE_DURATION_SECONDS,
             GEO_ENGINE_URL,
             LOCAL_DATA_DIR,
-            REMOTE_DATA_DIR,
+            VOLUME_NAME,
         );
 
         if let Some(dataset_name) = dataset_name {
@@ -340,10 +340,10 @@ fn add_dataset_and_tiles_to_geoengine(
     tile_duration_seconds: u32,
     geo_engine_url: &str,
     local_data_dir: &str,
-    remote_data_dir: Option<&str>,
+    volume_name: &str,
 ) -> Option<String> {
     let create_dataset = CreateDataset {
-        data_path: DataPath::Volume(VolumeName("test_data".to_string())),
+        data_path: DataPath::Volume(VolumeName(volume_name.to_string())),
         definition: DatasetDefinition {
             properties: AddDataset {
                 name: Some(
@@ -399,14 +399,11 @@ fn add_dataset_and_tiles_to_geoengine(
                 band: band_idx as u32,
                 z_index: 0, // TODO: implement z-index calculation
                 params: GdalDatasetParameters {
-                    file_path: if let Some(remote) = remote_data_dir {
-                        match file.path.strip_prefix(local_data_dir) {
-                            Ok(suffix) => Path::new(remote).join(suffix),
-                            Err(_) => file.path.clone(),
-                        }
-                    } else {
-                        file.path.clone()
-                    },
+                    file_path: file
+                        .path
+                        .strip_prefix(local_data_dir)
+                        .expect("Failed to strip local data dir")
+                        .to_path_buf(),
                     rasterband_channel: band_idx + 1,
                     geo_transform: file.geo_transform.into(),
                     width: file.width,

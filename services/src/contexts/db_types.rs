@@ -1,4 +1,5 @@
 use crate::{
+    api::model::services::DataPath,
     datasets::{
         dataset_listing_provider::DatasetLayerListingProviderDefinition,
         external::{
@@ -14,6 +15,7 @@ use crate::{
         },
         listing::Provenance,
         storage::MetaDataDefinition,
+        upload::{UploadId, VolumeName},
     },
     error::Error,
     layers::external::TypedDataProviderDefinition,
@@ -1354,6 +1356,39 @@ impl TryFrom<TypedDataProviderDefinitionDbType> for TypedDataProviderDefinition 
     }
 }
 
+#[derive(Debug, ToSql, FromSql)]
+#[postgres(name = "DataPath")]
+pub struct DataPathDbType {
+    pub volume_name: Option<String>,
+    pub upload_id: Option<uuid::Uuid>,
+}
+
+impl From<&DataPath> for DataPathDbType {
+    fn from(other: &DataPath) -> Self {
+        match other {
+            DataPath::Volume(volume_name) => Self {
+                volume_name: Some(volume_name.0.clone()),
+                upload_id: None,
+            },
+            DataPath::Upload(upload_id) => Self {
+                volume_name: None,
+                upload_id: Some(upload_id.0),
+            },
+        }
+    }
+}
+
+impl TryFrom<DataPathDbType> for DataPath {
+    type Error = Error;
+    fn try_from(other: DataPathDbType) -> Result<Self, Error> {
+        match (other.volume_name, other.upload_id) {
+            (Some(v), None) => Ok(DataPath::Volume(VolumeName(v))),
+            (None, Some(u)) => Ok(DataPath::Upload(UploadId(u))),
+            _ => Err(Error::UnexpectedInvalidDbTypeConversion),
+        }
+    }
+}
+
 delegate_from_to_sql!(ColorParam, ColorParamDbType);
 delegate_from_to_sql!(DatabaseConnectionConfig, DatabaseConnectionConfigDbType);
 delegate_from_to_sql!(
@@ -1391,6 +1426,7 @@ delegate_from_to_sql!(RasterSymbology, RasterSymbologyDbType);
 delegate_from_to_sql!(PointSymbology, PointSymbologyDbType);
 delegate_from_to_sql!(LineSymbology, LineSymbologyDbType);
 delegate_from_to_sql!(PolygonSymbology, PolygonSymbologyDbType);
+delegate_from_to_sql!(DataPath, DataPathDbType);
 
 #[cfg(test)]
 mod tests {
