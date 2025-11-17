@@ -63,6 +63,7 @@ proj-sys = { workspace = true }
 pwhash = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -99,7 +100,6 @@ httptest = { workspace = true }
 pretty_assertions = { workspace = true }
 prost = { workspace = true }             # must be compatbile with aruna-rust-api
 serial_test = { workspace = true }
-regex = { workspace = true }
 xml = { workspace = true }
 
 [build-dependencies]
