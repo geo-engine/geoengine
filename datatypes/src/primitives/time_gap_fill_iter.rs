@@ -1426,7 +1426,7 @@ mod tests {
                 TimeInstance::from_millis(1_746_057_600_000).unwrap(),
             ),
         ];
-        let step = TimeStep::months(1);
+        let step = TimeStep::months(1).unwrap();
         let start = TimeInstance::from_millis(1_733_011_200_000).unwrap();
         let end = TimeInstance::from_millis(1_747_267_200_000).unwrap();
         let iter = intervals
