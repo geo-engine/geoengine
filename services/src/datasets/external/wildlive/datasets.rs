@@ -18,8 +18,9 @@ const MAX_QUERY_LENGTH: usize = 40_000;
 pub(super) struct Project {
     pub id: String,
     pub name: String,
+    #[serde(default)]
     pub description: String,
-    #[serde(rename = "hasStationsLayouts")]
+    #[serde(rename = "hasStationsLayouts", default)]
     pub station_layouts: Vec<String>,
 }
 
@@ -58,6 +59,7 @@ struct StationSetup {
     pub id: String,
     pub name: String,
     pub location: String,
+    #[serde(default)]
     pub description: String,
     #[serde(rename = "decimalLatitude")]
     pub decimal_latitude: f64,
