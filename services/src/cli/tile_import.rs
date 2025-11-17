@@ -50,8 +50,12 @@ pub struct TileImport {
     local_data_dir: String,
 
     /// volume on the server that points to the path of the same files
-    #[arg(long, default_value = "force")]
+    #[arg(long, default_value = "geodata")]
     volume_name: String,
+
+    /// directory on the server, relative to the volume, where the files are located
+    #[arg(long, default_value = "force/marburg")]
+    remote_data_dir: String,
 
     /// file extension to look for
     #[arg(long, default_value = "tif")]
@@ -186,6 +190,7 @@ pub async fn tile_import(params: TileImport) -> Result<(), anyhow::Error> {
             &params.geo_engine_url,
             &params.local_data_dir,
             &params.volume_name,
+            &params.remote_data_dir,
         )
         .await?;
 
@@ -431,6 +436,7 @@ async fn add_dataset_and_tiles_to_geoengine(
     geo_engine_url: &str,
     local_data_dir: &str,
     volume_name: &str,
+    remote_data_dir: &str,
 ) -> anyhow::Result<Option<String>> {
     let create_dataset = CreateDataset {
         data_path: DataPath::Volume(VolumeName(volume_name.to_string())),
@@ -490,16 +496,14 @@ async fn add_dataset_and_tiles_to_geoengine(
                 band: band_idx as u32,
                 z_index: 0, // TODO: implement z-index calculation
                 params: GdalDatasetParameters {
-                    file_path: file
-                        .path
-                        .strip_prefix(local_data_dir)
-                        .with_context(|| {
+                    file_path: Path::new(remote_data_dir).join(
+                        file.path.strip_prefix(local_data_dir).with_context(|| {
                             format!(
                                 "Failed to strip local data dir from path {}",
                                 file.path.display()
                             )
-                        })?
-                        .to_path_buf(),
+                        })?,
+                    ),
                     rasterband_channel: band_idx + 1,
                     geo_transform: file.geo_transform.into(),
                     width: file.width,
