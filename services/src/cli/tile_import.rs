@@ -391,7 +391,7 @@ fn naive_date_to_time_instance(date: NaiveDate) -> anyhow::Result<TimeInstance> 
     let time: chrono::DateTime<chrono::Utc> = chrono::Utc.from_utc_datetime(
         &date
             .and_hms_opt(0, 0, 0)
-            .with_context(|| format!("Failed to create datetime from date: {}", date))?,
+            .with_context(|| format!("Failed to create datetime from date: {date}"))?,
     );
     let time: DateTime = time.into();
     Ok(time.into())
@@ -404,7 +404,7 @@ fn collect_files(
     files: &mut Vec<PathBuf>,
 ) -> anyhow::Result<()> {
     let entries =
-        fs::read_dir(dir).with_context(|| format!("Failed to read directory {:?}", dir))?;
+        fs::read_dir(dir).with_context(|| format!("Failed to read directory {}", dir.display()))?;
 
     for entry in entries.flatten() {
         let path = entry.path();
@@ -494,7 +494,10 @@ async fn add_dataset_and_tiles_to_geoengine(
                         .path
                         .strip_prefix(local_data_dir)
                         .with_context(|| {
-                            format!("Failed to strip local data dir from path {:?}", file.path)
+                            format!(
+                                "Failed to strip local data dir from path {}",
+                                file.path.display()
+                            )
                         })?
                         .to_path_buf(),
                     rasterband_channel: band_idx + 1,
@@ -606,15 +609,15 @@ fn extract_product_from_file(
     let filename = file_path
         .file_name()
         .and_then(|f| f.to_str())
-        .with_context(|| format!("Invalid filename: {:?}", file_path))?;
+        .with_context(|| format!("Invalid filename: {}", file_path.display()))?;
 
     let time_match = time_regex
         .captures(filename)
-        .with_context(|| format!("Time regex did not match filename: {}", filename))?;
+        .with_context(|| format!("Time regex did not match filename: {filename}"))?;
 
     let product_match = product_regex
         .captures(filename)
-        .with_context(|| format!("Product regex did not match filename: {}", filename))?;
+        .with_context(|| format!("Product regex did not match filename: {filename}"))?;
 
     let time_str = time_match
         .get(1)
@@ -627,12 +630,12 @@ fn extract_product_from_file(
         .as_str();
 
     let naive_date = NaiveDate::parse_from_str(time_str, time_format)
-        .with_context(|| format!("Failed to parse time '{}'", time_str))?;
+        .with_context(|| format!("Failed to parse time '{time_str}'"))?;
 
     let time = naive_date_to_time_instance(naive_date)?;
 
     let gdal_dataset = GdalDataset::open(&file_path)
-        .with_context(|| format!("Failed to open dataset {:?}", file_path))?;
+        .with_context(|| format!("Failed to open dataset {}", file_path.display()))?;
 
     let geo_transform: GdalGeoTransform = gdal_dataset
         .geo_transform()
