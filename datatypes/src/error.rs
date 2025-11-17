@@ -104,6 +104,11 @@ pub enum Error {
         i2: TimeInterval,
     },
 
+    #[snafu(display("Time step must be greater than zero, got: {}", step))]
+    TimeStepStepMustBeGreaterThanZero {
+        step: u32,
+    },
+
     #[snafu(display(
         "{} must be larger than {} and {} must be smaller than {}",
         start.inner(),

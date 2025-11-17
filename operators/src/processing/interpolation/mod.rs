@@ -860,7 +860,7 @@ mod tests {
                     )
                     .unwrap(),
                 ),
-                TimeStep::millis(10),
+                TimeStep::millis(10).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::new(Coordinate2D::new(0., 0.), 1.0, -1.0),

@@ -716,7 +716,7 @@ mod tests {
                     )
                     .unwrap(),
                 ),
-                TimeStep::millis(5),
+                TimeStep::millis(5).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,
@@ -958,7 +958,7 @@ mod tests {
                     )
                     .unwrap(),
                 ),
-                TimeStep::millis(5),
+                TimeStep::millis(5).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 in_geo_transform,

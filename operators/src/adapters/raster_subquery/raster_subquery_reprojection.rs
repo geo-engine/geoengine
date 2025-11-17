@@ -446,7 +446,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5)),
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
             spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
                 GeoTransform::new(Coordinate2D::new(0., 2.), 1., -1.),
                 GridShape::new_2d(2, 4).bounding_box(),

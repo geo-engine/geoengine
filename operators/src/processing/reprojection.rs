@@ -1209,7 +1209,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: crate::engine::TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(5),
+                TimeStep::millis(5).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 geo_transform,
@@ -1434,7 +1434,7 @@ mod tests {
                     TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                     TimeInstance::from_str("2014-07-01T00:00:00.000Z").unwrap(),
                 )),
-                TimeStep::months(1),
+                TimeStep::months(1).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(data_geo_transform, data_bounds),
             bands: RasterBandDescriptors::new_single_band(),
