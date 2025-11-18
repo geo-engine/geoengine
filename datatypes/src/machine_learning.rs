@@ -150,7 +150,7 @@ impl Display for MlModelName {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let d = NAME_DELIMITER;
         let s = match (&self.namespace, &self.name) {
-            (None, name) => name.to_string(),
+            (None, name) => name.clone(),
             (Some(namespace), name) => {
                 format!("{namespace}{d}{name}")
             }

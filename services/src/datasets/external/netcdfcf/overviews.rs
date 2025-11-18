@@ -230,7 +230,7 @@ impl NetCdfVisitor for Group<'_> {
             }
 
             arrays.push(NetCdfArray {
-                name: array_name.to_string(),
+                name: array_name.clone(),
                 number_of_entities,
             });
         }

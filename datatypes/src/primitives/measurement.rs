@@ -4,9 +4,10 @@ use std::collections::{BTreeMap, HashMap};
 use std::fmt;
 use std::str::FromStr;
 
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Measurement {
+    #[default]
     Unitless,
     Continuous(ContinuousMeasurement),
     Classification(ClassificationMeasurement),
@@ -22,12 +23,6 @@ impl Measurement {
             measurement,
             classes,
         })
-    }
-}
-
-impl Default for Measurement {
-    fn default() -> Self {
-        Self::Unitless
     }
 }
 

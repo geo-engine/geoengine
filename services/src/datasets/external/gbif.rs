@@ -333,7 +333,9 @@ impl GbifDataProvider {
         let limit = &i64::from(options.limit);
         let offset = &i64::from(options.offset);
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset];
-        filters.iter().for_each(|(_, value)| params.push(value));
+        for (_, value) in &filters {
+            params.push(value);
+        }
         let rows = conn.query(&stmt, params.as_slice()).await?;
 
         Ok(rows
@@ -422,7 +424,9 @@ impl GbifDataProvider {
         let limit = &i64::from(*limit);
         let offset = &i64::from(*offset);
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
-        filters.iter().for_each(|(_, value)| params.push(value));
+        for (_, value) in &filters {
+            params.push(value);
+        }
         let rows = conn.query(&stmt, params.as_slice()).await?;
 
         Ok(rows
@@ -441,7 +445,7 @@ impl GbifDataProvider {
                     name: name.clone(),
                     description: format!(
                         "{rank}, {num_points} occurrences",
-                        rank = rank[..1].to_ascii_uppercase().to_string() + &rank[1..]
+                        rank = rank[..1].to_ascii_uppercase().clone() + &rank[1..]
                     ),
                     properties: vec![],
                 })
@@ -485,7 +489,9 @@ impl GbifDataProvider {
         let limit = &i64::from(*limit);
         let offset = &i64::from(*offset);
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
-        filters.iter().for_each(|(_, value)| params.push(value));
+        for (_, value) in &filters {
+            params.push(value);
+        }
         let rows = timeout(
             Duration::from_secs(self.autocomplete_timeout),
             conn.query(&stmt, params.as_slice()),
@@ -535,7 +541,9 @@ impl GbifDataProvider {
         let limit = &i64::from(options.limit);
         let offset = &i64::from(options.offset);
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset];
-        filters.iter().for_each(|(_, value)| params.push(value));
+        for (_, value) in &filters {
+            params.push(value);
+        }
         let rows = conn.query(&stmt, params.as_slice()).await?;
 
         let items = rows
@@ -647,7 +655,9 @@ impl GbifDataProvider {
         let limit = &i64::from(*limit);
         let offset = &i64::from(*offset);
         let mut params: Vec<&(dyn ToSql + Sync)> = vec![limit, offset, &search_string];
-        filters.iter().for_each(|(_, value)| params.push(value));
+        for (_, value) in &filters {
+            params.push(value);
+        }
         let rows = conn.query(&stmt, params.as_slice()).await?;
 
         let items = rows

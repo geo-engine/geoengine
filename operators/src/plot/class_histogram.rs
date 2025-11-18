@@ -120,7 +120,7 @@ impl PlotOperator for ClassHistogram {
                 {
                     None => {
                         return Err(Error::ColumnDoesNotExist {
-                            column: column_name.to_string(),
+                            column: column_name.clone(),
                         });
                     }
                     Some(FeatureDataType::Text | FeatureDataType::DateTime) => {
@@ -297,11 +297,10 @@ impl ClassHistogramRasterQueryProcessor {
                 match tile?.grid_array {
                     geoengine_datatypes::raster::GridOrEmpty::Grid(g) => {
                         g.masked_element_deref_iterator().for_each(|value_option| {
-                            if let Some(v) = value_option {
-                                if let Some(count) = class_counts.get_mut(&v.as_()) {
+                            if let Some(v) = value_option
+                                && let Some(count) = class_counts.get_mut(&v.as_()) {
                                     *count += 1;
                                 }
-                            }
                         });
                     },
                     geoengine_datatypes::raster::GridOrEmpty::Empty(_) => (), // ignore no data,

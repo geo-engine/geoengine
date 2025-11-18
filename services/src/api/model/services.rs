@@ -221,7 +221,7 @@ pub struct Volume {
     pub path: Option<String>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, ToSchema, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, ToSchema, Serialize, Deserialize)]
 pub struct LayerProviderListing {
     pub id: DataProviderId,
     pub name: String,

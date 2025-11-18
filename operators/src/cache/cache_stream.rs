@@ -115,12 +115,12 @@ where
 
         let CacheStreamProjection { inner, mut state } = self.as_mut().project();
 
-        if state.is_none() {
-            if let Some(next) = inner.next_idx() {
-                let future_data = inner.data_arc();
-                let future = Self::create_decompression_future(future_data, next);
-                state.set(Some(future));
-            }
+        if state.is_none()
+            && let Some(next) = inner.next_idx()
+        {
+            let future_data = inner.data_arc();
+            let future = Self::create_decompression_future(future_data, next);
+            state.set(Some(future));
         }
 
         if let Some(pin_state) = state.as_mut().as_pin_mut() {

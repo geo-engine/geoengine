@@ -386,14 +386,6 @@ impl GdalDatasetParameters {
     }
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
-pub struct TilingInformation {
-    pub x_axis_tiles: usize,
-    pub y_axis_tiles: usize,
-    pub x_axis_tile_size: usize,
-    pub y_axis_tile_size: usize,
-}
-
 pub struct GdalSourceProcessor<T>
 where
     T: Pixel,
@@ -690,11 +682,11 @@ where
         debug!("result descr bbox: {:?}", result_descriptor.bbox);
         debug!("query bbox: {:?}", query.spatial_bounds);
 
-        if let Some(data_spatial_bounds) = result_descriptor.bbox {
-            if !data_spatial_bounds.intersects(&query.spatial_bounds) {
-                debug!("query does not intersect spatial data bounds");
-                empty = true;
-            }
+        if let Some(data_spatial_bounds) = result_descriptor.bbox
+            && !data_spatial_bounds.intersects(&query.spatial_bounds)
+        {
+            debug!("query does not intersect spatial data bounds");
+            empty = true;
         }
 
         // TODO: use the time bounds to early return.

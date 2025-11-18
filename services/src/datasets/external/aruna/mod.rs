@@ -211,7 +211,7 @@ impl ArunaDataProvider {
 
         let object_stub = ObjectServiceClient::with_interceptor(channel, interceptor);
 
-        let label_filter = Some(def.filter_label.to_string());
+        let label_filter = Some(def.filter_label.clone());
 
         Ok(ArunaDataProvider {
             name: def.name,
@@ -308,10 +308,10 @@ impl ArunaDataProvider {
                     ResourceVariant::Object,
                 )
                 .ok();
-                if let Some(object_ids) = outgoing_objects {
-                    if self.get_verified_dataset_objects(object_ids).await.is_ok() {
-                        verified_datasets.push(dataset);
-                    }
+                if let Some(object_ids) = outgoing_objects
+                    && self.get_verified_dataset_objects(object_ids).await.is_ok()
+                {
+                    verified_datasets.push(dataset);
                 }
             }
         }
@@ -572,11 +572,11 @@ impl ArunaDataProvider {
 
         for (k, v) in rd.columns.iter().map(|(name, info)| (name, info.data_type)) {
             match v {
-                FeatureDataType::Category | FeatureDataType::Int => int.push(k.to_string()),
-                FeatureDataType::Float => float.push(k.to_string()),
-                FeatureDataType::Text => text.push(k.to_string()),
-                FeatureDataType::Bool => bool.push(k.to_string()),
-                FeatureDataType::DateTime => datetime.push(k.to_string()),
+                FeatureDataType::Category | FeatureDataType::Int => int.push(k.clone()),
+                FeatureDataType::Float => float.push(k.clone()),
+                FeatureDataType::Text => text.push(k.clone()),
+                FeatureDataType::Bool => bool.push(k.clone()),
+                FeatureDataType::DateTime => datetime.push(k.clone()),
             }
         }
 

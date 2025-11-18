@@ -11,22 +11,21 @@ use futures::{
     FutureExt, TryFuture, TryStreamExt, ready,
     stream::{BoxStream, TryFold},
 };
-use futures::{Stream, StreamExt, TryFutureExt};
-use geoengine_datatypes::primitives::{BandSelection, CacheHint};
+use futures::{Stream, StreamExt};
+use geoengine_datatypes::primitives::BandSelection;
 use geoengine_datatypes::primitives::{
     RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
 };
-use geoengine_datatypes::raster::{EmptyGrid2D, GridBoundingBox2D, GridBounds, GridStep};
+use geoengine_datatypes::raster::TilingSpecification;
+use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, GridStep};
 use geoengine_datatypes::{
     primitives::TimeInstance,
     raster::{Blit, Pixel, RasterTile2D, TileInformation},
 };
-use geoengine_datatypes::{primitives::TimeInterval, raster::TilingSpecification};
 
 use pin_project::pin_project;
 use rayon::ThreadPool;
 
-use std::marker::PhantomData;
 use std::sync::Arc;
 use std::task::Poll;
 
@@ -532,74 +531,6 @@ impl<T: Pixel> FoldTileAccuMut for RasterTileAccu2D<T> {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct TileSubQueryIdentity<F, T> {
-    fold_fn: F,
-    _phantom_pixel_type: PhantomData<T>,
-}
-
-impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T> for TileSubQueryIdentity<FoldM, T>
-where
-    T: Pixel,
-    FoldM: Send + Sync + 'a + Clone + Fn(RasterTileAccu2D<T>, RasterTile2D<T>) -> FoldF,
-    FoldF: Send + TryFuture<Ok = RasterTileAccu2D<T>, Error = error::Error>,
-{
-    type FoldFuture = FoldF;
-
-    type FoldMethod = FoldM;
-
-    type TileAccu = RasterTileAccu2D<T>;
-    type TileAccuFuture = BoxFuture<'a, Result<Self::TileAccu>>;
-
-    fn new_fold_accu(
-        &self,
-        tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
-        pool: &Arc<ThreadPool>,
-    ) -> Self::TileAccuFuture {
-        identity_accu(tile_info, &query_rect, pool.clone()).boxed()
-    }
-
-    fn tile_query_rectangle(
-        &self,
-        tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
-        band_idx: u32,
-    ) -> Result<Option<RasterQueryRectangle>> {
-        Ok(Some(RasterQueryRectangle {
-            spatial_bounds: tile_info.spatial_partition(),
-            time_interval: TimeInterval::new_instant(start_time)?,
-            spatial_resolution: query_rect.spatial_resolution,
-            attributes: band_idx.into(),
-        }))
-    }
-
-    fn fold_method(&self) -> Self::FoldMethod {
-        self.fold_fn.clone()
-    }
-}
-
-pub fn identity_accu<T: Pixel>(
-    tile_info: TileInformation,
-    query_rect: &RasterQueryRectangle,
-    pool: Arc<ThreadPool>,
-) -> impl Future<Output = Result<RasterTileAccu2D<T>>> + use<T> {
-    let time_interval = query_rect.time_interval;
-    crate::util::spawn_blocking(move || {
-        let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
-        let output_tile = RasterTile2D::new_with_tile_info(
-            time_interval,
-            tile_info,
-            0,
-            output_raster,
-            CacheHint::max_duration(),
-        );
-        RasterTileAccu2D::new(output_tile, pool)
-    })
-    .map_err(From::from)
-}
-
 pub fn fold_by_blit_impl<T>(
     accu: RasterTileAccu2D<T>,
     tile: RasterTile2D<T>,
@@ -643,9 +574,11 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::marker::PhantomData;
+
     use geoengine_datatypes::{
-        primitives::{SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
+        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
+        raster::{EmptyGrid2D, Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
@@ -656,7 +589,75 @@ mod tests {
         RasterResultDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
-    use futures::StreamExt;
+    use futures::{StreamExt, TryFutureExt};
+
+    #[derive(Debug, Clone)]
+    pub struct TileSubQueryIdentity<F, T> {
+        fold_fn: F,
+        _phantom_pixel_type: PhantomData<T>,
+    }
+
+    impl<'a, T, FoldM, FoldF> SubQueryTileAggregator<'a, T> for TileSubQueryIdentity<FoldM, T>
+    where
+        T: Pixel,
+        FoldM: Send + Sync + 'a + Clone + Fn(RasterTileAccu2D<T>, RasterTile2D<T>) -> FoldF,
+        FoldF: Send + TryFuture<Ok = RasterTileAccu2D<T>, Error = error::Error>,
+    {
+        type FoldFuture = FoldF;
+
+        type FoldMethod = FoldM;
+
+        type TileAccu = RasterTileAccu2D<T>;
+        type TileAccuFuture = BoxFuture<'a, Result<Self::TileAccu>>;
+
+        fn new_fold_accu(
+            &self,
+            tile_info: TileInformation,
+            query_rect: RasterQueryRectangle,
+            pool: &Arc<ThreadPool>,
+        ) -> Self::TileAccuFuture {
+            identity_accu(tile_info, &query_rect, pool.clone()).boxed()
+        }
+
+        fn tile_query_rectangle(
+            &self,
+            tile_info: TileInformation,
+            query_rect: RasterQueryRectangle,
+            start_time: TimeInstance,
+            band_idx: u32,
+        ) -> Result<Option<RasterQueryRectangle>> {
+            Ok(Some(RasterQueryRectangle {
+                spatial_bounds: tile_info.spatial_partition(),
+                time_interval: TimeInterval::new_instant(start_time)?,
+                spatial_resolution: query_rect.spatial_resolution,
+                attributes: band_idx.into(),
+            }))
+        }
+
+        fn fold_method(&self) -> Self::FoldMethod {
+            self.fold_fn.clone()
+        }
+    }
+
+    pub fn identity_accu<T: Pixel>(
+        tile_info: TileInformation,
+        query_rect: &RasterQueryRectangle,
+        pool: Arc<ThreadPool>,
+    ) -> impl Future<Output = Result<RasterTileAccu2D<T>>> + use<T> {
+        let time_interval = query_rect.time_interval;
+        crate::util::spawn_blocking(move || {
+            let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
+            let output_tile = RasterTile2D::new_with_tile_info(
+                time_interval,
+                tile_info,
+                0,
+                output_raster,
+                CacheHint::max_duration(),
+            );
+            RasterTileAccu2D::new(output_tile, pool)
+        })
+        .map_err(From::from)
+    }
 
     #[tokio::test]
     async fn identity() {

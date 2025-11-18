@@ -923,7 +923,7 @@ CREATE TABLE ebv_provider_entities (
 CREATE TABLE ebv_provider_timestamps (
     provider_id uuid NOT NULL,
     file_name text NOT NULL,
-    time bigint NOT NULL,
+    time bigint NOT NULL, -- noqa: references.keywords
 
     -- TODO: check if we need it
     PRIMARY KEY (provider_id, file_name, time) DEFERRABLE,
@@ -1104,7 +1104,7 @@ CREATE TABLE user_uploads (
 CREATE TABLE sessions (
     id uuid PRIMARY KEY,
     project_id uuid REFERENCES projects (id) ON DELETE SET NULL,
-    view "STRectangle",
+    view "STRectangle",  -- noqa: references.keywords
     user_id uuid REFERENCES users (id) ON DELETE CASCADE NOT NULL,
     created timestamp with time zone NOT NULL,
     valid_until timestamp with time zone NOT NULL
@@ -1174,60 +1174,76 @@ CREATE UNIQUE INDEX ON permissions (
     ml_model_id
 );
 
+CREATE UNIQUE INDEX ON permissions (
+    role_id,
+    permission,
+    provider_id
+);
+
 CREATE VIEW user_permitted_datasets
 AS
 SELECT
     r.user_id,
     p.dataset_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.dataset_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.dataset_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.dataset_id;
 
 CREATE VIEW user_permitted_projects
 AS
 SELECT
     r.user_id,
     p.project_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.project_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.project_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.project_id;
 
 CREATE VIEW user_permitted_layer_collections
 AS
 SELECT
     r.user_id,
     p.layer_collection_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.layer_collection_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.layer_collection_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.layer_collection_id;
 
 CREATE VIEW user_permitted_layers
 AS
 SELECT
     r.user_id,
     p.layer_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.layer_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.layer_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.layer_id;
 
 CREATE VIEW user_permitted_providers
 AS
 SELECT
     r.user_id,
     p.provider_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.provider_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.provider_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.provider_id;
 
 CREATE TABLE oidc_session_tokens (
     session_id uuid PRIMARY KEY REFERENCES sessions (
@@ -1245,14 +1261,17 @@ AS
 SELECT
     r.user_id,
     p.ml_model_id,
-    p.permission
+    MAX(p.permission) AS max_permission
 FROM user_roles AS r
-INNER JOIN permissions AS p ON (
-    r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
-);
+INNER JOIN permissions AS p
+    ON (
+        r.role_id = p.role_id AND p.ml_model_id IS NOT NULL
+    )
+GROUP BY r.user_id, p.ml_model_id;
 
 CREATE TABLE quota_log (
-    timestamp timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    timestamp timestamp with time zone -- noqa: references.keywords
+    NOT NULL DEFAULT CURRENT_TIMESTAMP,
     user_id uuid NOT NULL,
     workflow_id uuid NOT NULL,
     computation_id uuid NOT NULL,

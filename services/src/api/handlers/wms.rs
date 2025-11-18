@@ -756,7 +756,7 @@ mod tests {
         assert_image_equals(test_data!("wms/get_map_ndvi.png"), &image_bytes);
     }
 
-    ///Actix uses serde_urlencoded inside web::Query which does not support this
+    ///Actix uses `serde_urlencoded` inside `web::Query` which does not support this
     #[ge_context::test(tiling_spec = "get_map_test_helper_tiling_spec")]
     async fn get_map_uppercase(app_ctx: PostgresContext<NoTls>) {
         let session = app_ctx.create_anonymous_session().await.unwrap();

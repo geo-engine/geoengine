@@ -733,8 +733,8 @@ mod tests {
         for (idx, &v) in data.as_slice()[5..].iter().enumerate() {
             estimator.update(v);
             assert_eq!(expected_positions[idx], estimator.positions);
-            for i in 0..5 {
-                float_cmp::assert_approx_eq!(f64, expected_markers[idx][i], estimator.markers[i]);
+            for (i, &item) in expected_markers[idx].iter().enumerate().take(5) {
+                float_cmp::assert_approx_eq!(f64, item, estimator.markers[i]);
             }
         }
     }

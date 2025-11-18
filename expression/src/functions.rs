@@ -77,7 +77,7 @@ mod cmp_by_name {
 
     impl PartialOrd for Function {
         fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-            Some(self.name.cmp(&other.name))
+            Some(self.cmp(other))
         }
     }
 

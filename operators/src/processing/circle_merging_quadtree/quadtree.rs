@@ -73,7 +73,7 @@ where
         }
     }
 
-    pub fn iter_rectangles(&self) -> RectangleIter {
+    pub fn iter_rectangles(&self) -> RectangleIter<'_> {
         let mut stack = VecDeque::new();
         stack.push_back(&*self.head);
         RectangleIter { stack }

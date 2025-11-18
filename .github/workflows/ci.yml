@@ -77,7 +77,7 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: SQLFluff
-        run: pipx run sqlfluff==3.4.1 lint
+        run: pipx run sqlfluff==3.5.0 lint
 
   build:
     runs-on: ubuntu-24.04

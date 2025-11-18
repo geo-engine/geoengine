@@ -1,24 +1,23 @@
 use super::database_migration::{DatabaseVersion, Migration};
-use crate::contexts::migrations::migration_0021_default_permissions_for_existing_providers::Migration0021DefaultPermissionsForExistingProviders;
-use crate::error::Result;
+use crate::{contexts::migrations::Migration0022PermissionQueries, error::Result};
 use async_trait::async_trait;
 use tokio_postgres::Transaction;
 
 /// This migration adds the provider permissions
-pub struct Migration0022WildliveOidc;
+pub struct Migration0023WildliveOidc;
 
 #[async_trait]
-impl Migration for Migration0022WildliveOidc {
+impl Migration for Migration0023WildliveOidc {
     fn prev_version(&self) -> Option<DatabaseVersion> {
-        Some(Migration0021DefaultPermissionsForExistingProviders.version())
+        Some(Migration0022PermissionQueries.version())
     }
 
     fn version(&self) -> DatabaseVersion {
-        "0022_wildlive_oidc".into()
+        "0023_wildlive_oidc".into()
     }
 
     async fn migrate(&self, tx: &Transaction<'_>) -> Result<()> {
-        tx.batch_execute(include_str!("migration_0022_wildlive_oidc.sql"))
+        tx.batch_execute(include_str!("migration_0023_wildlive_oidc.sql"))
             .await?;
 
         Ok(())
@@ -61,7 +60,7 @@ mod tests {
             &mut conn,
             &migrations_by_range(
                 &Migration0016MergeProviders.version(),
-                &Migration0021DefaultPermissionsForExistingProviders.version(),
+                &Migration0022PermissionQueries.version(),
             ),
         )
         .await
@@ -69,14 +68,14 @@ mod tests {
 
         // insert test data on initial schema
         assert_eq!(
-            conn.execute(include_str!("migration_0022_test_data.sql"), &[])
+            conn.execute(include_str!("migration_0023_test_data.sql"), &[])
                 .await
                 .unwrap(),
             2
         );
 
         // perform this migration
-        Migration0022WildliveOidc
+        Migration0023WildliveOidc
             .migrate(&conn.transaction().await.unwrap())
             .await
             .unwrap();

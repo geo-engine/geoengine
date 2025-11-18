@@ -169,14 +169,12 @@ impl Default for OgrSourceDatasetTimeType {
 ///   - "custom": define a custom format in the attribute `custom_format`
 ///   - "seconds": time column is numeric and contains seconds as UNIX timestamp
 ///   - "auto": time is parsed by OGR
-#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, Default)]
 #[serde(tag = "format")]
 #[serde(rename_all = "camelCase")]
 pub enum OgrSourceTimeFormat {
     #[serde(rename_all = "camelCase")]
-    Custom {
-        custom_format: DateTimeParseFormat,
-    },
+    Custom { custom_format: DateTimeParseFormat },
     #[serde(rename_all = "camelCase")]
     UnixTimeStamp {
         timestamp_type: UnixTimeStampType,
@@ -184,6 +182,7 @@ pub enum OgrSourceTimeFormat {
         #[serde(default = "DateTimeParseFormat::unix")]
         fmt: DateTimeParseFormat,
     },
+    #[default]
     Auto,
 }
 
@@ -208,12 +207,6 @@ impl OgrSourceTimeFormat {
 pub enum UnixTimeStampType {
     EpochSeconds,
     EpochMilliseconds,
-}
-
-impl Default for OgrSourceTimeFormat {
-    fn default() -> Self {
-        Self::Auto
-    }
 }
 
 /// A mapping of the columns to data, time, space. Columns that are not listed are skipped when parsing.
@@ -588,7 +581,7 @@ enum FeaturesProvider<'a> {
 }
 
 impl FeaturesProvider<'_> {
-    fn layer_ref(&self) -> &Layer {
+    fn layer_ref(&self) -> &Layer<'_> {
         match self {
             FeaturesProvider::Layer(l) => l,
             FeaturesProvider::ResultSet(r) => r,

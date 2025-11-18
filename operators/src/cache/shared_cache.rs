@@ -372,7 +372,7 @@ where
     fn find_matching_cache_entry_and_collect_expired_entries(
         &mut self,
         query: &C::Query,
-    ) -> CacheQueryResult<C::Query, C::CacheContainer> {
+    ) -> CacheQueryResult<'_, C::Query, C::CacheContainer> {
         let mut expired_cache_entry_ids = vec![];
 
         let x = self.operator_cache.iter().find(|&(id, entry)| {
@@ -408,7 +408,7 @@ where
     fn operator_cache_view_mut(
         &mut self,
         key: &CanonicOperatorName,
-    ) -> Option<OperatorCacheEntryView<C>>;
+    ) -> Option<OperatorCacheEntryView<'_, C>>;
 
     /// This method queries the cache for a given query.
     /// If the query matches an entry in the cache, the cache entry is returned and it is promoted in the LRU.
@@ -563,7 +563,7 @@ where
     fn operator_cache_view_mut(
         &mut self,
         key: &CanonicOperatorName,
-    ) -> Option<OperatorCacheEntryView<CompressedRasterTile2D<T>>> {
+    ) -> Option<OperatorCacheEntryView<'_, CompressedRasterTile2D<T>>> {
         self.raster_caches
             .get_mut(key)
             .map(|op| OperatorCacheEntryView {
@@ -587,7 +587,7 @@ where
     fn operator_cache_view_mut(
         &mut self,
         key: &CanonicOperatorName,
-    ) -> Option<OperatorCacheEntryView<CompressedFeatureCollection<T>>> {
+    ) -> Option<OperatorCacheEntryView<'_, CompressedFeatureCollection<T>>> {
         self.vector_caches
             .get_mut(key)
             .map(|op| OperatorCacheEntryView {

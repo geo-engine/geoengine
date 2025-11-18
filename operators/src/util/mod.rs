@@ -28,7 +28,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 
 /// Get a lock for mutex and recover from poisoning
 /// TODO: proper poisoning handling
-pub fn safe_lock_mutex<M, T>(lock: &M) -> MutexGuard<T>
+pub fn safe_lock_mutex<M, T>(lock: &M) -> MutexGuard<'_, T>
 where
     M: Deref<Target = Mutex<T>>,
 {

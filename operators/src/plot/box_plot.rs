@@ -155,9 +155,7 @@ impl PlotOperator for BoxPlot {
                             // OK
                         }
                         None => {
-                            return Err(Error::ColumnDoesNotExist {
-                                column: cn.to_string(),
-                            });
+                            return Err(Error::ColumnDoesNotExist { column: cn.clone() });
                         }
                     }
                 }
@@ -400,7 +398,7 @@ impl BoxPlotAccumKind {
     }
 
     fn median(values: &[f64]) -> f64 {
-        if values.len() % 2 == 0 {
+        if values.len().is_multiple_of(2) {
             let i = values.len() / 2;
             f64::midpoint(values[i], values[i - 1])
         } else {
@@ -413,7 +411,7 @@ impl BoxPlotAccumKind {
 
         let s = values.split_at(idx);
 
-        if values.len() % 2 == 0 {
+        if values.len().is_multiple_of(2) {
             s
         } else {
             (s.0, &s.1[1..])
