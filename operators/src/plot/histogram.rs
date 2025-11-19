@@ -138,7 +138,7 @@ impl PlotOperator for Histogram {
                 {
                     None => {
                         return Err(Error::ColumnDoesNotExist {
-                            column: column_name.to_string(),
+                            column: column_name.clone(),
                         });
                     }
                     Some(FeatureDataType::Category | FeatureDataType::Text) => {

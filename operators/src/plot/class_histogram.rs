@@ -120,7 +120,7 @@ impl PlotOperator for ClassHistogram {
                 {
                     None => {
                         return Err(Error::ColumnDoesNotExist {
-                            column: column_name.to_string(),
+                            column: column_name.clone(),
                         });
                     }
                     Some(FeatureDataType::Text | FeatureDataType::DateTime) => {

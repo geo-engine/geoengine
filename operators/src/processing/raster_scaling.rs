@@ -38,18 +38,15 @@ pub enum ScalingMode {
     SubOffsetDivSlope,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, Default)]
 #[serde(rename_all = "camelCase", tag = "type")]
 enum SlopeOffsetSelection {
+    #[default]
     Auto,
     MetadataKey(RasterPropertiesKey),
-    Constant { value: f64 },
-}
-
-impl Default for SlopeOffsetSelection {
-    fn default() -> Self {
-        Self::Auto
-    }
+    Constant {
+        value: f64,
+    },
 }
 
 /// The raster scaling operator scales/unscales the values of a raster by a given scale factor and offset.
