@@ -52,6 +52,10 @@ impl Role {
     pub fn anonymous_role_id() -> RoleId {
         RoleId::from_str("fd8e87bf-515c-4f36-8da6-1a53702ff102").expect("valid")
     }
+
+    pub fn is_admin(&self) -> bool {
+        self.id == Self::admin_role_id()
+    }
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, Hash, ToSchema, ToSql, FromSql)]
@@ -90,6 +94,10 @@ impl Permission {
             Permission::Read => vec![Permission::Owner, Permission::Read],
             Permission::Owner => vec![Permission::Owner],
         }
+    }
+
+    pub fn is_owner(&self) -> bool {
+        matches!(self, Permission::Owner)
     }
 }
 

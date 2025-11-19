@@ -18,7 +18,7 @@ path = "test_upload"
 
 [oidc]
 enabled = true
-issuer = ""
+issuer = "http://localhost"
 client_id = ""
 client_secret = ""
 redirect_uri = ""

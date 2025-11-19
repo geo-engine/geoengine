@@ -435,7 +435,7 @@ pub enum QuotaTrackingMode {
 #[derive(Clone, Debug, Deserialize)]
 pub struct Oidc {
     pub enabled: bool,
-    pub issuer: String,
+    pub issuer: Url,
     pub client_id: String,
     pub client_secret: Option<String>,
     pub scopes: Vec<String>,
@@ -475,4 +475,22 @@ impl TestDefault for Cache {
 
 impl ConfigElement for Cache {
     const KEY: &'static str = "cache";
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct Wildlive {
+    pub api_endpoint: Url,
+    pub oidc: WildliveOidc,
+}
+
+#[derive(Clone, Debug, Deserialize)]
+pub struct WildliveOidc {
+    pub issuer: Url,
+    pub client_id: String,
+    pub client_secret: Option<String>,
+    pub broker_provider: String,
+}
+
+impl ConfigElement for Wildlive {
+    const KEY: &'static str = "wildlive";
 }

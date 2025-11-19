@@ -98,11 +98,11 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for CopernicusDataspaceDataProvid
         self.priority.unwrap_or(0)
     }
 
-    fn update(&self, new: TypedDataProviderDefinition) -> TypedDataProviderDefinition
+    async fn update(&self, new: TypedDataProviderDefinition) -> Result<TypedDataProviderDefinition>
     where
         Self: Sized,
     {
-        match new {
+        Ok(match new {
             TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(mut new) => {
                 if new.s3_secret_key == SECRET_REPLACEMENT {
                     new.s3_secret_key.clone_from(&self.s3_secret_key);
@@ -111,7 +111,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for CopernicusDataspaceDataProvid
                 TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(new)
             }
             _ => new,
-        }
+        })
     }
 }
 

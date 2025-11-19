@@ -7,6 +7,7 @@ pub use crate::contexts::migrations::{
     migration_0020_provider_permissions::Migration0020ProviderPermissions,
     migration_0021_default_permissions_for_existing_providers::Migration0021DefaultPermissionsForExistingProviders,
     migration_0022_permission_queries::Migration0022PermissionQueries,
+    migration_0023_wildlive_oidc::Migration0023WildliveOidc,
     migration_0030_raster_result_desc::Migration0030RasterResultDesc,
     migration_0031_time_descriptor::Migration0031TimeDescriptor,
 };
@@ -23,8 +24,10 @@ mod migration_0019_ml_model_no_data;
 mod migration_0020_provider_permissions;
 mod migration_0021_default_permissions_for_existing_providers;
 mod migration_0022_permission_queries;
+mod migration_0023_wildlive_oidc;
 mod migration_0030_raster_result_desc;
 mod migration_0031_time_descriptor;
+
 
 #[cfg(test)]
 mod schema_info;
@@ -53,8 +56,10 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0020ProviderPermissions),
         Box::new(Migration0021DefaultPermissionsForExistingProviders),
         Box::new(Migration0022PermissionQueries),
+        Box::new(Migration0023WildliveOidc),
         Box::new(Migration0030RasterResultDesc),
         Box::new(Migration0031TimeDescriptor),
+        
     ]
 }
 
