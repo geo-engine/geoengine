@@ -78,15 +78,20 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: SQLFluff
         run: pipx run sqlfluff==3.5.0 lint
-      - name: OpenAPI Validator
-        run: |
-          mount --make-rshared /
-          podman run \
-            --privileged \
-            --rm \
-            -v .:/local \
-            docker.io/openapitools/openapi-generator-cli:v7.17.0 \
-              validate -i /local/openapi.json
+
+  openapi:
+    name: OpenAPI Validation
+
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Validate OpenAPI spec
+        run: npx @openapitools/openapi-generator-cli validate -i openapi.json
 
   build:
     runs-on: ubuntu-24.04
