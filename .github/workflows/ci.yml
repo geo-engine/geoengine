@@ -78,6 +78,8 @@ jobs:
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: SQLFluff
         run: pipx run sqlfluff==3.5.0 lint
+      - name: OpenAPI Validator
+        run: npx @openapitools/openapi-generator-cli validate -i openapi.json
 
   build:
     runs-on: ubuntu-24.04
