@@ -81,6 +81,7 @@ jobs:
       - name: OpenAPI Validator
         run: |
           podman run \
+            --privileged \
             --rm \
             -v .:/local \
             docker.io/openapitools/openapi-generator-cli:v7.17.0 \
