@@ -1066,10 +1066,24 @@ impl MockQuotaTracking for QuotaTracking {
     }
 }
 
+/// A responder that serves a json file with content type application/json.
+///
+/// # Panics
+/// Panics if the file cannot be read.
+///
+#[cfg(test)]
+pub fn json_file_responder(path: &Path) -> impl httptest::responders::Responder + use<> {
+    let json = std::fs::read_to_string(path).unwrap();
+    httptest::responders::status_code(200)
+        .append_header("Content-Type", "application/json")
+        .body(json)
+}
+
 #[cfg(test)]
 pub(crate) mod mock_oidc {
     use crate::config::Oidc;
     use crate::users::{DefaultJsonWebKeySet, DefaultProviderMetadata};
+    use crate::util::join_base_url_and_path;
     use chrono::{Duration, Utc};
     use httptest::matchers::{matches, request};
     use httptest::responders::status_code;
@@ -1086,9 +1100,10 @@ pub(crate) mod mock_oidc {
     };
     use openidconnect::{
         Audience, EmptyAdditionalClaims, EmptyAdditionalProviderMetadata, EndUserEmail,
-        EndUserName, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim, Nonce,
-        ResponseTypes, StandardClaims, SubjectIdentifier,
+        EndUserName, EndUserUsername, IssuerUrl, JsonWebKeySet, JsonWebKeySetUrl, LocalizedClaim,
+        Nonce, ResponseTypes, StandardClaims, SubjectIdentifier,
     };
+    use url::Url;
 
     const TEST_PRIVATE_KEY: &str = "-----BEGIN RSA PRIVATE KEY-----\n\
 	    MIIEogIBAAKCAQEAxIm5pngAgY4V+6XJPtlATkU6Gbcen22M3Tf16Gwl4uuFagEp\n\
@@ -1142,7 +1157,7 @@ pub(crate) mod mock_oidc {
     pub const SINGLE_NONCE: &str = "Nonce_1";
 
     pub struct MockTokenConfig {
-        issuer: String,
+        issuer: Url,
         client_id: String,
         pub email: Option<EndUserEmail>,
         pub name: Option<LocalizedClaim<EndUserName>>,
@@ -1151,10 +1166,12 @@ pub(crate) mod mock_oidc {
         pub access: String,
         pub access_for_id: String,
         pub refresh: Option<String>,
+        pub signing_alg: Option<CoreJwsSigningAlgorithm>,
+        pub preferred_username: Option<String>,
     }
 
     impl MockTokenConfig {
-        pub fn create_from_issuer_and_client(issuer: String, client_id: String) -> Self {
+        pub fn create_from_issuer_and_client(issuer: Url, client_id: String) -> Self {
             let mut name = LocalizedClaim::new();
             name.insert(None, EndUserName::new("Robin".to_string()));
             let name = Some(name);
@@ -1169,11 +1186,13 @@ pub(crate) mod mock_oidc {
                 access: ACCESS_TOKEN.to_string(),
                 access_for_id: ACCESS_TOKEN.to_string(),
                 refresh: None,
+                signing_alg: Some(CoreJwsSigningAlgorithm::RsaSsaPssSha256),
+                preferred_username: None,
             }
         }
 
         pub fn create_from_tokens(
-            issuer: String,
+            issuer: Url,
             client_id: String,
             duration: core::time::Duration,
             access_token: String,
@@ -1193,27 +1212,32 @@ pub(crate) mod mock_oidc {
                 access: access_token.clone(),
                 access_for_id: access_token,
                 refresh: Some(refresh_token),
+                signing_alg: Some(CoreJwsSigningAlgorithm::RsaSsaPssSha256),
+                preferred_username: None,
             }
         }
     }
 
-    pub fn mock_provider_metadata(provider_base_url: &str) -> DefaultProviderMetadata {
+    pub fn mock_provider_metadata(provider_base_url: &Url) -> DefaultProviderMetadata {
         CoreProviderMetadata::new(
-            IssuerUrl::new(provider_base_url.to_string())
-                .expect("Parsing mock issuer should not fail"),
-            AuthUrl::new(provider_base_url.to_owned() + "/authorize")
-                .expect("Parsing mock auth url should not fail"),
-            JsonWebKeySetUrl::new(provider_base_url.to_owned() + "/jwk")
-                .expect("Parsing mock jwk url should not fail"),
+            IssuerUrl::from_url(provider_base_url.clone()),
+            AuthUrl::from_url(
+                join_base_url_and_path(provider_base_url, "authorize")
+                    .expect("Parsing mock auth url should not fail"),
+            ),
+            JsonWebKeySetUrl::from_url(
+                join_base_url_and_path(provider_base_url, "jwk")
+                    .expect("Parsing mock jwk url should not fail"),
+            ),
             vec![ResponseTypes::new(vec![CoreResponseType::Code])],
             vec![],
             vec![CoreJwsSigningAlgorithm::RsaSsaPssSha256],
             EmptyAdditionalProviderMetadata {},
         )
-        .set_token_endpoint(Some(
-            TokenUrl::new(provider_base_url.to_owned() + "/token")
+        .set_token_endpoint(Some(TokenUrl::from_url(
+            join_base_url_and_path(provider_base_url, "token")
                 .expect("Parsing mock token url should not fail"),
-        ))
+        )))
         .set_scopes_supported(Some(vec![
             Scope::new("openid".to_string()),
             Scope::new("email".to_string()),
@@ -1237,20 +1261,27 @@ pub(crate) mod mock_oidc {
     ) -> StandardTokenResponse<CoreIdTokenFields, BasicTokenType> {
         let id_token = CoreIdToken::new(
             CoreIdTokenClaims::new(
-                IssuerUrl::new(mock_token_config.issuer)
+                IssuerUrl::new(mock_token_config.issuer.to_string())
                     .expect("Parsing mock issuer should not fail"),
                 vec![Audience::new(mock_token_config.client_id)],
                 Utc::now() + Duration::seconds(300),
                 Utc::now(),
                 StandardClaims::new(SubjectIdentifier::new("DUMMY_SUBJECT_ID".to_string()))
                     .set_email(mock_token_config.email)
-                    .set_name(mock_token_config.name),
+                    .set_name(mock_token_config.name)
+                    .set_preferred_username(
+                        mock_token_config
+                            .preferred_username
+                            .map(EndUserUsername::new),
+                    ),
                 EmptyAdditionalClaims {},
             )
             .set_nonce(mock_token_config.nonce),
             &CoreRsaPrivateSigningKey::from_pem(TEST_PRIVATE_KEY, None)
                 .expect("Cannot create mock of RSA private key"),
-            CoreJwsSigningAlgorithm::RsaSsaPssSha256,
+            mock_token_config
+                .signing_alg
+                .unwrap_or(CoreJwsSigningAlgorithm::RsaSsaPssSha256),
             Some(&AccessToken::new(mock_token_config.access_for_id.clone())),
             None,
         )
@@ -1273,9 +1304,9 @@ pub(crate) mod mock_oidc {
 
     pub fn mock_valid_provider_discovery(expected_discoveries: usize) -> Server {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
-        let provider_metadata = mock_provider_metadata(server_url.as_str());
+        let provider_metadata = mock_provider_metadata(&server_url);
         let jwks = mock_jwks();
 
         server.expect(
@@ -1317,7 +1348,7 @@ pub(crate) mod mock_oidc {
         let client_id = "";
 
         let server = mock_valid_provider_discovery(config.expected_discoveries);
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
         if config.creates_first_token {
             let mock_token_config = MockTokenConfig::create_from_tokens(

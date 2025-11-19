@@ -821,6 +821,9 @@ where
 
         let clamp_prio = Self::clamp_prio(&provider, prio);
 
+        // TODO: find out if init makes sense instead
+        let provider = DataProviderDefinition::<Self>::update(&provider, provider.clone()).await?;
+
         let stmt = tx
             .prepare(
                 "
@@ -978,7 +981,7 @@ where
         }
 
         let old_definition = self.get_layer_provider_definition(id).await?;
-        let provider = DataProviderDefinition::<Self>::update(&old_definition, provider);
+        let provider = DataProviderDefinition::<Self>::update(&old_definition, provider).await?;
 
         let prio = DataProviderDefinition::<Self>::priority(&provider);
 

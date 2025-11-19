@@ -913,6 +913,7 @@ mod tests {
     use httptest::{Expectation, Server};
     use serde_json::json;
     use tokio_postgres::NoTls;
+    use url::Url;
     use uuid::Uuid;
 
     const DUMMY_REDIRECT_URI: &str = "http://dummy.redirect-uri.com";
@@ -1391,7 +1392,7 @@ mod tests {
 
     const MOCK_CLIENT_ID: &str = "";
 
-    fn single_state_nonce_request_db(issuer: String) -> OidcManager {
+    fn single_state_nonce_request_db(issuer: Url) -> OidcManager {
         let oidc_config = Oidc {
             enabled: true,
             issuer,
@@ -1427,7 +1428,7 @@ mod tests {
 
     fn oidc_attr_for_test() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(1);
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
         (server, move || {
             single_state_nonce_request_db(server_url.clone())
@@ -1444,7 +1445,7 @@ mod tests {
 
     fn oidc_bad_server() -> (Server, impl Fn() -> OidcManager) {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
         let error_message = serde_json::to_string(&json!({
             "error_description": "Dummy bad request",
@@ -1492,7 +1493,7 @@ mod tests {
 
     fn oidc_login_oidc_db() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(2);
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             server_url.clone(),
@@ -1539,7 +1540,7 @@ mod tests {
 
     fn oidc_login_illegal_request_oidc_db() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(1);
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
         (server, move || {
             single_state_nonce_request_db(server_url.clone())
@@ -1561,7 +1562,7 @@ mod tests {
 
     fn oidc_login_fail_oidc_db() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(2);
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
         let error_message = serde_json::to_string(&json!({
             "error_description": "Dummy bad request",
@@ -1747,7 +1748,7 @@ mod tests {
 
     fn oidc_short_duration() -> (Server, impl Fn() -> OidcManager) {
         let server = mock_valid_provider_discovery(2);
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
 
         let mut mock_token_config = MockTokenConfig::create_from_issuer_and_client(
             server_url.clone(),

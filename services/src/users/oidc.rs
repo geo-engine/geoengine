@@ -202,7 +202,7 @@ impl From<Oidc> for OidcManager {
 }
 
 struct OidcRequestDb {
-    issuer: String,
+    issuer: Url,
     client_id: String,
     client_secret: Option<String>,
     scopes: Vec<String>,
@@ -337,7 +337,7 @@ impl From<ParseError> for OidcError {
 
 impl OidcRequestDb {
     async fn get_client(&self, redirect_uri: Option<String>) -> Result<DefaultClient> {
-        let issuer_url = IssuerUrl::new(self.issuer.clone())?;
+        let issuer_url = IssuerUrl::new(self.issuer.to_string())?;
 
         //TODO: Provider meta data could be added as a fixed field in the DB, making discovery a one-time process. This would have implications for server startup.
         let provider_metadata: DefaultProviderMetadata =
@@ -666,7 +666,7 @@ mod tests {
 
     fn single_state_nonce_request_db() -> OidcRequestDb {
         OidcRequestDb {
-            issuer: ISSUER_URL.to_string(),
+            issuer: Url::parse(ISSUER_URL).unwrap(),
             client_id: "DummyClient".to_string(),
             client_secret: Some("DummySecret".to_string()),
             scopes: vec!["profile".to_string(), "email".to_string()],
@@ -677,7 +677,7 @@ mod tests {
         }
     }
 
-    fn single_state_nonce_mocked_request_db(server_url: String) -> OidcRequestDb {
+    fn single_state_nonce_mocked_request_db(server_url: Url) -> OidcRequestDb {
         OidcRequestDb {
             issuer: server_url,
             client_id: String::new(),
@@ -697,8 +697,7 @@ mod tests {
         let client_id = request_db.client_id.clone();
         let client_secret = request_db.client_secret.clone();
 
-        let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_jwks(mock_jwks());
+        let provider_metadata = mock_provider_metadata(&request_db.issuer).set_jwks(mock_jwks());
 
         let mut client = Client::from_provider_metadata(
             provider_metadata,
@@ -763,10 +762,10 @@ mod tests {
     #[tokio::test]
     async fn get_client_success() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
-        let provider_metadata = mock_provider_metadata(request_db.issuer.as_str());
+        let provider_metadata = mock_provider_metadata(&request_db.issuer);
         let jwks = mock_jwks();
 
         mock_provider_discovery(&server, &provider_metadata, &jwks);
@@ -779,7 +778,7 @@ mod tests {
     #[tokio::test]
     async fn get_client_bad_request() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let error_message = serde_json::to_string(&json!({
@@ -808,11 +807,11 @@ mod tests {
     #[tokio::test]
     async fn get_client_auth_code_unsupported() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_response_types_supported(vec![]);
+            mock_provider_metadata(&request_db.issuer).set_response_types_supported(vec![]);
         let jwks = mock_jwks();
 
         mock_provider_discovery(&server, &provider_metadata, &jwks);
@@ -827,10 +826,10 @@ mod tests {
     #[tokio::test]
     async fn get_client_id_rsa_signing_unsupported() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
-        let provider_metadata = mock_provider_metadata(request_db.issuer.as_str())
+        let provider_metadata = mock_provider_metadata(&request_db.issuer)
             .set_id_token_signing_alg_values_supported(vec![]);
         let jwks = mock_jwks();
 
@@ -846,11 +845,11 @@ mod tests {
     #[tokio::test]
     async fn get_client_missing_scopes() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_scopes_supported(None);
+            mock_provider_metadata(&request_db.issuer).set_scopes_supported(None);
         let jwks = mock_jwks();
 
         mock_provider_discovery(&server, &provider_metadata, &jwks);
@@ -865,11 +864,11 @@ mod tests {
     #[tokio::test]
     async fn get_client_missing_claims() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let provider_metadata =
-            mock_provider_metadata(request_db.issuer.as_str()).set_claims_supported(None);
+            mock_provider_metadata(&request_db.issuer).set_claims_supported(None);
         let jwks = mock_jwks();
 
         mock_provider_discovery(&server, &provider_metadata, &jwks);
@@ -886,7 +885,7 @@ mod tests {
     #[tokio::test]
     async fn generate_request_success() {
         let request_db = OidcRequestDb {
-            issuer: ISSUER_URL.to_owned() + "oidc/test",
+            issuer: Url::parse(&(ISSUER_URL.to_owned() + "oidc/test")).unwrap(),
             client_id: "DummyClient".to_string(),
             client_secret: Some("DummySecret".to_string()),
             scopes: vec!["profile".to_string(), "email".to_string()],
@@ -955,7 +954,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_success() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1017,7 +1016,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_id_token() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
 
         let mock_token_config = MockTokenConfig::create_from_issuer_and_client(
@@ -1051,7 +1050,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_nonce() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1078,7 +1077,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_wrong_nonce() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1105,7 +1104,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_email() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1132,7 +1131,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_name() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1159,7 +1158,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_no_access_token_duration() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1186,7 +1185,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_access_hashcode_mismatch() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1215,7 +1214,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_request_twice() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1246,7 +1245,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_multiple_requests() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let mut request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1313,7 +1312,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_bad_request() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1347,7 +1346,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_after_bad_request() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1389,7 +1388,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_refresh_success() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
@@ -1414,7 +1413,7 @@ mod tests {
     #[tokio::test]
     async fn resolve_refresh_failed() {
         let server = Server::run();
-        let server_url = format!("http://{}", server.addr());
+        let server_url = Url::parse(&server.url_str("/")).unwrap();
         let request_db = single_state_nonce_mocked_request_db(server_url);
         let client = mock_client(&request_db, None).unwrap();
 
