@@ -79,7 +79,12 @@ jobs:
       - name: SQLFluff
         run: pipx run sqlfluff==3.5.0 lint
       - name: OpenAPI Validator
-        run: npx @openapitools/openapi-generator-cli validate -i openapi.json
+        run: |
+          podman run \
+            --rm \
+            -v .:/local \
+            docker.io/openapitools/openapi-generator-cli:v7.17.0 \
+              validate -i /local/openapi.json
 
   build:
     runs-on: ubuntu-24.04
