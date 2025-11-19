@@ -80,6 +80,7 @@ jobs:
         run: pipx run sqlfluff==3.5.0 lint
       - name: OpenAPI Validator
         run: |
+          mount --make-rshared /
           podman run \
             --privileged \
             --rm \
