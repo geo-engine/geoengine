@@ -167,7 +167,7 @@ group_abcd_units = true
 
 [oidc]
 enabled = false
-issuer = ""
+issuer = "https://auth.geoengine.io"
 client_id = ""
 client_secret = ""
 scopes = []
