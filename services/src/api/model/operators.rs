@@ -78,6 +78,13 @@ impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDes
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum TimeDimension {
+    Regular(RegularTimeDimension),
+    Irregular,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RegularTimeDimension {
     pub origin: TimeInstance,
@@ -106,7 +113,7 @@ impl From<geoengine_datatypes::primitives::RegularTimeDimension> for RegularTime
 #[serde(rename_all = "camelCase")]
 pub struct TimeDescriptor {
     pub bounds: Option<TimeInterval>,
-    pub dimension: Option<RegularTimeDimension>,
+    pub dimension: TimeDimension,
 }
 
 impl From<TimeDescriptor> for geoengine_operators::engine::TimeDescriptor {
@@ -114,8 +121,12 @@ impl From<TimeDescriptor> for geoengine_operators::engine::TimeDescriptor {
         geoengine_operators::engine::TimeDescriptor::new(
             value.bounds.map(Into::into),
             match value.dimension {
-                Some(d) => geoengine_datatypes::primitives::TimeDimension::Regular(d.into()),
-                None => geoengine_datatypes::primitives::TimeDimension::Irregular,
+                TimeDimension::Regular(d) => {
+                    geoengine_datatypes::primitives::TimeDimension::Regular(d.into())
+                }
+                TimeDimension::Irregular => {
+                    geoengine_datatypes::primitives::TimeDimension::Irregular
+                }
             },
         )
     }
@@ -123,13 +134,16 @@ impl From<TimeDescriptor> for geoengine_operators::engine::TimeDescriptor {
 
 impl From<geoengine_operators::engine::TimeDescriptor> for TimeDescriptor {
     fn from(value: geoengine_operators::engine::TimeDescriptor) -> Self {
-        let dimension = match value.dimension {
-            geoengine_datatypes::primitives::TimeDimension::Regular(d) => Some(d.into()),
-            geoengine_datatypes::primitives::TimeDimension::Irregular => None,
-        };
         Self {
             bounds: value.bounds.map(Into::into),
-            dimension,
+            dimension: match value.dimension {
+                geoengine_datatypes::primitives::TimeDimension::Regular(d) => {
+                    TimeDimension::Regular(d.into())
+                }
+                geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                    TimeDimension::Irregular
+                }
+            },
         }
     }
 }

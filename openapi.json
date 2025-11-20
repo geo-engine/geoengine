@@ -10127,6 +10127,9 @@
       },
       "TimeDescriptor": {
         "type": "object",
+        "required": [
+          "dimension"
+        ],
         "properties": {
           "bounds": {
             "oneOf": [
@@ -10139,16 +10142,48 @@
             ]
           },
           "dimension": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/RegularTimeDimension"
-              }
-            ]
+            "$ref": "#/components/schemas/TimeDimension"
           }
         }
+      },
+      "TimeDimension": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RegularTimeDimension"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "regular"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "irregular"
+                ]
+              }
+            }
+          }
+        ]
       },
       "TimeGranularity": {
         "type": "string",
