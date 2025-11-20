@@ -79,6 +79,20 @@ jobs:
       - name: SQLFluff
         run: pipx run sqlfluff==3.5.0 lint
 
+  openapi:
+    name: OpenAPI Validation
+
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+      - name: Validate OpenAPI spec
+        run: npx @openapitools/openapi-generator-cli validate -i openapi.json
+
   build:
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
