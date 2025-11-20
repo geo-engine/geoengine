@@ -9,7 +9,12 @@ jobs:
   title:
     name: Title
     if: github.event.action == 'opened' || github.event.changes.title.from
+
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
     steps:
       - uses: geo-engine/conventional-pr-title@v1
         with:

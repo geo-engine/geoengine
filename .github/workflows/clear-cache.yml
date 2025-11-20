@@ -11,6 +11,10 @@ jobs:
   clear-cache:
     runs-on: ubuntu-24.04
 
+    permissions:
+      actions: write
+      contents: read
+
     steps:
       - name: Clear all caches
         uses: actions/github-script@v6
