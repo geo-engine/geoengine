@@ -22,7 +22,9 @@
             "start": "2025-01-01T00:00:00.000Z",
             "end": "2025-05-01T00:00:00.000Z"
           },
-          "dimension": null
+          "dimension": {
+            "type": "irregular"
+          }
         },
         "spatialGrid": {
           "spatialGrid": {

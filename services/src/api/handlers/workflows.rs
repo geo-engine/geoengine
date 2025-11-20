@@ -1110,7 +1110,9 @@ mod tests {
                 "spatialReference": "EPSG:4326",
                 "time": {
                     "bounds": null,
-                    "dimension": null
+                    "dimension": {
+                        "type": "irregular",
+                    }
                 },
                 "spatialGrid": {
                     "descriptor": "source",
@@ -1389,6 +1391,7 @@ mod tests {
                 "spatialReference": "EPSG:4326",
                 "time": {
                     "dimension": {
+                        "type": "regular",
                         "origin": 0,
                         "step": {
                             "granularity": "months",
