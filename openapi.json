@@ -812,6 +812,17 @@
         ],
         "summary": "Add a tile to a gdal dataset.",
         "operationId": "add_dataset_tiles_handler",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "description": "Dataset Name",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DatasetName"
+            }
+          }
+        ],
         "requestBody": {
           "content": {
             "application/json": {
@@ -10215,6 +10226,9 @@
       },
       "TimeDescriptor": {
         "type": "object",
+        "required": [
+          "dimension"
+        ],
         "properties": {
           "bounds": {
             "oneOf": [
@@ -10227,16 +10241,48 @@
             ]
           },
           "dimension": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/RegularTimeDimension"
-              }
-            ]
+            "$ref": "#/components/schemas/TimeDimension"
           }
         }
+      },
+      "TimeDimension": {
+        "oneOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/RegularTimeDimension"
+              },
+              {
+                "type": "object",
+                "required": [
+                  "type"
+                ],
+                "properties": {
+                  "type": {
+                    "type": "string",
+                    "enum": [
+                      "regular"
+                    ]
+                  }
+                }
+              }
+            ]
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "irregular"
+                ]
+              }
+            }
+          }
+        ]
       },
       "TimeGranularity": {
         "type": "string",
