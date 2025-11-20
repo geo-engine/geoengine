@@ -197,6 +197,9 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     responses(
         (status = 200),
     ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
     security(
         ("session_token" = [])
     )
@@ -1589,7 +1592,7 @@ mod tests {
             operators::{
                 FileNotFoundHandling, GdalDatasetGeoTransform, GdalMultiBand, RasterBandDescriptor,
                 RasterBandDescriptors, RasterResultDescriptor, SpatialGridDescriptor,
-                SpatialGridDescriptorState, TimeDescriptor,
+                SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
             },
             responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
@@ -5025,7 +5028,7 @@ mod tests {
                                 )
                                 .into(),
                             ),
-                            dimension: None,
+                            dimension: TimeDimension::Irregular,
                         },
                         spatial_grid: SpatialGridDescriptor {
                             spatial_grid: SpatialGridDefinition {
