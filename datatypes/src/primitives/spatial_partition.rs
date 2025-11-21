@@ -335,22 +335,10 @@ impl From<&SpatialPartition2D> for geo::Rect<f64> {
 }
 
 /// Compute the extent of all input partitions. If one partition is None, the output will also be None
-pub fn partitions_extent<I: Iterator<Item = Option<SpatialPartition2D>>>(
-    mut bboxes: I,
+pub fn partitions_extent<I: Iterator<Item = SpatialPartition2D>>(
+    bboxes: I,
 ) -> Option<SpatialPartition2D> {
-    let Some(Some(mut extent)) = bboxes.next() else {
-        return None;
-    };
-
-    for bbox in bboxes {
-        if let Some(bbox) = bbox {
-            extent.extend(&bbox);
-        } else {
-            return None;
-        }
-    }
-
-    Some(extent)
+    bboxes.reduce(|s, other| s.extended(&other))
 }
 
 #[cfg(test)]
@@ -524,36 +512,15 @@ mod tests {
 
     #[test]
     fn extent() {
-        assert_eq!(partitions_extent([None].into_iter()), None);
         assert_eq!(
             partitions_extent(
                 [
-                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap()),
-                    Some(SpatialPartition2D::new((0., 70.).into(), (70., 0.).into()).unwrap())
+                    SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap(),
+                    SpatialPartition2D::new((0., 70.).into(), (70., 0.).into()).unwrap()
                 ]
                 .into_iter()
             ),
             Some(SpatialPartition2D::new((-50., 70.).into(), (70., -50.).into()).unwrap())
-        );
-        assert_eq!(
-            partitions_extent(
-                [
-                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap()),
-                    None
-                ]
-                .into_iter()
-            ),
-            None
-        );
-        assert_eq!(
-            partitions_extent(
-                [
-                    None,
-                    Some(SpatialPartition2D::new((-50., 50.).into(), (50., -50.).into()).unwrap())
-                ]
-                .into_iter()
-            ),
-            None
         );
     }
 

@@ -1,10 +1,13 @@
 use super::masked_grid::MaskedGrid;
 use super::{
+    BoundedGrid, ChangeGridBounds, GridBoundingBox2D, GridIndexAccessMut, RasterProperties,
+    SpatialGridDefinition,
+};
+use super::{
     GeoTransform, GeoTransformAccess, GridBounds, GridIdx2D, GridIndexAccess, GridShape,
     GridShape2D, GridShape3D, GridShapeAccess, GridSize, Raster, TileInformation,
     grid_or_empty::GridOrEmpty,
 };
-use super::{GridIndexAccessMut, RasterProperties};
 use crate::primitives::CacheHint;
 use crate::primitives::{
     SpatialBounded, SpatialPartition2D, SpatialPartitioned, SpatialResolution, TemporalBounded,
@@ -12,6 +15,7 @@ use crate::primitives::{
 };
 use crate::raster::Pixel;
 use crate::util::{ByteSize, Result};
+use float_cmp::approx_eq;
 use serde::{Deserialize, Serialize};
 use std::fmt::Write;
 
@@ -65,6 +69,26 @@ where
             self.tile_position,
             [self.grid_array.axis_size_y(), self.grid_array.axis_size_x()].into(),
             self.global_geo_transform,
+        )
+    }
+
+    pub fn global_pixel_spatial_grid_definition(&self) -> SpatialGridDefinition {
+        let global_upper_left_idx = self.tile_position
+            * [
+                self.grid_array.axis_size_y() as isize,
+                self.grid_array.axis_size_x() as isize,
+            ];
+
+        SpatialGridDefinition::new(
+            self.global_geo_transform,
+            GridBoundingBox2D::new_unchecked(
+                global_upper_left_idx,
+                global_upper_left_idx
+                    + [
+                        self.grid_array.axis_size_y() as isize,
+                        self.grid_array.axis_size_x() as isize,
+                    ],
+            ),
         )
     }
 
@@ -142,21 +166,35 @@ impl<G: PartialEq, const N: usize> IterableBaseTile<G> for [BaseTile<G>; N] {
     }
 }
 
-impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I {
+impl<G: PartialEq, I: IterableBaseTile<G>> TilesEqualIgnoringCacheHint<G> for I
+where
+    G: GridSize,
+{
     fn tiles_equal_ignoring_cache_hint(&self, other: &dyn IterableBaseTile<G>) -> bool {
         let mut iter_self = self.iter_tiles();
         let mut iter_other = other.iter_tiles();
-
         loop {
             match (iter_self.next(), iter_other.next()) {
                 (Some(a), Some(b)) => {
-                    if a.time != b.time
-                        || a.tile_position != b.tile_position
-                        || a.band != b.band
-                        || a.global_geo_transform != b.global_geo_transform
-                        || a.grid_array != b.grid_array
-                        || a.properties != b.properties
-                    {
+                    if a.time != b.time {
+                        return false;
+                    }
+                    if a.tile_position != b.tile_position {
+                        return false;
+                    }
+                    if a.band != b.band {
+                        return false;
+                    }
+                    if !approx_eq!(GeoTransform, a.global_geo_transform, b.global_geo_transform) {
+                        return false;
+                    }
+                    if a.global_geo_transform != b.global_geo_transform {
+                        return false;
+                    }
+                    if a.properties != b.properties {
+                        return false;
+                    }
+                    if a.grid_array != b.grid_array {
                         return false;
                     }
                 }
@@ -337,6 +375,43 @@ where
                     .into();
             }
         }
+    }
+}
+
+impl<T> RasterTile2D<T>
+where
+    T: Pixel,
+{
+    /// Converts the tile into a grid with the global pixel bounds of the tile.
+    ///
+    /// # Panics
+    /// Only if the tile was invalid before...
+    ///
+    pub fn into_inner_positioned_grid(self) -> GridOrEmpty<GridBoundingBox2D, T> {
+        let b = self.bounding_box();
+        let g = self.grid_array;
+        g.set_grid_bounds(b).expect("tile was valid before")
+    }
+}
+
+impl<T> BoundedGrid for RasterTile2D<T>
+where
+    T: Pixel,
+{
+    type IndexArray = [isize; 2];
+
+    fn bounding_box(&self) -> GridBoundingBox2D {
+        let shape = self.grid_array.shape_ref();
+        let offset =
+            self.tile_position * [shape.axis_size_y() as isize, shape.axis_size_x() as isize];
+        GridBoundingBox2D::new_unchecked(
+            offset,
+            offset
+                + [
+                    shape.axis_size_y() as isize - 1,
+                    shape.axis_size_x() as isize - 1,
+                ],
+        )
     }
 }
 

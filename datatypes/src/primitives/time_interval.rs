@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::{cmp::Ordering, convert::TryInto};
 
 /// Stores time intervals in ms in close-open semantic [start, end)
-#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql)]
+#[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql, Hash)]
 #[repr(C)]
 pub struct TimeInterval {
     start: TimeInstance,
@@ -70,6 +70,23 @@ impl TimeInterval {
     {
         let start_instant = start.try_into()?;
         let end_instant = end.try_into()?;
+
+        ensure!(
+            start_instant <= end_instant,
+            error::TimeIntervalEndBeforeStart {
+                start: start_instant,
+                end: end_instant
+            }
+        );
+        ensure!(
+            start_instant >= TimeInstance::MIN && end_instant <= TimeInstance::MAX,
+            error::TimeIntervalOutOfBounds {
+                start: start_instant,
+                end: end_instant,
+                min: TimeInstance::MIN,
+                max: TimeInstance::MAX,
+            }
+        );
 
         ensure!(
             start_instant <= end_instant,
@@ -173,6 +190,10 @@ impl TimeInterval {
         self == other || ((self.start..self.end).contains(&other.start) && (self.end >= other.end))
     }
 
+    pub fn contains_instance(&self, instance: TimeInstance) -> bool {
+        self.start <= instance && instance < self.end
+    }
+
     /// Returns whether the given interval intersects this interval
     ///
     /// # Examples
@@ -246,10 +267,10 @@ impl TimeInterval {
                 i2: *other,
             }
         );
-        Ok(Self {
-            start: TimeInstance::min(self.start, other.start),
-            end: TimeInstance::max(self.end, other.end),
-        })
+        Self::new(
+            TimeInstance::min(self.start, other.start),
+            TimeInstance::max(self.end, other.end),
+        )
     }
 
     pub fn start(&self) -> TimeInstance {

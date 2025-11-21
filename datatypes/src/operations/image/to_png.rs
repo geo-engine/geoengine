@@ -34,6 +34,15 @@ pub trait ToPng {
     ) -> Result<Vec<u8>>;
 }
 
+pub fn create_empty_no_data_color_png_bytes(
+    width: u32,
+    height: u32,
+    no_data_color: RgbaColor,
+) -> Result<Vec<u8>> {
+    let image_buffer = ImageBuffer::from_pixel(width, height, no_data_color.into());
+    image_buffer_to_png_bytes(image_buffer)
+}
+
 fn image_buffer_to_png_bytes(
     image_buffer: ImageBuffer<image::Rgba<u8>, Vec<u8>>,
 ) -> Result<Vec<u8>> {
@@ -121,9 +130,7 @@ where
     ) -> Result<Vec<u8>> {
         // TODO: use PNG color palette once it is available
 
-        let image_buffer = ImageBuffer::from_pixel(width, height, no_data_color.into());
-
-        image_buffer_to_png_bytes(image_buffer)
+        create_empty_no_data_color_png_bytes(width, height, no_data_color)
     }
 }
 

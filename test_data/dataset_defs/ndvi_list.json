@@ -290,16 +290,36 @@
       "spatialReference": "EPSG:4326",
 
       "time": {
-        "start": "2014-01-01T00:00:00.000Z",
-        "end": "2014-07-01T00:00:00.000Z"
+        "bounds": {
+          "start": "2014-01-01T00:00:00.000Z",
+          "end": "2014-07-01T00:00:00.000Z"
+        },
+        "dimension": {
+          "regular": {
+              "origin": "2014-01-01T00:00:00.000Z",
+              "step": {
+                "granularity": "months",
+                "step": 1
+              }
+            }
+        }
       },
-      "bbox": {
-        "upperLeftCoordinate": [-180.0, 90.0],
-        "lowerRightCoordinate": [180.0, -90.0]
-      },
-      "resolution": {
-        "x": 0.1,
-        "y": 0.1
+      "spatialGrid": {
+        "state": "source",
+        "spatialGrid":{
+          "geoTransform": {
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize":0.1,
+            "yPixelSize":-0.1
+          },
+          "gridBounds": {
+            "min": [0, 0],
+            "max": [1799, 3599]
+          }
+        }
       },
       "bands": [
         {

@@ -2,10 +2,11 @@ use std::sync::Arc;
 
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-    TypedRasterQueryProcessor, WorkflowOperatorPath,
+    OperatorName, QueryProcessor, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor,
+    WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use TypedRasterQueryProcessor::F32 as QueryProcessorOut;
 use async_trait::async_trait;
@@ -13,14 +14,14 @@ use num_traits::AsPrimitive;
 use rayon::ThreadPool;
 
 use crate::error::Error;
-use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::primitives::{
     BandSelection, ClassificationMeasurement, ContinuousMeasurement, DateTime, Measurement,
-    RasterQueryRectangle, SpatialPartition2D,
+    RasterQueryRectangle, SpatialResolution,
 };
 use geoengine_datatypes::raster::{
-    GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey, RasterTile2D,
+    GridBoundingBox2D, GridIdx2D, MapIndexedElementsParallel, RasterDataType, RasterPropertiesKey,
+    RasterTile2D,
 };
 use serde::{Deserialize, Serialize};
 
@@ -117,8 +118,7 @@ impl RasterOperator for Reflectance {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterOut,
             time: in_desc.time,
-            bbox: in_desc.bbox,
-            resolution: in_desc.resolution,
+            spatial_grid: in_desc.spatial_grid,
             bands: RasterBandDescriptors::new(
                 in_desc
                     .bands
@@ -178,6 +178,19 @@ impl InitializedRasterOperator for InitializedReflectance {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(Reflectance {
+            params: self.params,
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 
@@ -296,23 +309,18 @@ fn calculate_esd(timestamp: &DateTime) -> f64 {
 #[async_trait]
 impl<Q> QueryProcessor for ReflectanceProcessor<Q>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<PixelOut>,
-            SpatialBounds = SpatialPartition2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = PixelOut>,
 {
     type Output = RasterTile2D<PixelOut>;
-    type SpatialBounds = SpatialPartition2D;
-    type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
 
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
-        ctx: &'a dyn QueryContext,
-    ) -> Result<BoxStream<'a, Result<Self::Output>>> {
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
         let src = self.source.query(query, ctx).await?;
         let rs = src.and_then(move |tile| self.process_tile_async(tile, ctx.thread_pool().clone()));
         Ok(rs.boxed())
@@ -320,6 +328,23 @@ where
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl<Q> RasterQueryProcessor for ReflectanceProcessor<Q>
+where
+    Q: RasterQueryProcessor<RasterType = PixelOut>,
+{
+    type RasterType = PixelOut;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        self.source.time_query(query, ctx).await
     }
 }
 
@@ -335,7 +360,7 @@ mod tests {
     use geoengine_datatypes::raster::{
         EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterTile2D, TilingSpecification,
     };
-    use std::collections::HashMap;
+    use std::collections::BTreeMap;
 
     async fn process_mock(
         params: ReflectanceParams,
@@ -346,7 +371,6 @@ mod tests {
     ) -> Result<RasterTile2D<f32>> {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -617,7 +641,7 @@ mod tests {
             false,
             Some(Measurement::Classification(ClassificationMeasurement {
                 measurement: "invalid".into(),
-                classes: HashMap::new(),
+                classes: BTreeMap::new(),
             })),
         )
         .await;

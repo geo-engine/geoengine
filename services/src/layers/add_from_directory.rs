@@ -274,7 +274,7 @@ pub async fn add_datasets_from_directory<D: DatasetDb + PermissionDb>(
             serde_json::from_reader(BufReader::new(File::open(entry.path())?))?;
 
         let dataset_id: DatasetId = db
-            .add_dataset(def.properties.clone(), def.meta_data.clone())
+            .add_dataset(def.properties.clone(), def.meta_data.clone(), None)
             .await?
             .id;
 

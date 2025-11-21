@@ -1,70 +1,60 @@
 use super::from_index_fn::FromIndexFnParallel;
-use crate::primitives::{AxisAlignedRectangle, SpatialPartitioned};
 use crate::raster::{
-    EmptyGrid, GridIdx, GridIdx2D, GridIndexAccess, GridOrEmpty, Pixel, RasterTile2D,
-    TileInformation,
+    GeoTransform, GridBounds, GridIdx, GridIdx2D, GridIndexAccess, GridOrEmpty, GridShapeAccess,
+    GridSize, GridSpaceToLinearSpace, Pixel,
 };
 use crate::util::Result;
 
-pub trait InterpolationAlgorithm<P: Pixel>: Send + Sync + Clone + 'static {
+pub trait InterpolationAlgorithm<D, P: Pixel>: Send + Sync + Clone + 'static {
     /// interpolate the given input tile into the output tile
     /// the output must be fully contained in the input tile and have an additional row and column in order
     /// to have all the required neighbor pixels.
     /// Also the output must have a finer resolution than the input
     fn interpolate(
-        input: &RasterTile2D<P>,
-        output_tile_info: &TileInformation,
-    ) -> Result<RasterTile2D<P>>;
+        in_geo_transform: GeoTransform,
+        input: &GridOrEmpty<D, P>,
+        out_geo_transform: GeoTransform,
+        out_bounds: D,
+    ) -> Result<GridOrEmpty<D, P>>;
 }
 
 #[derive(Clone, Debug)]
 pub struct NearestNeighbor {}
 
-impl<P> InterpolationAlgorithm<P> for NearestNeighbor
+impl<D, P> InterpolationAlgorithm<D, P> for NearestNeighbor
 where
+    D: GridShapeAccess<ShapeArray = [usize; 2]>
+        + Clone
+        + GridSize<ShapeArray = [usize; 2]>
+        + GridBounds<IndexArray = [isize; 2]>
+        + PartialEq
+        + Send
+        + Sync
+        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
     P: Pixel,
+    GridOrEmpty<D, P>:
+        GridIndexAccess<Option<P>, GridIdx<<D as GridSpaceToLinearSpace>::IndexArray>>,
 {
-    fn interpolate(input: &RasterTile2D<P>, info_out: &TileInformation) -> Result<RasterTile2D<P>> {
+    fn interpolate(
+        in_geo_transform: GeoTransform,
+        input: &GridOrEmpty<D, P>,
+        out_geo_transform: GeoTransform,
+        out_bounds: D,
+    ) -> Result<GridOrEmpty<D, P>> {
         if input.is_empty() {
-            return Ok(RasterTile2D::new_with_tile_info(
-                input.time,
-                *info_out,
-                input.band,
-                EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-                input.cache_hint.clone_with_current_datetime(),
-            ));
+            return Ok(GridOrEmpty::new_empty_shape(out_bounds));
         }
 
-        let info_in = input.tile_information();
-        let in_upper_left = info_in.spatial_partition().upper_left();
-        let in_x_size = info_in.global_geo_transform.x_pixel_size();
-        let in_y_size = info_in.global_geo_transform.y_pixel_size();
-
-        let out_upper_left = info_out.spatial_partition().upper_left();
-        let out_x_size = info_out.global_geo_transform.x_pixel_size();
-        let out_y_size = info_out.global_geo_transform.y_pixel_size();
-
         let map_fn = |gidx: GridIdx2D| {
-            let GridIdx([y, x]) = gidx;
-            let out_y_coord = out_upper_left.y + y as f64 * out_y_size;
-            let out_x_coord = out_upper_left.x + x as f64 * out_x_size;
-            let nearest_in_y_idx = ((out_y_coord - in_upper_left.y) / in_y_size).round() as isize;
-            let nearest_in_x_idx = ((out_x_coord - in_upper_left.x) / in_x_size).round() as isize;
-            input.get_at_grid_index_unchecked([nearest_in_y_idx, nearest_in_x_idx])
+            let coordinate = out_geo_transform.grid_idx_to_pixel_center_coordinate_2d(gidx); // use center coordinate similar to ArgGIS
+            let pixel_in_input = in_geo_transform.coordinate_to_grid_idx_2d(coordinate);
+
+            input.get_at_grid_index_unchecked(pixel_in_input)
         };
 
-        let out_data = GridOrEmpty::from_index_fn_parallel(&info_out.tile_size_in_pixels, map_fn); // TODO: this will check for empty tiles. Change to MaskedGrid::from.. to avoid this.
+        let out_data = GridOrEmpty::from_index_fn_parallel(&out_bounds, map_fn); // TODO: this will check for empty tiles. Change to MaskedGrid::from.. to avoid this.
 
-        let out_tile = RasterTile2D::new(
-            input.time,
-            info_out.global_tile_position,
-            input.band,
-            info_out.global_geo_transform,
-            out_data,
-            input.cache_hint.clone_with_current_datetime(),
-        );
-
-        Ok(out_tile)
+        Ok(out_data)
     }
 }
 
@@ -99,57 +89,59 @@ impl Bilinear {
     }
 }
 
-impl<P> InterpolationAlgorithm<P> for Bilinear
+impl<P, D> InterpolationAlgorithm<D, P> for Bilinear
 where
+    D: GridShapeAccess<ShapeArray = [usize; 2]>
+        + Clone
+        + GridSize<ShapeArray = [usize; 2]>
+        + GridBounds<IndexArray = [isize; 2]>
+        + PartialEq
+        + Send
+        + Sync
+        + GridSpaceToLinearSpace<IndexArray = [isize; 2]>,
     P: Pixel,
+    GridOrEmpty<D, P>:
+        GridIndexAccess<Option<P>, GridIdx<<D as GridSpaceToLinearSpace>::IndexArray>>,
 {
-    fn interpolate(input: &RasterTile2D<P>, info_out: &TileInformation) -> Result<RasterTile2D<P>> {
+    fn interpolate(
+        in_geo_transform: GeoTransform,
+        input: &GridOrEmpty<D, P>,
+        out_geo_transform: GeoTransform,
+        out_bounds: D,
+    ) -> Result<GridOrEmpty<D, P>> {
         if input.is_empty() {
-            return Ok(RasterTile2D::new_with_tile_info(
-                input.time,
-                *info_out,
-                input.band,
-                EmptyGrid::new(info_out.tile_size_in_pixels).into(),
-                input.cache_hint.clone_with_current_datetime(),
-            ));
+            return Ok(GridOrEmpty::new_empty_shape(out_bounds));
         }
 
-        let info_in = input.tile_information();
-        let in_upper_left = info_in.spatial_partition().upper_left();
-        let in_x_size = info_in.global_geo_transform.x_pixel_size();
-        let in_y_size = info_in.global_geo_transform.y_pixel_size();
+        let map_fn = |out_g_idx: GridIdx2D| {
+            let out_coord = out_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(out_g_idx);
 
-        let out_upper_left = info_out.spatial_partition().upper_left();
-        let out_x_size = info_out.global_geo_transform.x_pixel_size();
-        let out_y_size = info_out.global_geo_transform.y_pixel_size();
+            let in_g_idx = in_geo_transform.coordinate_to_grid_idx_2d(out_coord);
 
-        let map_fn = |g_idx: GridIdx2D| {
-            let GridIdx([y_idx, x_idx]) = g_idx;
+            let in_a_idx = in_g_idx;
+            let in_b_idx = in_a_idx + [1, 0];
+            let in_c_idx = in_a_idx + [0, 1];
+            let in_d_idx = in_a_idx + [1, 1];
 
-            let out_y = out_upper_left.y + y_idx as f64 * out_y_size;
-            let in_y_idx = ((out_y - in_upper_left.y) / in_y_size).floor() as isize;
+            let in_a_coord = in_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(in_a_idx);
+            let a_y = in_a_coord.y;
+            let b_y = a_y + in_geo_transform.y_pixel_size();
 
-            let a_y = in_upper_left.y + in_y_size * in_y_idx as f64;
-            let b_y = a_y + in_y_size;
+            let a_x = in_a_coord.x;
+            let c_x = a_x + in_geo_transform.x_pixel_size();
 
-            let out_x = out_upper_left.x + x_idx as f64 * out_x_size;
-            let in_x_idx = ((out_x - in_upper_left.x) / in_x_size).floor() as isize;
+            let a_v = input.get_at_grid_index(in_a_idx).unwrap_or(None);
 
-            let a_x = in_upper_left.x + in_x_size * in_x_idx as f64;
-            let c_x = a_x + in_x_size;
+            let b_v = input.get_at_grid_index(in_b_idx).unwrap_or(None);
 
-            let a_v = input.get_at_grid_index_unchecked([in_y_idx, in_x_idx]);
+            let c_v = input.get_at_grid_index(in_c_idx).unwrap_or(None);
 
-            let b_v = input.get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx]);
-
-            let c_v = input.get_at_grid_index_unchecked([in_y_idx, in_x_idx + 1]);
-
-            let d_v = input.get_at_grid_index_unchecked([in_y_idx + 1, in_x_idx + 1]);
+            let d_v = input.get_at_grid_index(in_d_idx).unwrap_or(None);
 
             let value = match (a_v, b_v, c_v, d_v) {
                 (Some(a), Some(b), Some(c), Some(d)) => Some(Self::bilinear_interpolation(
-                    out_x,
-                    out_y,
+                    out_coord.x,
+                    out_coord.y,
                     a_x,
                     a_y,
                     a.as_(),
@@ -165,18 +157,9 @@ where
             value.map(|v| P::from_(v))
         };
 
-        let out_data = GridOrEmpty::from_index_fn_parallel(&info_out.tile_size_in_pixels, map_fn); // TODO: this will check for empty tiles. Change to MaskedGrid::from.. to avoid this.
+        let out_data = GridOrEmpty::from_index_fn_parallel(&out_bounds, map_fn);
 
-        let out_tile = RasterTile2D::new(
-            input.time,
-            info_out.global_tile_position,
-            input.band,
-            info_out.global_geo_transform,
-            out_data,
-            input.cache_hint.clone_with_current_datetime(),
-        );
-
-        Ok(out_tile)
+        Ok(out_data)
     }
 }
 
@@ -187,7 +170,10 @@ mod tests {
     use super::*;
     use crate::{
         primitives::CacheHint,
-        raster::{GeoTransform, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D, TileInformation},
+        raster::{
+            GeoTransform, GeoTransformAccess, Grid2D, GridOrEmpty, MaskedGrid, RasterTile2D,
+            TileInformation,
+        },
     };
 
     #[test]
@@ -206,20 +192,33 @@ mod tests {
             CacheHint::default(),
         );
 
+        let input_geo_transform = input.geo_transform();
+        let input_grid = input.into_inner_positioned_grid();
+
         let output_info = TileInformation {
             global_tile_position: [0, 0].into(),
-            tile_size_in_pixels: [4, 4].into(),
+            tile_size_in_pixels: [3, 3].into(),
             global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
         };
+
+        let output_geo_transform = output_info.global_geo_transform;
+        let output_bounds = output_info.global_pixel_bounds();
 
         let pool = ThreadPoolBuilder::new().num_threads(0).build().unwrap();
 
         let output = pool
-            .install(|| NearestNeighbor::interpolate(&input, &output_info))
+            .install(|| {
+                NearestNeighbor::interpolate(
+                    input_geo_transform,
+                    &input_grid,
+                    output_geo_transform,
+                    output_bounds,
+                )
+            })
             .unwrap();
 
         assert!(!output.is_empty());
-        let output_data = output.grid_array.as_masked_grid().unwrap();
+        let output_data = output.as_masked_grid().unwrap();
 
         assert_eq!(
             output_data
@@ -227,21 +226,14 @@ mod tests {
                 .collect::<Vec<_>>(),
             vec![
                 Some(1),
+                Some(1),
                 Some(2),
+                Some(1),
+                Some(1),
                 Some(2),
-                Some(3),
                 Some(4),
-                Some(5),
-                Some(5),
-                Some(6),
                 Some(4),
-                Some(5),
-                Some(5),
-                Some(6),
-                Some(7),
-                Some(8),
-                Some(8),
-                Some(9)
+                Some(5)
             ]
         );
     }
@@ -285,20 +277,33 @@ mod tests {
             CacheHint::default(),
         );
 
+        let input_geo_transform = input.geo_transform();
+        let input_grid = input.into_inner_positioned_grid();
+
         let output_info = TileInformation {
             global_tile_position: [0, 0].into(),
             tile_size_in_pixels: [4, 4].into(),
             global_geo_transform: GeoTransform::new((0.0, 2.0).into(), 0.5, -0.5),
         };
 
+        let output_geo_transform = output_info.global_geo_transform;
+        let output_bounds = output_info.global_pixel_bounds();
+
         let pool = ThreadPoolBuilder::new().num_threads(0).build().unwrap();
 
         let output = pool
-            .install(|| Bilinear::interpolate(&input, &output_info))
+            .install(|| {
+                Bilinear::interpolate(
+                    input_geo_transform,
+                    &input_grid,
+                    output_geo_transform,
+                    output_bounds,
+                )
+            })
             .unwrap();
 
         assert!(!output.is_empty());
-        let output_data = output.grid_array.as_masked_grid().unwrap();
+        let output_data = output.as_masked_grid().unwrap();
 
         assert_eq!(
             output_data

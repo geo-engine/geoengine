@@ -24,7 +24,7 @@ impl fmt::Display for BoundingBox2D {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "(ll: {}, ur: {})",
+            "BoundingBox2D: (lower_left: {}, upper_right: {})",
             self.lower_left_coordinate, self.upper_right_coordinate
         )
     }

@@ -1,17 +1,19 @@
 use crate::adapters::StreamStatisticsAdapter;
 use crate::engine::{
     CanonicOperatorName, CreateSpan, InitializedRasterOperator, InitializedVectorOperator,
-    QueryContext, QueryProcessor, RasterResultDescriptor, ResultDescriptor,
-    TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorResultDescriptor,
-    WorkflowOperatorPath,
+    QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    ResultDescriptor, TypedRasterQueryProcessor, TypedVectorQueryProcessor, VectorOperator,
+    VectorResultDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, QueryAttributeSelection, QueryRectangle,
+    QueryAttributeSelection, QueryRectangle, SpatialResolution, TimeInterval,
 };
+use geoengine_datatypes::raster::RasterTile2D;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use tracing::{Level, span};
 
@@ -157,6 +159,13 @@ impl InitializedRasterOperator for InitializedOperatorWrapper<Box<dyn Initialize
     fn path(&self) -> WorkflowOperatorPath {
         self.source.path()
     }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.source.optimize(resolution)
+    }
 }
 
 impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn InitializedVectorOperator>> {
@@ -195,6 +204,13 @@ impl InitializedVectorOperator for InitializedOperatorWrapper<Box<dyn Initialize
 
     fn path(&self) -> WorkflowOperatorPath {
         self.source.path()
+    }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        self.source.optimize(resolution)
     }
 }
 
@@ -241,7 +257,7 @@ where
 impl<Q, T, S, A, R> QueryProcessor for QueryProcessorWrapper<Q, T>
 where
     Q: QueryProcessor<Output = T, SpatialBounds = S, Selection = A, ResultDescription = R>,
-    S: AxisAlignedRectangle + Send + Sync + 'static,
+    S: std::fmt::Display + Send + Sync + 'static + Clone + Copy,
     A: QueryAttributeSelection + 'static,
     R: ResultDescriptor<QueryRectangleSpatialBounds = S, QueryRectangleAttributeSelection = A>
         + 'static,
@@ -289,18 +305,15 @@ where
 
         let _enter = span.enter();
 
+        let spbox = query.spatial_bounds();
+        let time = query.time_interval();
         tracing::trace!(
             event = %"query_start",
             path = %self.path,
-            bbox = %format!("[{},{},{},{}]",
-                query.spatial_bounds.lower_left().x,
-                query.spatial_bounds.lower_left().y,
-                query.spatial_bounds.upper_right().x,
-                query.spatial_bounds.upper_right().y
-            ),
+            bbox = %format!("{}", spbox),
             time = %format!("[{},{}]",
-                query.time_interval.start().inner(),
-                query.time_interval.end().inner()
+                time.start().inner(),
+                time.end().inner()
             )
         );
 
@@ -329,5 +342,21 @@ where
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
         self.processor.result_descriptor()
+    }
+}
+
+#[async_trait]
+impl<Q> RasterQueryProcessor for QueryProcessorWrapper<Q, RasterTile2D<Q::RasterType>>
+where
+    Q: RasterQueryProcessor + QueryProcessor<Output = RasterTile2D<Q::RasterType>>,
+{
+    type RasterType = Q::RasterType;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+        self.processor.time_query(query, ctx).await
     }
 }

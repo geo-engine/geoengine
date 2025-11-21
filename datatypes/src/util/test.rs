@@ -1,4 +1,9 @@
-use crate::raster::{EmptyGrid, Grid, GridOrEmpty, GridSize, MaskedGrid};
+use float_cmp::approx_eq;
+
+use crate::raster::{
+    EmptyGrid, GeoTransform, Grid, GridIndexAccess, GridOrEmpty, GridSize, MaskedGrid, Pixel,
+    RasterTile2D, grid_idx_iter_2d,
+};
 use std::panic;
 
 pub trait TestDefault {
@@ -75,6 +80,121 @@ pub fn save_test_bytes(bytes: &[u8], filename: &str) {
         .expect("it should be possible to create this file for testing")
         .write_all(bytes)
         .expect("it should be possible to write this file for testing");
+}
+
+/// Method that compares two lists of tiles and panics with a message why there is a difference.
+///
+/// # Panics
+/// If there is a difference between two tiles or the length of the lists
+pub fn assert_eq_two_list_of_tiles_u8(
+    list_a: &[RasterTile2D<u8>],
+    list_b: &[RasterTile2D<u8>],
+    compare_cache_hint: bool,
+) {
+    assert_eq_two_list_of_tiles::<u8>(list_a, list_b, compare_cache_hint);
+}
+
+/// Method that compares two lists of tiles and panics with a message why there is a difference.
+///
+/// # Panics
+/// If there is a difference between two tiles or the length of the lists
+pub fn assert_eq_two_list_of_tiles<P: Pixel>(
+    list_a: &[RasterTile2D<P>],
+    list_b: &[RasterTile2D<P>],
+    compare_cache_hint: bool,
+) {
+    assert_eq!(
+        list_a.len(),
+        list_b.len(),
+        "len() of input_a: {}, len of input_b: {}",
+        list_a.len(),
+        list_b.len()
+    );
+
+    list_a
+        .iter()
+        .zip(list_b)
+        .enumerate()
+        .for_each(|(i, (a, b))| {
+            assert_eq!(
+                a.time, b.time,
+                "time of tile {} input_a: {}, input_b: {}",
+                i, a.time, b.time
+            );
+            assert_eq!(
+                a.band, b.band,
+                "band of tile {} input_a: {}, input_b: {}",
+                i, a.band, b.band
+            );
+            assert_eq!(
+                a.tile_position, b.tile_position,
+                "tile position of tile {} input_a: {:?}, input_b: {:?}",
+                i, a.tile_position, b.tile_position
+            );
+
+            let spatial_grid_a = a.global_pixel_spatial_grid_definition();
+            let spatial_grid_b = b.global_pixel_spatial_grid_definition();
+            assert_eq!(
+                spatial_grid_a.grid_bounds(),
+                spatial_grid_b.grid_bounds(),
+                "grid bounds of tile {} input_a: {:?}, input_b {:?}",
+                i,
+                spatial_grid_a.grid_bounds(),
+                spatial_grid_b.grid_bounds()
+            );
+            assert!(
+                approx_eq!(
+                    GeoTransform,
+                    spatial_grid_a.geo_transform(),
+                    spatial_grid_b.geo_transform()
+                ),
+                "geo transform of tile {} input_a: {:?}, input_b: {:?}",
+                i,
+                spatial_grid_a.geo_transform(),
+                spatial_grid_b.geo_transform()
+            );
+            assert_eq!(
+                a.grid_array.is_empty(),
+                b.grid_array.is_empty(),
+                "grid shape of tile {} input_a is_empty: {:?}, input_b is_empty: {:?}",
+                i,
+                a.grid_array.is_empty(),
+                b.grid_array.is_empty(),
+            );
+            if !a.grid_array.is_empty() {
+                let mat_a = a.grid_array.clone().into_materialized_masked_grid();
+                let mat_b = b.grid_array.clone().into_materialized_masked_grid();
+
+                assert_eq!(
+                    mat_a.inner_grid.data.len(),
+                    mat_b.inner_grid.data.len(),
+                    "grid data len of tile {} input_a: {:?}, input_b: {:?}",
+                    i,
+                    mat_a.inner_grid.data.len(),
+                    mat_b.inner_grid.data.len(),
+                );
+
+                for (pi, idx) in grid_idx_iter_2d(&mat_a).enumerate() {
+                    let a_v = mat_a
+                        .get_at_grid_index(idx)
+                        .expect("tile a must contain idx inside tile bounds");
+                    let b_v = mat_b
+                        .get_at_grid_index(idx)
+                        .expect("tile b must contain idx inside tile bounds");
+                    assert_eq!(
+                        a_v, b_v,
+                        "tile {i} pixel {pi} at {idx:?} input_a: {a_v:?}, input_b: {b_v:?}",
+                    );
+                }
+            }
+            if compare_cache_hint {
+                assert_eq!(
+                    a.cache_hint, b.cache_hint,
+                    "cache hint of tile {} input_a: {:?}, input_b: {:?}",
+                    i, a.cache_hint, b.cache_hint
+                );
+            }
+        });
 }
 
 #[cfg(test)]

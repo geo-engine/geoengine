@@ -2,19 +2,27 @@ use crate::adapters::{
     FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
 };
 use crate::engine::{
-    CanonicOperatorName, InitializedRasterOperator, OperatorData, OperatorName, RasterOperator,
-    RasterQueryProcessor, RasterResultDescriptor, SourceOperator, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator, OperatorData,
+    OperatorName, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+    SingleRasterSource, SourceOperator, TypedRasterQueryProcessor, WorkflowOperatorPath,
+};
+use crate::optimization::{OptimizableOperator, OptimizationError};
+use crate::processing::{
+    Downsampling, DownsamplingMethod, DownsamplingParams, DownsamplingResolution,
 };
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{CacheExpiration, TimeInstance};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartitioned};
-use geoengine_datatypes::raster::{
-    GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D, TilingSpecification,
+use geoengine_datatypes::primitives::{
+    BandSelection, CacheExpiration, RasterQueryRectangle, SpatialResolution, TimeFilledItem,
+    TimeInstance, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
 };
+use geoengine_datatypes::raster::{
+    GridBoundingBox2D, GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel,
+    RasterTile2D, TilingSpecification,
+};
+use itertools::Itertools;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
@@ -52,11 +60,9 @@ where
         data: Vec<RasterTile2D<T>>,
         tiling_specification: TilingSpecification,
     ) -> Self {
-        Self {
-            result_descriptor,
-            data,
-            tiling_specification,
-        }
+        // use expect here since the mock source should not be used in production and this provides valuable debug information
+        Self::_new(result_descriptor, data, tiling_specification)
+            .expect("can initialize from inputs")
     }
 
     fn _new(
@@ -100,48 +106,59 @@ where
 }
 
 #[async_trait]
-impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
+impl<T> QueryProcessor for MockRasterSourceProcessor<T>
 where
     T: Pixel,
 {
-    type RasterType = T;
-    async fn raster_query<'a>(
+    type Output = RasterTile2D<T>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
+
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         _ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<futures::stream::BoxStream<crate::util::Result<RasterTile2D<Self::RasterType>>>>
-    {
+    ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
         let mut known_time_start: Option<TimeInstance> = None;
         let mut known_time_end: Option<TimeInstance> = None;
+        let qt = query.time_interval();
+        let qg = query.spatial_bounds();
         let parts: Vec<RasterTile2D<T>> = self
             .data
             .iter()
             .inspect(|m| {
                 let time_interval = m.time;
 
-                if time_interval.start() <= query.time_interval.start() {
-                    let t = if time_interval.end() > query.time_interval.start() {
-                        time_interval.start()
-                    } else {
-                        time_interval.end()
-                    };
-                    known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
+                if time_interval.contains(&qt) {
+                    let t1 = time_interval.start();
+                    let t2 = time_interval.end();
+                    known_time_start = Some(t1);
+                    known_time_end = Some(t2);
+                    return;
                 }
 
-                if time_interval.end() >= query.time_interval.end() {
-                    let t = if time_interval.start() < query.time_interval.end() {
-                        time_interval.end()
-                    } else {
-                        time_interval.start()
-                    };
-                    known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+                if time_interval.end() <= qt.start() {
+                    let t1 = time_interval.end();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                } else if time_interval.start() <= qt.start() {
+                    let t1 = time_interval.start();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                }
+
+                if time_interval.start() >= qt.end() {
+                    let t2 = time_interval.start();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                } else if time_interval.end() >= qt.end() {
+                    let t2 = time_interval.end();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                 }
             })
             .filter(move |t| {
-                t.time.intersects(&query.time_interval)
+                t.time.intersects(&qt)
                     && t.tile_information()
-                        .spatial_partition()
-                        .intersects(&query.spatial_bounds)
+                        .global_pixel_bounds()
+                        .intersects(&query.spatial_bounds())
             })
             .cloned()
             .collect();
@@ -152,37 +169,63 @@ where
 
         let inner_stream = stream::iter(parts.into_iter().map(Result::Ok));
 
-        // TODO: evaluate if there are GeoTransforms with positive y-axis
-        // The "Pixel-space" starts at the top-left corner of a `GeoTransform`.
-        // Therefore, the pixel size on the x-axis is always increasing
-        let spatial_resolution = query.spatial_resolution;
+        let tiling_grid_spec = self
+            .result_descriptor
+            .tiling_grid_definition(self.tiling_specification);
 
-        let pixel_size_x = spatial_resolution.x;
-        debug_assert!(pixel_size_x.is_sign_positive());
-        // and the pixel size on  the y-axis is always decreasing
-        let pixel_size_y = -spatial_resolution.y;
-        debug_assert!(pixel_size_y.is_sign_negative());
-
-        let tiling_strategy = self
-            .tiling_specification
-            .strategy(pixel_size_x, pixel_size_y);
+        let tiling_strategy = tiling_grid_spec.generate_data_tiling_strategy();
 
         // use SparseTilesFillAdapter to fill all the gaps
         Ok(SparseTilesFillAdapter::new(
             inner_stream,
-            tiling_strategy.tile_grid_box(query.spatial_partition()),
+            tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(qg),
             self.result_descriptor.bands.count(),
             tiling_strategy.geo_transform,
             tiling_strategy.tile_size_in_pixels,
             FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
-            query.time_interval,
+            qt,
             FillerTimeBounds::new(known_time_before, known_time_after),
         )
         .boxed())
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl<T> RasterQueryProcessor for MockRasterSourceProcessor<T>
+where
+    T: Pixel,
+{
+    type RasterType = T;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        let unique_times = self
+            .data
+            .iter()
+            .map(|tile| tile.time)
+            .unique_by(|t| *t)
+            .filter(move |t| t.intersects(&query))
+            .map(Ok);
+
+        let times = match self.result_descriptor.time.dimension {
+            geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                let times = unique_times.try_time_irregular_range_fill(query.time());
+                stream::iter(times).boxed()
+            }
+            geoengine_datatypes::primitives::TimeDimension::Regular(regular_dim) => {
+                let times = unique_times.try_time_regular_range_fill(regular_dim, query.time());
+                stream::iter(times).boxed()
+            }
+        };
+
+        Ok(times)
     }
 }
 
@@ -303,7 +346,8 @@ pub struct InitializedMockRasterSource<T: Pixel> {
 
 impl<T: Pixel> InitializedRasterOperator for InitializedMockRasterSource<T>
 where
-    TypedRasterQueryProcessor: From<std::boxed::Box<dyn RasterQueryProcessor<RasterType = T>>>,
+    TypedRasterQueryProcessor: From<BoxRasterQueryProcessor<T>>,
+    SourceOperator<MockRasterSourceParams<T>>: RasterOperator,
 {
     fn query_processor(&self) -> Result<TypedRasterQueryProcessor> {
         let processor = TypedRasterQueryProcessor::from(
@@ -333,23 +377,51 @@ where
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let source = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: self.data.clone(),
+                result_descriptor: self.result_descriptor.clone(),
+            },
+        }
+        .boxed();
+
+        if target_resolution > self.result_descriptor.spatial_grid.spatial_resolution() {
+            return Ok(Downsampling {
+                params: DownsamplingParams {
+                    sampling_method: DownsamplingMethod::NearestNeighbor,
+                    output_resolution: DownsamplingResolution::Resolution(target_resolution),
+                    output_origin_reference: None,
+                },
+                sources: SingleRasterSource { raster: source },
+            }
+            .boxed());
+        }
+
+        Ok(source)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, RasterBandDescriptors,
+        MockExecutionContext, QueryProcessor, RasterBandDescriptors, SpatialGridDescriptor,
+        TimeDescriptor,
     };
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-    use geoengine_datatypes::primitives::{SpatialPartition2D, SpatialResolution};
-    use geoengine_datatypes::raster::{Grid, MaskedGrid, RasterDataType, RasterProperties};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval, TimeStep};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, MaskedGrid, RasterDataType,
+        RasterProperties, TileInformation,
+    };
+    use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::{
-        primitives::TimeInterval,
-        raster::{Grid2D, TileInformation},
-        spatial_reference::SpatialReference,
-    };
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -376,9 +448,11 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., 0.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 2).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -431,9 +505,24 @@ mod tests {
                 "resultDescriptor": {
                     "dataType": "U8",
                     "spatialReference": "EPSG:4326",
-                    "time": null,
-                    "bbox": null,
-                    "resolution": null,
+                    "time": {"bounds": {"start": -8_334_601_228_800_000_i64, "end": 8_210_266_876_799_999_i64}, "dimension": "irregular"} ,
+                        "spatialGrid": {
+                            "spatialGrid": {
+                            "geoTransform": {
+                                "originCoordinate": {
+                                    "x": 0.0,
+                                    "y": 0.0
+                                },
+                                "xPixelSize": 1.0,
+                                "yPixelSize": -1.0
+                            },
+                            "gridBounds": {
+                                "max": [2, 1],
+                                "min": [0, 0]
+                            }
+                        },
+                        "state": "source",
+                    },
                     "bands": [
                         {
                             "name": "band",
@@ -451,7 +540,6 @@ mod tests {
 
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -522,18 +610,22 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        Some(TimeInterval::new_unchecked(1, 3)),
+                        TimeStep::millis(1).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-        );
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let query_processor = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -544,16 +636,15 @@ mod tests {
             .get_u8()
             .unwrap();
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = execution_context.mock_query_context_test_default();
 
         // QUERY 1
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(-3, 7),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 4),
+            BandSelection::first(),
+        );
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
 
@@ -575,12 +666,11 @@ mod tests {
 
         // QUERY 2
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(2, 4),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(2, 4),
+            BandSelection::first(),
+        );
 
         let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
 

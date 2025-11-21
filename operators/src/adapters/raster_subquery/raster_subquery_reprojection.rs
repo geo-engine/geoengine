@@ -7,39 +7,44 @@ use async_trait::async_trait;
 use futures::future::BoxFuture;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt};
 use geoengine_datatypes::operations::reproject::Reproject;
-use geoengine_datatypes::primitives::CacheHint;
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialPartition2D, SpatialPartitioned,
+    AxisAlignedRectangle, BoundingBox2D, CacheHint, RasterQueryRectangle, SpatialPartition2D,
+    SpatialPartitioned,
 };
 use geoengine_datatypes::raster::{
-    Grid2D, GridIndexAccess, GridSize, UpdateIndexedElementsParallel,
+    Grid2D, GridIndexAccess, GridIntersection, GridSize, SpatialGridDefinition,
+    UpdateIndexedElementsParallel,
 };
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector},
-    primitives::{SpatialResolution, TimeInterval},
+    primitives::TimeInterval,
     raster::EmptyGrid,
     spatial_reference::SpatialReference,
 };
 use geoengine_datatypes::{
-    primitives::{Coordinate2D, TimeInstance},
+    primitives::Coordinate2D,
     raster::{CoordinatePixelAccess, GridIdx2D, Pixel, RasterTile2D, TileInformation},
 };
 use num;
 use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
-use rayon::slice::ParallelSliceMut;
+use rayon::slice::{ParallelSlice, ParallelSliceMut};
 use tracing::debug;
 
 use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
+
+#[derive(Debug, Clone, Copy)]
+pub struct TileReprojectionSubqueryGridInfo {
+    pub in_spatial_grid: SpatialGridDefinition,
+    pub out_spatial_grid: SpatialGridDefinition,
+}
 
 #[derive(Debug)]
 pub struct TileReprojectionSubQuery<T, F> {
     pub in_srs: SpatialReference,
     pub out_srs: SpatialReference,
     pub fold_fn: F,
-    pub in_spatial_res: SpatialResolution,
-    pub valid_bounds_in: SpatialPartition2D,
-    pub valid_bounds_out: SpatialPartition2D,
+    pub state: TileReprojectionSubqueryGridInfo,
     pub _phantom_data: PhantomData<T>,
 }
 
@@ -66,13 +71,11 @@ where
         query_rect: RasterQueryRectangle,
         pool: &Arc<ThreadPool>,
     ) -> Self::TileAccuFuture {
-        // println!("new_fold_accu {:?}", &tile_info.global_tile_position);
-
         build_accu(
             &query_rect,
             pool.clone(),
             tile_info,
-            self.valid_bounds_out,
+            self.state,
             self.out_srs,
             self.in_srs,
         )
@@ -83,25 +86,42 @@ where
         &self,
         tile_info: TileInformation,
         query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        // this is the spatial partition we are interested in
-        let valid_spatial_bounds = self
-            .valid_bounds_out
-            .intersection(&tile_info.spatial_partition())
-            .and_then(|vo| vo.intersection(&query_rect.spatial_partition()));
+        // this are the pixels we are interested in
+        debug_assert_eq!(
+            tile_info.global_geo_transform,
+            self.state.out_spatial_grid.geo_transform()
+        );
+
+        let valid_pixel_bounds = self
+            .state
+            .out_spatial_grid
+            .grid_bounds()
+            .intersection(&tile_info.global_pixel_bounds())
+            .and_then(|b| b.intersection(&query_rect.spatial_bounds()));
+
+        let valid_spatial_bounds = valid_pixel_bounds.map(|pb| {
+            self.state
+                .out_spatial_grid
+                .geo_transform()
+                .grid_to_spatial_bounds(&pb)
+        });
+
         if let Some(bounds) = valid_spatial_bounds {
             let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
             let projected_bounds = bounds.reproject(&proj);
 
             match projected_bounds {
-                Ok(pb) => Ok(Some(RasterQueryRectangle {
-                    spatial_bounds: pb,
-                    time_interval: TimeInterval::new_instant(start_time)?,
-                    spatial_resolution: self.in_spatial_res,
-                    attributes: band_idx.into(),
-                })),
+                Ok(pb) => Ok(Some(RasterQueryRectangle::new(
+                    self.state
+                        .in_spatial_grid
+                        .geo_transform()
+                        .spatial_to_grid_bounds(&pb),
+                    time,
+                    band_idx.into(),
+                ))),
                 // In some strange cases the reprojection can return an empty box.
                 // We ignore it since it contains no pixels.
                 Err(geoengine_datatypes::error::Error::OutputBboxEmpty { bbox: _ }) => Ok(None),
@@ -122,11 +142,11 @@ fn build_accu<T: Pixel>(
     query_rect: &RasterQueryRectangle,
     pool: Arc<ThreadPool>,
     tile_info: TileInformation,
-    valid_bounds_out: SpatialPartition2D,
+    state: TileReprojectionSubqueryGridInfo,
     out_srs: SpatialReference,
     in_srs: SpatialReference,
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> + use<T> {
-    let time_interval = query_rect.time_interval;
+    let time_interval = query_rect.time_interval();
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels);
 
@@ -138,7 +158,7 @@ fn build_accu<T: Pixel>(
             tile_info,
             out_srs,
             in_srs,
-            &valid_bounds_out,
+            &state.out_spatial_grid.spatial_partition(),
         )?;
 
         Ok(TileWithProjectionCoordinates {
@@ -181,10 +201,12 @@ fn projected_coordinate_grid_parallel(
             &tile_info.global_tile_position
         );
 
-        let mut coord_grid: Grid2D<Option<Coordinate2D>> =
+        let mut in_coord_grid: Grid2D<Option<Coordinate2D>> =
             Grid2D::new_filled(tile_info.tile_size_in_pixels, None);
 
-        let tile_geo_transform = tile_info.tile_geo_transform();
+        let out_coords = tile_info
+            .spatial_grid_definition()
+            .generate_coord_grid_pixel_center();
 
         let parallelism = pool.current_num_threads();
         let par_chunk_split =
@@ -198,65 +220,53 @@ fn projected_coordinate_grid_parallel(
             par_chunk_size
         );
 
-        let axis_size_x = tile_info.tile_size_in_pixels.axis_size_x();
-
-        let res = coord_grid
+        in_coord_grid
             .data
             .par_chunks_mut(par_chunk_size)
-            .enumerate()
-            .try_for_each(|(chunk_idx, opt_coord_slice)| {
-                let chunk_start_y = chunk_idx * par_chunk_split;
-                let chunk_len = opt_coord_slice.len();
-                let chunk_end_y = chunk_start_y + (chunk_len / axis_size_x) - 1;
-                let out_coords = (0..chunk_len)
-                    .map(|lin_idx| {
-                        let x_idx = lin_idx % axis_size_x;
-                        let y_idx = lin_idx / axis_size_x + chunk_start_y;
-                        let grid_idx = GridIdx2D::from([y_idx as isize, x_idx as isize]);
-                        tile_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(grid_idx)
-                    })
-                    .collect::<Vec<Coordinate2D>>();
+            .zip(out_coords.data.par_chunks(par_chunk_size))
+            .try_for_each(|(in_coord_slice, out_coord_slice)| {
+                debug_assert_eq!(
+                    in_coord_slice.len(),
+                    out_coord_slice.len(),
+                    "slices must be equal"
+                );
+                let chunk_bounds = BoundingBox2D::from_coord_ref_iter(out_coord_slice.iter());
 
-                // the output bounds start at the top left corner of the chunk.
-                let ul_grid_idx = GridIdx2D::from([chunk_start_y as isize, 0_isize]);
-                let ul_coord =
-                    tile_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(ul_grid_idx);
+                if chunk_bounds.is_none() {
+                    debug!("reprojection early exit");
+                    return Ok(());
+                }
 
-                // the output bounds must cover the whole chunk pixels.
-                let lr_grid_idx =
-                    GridIdx2D::from([chunk_end_y as isize, (axis_size_x - 1) as isize]);
-                let lr_coord =
-                    tile_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(lr_grid_idx + 1);
-
-                let chunk_bounds = SpatialPartition2D::new_unchecked(ul_coord, lr_coord);
+                let chunk_bounds = chunk_bounds.expect("checked above");
+                let valid_out_area = valid_out_area.as_bbox();
 
                 let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
 
-                if valid_out_area.contains(&chunk_bounds) {
+                if valid_out_area.contains_bbox(&chunk_bounds) {
                     debug!("reproject whole tile chunk");
-                    let in_coords = proj.project_coordinates(&out_coords)?;
-                    opt_coord_slice
+                    let in_coords = proj.project_coordinates(out_coord_slice)?;
+                    in_coord_slice
                         .iter_mut()
-                        .zip(in_coords)
-                        .for_each(|(opt_coord, in_coord)| *opt_coord = Some(in_coord));
-                } else if valid_out_area.intersects(&chunk_bounds) {
+                        .zip(in_coords.into_iter())
+                        .for_each(|(a, b)| *a = Some(b));
+                } else if valid_out_area.intersects_bbox(&chunk_bounds) {
                     debug!("reproject part of tile chunk");
-                    opt_coord_slice.iter_mut().zip(out_coords).for_each(
-                        |(opt_coord, idx_coord)| {
-                            let in_coord = if valid_out_area.contains_coordinate(&idx_coord) {
-                                proj.project_coordinate(idx_coord).ok()
+                    in_coord_slice
+                        .iter_mut()
+                        .zip(out_coord_slice.iter())
+                        .for_each(|(in_coord, out_coord)| {
+                            *in_coord = if valid_out_area.contains_coordinate(out_coord) {
+                                proj.project_coordinate(*out_coord).ok()
                             } else {
                                 None
                             };
-                            *opt_coord = in_coord;
-                        },
-                    );
+                        });
                 } else {
-                    debug!("reproject empty tile chunk");
+                    // do nothing. Should be unreachable
                 }
                 Result::<(), crate::error::Error>::Ok(())
-            });
-        res.map(|()| coord_grid)
+            })?;
+        Ok(in_coord_grid)
     });
     debug!(
         "projected_coordinate_grid_parallel took {} (ns)",
@@ -296,8 +306,8 @@ where
     let mut accu = accu;
     let t_union = accu.accu_tile.time.union(&tile.time)?;
 
-    accu.tile_mut().time = t_union;
-    accu.tile_mut().cache_hint.merge_with(&tile.cache_hint);
+    accu.set_time(t_union);
+    accu.set_cache_hint(accu.accu_tile.cache_hint.merged(&tile.cache_hint));
 
     if tile.grid_array.is_empty() {
         return Ok(accu);
@@ -351,8 +361,12 @@ impl<T: Pixel> FoldTileAccu for TileWithProjectionCoordinates<T> {
 }
 
 impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
-    fn tile_mut(&mut self) -> &mut RasterTile2D<Self::RasterType> {
-        &mut self.accu_tile
+    fn set_time(&mut self, time: TimeInterval) {
+        self.accu_tile.time = time;
+    }
+
+    fn set_cache_hint(&mut self, cache_hint: CacheHint) {
+        self.accu_tile.cache_hint = cache_hint;
     }
 }
 
@@ -360,22 +374,26 @@ impl<T: Pixel> FoldTileAccuMut for TileWithProjectionCoordinates<T> {
 mod tests {
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::BandSelection,
-        raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
-        util::test::TestDefault,
+        primitives::{BandSelection, TimeStep},
+        raster::{
+            BoundedGrid, GeoTransform, Grid, GridBoundingBox2D, GridShape, GridShape2D,
+            RasterDataType, SpatialGridDefinition, TilingSpecification,
+        },
+        util::test::{TestDefault, assert_eq_two_list_of_tiles_u8},
     };
 
     use crate::{
         adapters::RasterSubQueryAdapter,
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-            RasterResultDescriptor, WorkflowOperatorPath,
+            MockExecutionContext, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+            SpatialGridDescriptor, TimeDescriptor, WorkflowOperatorPath,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
     };
 
     use super::*;
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn identity_projection() {
         let projection = SpatialReference::epsg_4326();
@@ -386,7 +404,9 @@ mod tests {
                 tile_position: [-1, 0].into(),
                 band: 0,
                 global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![1, 2, 3, 4]).unwrap().into(),
+                grid_array: Grid::new([2, 2].into(), vec![1_u8, 2, 3, 4])
+                    .unwrap()
+                    .into(),
                 properties: Default::default(),
                 cache_hint: CacheHint::default(),
             },
@@ -423,60 +443,74 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
+            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                GeoTransform::new(Coordinate2D::new(0., 2.), 1., -1.),
+                GridShape::new_2d(2, 4).bounding_box(),
+            )),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
+        let tiling_spec = TilingSpecification::new(GridShape2D::new([2, 2]));
+
+        let tiling_grid = result_descriptor.tiling_grid_definition(tiling_spec);
+        let tiling_strat = tiling_grid.generate_data_tiling_strategy();
+
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_spec);
+
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
 
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-
-        let query_ctx = MockQueryContext::test_default();
-        let tiling_strat = exe_ctx.tiling_specification;
+        let query_ctx = exe_ctx.mock_query_context(TestDefault::test_default());
 
         let op = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
-        let qp = op.query_processor().unwrap().get_u8().unwrap();
-
-        let valid_bounds = projection.area_of_use_projected().unwrap();
+        let qp = op.query_processor().unwrap().get_u8();
+        let qp = qp.unwrap();
 
         let state_gen = TileReprojectionSubQuery {
             in_srs: projection,
             out_srs: projection,
             fold_fn: fold_by_coordinate_lookup_future,
-            in_spatial_res: query_rect.spatial_resolution,
-            valid_bounds_in: valid_bounds,
-            valid_bounds_out: valid_bounds,
+            state: TileReprojectionSubqueryGridInfo {
+                in_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
+                out_spatial_grid: tiling_grid.tiling_spatial_grid_definition(),
+            },
             _phantom_data: PhantomData,
         };
-        let a = RasterSubQueryAdapter::new(&qp, query_rect, tiling_strat, &query_ctx, state_gen);
-        let res = a
-            .map(Result::unwrap)
-            .map(Option::unwrap)
-            .collect::<Vec<RasterTile2D<u8>>>()
-            .await;
-        assert!(data.tiles_equal_ignoring_cache_hint(&res));
+
+        let time_stream = qp
+            .time_query(query_rect.time_interval(), &query_ctx)
+            .await
+            .unwrap();
+
+        let a = RasterSubQueryAdapter::new(
+            &qp,
+            query_rect,
+            tiling_strat,
+            &query_ctx,
+            state_gen,
+            time_stream,
+        );
+        let res = a.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq_two_list_of_tiles_u8(&data, &res, false);
     }
 }

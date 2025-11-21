@@ -6,10 +6,9 @@ use super::shared_cache::{
     RasterLandingQueryEntry,
 };
 use crate::util::Result;
-use geoengine_datatypes::primitives::SpatialPartitioned;
 use geoengine_datatypes::raster::{
-    BaseTile, EmptyGrid, Grid, GridOrEmpty, GridShape2D, GridSize, GridSpaceToLinearSpace,
-    MaskedGrid, RasterTile,
+    BaseTile, EmptyGrid, Grid, GridBoundingBoxExt, GridIntersection, GridOrEmpty, GridShape2D,
+    GridSize, GridSpaceToLinearSpace, MaskedGrid, RasterTile,
 };
 use geoengine_datatypes::{
     primitives::RasterQueryRectangle,
@@ -197,18 +196,23 @@ where
     }
 
     fn update_stored_query(&self, query: &mut Self::Query) -> Result<(), CacheError> {
-        query.spatial_bounds.extend(&self.spatial_partition());
-        query.time_interval = query
-            .time_interval
+        let stored_spatial_query_mut = query.spatial_bounds_mut();
+
+        stored_spatial_query_mut.extend(&self.tile_information().global_pixel_bounds());
+
+        *query.time_interval_mut() = query
+            .time_interval()
             .union(&self.time)
             .map_err(|_| CacheError::ElementAndQueryDoNotIntersect)?;
         Ok(())
     }
 
     fn intersects_query(&self, query: &Self::Query) -> bool {
-        self.spatial_partition().intersects(&query.spatial_bounds)
-            && self.time.intersects(&query.time_interval)
-            && query.attributes.as_slice().contains(&self.band)
+        self.tile_information()
+            .global_pixel_bounds()
+            .intersects(&query.spatial_bounds())
+            && self.time.intersects(&query.time_interval())
+            && query.attributes().as_slice().contains(&self.band)
     }
 }
 
@@ -602,10 +606,8 @@ impl TileCompression for Lz4FlexCompression {
 mod tests {
     use std::sync::Arc;
 
-    use geoengine_datatypes::{
-        primitives::{BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution},
-        raster::GeoTransform,
-        util::test::TestDefault,
+    use super::{
+        CompressedGridOrEmpty, CompressedMaskedGrid, CompressedRasterTile2D, LandingZoneQueryTiles,
     };
 
     use crate::cache::{
@@ -615,9 +617,10 @@ mod tests {
             RasterLandingQueryEntry,
         },
     };
-
-    use super::{
-        CompressedGridOrEmpty, CompressedMaskedGrid, CompressedRasterTile2D, LandingZoneQueryTiles,
+    use geoengine_datatypes::{
+        primitives::{BandSelection, RasterQueryRectangle},
+        raster::{GeoTransform, GridBoundingBox2D},
+        util::test::TestDefault,
     };
 
     fn create_test_tile() -> CompressedRasterTile2D<u8> {
@@ -665,12 +668,11 @@ mod tests {
     #[test]
     fn landing_zone_to_cache_entry() {
         let tile = create_test_tile();
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
         let mut lq =
             RasterLandingQueryEntry::create_empty::<CompressedRasterTile2D<u8>>(query.clone());
         tile.move_element_into_landing_zone(lq.elements_mut())
@@ -685,47 +687,37 @@ mod tests {
         let tile = create_test_tile();
 
         // tile is fully contained
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
         assert!(tile.intersects_query(&query));
 
         // tile is partially contained
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (0.5, -0.5).into(),
-                (1.5, -1.5).into(),
-            ),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-1, -1], [0, 0]).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
         assert!(tile.intersects_query(&query));
 
         // tile is not contained
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (10., -10.).into(),
-                (11., -11.).into(),
-            ),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([10, 10], [11, 11]).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
         assert!(!tile.intersects_query(&query));
     }
 
     #[test]
     fn cache_entry_matches() {
-        let cache_entry_bounds = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 0.).into(), (1., -1.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let cache_entry_bounds = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [10, 10]).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
         let cache_query_entry = RasterCacheQueryEntry {
             query: cache_entry_bounds.clone(),
             elements: CachedTiles::U8(Arc::new(Vec::new())),
@@ -736,27 +728,19 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained
-        let query2 = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (0.1, -0.1).into(),
-                (0.9, -0.9).into(),
-            ),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query2 = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([1, 1], [9, 9]).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
         assert!(cache_query_entry.query().is_match(&query2));
 
         // query is exceeds cached bounds
-        let query3 = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (-0.1, 0.1).into(),
-                (1.1, -1.1).into(),
-            ),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query3 = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [11, 11]).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
         assert!(!cache_query_entry.query().is_match(&query3));
     }
 }

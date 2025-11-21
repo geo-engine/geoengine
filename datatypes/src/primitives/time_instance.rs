@@ -13,7 +13,7 @@ use std::{
     str::FromStr,
 };
 
-#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, FromSql, ToSql)]
+#[derive(Clone, Copy, Serialize, PartialEq, Eq, PartialOrd, Ord, Debug, FromSql, ToSql, Hash)]
 #[repr(C)]
 #[postgres(transparent)]
 pub struct TimeInstance(i64);

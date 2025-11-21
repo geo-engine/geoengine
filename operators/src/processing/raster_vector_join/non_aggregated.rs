@@ -1,35 +1,32 @@
-use crate::adapters::FeatureCollectionStreamExt;
-use crate::processing::raster_vector_join::create_feature_aggregator;
-use futures::stream::{BoxStream, once as once_stream};
-use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::{
-    BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureDataType, Geometry,
-    RasterQueryRectangle, VectorQueryRectangle,
-};
-use geoengine_datatypes::util::arrow::ArrowTyped;
-use std::marker::PhantomData;
-use std::sync::Arc;
-
-use geoengine_datatypes::raster::{
-    DynamicRasterDataType, GridIdx2D, GridIndexAccess, RasterTile2D,
-};
-use geoengine_datatypes::{
-    collections::FeatureCollectionModifications, primitives::TimeInterval, raster::Pixel,
-};
-
+use super::aggregator::TypedAggregator;
 use super::util::{CoveredPixels, PixelCoverCreator};
+use super::{FeatureAggregationMethod, RasterInput};
+use crate::adapters::FeatureCollectionStreamExt;
 use crate::engine::{
     QueryContext, QueryProcessor, RasterQueryProcessor, TypedRasterQueryProcessor,
     VectorQueryProcessor, VectorResultDescriptor,
 };
+use crate::processing::raster_vector_join::create_feature_aggregator;
 use crate::util::Result;
 use crate::{adapters::RasterStreamExt, error::Error};
 use async_trait::async_trait;
+use futures::stream::{BoxStream, once as once_stream};
+use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
-
-use super::aggregator::TypedAggregator;
-use super::{FeatureAggregationMethod, RasterInput};
+use geoengine_datatypes::primitives::{
+    BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureDataType, Geometry,
+    RasterQueryRectangle, VectorQueryRectangle,
+};
+use geoengine_datatypes::raster::{
+    DynamicRasterDataType, GridIdx2D, GridIndexAccess, RasterTile2D,
+};
+use geoengine_datatypes::util::arrow::ArrowTyped;
+use geoengine_datatypes::{
+    collections::FeatureCollectionModifications, primitives::TimeInterval, raster::Pixel,
+};
+use std::marker::PhantomData;
+use std::sync::Arc;
 
 pub struct RasterVectorJoinProcessor<G> {
     collection: Box<dyn VectorQueryProcessor<VectorType = FeatureCollection<G>>>,
@@ -112,15 +109,15 @@ where
 
         let bbox = collection
             .bbox()
-            .and_then(|bbox| bbox.intersection(&query.spatial_bounds));
+            .and_then(|bbox| bbox.intersection(&query.spatial_bounds()));
 
         let time = collection
             .time_bounds()
-            .and_then(|time| time.intersect(&query.time_interval));
+            .and_then(|time| time.intersect(&query.time_interval()));
 
         // TODO: also intersect with raster spatial / time bounds
 
-        let (Some(_spatial_bounds), Some(_time_interval)) = (bbox, time) else {
+        let (Some(spatial_bounds), Some(time_interval)) = (bbox, time) else {
             tracing::debug!(
                 "spatial or temporal intersection is empty, returning the same collection, skipping raster query"
             );
@@ -132,8 +129,16 @@ where
             );
         };
 
-        let query = RasterQueryRectangle::from_qrect_and_bands(
-            &query,
+        let rd = raster_processor.result_descriptor();
+
+        let pixel_bounds = rd
+            .tiling_grid_definition(ctx.tiling_specification())
+            .tiling_geo_transform()
+            .bounding_box_2d_to_intersecting_grid_bounds(&spatial_bounds);
+
+        let query = RasterQueryRectangle::new(
+            pixel_bounds,
+            time_interval,
             BandSelection::first_n(column_names.len() as u32),
         );
 
@@ -175,7 +180,7 @@ where
     #[allow(clippy::too_many_arguments)]
     async fn process_typed_collection_chunk<'a, P: Pixel>(
         collection: FeatureCollection<G>,
-        raster_processor: &'a dyn RasterQueryProcessor<RasterType = P>,
+        raster_processor: &'a dyn RasterQueryProcessor<RasterType = P, Output = RasterTile2D<P>>,
         column_names: &'a [String],
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -426,9 +431,9 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor,
-        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
-        VectorColumnInfo, VectorOperator, WorkflowOperatorPath,
+        ChunkByteSize, MockExecutionContext, QueryProcessor, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+        TimeDescriptor, VectorColumnInfo, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -436,12 +441,13 @@ mod tests {
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, MultiPointCollection, MultiPolygonCollection, VectorDataType,
     };
-    use geoengine_datatypes::primitives::SpatialResolution;
-    use geoengine_datatypes::primitives::{BoundingBox2D, DateTime, FeatureData, MultiPolygon};
-    use geoengine_datatypes::primitives::{CacheHint, Measurement};
-    use geoengine_datatypes::primitives::{MultiPoint, TimeInterval};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, CacheHint, Coordinate2D, DateTime, FeatureData, Measurement, MultiPoint,
+        MultiPolygon, TimeInterval, TimeStep,
+    };
     use geoengine_datatypes::raster::{
-        Grid2D, RasterDataType, TileInformation, TilingSpecification,
+        GeoTransform, Grid2D, GridBoundingBox2D, RasterDataType, TileInformation,
+        TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
     use geoengine_datatypes::util::test::TestDefault;
@@ -472,9 +478,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
-            params: GdalSourceParameters {
-                data: add_ndvi_dataset(&mut execution_context),
-            },
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
         .boxed();
 
@@ -521,14 +525,12 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: time_instant,
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MAX),
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    time_instant,
+                    ColumnSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -582,9 +584,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
-            params: GdalSourceParameters {
-                data: add_ndvi_dataset(&mut execution_context),
-            },
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
         .boxed();
 
@@ -631,18 +631,16 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MAX),
+                    ColumnSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -704,9 +702,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
-            params: GdalSourceParameters {
-                data: add_ndvi_dataset(&mut execution_context),
-            },
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
         .boxed();
 
@@ -753,17 +749,12 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_instant(DateTime::new_utc(
-                        2014, 1, 1, 0, 0, 0,
-                    ))
-                    .unwrap(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MAX),
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::new_instant(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).unwrap(),
+                    ColumnSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -828,9 +819,7 @@ mod tests {
         let mut execution_context = MockExecutionContext::test_default();
 
         let raster_source = GdalSource {
-            params: GdalSourceParameters {
-                data: add_ndvi_dataset(&mut execution_context),
-            },
+            params: GdalSourceParameters::new(add_ndvi_dataset(&mut execution_context)),
         }
         .boxed();
 
@@ -877,18 +866,16 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2014, 1, 1, 0, 0, 0),
                         DateTime::new_utc(2014, 3, 1, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MAX),
+                    ColumnSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -993,6 +980,20 @@ mod tests {
             CacheHint::default(),
         );
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new(0, 20).unwrap()),
+                TimeStep::seconds(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
@@ -1001,21 +1002,13 @@ mod tests {
                     raster_tile_b_0,
                     raster_tile_b_1,
                 ],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-        );
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let raster = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1074,14 +1067,12 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_unchecked(0, 20),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MAX),
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
+                    TimeInterval::new_unchecked(0, 20),
+                    ColumnSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -1206,6 +1197,20 @@ mod tests {
             CacheHint::default(),
         );
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 20)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         let raster_source = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![
@@ -1216,21 +1221,13 @@ mod tests {
                     raster_tile_b_1,
                     raster_tile_b_2,
                 ],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U16,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-        );
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let raster = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1293,14 +1290,12 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_unchecked(0, 20),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MAX),
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
+                    TimeInterval::new_unchecked(0, 20),
+                    ColumnSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MAX),
             )
             .await
             .unwrap()
@@ -1532,9 +1527,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                        Some(TimeInterval::new_unchecked(0, 20)),
+                        TimeStep::millis(10).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::test_default(),
+                        GridBoundingBox2D::new([0, 0], [2, 3]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),
@@ -1545,9 +1545,8 @@ mod tests {
         }
         .boxed();
 
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new((0., 0.).into(), [3, 2].into()),
-        );
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
 
         let raster = raster_source
             .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
@@ -1610,14 +1609,12 @@ mod tests {
 
         let mut result = processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::new_unchecked(0, 20),
-                    spatial_resolution: SpatialResolution::new(1., 1.).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MAX),
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((0.0, -3.0).into(), (4.0, 0.0).into()).unwrap(),
+                    TimeInterval::new_unchecked(0, 20),
+                    ColumnSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MAX),
             )
             .await
             .unwrap()

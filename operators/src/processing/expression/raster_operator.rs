@@ -10,11 +10,12 @@ use crate::{
         WorkflowOperatorPath,
     },
     error::InvalidNumberOfExpressionInputBands,
+    optimization::{OptimizableOperator, OptimizationError},
     processing::expression::canonicalize_name,
     util::Result,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::{primitives::SpatialResolution, raster::RasterDataType};
 use geoengine_expression::{
     DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
 };
@@ -108,8 +109,7 @@ impl RasterOperator for Expression {
             data_type: self.params.output_type,
             spatial_reference: in_descriptor.spatial_reference,
             time: in_descriptor.time,
-            bbox: in_descriptor.bbox,
-            resolution: in_descriptor.resolution,
+            spatial_grid: in_descriptor.spatial_grid,
             bands: RasterBandDescriptors::new(vec![
                 self.params
                     .output_band
@@ -122,6 +122,7 @@ impl RasterOperator for Expression {
             path,
             result_descriptor,
             source,
+            expression_string: self.params.expression,
             expression,
             map_no_data: self.params.map_no_data,
         };
@@ -136,11 +137,13 @@ impl OperatorName for Expression {
     const TYPE_NAME: &'static str = "Expression";
 }
 
+#[derive(Clone)]
 pub struct InitializedExpression {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
+    expression_string: String,
     expression: ExpressionAst,
     map_no_data: bool,
 }
@@ -217,24 +220,43 @@ impl InitializedRasterOperator for InitializedExpression {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(resolution)?;
+
+        Ok(Expression {
+            params: ExpressionParams {
+                expression: self.expression_string.clone(),
+                output_type: self.result_descriptor.data_type,
+                output_band: Some(self.result_descriptor.bands[0].clone()),
+                map_no_data: self.map_no_data,
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, QueryProcessor,
+        MockExecutionContext, MultipleRasterSources, QueryProcessor, SpatialGridDescriptor,
+        TimeDescriptor,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use crate::processing::{RasterStacker, RasterStackerParams};
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{BandSelection, CacheHint, CacheTtlSeconds, Measurement};
-    use geoengine_datatypes::primitives::{
-        RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-    };
+    use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
     use geoengine_datatypes::raster::{
-        Grid2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D, RenameBands, TileInformation,
-        TilingSpecification,
+        Grid2D, GridBoundingBox2D, GridOrEmpty, MapElements, MaskedGrid2D, RasterTile2D,
+        RenameBands, TileInformation, TilingSpecification,
     };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
@@ -291,7 +313,6 @@ mod tests {
     async fn basic_unary() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -315,18 +336,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -352,7 +369,6 @@ mod tests {
     async fn unary_map_no_data() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -376,18 +392,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -413,7 +425,6 @@ mod tests {
     async fn basic_binary() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -448,18 +459,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -481,7 +488,6 @@ mod tests {
     async fn basic_coalesce() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -523,18 +529,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -563,7 +565,6 @@ mod tests {
 
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -599,18 +600,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -644,7 +641,6 @@ mod tests {
 
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -688,18 +684,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -721,7 +713,6 @@ mod tests {
     async fn it_classifies() {
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -765,18 +756,14 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ctx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -805,7 +792,6 @@ mod tests {
         let no_data_value = 0;
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -839,18 +825,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -904,9 +886,11 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -919,7 +903,6 @@ mod tests {
         let no_data_value = 0;
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -954,18 +937,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -987,7 +966,6 @@ mod tests {
         let no_data_value = 0;
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -1025,18 +1003,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await
@@ -1057,7 +1031,6 @@ mod tests {
         let no_data_value = 0;
         let tile_size_in_pixels = [3, 2].into();
         let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
             tile_size_in_pixels,
         };
 
@@ -1098,18 +1071,14 @@ mod tests {
 
         let processor = o.query_processor().unwrap().get_i8().unwrap();
 
-        let ctx = MockQueryContext::new(1.into());
+        let ctx = ectx.mock_query_context(1.into());
         let result_stream = processor
             .query(
-                RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 3.).into(),
-                        (2., 0.).into(),
-                    ),
-                    time_interval: Default::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first(),
-                },
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-3, 0], [-1, 1]).unwrap(),
+                    Default::default(),
+                    BandSelection::first(),
+                ),
                 &ctx,
             )
             .await

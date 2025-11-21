@@ -6,13 +6,14 @@ use crate::{
 };
 use async_trait::async_trait;
 use geoengine_datatypes::primitives::{
-    CacheTtlSeconds, RasterQueryRectangle, TimeInstance, TimeInterval, TimeStep, TimeStepIter,
+    CacheTtlSeconds, RasterQueryRectangle, TimeFilledItem, TimeInstance, TimeInterval, TimeStep,
+    TimeStepIter,
 };
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromSql, ToSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataStatic {
     pub time: Option<TimeInterval>,
@@ -29,7 +30,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
     async fn loading_info(&self, query: RasterQueryRectangle) -> Result<GdalLoadingInfo> {
         let valid = self.time.unwrap_or_default();
 
-        let parts = if valid.intersects(&query.time_interval) {
+        let parts = if valid.intersects(&query.time_interval()) {
             vec![GdalLoadingInfoTemporalSlice {
                 time: valid,
                 params: Some(self.params.clone()),
@@ -39,17 +40,17 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
             vec![]
         };
 
-        let known_time_before = if query.time_interval.start() < valid.start() {
+        let known_time_before = if query.time_interval().start() < valid.start() {
             TimeInstance::MIN
-        } else if query.time_interval.start() < valid.end() {
+        } else if query.time_interval().start() < valid.end() {
             valid.start()
         } else {
             valid.end()
         };
 
-        let known_time_after = if query.time_interval.end() <= valid.start() {
+        let known_time_after = if query.time_interval().end() <= valid.start() {
             valid.start()
-        } else if query.time_interval.end() <= valid.end() {
+        } else if query.time_interval().end() <= valid.end() {
             valid.end()
         } else {
             TimeInstance::MAX
@@ -79,7 +80,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 /// sets `step` time apart. The `time_placeholders` in the file path of the dataset are replaced with the
 /// specified time `reference` in specified time `format`. Inside the `data_time` the gdal source will load the data
 /// from the files and outside it will create nodata.
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataRegular {
     pub result_descriptor: RasterResultDescriptor,
@@ -106,22 +107,28 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
         TimeStepIter::new_with_interval(data_time, step)?
             .into_intervals(step, data_time.end())
             .for_each(|time_interval| {
-                if time_interval.start() <= query.time_interval.start() {
-                    let t = if time_interval.end() > query.time_interval.start() {
-                        time_interval.start()
-                    } else {
-                        time_interval.end()
-                    };
-                    known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
+                if time_interval.contains(&query.time_interval()) {
+                    let t1 = time_interval.start();
+                    let t2 = time_interval.end();
+                    known_time_start = Some(t1);
+                    known_time_end = Some(t2);
+                    return;
                 }
 
-                if time_interval.end() >= query.time_interval.end() {
-                    let t = if time_interval.start() < query.time_interval.end() {
-                        time_interval.end()
-                    } else {
-                        time_interval.start()
-                    };
-                    known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+                if time_interval.end() <= query.time_interval().start() {
+                    let t1 = time_interval.end();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                } else if time_interval.start() <= query.time_interval().start() {
+                    let t1 = time_interval.start();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                }
+
+                if time_interval.start() >= query.time_interval().end() {
+                    let t2 = time_interval.start();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                } else if time_interval.end() >= query.time_interval().end() {
+                    let t2 = time_interval.end();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                 }
             });
 
@@ -134,7 +141,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
                 self.params.clone(),
                 self.time_placeholders.clone(),
                 self.step,
-                query.time_interval,
+                query.time_interval(),
                 self.data_time,
                 self.cache_ttl,
             )?),
@@ -155,7 +162,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 /// Meta data for 4D `NetCDF` CF datasets
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetadataNetCdfCf {
     pub result_descriptor: RasterResultDescriptor,
@@ -198,10 +205,10 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 
         let snapped_start = self
             .step
-            .snap_relative(self.start, query.time_interval.start())?;
+            .snap_relative(self.start, query.time_interval().start())?;
 
         let snapped_interval =
-            TimeInterval::new_unchecked(snapped_start, query.time_interval.end()); // TODO: snap end?
+            TimeInterval::new_unchecked(snapped_start, query.time_interval().end()); // TODO: snap end?
 
         let time_iterator = TimeStepIter::new_with_interval(snapped_interval, self.step)?;
 
@@ -232,7 +239,7 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
 }
 
 // TODO: custom deserializer that checks that that params are sorted and do not overlap
-#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, FromSql, ToSql)]
+#[derive(Serialize, Deserialize, Debug, Clone, FromSql, ToSql, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct GdalMetaDataList {
     pub result_descriptor: RasterResultDescriptor,
@@ -251,25 +258,45 @@ impl MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle> for
             .inspect(|m| {
                 let time_interval = m.time;
 
-                if time_interval.start() <= query.time_interval.start() {
-                    let t = if time_interval.end() > query.time_interval.start() {
-                        time_interval.start()
-                    } else {
-                        time_interval.end()
-                    };
-                    known_time_start = known_time_start.map(|old| old.max(t)).or(Some(t));
+                debug_assert!(
+                    !time_interval.is_instant(),
+                    "time_interval {time_interval} is an instant!"
+                );
+
+                if time_interval.contains(&query.time_interval()) {
+                    let t1 = time_interval.start();
+                    let t2 = time_interval.end();
+                    known_time_start = Some(t1);
+                    known_time_end = Some(t2);
+                    return;
                 }
 
-                if time_interval.end() >= query.time_interval.end() {
-                    let t = if time_interval.start() < query.time_interval.end() {
-                        time_interval.end()
-                    } else {
-                        time_interval.start()
-                    };
-                    known_time_end = known_time_end.map(|old| old.min(t)).or(Some(t));
+                if time_interval.end() <= query.time_interval().start() {
+                    let t1 = time_interval.end();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                } else if time_interval.start() <= query.time_interval().start() {
+                    let t1 = time_interval.start();
+                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
+                }
+
+                if query.time_interval().is_instant() {
+                    // be carefull not to use instant ends...
+                    if time_interval.start() > query.time_interval().end() {
+                        let t2 = time_interval.start();
+                        known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                    } else if time_interval.end() > query.time_interval().end() {
+                        let t2 = time_interval.end();
+                        known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                    }
+                } else if time_interval.start() >= query.time_interval().end() {
+                    let t2 = time_interval.start();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
+                } else if time_interval.end() >= query.time_interval().end() {
+                    let t2 = time_interval.end();
+                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
                 }
             })
-            .filter(|m| m.time.intersects(&query.time_interval))
+            .filter(|m| m.time.intersects(&query.time_interval()))
             .cloned()
             .collect::<Vec<_>>();
 
@@ -612,21 +639,32 @@ pub struct GdalLoadingInfoTemporalSlice {
     pub cache_ttl: CacheTtlSeconds,
 }
 
+impl TimeFilledItem for GdalLoadingInfoTemporalSlice {
+    fn create_fill_element(time: TimeInterval) -> Self {
+        Self {
+            time,
+            params: None,
+            cache_ttl: CacheTtlSeconds::max(), // TODO: is this ok?
+        }
+    }
+
+    fn time(&self) -> TimeInterval {
+        self.time
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
         hashmap,
-        primitives::{
-            BandSelection, DateTime, DateTimeParseFormat, SpatialPartition2D, SpatialResolution,
-            TimeGranularity,
-        },
-        raster::RasterDataType,
+        primitives::{BandSelection, DateTime, DateTimeParseFormat, TimeGranularity},
+        raster::{BoundedGrid, GeoTransform, GridBoundingBox2D, GridShape2D, RasterDataType},
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
     use crate::{
-        engine::RasterBandDescriptors,
+        engine::{RasterBandDescriptors, SpatialGridDescriptor, TimeDescriptor},
         source::{FileNotFoundHandling, GdalDatasetGeoTransform, TimeReference},
     };
 
@@ -639,9 +677,17 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: None,
-                bbox: None,
-                resolution: None,
+                time: TimeDescriptor::new_regular_with_epoch(
+                    Some(TimeInterval::new_unchecked(
+                        TimeInstance::from_millis_unchecked(0),
+                        TimeInstance::from_millis_unchecked(33),
+                    )),
+                    TimeStep::millis(11).unwrap(),
+                ),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -668,10 +714,7 @@ mod tests {
                 TimeInstance::from_millis_unchecked(0),
                 TimeInstance::from_millis_unchecked(33),
             ),
-            step: TimeStep {
-                granularity: TimeGranularity::Millis,
-                step: 11,
-            },
+            step: TimeStep::millis(11).unwrap(),
             cache_ttl: CacheTtlSeconds::default(),
         }
     }
@@ -685,10 +728,18 @@ mod tests {
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: None,
-                bbox: None,
-                resolution: None,
-                bands: RasterBandDescriptors::new_single_band()
+                time: TimeDescriptor::new_regular_with_epoch(
+                    Some(TimeInterval::new_unchecked(
+                        TimeInstance::from_millis_unchecked(0),
+                        TimeInstance::from_millis_unchecked(33),
+                    )),
+                    TimeStep::millis(11).unwrap(),
+                ),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box()
+                ),
+                bands: RasterBandDescriptors::new_single_band(),
             }
         );
     }
@@ -699,15 +750,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 30),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(0, 30),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -742,15 +789,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -787,15 +830,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(-10, -5),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(-10, -5),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -817,15 +856,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(50, 55),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(50, 55),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -847,15 +882,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 22),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(0, 22),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -886,15 +917,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 20),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(0, 20),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -928,9 +955,11 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: None,
-                bbox: None,
-                resolution: None,
+                time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(0, 6))),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: vec![
@@ -996,24 +1025,22 @@ mod tests {
             RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: None,
-                bbox: None,
-                resolution: None,
+                time: TimeDescriptor::new_irregular(Some(TimeInterval::new_unchecked(0, 6))),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box()
+                ),
                 bands: RasterBandDescriptors::new_single_band()
             }
         );
 
         assert_eq!(
             meta_data
-                .loading_info(RasterQueryRectangle {
-                    spatial_bounds: SpatialPartition2D::new_unchecked(
-                        (0., 1.).into(),
-                        (1., 0.).into()
-                    ),
-                    time_interval: TimeInterval::new_unchecked(0, 3),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: BandSelection::first()
-                })
+                .loading_info(RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-1, 0], [-1, 0]).unwrap(),
+                    TimeInterval::new_unchecked(0, 3),
+                    BandSelection::first()
+                ))
                 .await
                 .unwrap()
                 .info
@@ -1043,9 +1070,11 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: None,
-                bbox: None,
-                resolution: None,
+                time: TimeDescriptor::new_irregular(None), // FIXME: the regular time step settings are crazy
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((0., 0.).into(), 1., -1.),
+                    GridShape2D::new_2d(128, 128).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1073,12 +1102,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new(time_start, time_end).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
+            TimeInterval::new(time_start, time_end).unwrap(),
+            BandSelection::first(),
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;
@@ -1111,9 +1139,11 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: None,
-                bbox: None,
-                resolution: None,
+                time: TimeDescriptor::new_irregular(None), // FIXME: the regular time step settings are crazy
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1141,12 +1171,11 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new(time_start, time_end).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
+            TimeInterval::new(time_start, time_end).unwrap(),
+            BandSelection::first(),
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;
@@ -1179,9 +1208,14 @@ mod tests {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReference::epsg_4326().into(),
-                time: None,
-                bbox: None,
-                resolution: None,
+                time: TimeDescriptor::new_regular_with_epoch(
+                    Some(TimeInterval::new(time_start, time_end).unwrap()),
+                    time_step,
+                ),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                    GeoTransform::new((-180., -90.).into(), 1., -1.),
+                    GridShape2D::new_2d(180, 360).bounding_box(),
+                ),
                 bands: RasterBandDescriptors::new_single_band(),
             },
             params: GdalDatasetParameters {
@@ -1209,15 +1243,14 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 128.).into(), (128., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-128, 0], [-1, 127]).unwrap(),
+            TimeInterval::new_unchecked(
                 TimeInstance::from(DateTime::new_utc(2009, 7, 1, 0, 0, 0)),
                 TimeInstance::from(DateTime::new_utc(2013, 3, 1, 0, 0, 0)),
             ),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
+            BandSelection::first(),
+        );
 
         let loading_info = metadata.loading_info(query).await.unwrap();
         let mut iter = loading_info.info;

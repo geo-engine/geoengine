@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
+    DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::aruna::error::ArunaProviderError;
@@ -9,6 +9,7 @@ use actix_web::HttpResponse;
 use actix_web::http::StatusCode;
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::ErrorSource;
+use geoengine_datatypes::primitives::RegularTimeDimension;
 use geoengine_datatypes::util::helpers::ge_report;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
@@ -549,6 +550,26 @@ pub enum Error {
     #[snafu(display("WildLIVE connector error: {source}"), context(false))]
     Wildlive {
         source: crate::datasets::external::WildliveError,
+    },
+    #[snafu(display(
+        "Dataset tile time `{times:?}` conflict with existing times `{existing_times:?}`"
+    ))]
+    DatasetTileTimeConflict {
+        times: Vec<TimeInterval>,
+        existing_times: Vec<TimeInterval>,
+    },
+    #[snafu(display(
+        "Dataset tile times `{times:?}` conflict with dataset regularity {time_dim:?}"
+    ))]
+    DatasetTileRegularTimeConflict {
+        times: Vec<TimeInterval>,
+        time_dim: RegularTimeDimension,
+    },
+    #[snafu(display(
+        "Dataset tile z-index of files `{files:?}` conflict with existing tiles with the same z-indexes"
+    ))]
+    DatasetTileZIndexConflict {
+        files: Vec<String>,
     },
 }
 
