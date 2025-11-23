@@ -119,7 +119,7 @@ libloading = "0.8"
 lru = "0.16"
 lz4_flex = "0.11"
 mime = "0.3"
-ndarray = { version = "0.16", features = ["approx"] }                                                  # has to match with `ort`
+ndarray = { version = "0.17", features = ["approx"] }                                                  # has to match with `ort`
 num = "0.4"
 num-traits = "0.2"
 oauth2 = "5.0"
