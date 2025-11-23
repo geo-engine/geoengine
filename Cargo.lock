@@ -6038,9 +6038,9 @@ checksum = "6ce2be8dc25455e1f91df71bfa12ad37d7af1092ae736f3a6cd0e37bc7810596"
 
 [[package]]
 name = "stac"
-version = "0.13.2"
+version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f0a318927c5491d817f2833002397b841b2c008354d3eb3b83abd2fc723cabc1"
+checksum = "74d226653f99eee743e3ea4aac54ccb11d26a3366169a66741ec1a1b7ae19f71"
 dependencies = [
  "bytes",
  "chrono",
