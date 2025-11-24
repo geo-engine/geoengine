@@ -429,13 +429,13 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 metadata: Default::default(),
             }),
             WildliveLayerId::ProjectBounds => Ok(Layer {
-                id: self.layer_id(WildliveLayerId::Projects)?,
+                id: self.layer_id(WildliveLayerId::ProjectBounds)?,
                 name: "Project Bounds".to_string(),
                 description: "Overview of all project bounds".to_string(),
                 workflow: Workflow {
                     operator: OgrSource {
                         params: OgrSourceParameters {
-                            data: self.named_data(WildliveLayerId::Projects)?,
+                            data: self.named_data(WildliveLayerId::ProjectBounds)?,
                             attribute_projection: None,
                             attribute_filters: None,
                         },
@@ -1195,6 +1195,38 @@ mod tests {
         };
 
         let layer = connector
+            .load_layer(&WildliveLayerId::ProjectBounds.try_into().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            layer,
+            Layer {
+                id: ProviderLayerId {
+                    provider_id: connector.definition.id,
+                    layer_id: WildliveLayerId::ProjectBounds.try_into().unwrap(),
+                },
+                name: "Project Bounds".to_string(),
+                description: "Overview of all project bounds".to_string(),
+                workflow: Workflow {
+                    operator: OgrSource {
+                        params: OgrSourceParameters {
+                            data: connector
+                                .named_data(WildliveLayerId::ProjectBounds)
+                                .unwrap(),
+                            attribute_projection: None,
+                            attribute_filters: None,
+                        },
+                    }
+                    .boxed()
+                    .into(),
+                },
+                symbology: None,
+                properties: Vec::new(),
+                metadata: Default::default(),
+            }
+        );
+
+        let layer = connector
             .load_layer(&WildliveLayerId::Projects.try_into().unwrap())
             .await
             .unwrap();
@@ -1208,17 +1240,66 @@ mod tests {
                 name: "Projects".to_string(),
                 description: "Overview of all projects".to_string(),
                 workflow: Workflow {
-                    operator: OgrSource {
-                        params: OgrSourceParameters {
-                            data: connector.named_data(WildliveLayerId::Projects).unwrap(),
-                            attribute_projection: None,
-                            attribute_filters: None,
+                    operator: VectorExpression {
+                        params: VectorExpressionParams {
+                            expression: "centroid(geom)".into(),
+                            input_columns: Vec::new(),
+                            output_column: GeoVectorDataType::MultiPoint.into(),
+                            geometry_column_name: "geom".into(),
+                            output_measurement: Measurement::Unitless,
+                        },
+                        sources: SingleVectorSource {
+                            vector: OgrSource {
+                                params: OgrSourceParameters {
+                                    data: connector.named_data(WildliveLayerId::Projects).unwrap(),
+                                    attribute_projection: None,
+                                    attribute_filters: None,
+                                },
+                            }
+                            .boxed(),
                         },
                     }
                     .boxed()
                     .into(),
                 },
-                symbology: None,
+                symbology: Some(Symbology::Point(PointSymbology {
+                    r#type: Default::default(),
+                    radius: NumberParam::Static(StaticNumber {
+                        r#type: Default::default(),
+                        value: 10,
+                    }),
+                    fill_color: ColorParam::Static(StaticColor {
+                        r#type: Default::default(),
+                        color: RgbaColor::new(103, 156, 96, 255),
+                    }),
+                    stroke: StrokeParam {
+                        color: ColorParam::Static(StaticColor {
+                            r#type: Default::default(),
+                            color: RgbaColor::black(),
+                        }),
+                        width: NumberParam::Static(StaticNumber {
+                            r#type: Default::default(),
+                            value: 1,
+                        }),
+                    },
+                    text: Some(TextSymbology {
+                        attribute: "name".into(),
+                        fill_color: ColorParam::Static(StaticColor {
+                            r#type: Default::default(),
+                            color: RgbaColor::white(),
+                        }),
+                        stroke: StrokeParam {
+                            color: ColorParam::Static(StaticColor {
+                                r#type: Default::default(),
+                                color: RgbaColor::black(),
+                            }),
+                            width: NumberParam::Static(StaticNumber {
+                                r#type: Default::default(),
+                                value: 1,
+                            }),
+                        },
+                    }),
+                })),
                 properties: Vec::new(),
                 metadata: Default::default(),
             }
@@ -1347,6 +1428,7 @@ mod tests {
                 request::method("GET"),
                 request::path("/api/objects/wildlive/ef7833589d61b2d2a905"),
             ])
+            .times(2)
             .respond_with(json_responder(test_data!(
                 "wildlive/responses/project.json"
             ))),
@@ -1472,6 +1554,7 @@ mod tests {
         };
 
         let project_id = "wildlive/ef7833589d61b2d2a905";
+        let project_name = "CameraTrapping project in Bolivia";
 
         let layer = connector
             .load_layer(
@@ -1494,7 +1577,7 @@ mod tests {
                     .try_into()
                     .unwrap(),
                 },
-                name: format!("Captures for project {project_id}"),
+                name: format!("Captures for project {project_name}"),
                 description: format!("Overview of all captures within project {project_id}"),
                 workflow: Workflow {
                     operator: OgrSource {
