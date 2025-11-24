@@ -21,7 +21,7 @@ pub trait DatasetInDb {
 impl DatasetInDb for WildliveLayerId {
     fn table_name(&self) -> &str {
         match self {
-            WildliveLayerId::Projects => "wildlive_projects",
+            WildliveLayerId::Projects | WildliveLayerId::ProjectBounds => "wildlive_projects",
             WildliveLayerId::Stations { project_id: _ } => "wildlive_stations",
             WildliveLayerId::Captures { project_id: _ } => "wildlive_captures",
         }
@@ -57,6 +57,12 @@ pub trait WildliveDbCache: Send + Sync {
         project_id: &str,
         captures: &[CaptureFeature],
     ) -> Result<()>;
+
+    async fn project_name_by_id(
+        &self,
+        provider_id: DataProviderId,
+        project_id: &str,
+    ) -> Result<Option<String>>;
 }
 
 #[async_trait]
@@ -171,6 +177,32 @@ where
             .commit()
             .await
             .boxed_context(error::UnexpectedExecution)
+    }
+
+    async fn project_name_by_id(
+        &self,
+        provider_id: DataProviderId,
+        project_id: &str,
+    ) -> Result<Option<String>> {
+        let connection = get_connection!(self.conn_pool);
+
+        let row = connection
+            .query_opt(
+                "
+                SELECT name
+                FROM wildlive_projects
+                WHERE
+                    provider_id = $1 AND
+                    project_id = $2
+                ORDER BY cache_date DESC
+                LIMIT 1
+                ",
+                &[&provider_id, &project_id],
+            )
+            .await
+            .boxed_context(error::UnexpectedExecution)?;
+
+        Ok(row.map(|r| r.get::<_, String>(0)))
     }
 }
 
@@ -290,7 +322,7 @@ where
             "
                 SELECT EXISTS (
                     SELECT 1
-                    FROM wildlive_stations
+                    FROM wildlive_projects
                     WHERE
                         provider_id = $1 AND
                         cache_date = $2

@@ -98,6 +98,12 @@ pub enum OutputColumn {
     Column(String),
 }
 
+impl From<GeoVectorDataType> for OutputColumn {
+    fn from(value: GeoVectorDataType) -> Self {
+        OutputColumn::Geometry(value)
+    }
+}
+
 struct InitializedVectorExpression {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
