@@ -305,6 +305,7 @@ pub fn ogc_endpoint_url(base: &Url, protocol: OgcProtocol, workflow: WorkflowId)
         .map_err(Into::into)
 }
 
+// TODO: remove when all OGC handlers are using only one handler
 pub struct OgcRequestGuard<'a> {
     request: &'a str,
 }
