@@ -191,9 +191,13 @@ pub(super) async fn projects_dataset(
                     .filter_map(|layout| station_coordinates.get(layout))
                     .flat_map(|coordinates| coordinates.iter().map(Coordinate2D::from)),
             ) else {
-                return Err(WildliveError::EmptyProjectBounds {
-                    project: project.id,
-                });
+                error!(
+                    "{:?}",
+                    WildliveError::EmptyProjectBounds {
+                        project: project.id,
+                    }
+                );
+                continue;
             };
 
             features.push(ProjectFeature {
@@ -204,10 +208,10 @@ pub(super) async fn projects_dataset(
             });
         }
 
-        Ok(features)
+        features
     })
     .await
-    .boxed_context(error::UnexpectedExecution)??;
+    .boxed_context(error::UnexpectedExecution)?;
 
     Ok(features)
 }
@@ -238,7 +242,7 @@ pub(super) async fn projects(
         .collect())
 }
 
-async fn project(
+pub(super) async fn project(
     api_endpoint: &Url,
     api_token: Option<&AccessToken>,
     project_id: &str,
