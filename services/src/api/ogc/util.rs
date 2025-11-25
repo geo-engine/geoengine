@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 use std::str::FromStr;
 use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
-use utoipa::{PartialSchema, ToSchema};
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 use super::wcs::request::WcsBoundingbox;
 use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
@@ -351,6 +351,19 @@ where
             .map(OgcQueryExtractor);
 
         ready(res)
+    }
+}
+
+// Tell `utoipa` that our wrapper is a query-parameter extractor by forwarding
+// `IntoParams` to the inner type and specifying `ParameterIn::Query`.
+impl<T> IntoParams for OgcQueryExtractor<T>
+where
+    T: IntoParams,
+{
+    fn into_params(
+        _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+    ) -> Vec<utoipa::openapi::path::Parameter> {
+        T::into_params(|| Some(utoipa::openapi::path::ParameterIn::Query))
     }
 }
 

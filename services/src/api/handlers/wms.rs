@@ -32,6 +32,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use tracing::debug;
 use utoipa::IntoParams;
+use utoipa::openapi::Required;
 use uuid::Uuid;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
@@ -57,15 +58,17 @@ pub enum WmsQueryParams {
 /// Note, that WMS is not really OpenAPI compatible, so this is just an approximation to enable client generation
 impl IntoParams for WmsQueryParams {
     fn into_params(
-        parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+        _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
     ) -> Vec<utoipa::openapi::path::Parameter> {
+        let pip = || Some(utoipa::openapi::path::ParameterIn::Query);
+
         let mut params = Vec::new();
 
         params.push(
             utoipa::openapi::path::ParameterBuilder::new()
                 .name("request")
                 .required(utoipa::openapi::Required::True)
-                .parameter_in(parameter_in_provider().unwrap_or_default())
+                .parameter_in(pip().unwrap_or_default())
                 .description(Some("type of WMS request"))
                 .schema(Some(
                     utoipa::openapi::ObjectBuilder::new()
@@ -81,19 +84,24 @@ impl IntoParams for WmsQueryParams {
                 .build(),
         );
 
-        for p in GetCapabilities::into_params(&parameter_in_provider) {
+        for mut p in GetCapabilities::into_params(pip) {
+            p.required = Required::False;
             params.push(p);
         }
-        for p in GetMap::into_params(&parameter_in_provider) {
+        for mut p in GetMap::into_params(pip) {
+            p.required = Required::False;
             params.push(p);
         }
-        for p in GetFeatureInfo::into_params(&parameter_in_provider) {
+        for mut p in GetFeatureInfo::into_params(pip) {
+            p.required = Required::False;
             params.push(p);
         }
-        for p in GetStyles::into_params(&parameter_in_provider) {
+        for mut p in GetStyles::into_params(pip) {
+            p.required = Required::False;
             params.push(p);
         }
-        for p in GetLegendGraphic::into_params(&parameter_in_provider) {
+        for mut p in GetLegendGraphic::into_params(pip) {
+            p.required = Required::False;
             params.push(p);
         }
 

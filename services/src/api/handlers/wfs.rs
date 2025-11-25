@@ -36,6 +36,7 @@ use serde_json::json;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
+use utoipa::openapi::Required;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -59,15 +60,17 @@ pub enum WfsQueryParams {
 /// Note, that WFS is not really OpenAPI compatible, so this is just an approximation to enable client generation
 impl IntoParams for WfsQueryParams {
     fn into_params(
-        parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+        _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
     ) -> Vec<utoipa::openapi::path::Parameter> {
+        let pip = || Some(utoipa::openapi::path::ParameterIn::Query);
+
         let mut params = Vec::new();
 
         params.push(
             utoipa::openapi::path::ParameterBuilder::new()
                 .name("request")
                 .required(utoipa::openapi::Required::True)
-                .parameter_in(parameter_in_provider().unwrap_or_default())
+                .parameter_in(pip().unwrap_or_default())
                 .description(Some("type of WFS request"))
                 .schema(Some(
                     utoipa::openapi::ObjectBuilder::new()
@@ -77,10 +80,12 @@ impl IntoParams for WfsQueryParams {
                 .build(),
         );
 
-        for p in GetCapabilities::into_params(&parameter_in_provider) {
+        for mut p in GetCapabilities::into_params(pip) {
+            p.required = Required::False;
             params.push(p);
         }
-        for p in GetFeature::into_params(&parameter_in_provider) {
+        for mut p in GetFeature::into_params(pip) {
+            p.required = Required::False;
             params.push(p);
         }
 
@@ -1146,15 +1151,13 @@ x;y
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
         let res = send_test_request(req, app_ctx).await;
 
-        dbg!(read_body_string(res).await);
-
-        // ErrorResponse::assert(
-        //     res,
-        //     400,
-        //     "UnableToParseQueryString",
-        //     "Unable to parse query string: missing field `typeNames`",
-        // )
-        // .await;
+        ErrorResponse::assert(
+            res,
+            400,
+            "UnableToParseQueryString",
+            "Unable to parse query string: missing field `typeNames`",
+        )
+        .await;
     }
 
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles

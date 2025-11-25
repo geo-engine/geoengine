@@ -4211,8 +4211,8 @@
           },
           {
             "name": "boundingbox",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4220,16 +4220,16 @@
           },
           {
             "name": "format",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/GetCoverageFormat"
             }
           },
           {
             "name": "gridbasecrs",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4237,8 +4237,8 @@
           },
           {
             "name": "gridoffsets",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4246,8 +4246,8 @@
           },
           {
             "name": "gridorigin",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4255,8 +4255,8 @@
           },
           {
             "name": "identifier",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4264,8 +4264,8 @@
           },
           {
             "name": "identifiers",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4273,8 +4273,8 @@
           },
           {
             "name": "nodatavalue",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "number",
@@ -4285,7 +4285,7 @@
           },
           {
             "name": "request",
-            "in": "path",
+            "in": "query",
             "description": "type of WMS request",
             "required": true,
             "schema": {
@@ -4299,8 +4299,8 @@
           },
           {
             "name": "resx",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "number",
@@ -4311,8 +4311,8 @@
           },
           {
             "name": "resy",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "number",
@@ -4323,24 +4323,24 @@
           },
           {
             "name": "service",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/WcsService"
             }
           },
           {
             "name": "time",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
             "name": "version",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "oneOf": [
                 {
@@ -4391,8 +4391,8 @@
           },
           {
             "name": "bbox",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/OgcBoundingBox"
             },
@@ -4400,8 +4400,8 @@
           },
           {
             "name": "count",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "integer",
@@ -4413,8 +4413,8 @@
           },
           {
             "name": "filter",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4424,8 +4424,8 @@
           },
           {
             "name": "namespaces",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4435,8 +4435,8 @@
           },
           {
             "name": "propertyName",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4446,7 +4446,7 @@
           },
           {
             "name": "request",
-            "in": "path",
+            "in": "query",
             "description": "type of WFS request",
             "required": true,
             "schema": {
@@ -4459,8 +4459,8 @@
           },
           {
             "name": "resultType",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4470,16 +4470,16 @@
           },
           {
             "name": "service",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/WfsService"
             }
           },
           {
             "name": "sortBy",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4489,8 +4489,8 @@
           },
           {
             "name": "srsName",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4501,8 +4501,8 @@
           },
           {
             "name": "time",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4510,8 +4510,8 @@
           },
           {
             "name": "typeNames",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/TypeNames"
             },
@@ -4519,8 +4519,8 @@
           },
           {
             "name": "version",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "oneOf": [
                 {
@@ -4666,8 +4666,8 @@
           },
           {
             "name": "bbox",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/OgcBoundingBox"
             },
@@ -4675,8 +4675,8 @@
           },
           {
             "name": "bgcolor",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4686,8 +4686,8 @@
           },
           {
             "name": "crs",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4698,8 +4698,8 @@
           },
           {
             "name": "elevation",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4709,8 +4709,8 @@
           },
           {
             "name": "exceptions",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "oneOf": [
                 {
@@ -4724,8 +4724,8 @@
           },
           {
             "name": "format",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "oneOf": [
                 {
@@ -4739,8 +4739,8 @@
           },
           {
             "name": "height",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
               "format": "int32",
@@ -4750,8 +4750,8 @@
           },
           {
             "name": "info_format",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4761,16 +4761,16 @@
           },
           {
             "name": "layer",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
             "name": "layers",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4778,15 +4778,15 @@
           },
           {
             "name": "query_layers",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             }
           },
           {
             "name": "request",
-            "in": "path",
+            "in": "query",
             "description": "type of WMS request",
             "required": true,
             "schema": {
@@ -4802,16 +4802,16 @@
           },
           {
             "name": "service",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/WmsService"
             }
           },
           {
             "name": "sld",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4821,8 +4821,8 @@
           },
           {
             "name": "sld_body",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "string",
@@ -4832,8 +4832,8 @@
           },
           {
             "name": "styles",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4841,8 +4841,8 @@
           },
           {
             "name": "time",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "string"
             },
@@ -4850,8 +4850,8 @@
           },
           {
             "name": "transparent",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": [
                 "boolean",
@@ -4861,8 +4861,8 @@
           },
           {
             "name": "version",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "oneOf": [
                 {
@@ -4876,8 +4876,8 @@
           },
           {
             "name": "width",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "type": "integer",
               "format": "int32",
