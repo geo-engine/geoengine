@@ -344,7 +344,6 @@ use utoipa::{Modify, OpenApi};
 
             wfs::request::WfsService,
             wfs::request::WfsVersion,
-            wfs::request::WfsResolution,
             wfs::request::GetFeatureRequest,
             wfs::request::TypeNames,
 

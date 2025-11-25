@@ -4445,22 +4445,6 @@
             }
           },
           {
-            "name": "queryResolution",
-            "in": "path",
-            "description": "Vendor parameter for specifying a spatial query resolution",
-            "required": true,
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/WfsResolution"
-                }
-              ]
-            }
-          },
-          {
             "name": "request",
             "in": "path",
             "description": "type of WFS request",
@@ -10858,9 +10842,6 @@
           "1.1.0",
           "1.1.1"
         ]
-      },
-      "WfsResolution": {
-        "type": "string"
       },
       "WfsService": {
         "type": "string",

@@ -1,9 +1,6 @@
 use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{
-    OgcBoundingBox, parse_ogc_bbox, parse_time_option, parse_wfs_resolution_option,
-};
+use crate::api::ogc::util::{OgcBoundingBox, parse_ogc_bbox, parse_time_option};
 use crate::util::from_str_option;
-use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 use utoipa::openapi::Type;
@@ -76,26 +73,8 @@ pub struct GetFeature {
     pub filter: Option<String>, // TODO: parse filters
     #[serde(alias = "propertyname")]
     pub property_name: Option<String>, // TODO comma separated list
-    // TODO: feature_id, ...
-    /// Vendor parameter for specifying a spatial query resolution
-    #[serde(default)]
-    #[serde(deserialize_with = "parse_wfs_resolution_option")]
-    #[serde(alias = "queryresolution")]
-    pub query_resolution: Option<WfsResolution>,
+                                // TODO: feature_id, ...
 }
-
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub struct WfsResolution(pub SpatialResolution);
-
-impl PartialSchema for WfsResolution {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
-        ObjectBuilder::new()
-            .schema_type(SchemaType::Type(Type::String))
-            .into()
-    }
-}
-
-impl ToSchema for WfsResolution {}
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetFeatureRequest {
@@ -151,7 +130,6 @@ mod tests {
                 feature_type: "test".into(),
             },
             property_name: None,
-            query_resolution: None,
         };
 
         assert_eq!(parsed, request);
@@ -179,7 +157,6 @@ mod tests {
   </And>
 </Filter>"),
             ("propertyName","P1,P2"),
-            ("queryResolution","0.1,0.1"),
         ];
         let query = serde_urlencoded::to_string(params).unwrap();
         let parsed: GetFeature = serde_urlencoded::from_str(&query).unwrap();
@@ -205,7 +182,6 @@ mod tests {
                 feature_type: "test".into(),
             },
             property_name: Some("P1,P2".into()),
-            query_resolution: Some(WfsResolution(SpatialResolution::zero_point_one())),
         };
 
         assert_eq!(parsed, request);
@@ -243,7 +219,6 @@ mod tests {
                 feature_type: op,
             },
             property_name: None,
-            query_resolution: None,
         };
 
         assert_eq!(parsed, request);

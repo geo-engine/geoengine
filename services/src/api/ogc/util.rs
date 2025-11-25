@@ -2,8 +2,8 @@ use crate::api::model::datatypes::SpatialReference;
 use actix_web::guard::{Guard, GuardContext};
 use actix_web::{FromRequest, HttpRequest, dev::Payload};
 use futures_util::future::{Ready, ready};
+use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, DateTime};
-use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
 use reqwest::Url;
 use serde::de::DeserializeOwned;
 use serde::de::Error;
@@ -14,7 +14,6 @@ use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
 use utoipa::{PartialSchema, ToSchema};
 
 use super::wcs::request::WcsBoundingbox;
-use super::wfs::request::WfsResolution;
 use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
 use crate::api::model::datatypes::TimeInterval;
 use crate::error::{self, Result, UnableToParseQueryString, UnableToSerializeQueryString};
@@ -140,38 +139,6 @@ where
             .map_err(D::Error::custom),
         _ => Err(D::Error::custom(format!("Invalid time {s}"))),
     }
-}
-
-/// Parse a spatial resolution, format is: "resolution" or "xResolution,yResolution"
-pub fn parse_wfs_resolution_option<'de, D>(
-    deserializer: D,
-) -> Result<Option<WfsResolution>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-
-    if s.is_empty() {
-        return Ok(None);
-    }
-    // don't fail on python queries where undefined resolution is not removed
-    if s == "None" {
-        return Ok(None);
-    }
-
-    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
-
-    let spatial_resolution = match *split.as_slice() {
-        [Ok(resolution)] => {
-            SpatialResolution::new(resolution, resolution).map_err(D::Error::custom)?
-        }
-        [Ok(x_resolution), Ok(y_resolution)] => {
-            SpatialResolution::new(x_resolution, y_resolution).map_err(D::Error::custom)?
-        }
-        _ => return Err(D::Error::custom("Invalid spatial resolution")),
-    };
-
-    Ok(Some(WfsResolution(spatial_resolution)))
 }
 
 /// Parse wcs 1.1.1 bbox, format is: "x1,y1,x2,y2,crs", crs format is like `urn:ogc:def:crs:EPSG::4326`
@@ -519,31 +486,6 @@ mod tests {
 
     fn to_deserializer(s: &str) -> StringDeserializer<serde::de::value::Error> {
         s.to_owned().into_deserializer()
-    }
-
-    #[test]
-    fn it_parses_spatial_resolution_options() {
-        assert_eq!(
-            parse_wfs_resolution_option(to_deserializer("")).unwrap(),
-            None
-        );
-
-        assert_eq!(
-            parse_wfs_resolution_option(to_deserializer("0.1")).unwrap(),
-            Some(WfsResolution(SpatialResolution::zero_point_one()))
-        );
-        assert_eq!(
-            parse_wfs_resolution_option(to_deserializer("1")).unwrap(),
-            Some(WfsResolution(SpatialResolution::one()))
-        );
-
-        assert_eq!(
-            parse_wfs_resolution_option(to_deserializer("0.1,0.2")).unwrap(),
-            Some(WfsResolution(SpatialResolution::new(0.1, 0.2).unwrap()))
-        );
-
-        assert!(parse_wfs_resolution_option(to_deserializer(",")).is_err());
-        assert!(parse_wfs_resolution_option(to_deserializer("0.1,0.2,0.3")).is_err());
     }
 
     #[test]
