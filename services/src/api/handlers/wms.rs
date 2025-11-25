@@ -44,6 +44,7 @@ where
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant, clippy::enum_variant_names)]
 pub enum WmsQueryParams {
     GetCapabilities(GetCapabilities),
     GetMap(GetMap),
@@ -80,21 +81,21 @@ impl IntoParams for WmsQueryParams {
                 .build(),
         );
 
-        GetCapabilities::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
-        GetMap::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
-        GetFeatureInfo::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
-        GetStyles::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
-        GetLegendGraphic::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
+        for p in GetCapabilities::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
+        for p in GetMap::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
+        for p in GetFeatureInfo::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
+        for p in GetStyles::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
+        for p in GetLegendGraphic::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
 
         // remove duplicate parameters
         params.sort_by(|a, b| a.name.cmp(&b.name));

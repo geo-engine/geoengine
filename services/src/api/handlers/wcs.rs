@@ -73,15 +73,15 @@ impl IntoParams for WcsQueryParams {
                 .build(),
         );
 
-        GetCapabilities::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
-        DescribeCoverage::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
-        GetCoverage::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
+        for p in GetCapabilities::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
+        for p in DescribeCoverage::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
+        for p in GetCoverage::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
 
         // remove duplicate parameters
         params.sort_by(|a, b| a.name.cmp(&b.name));
@@ -211,6 +211,7 @@ async fn wcs_get_capabilities<C: ApplicationContext>(
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
+#[allow(clippy::too_many_lines)]
 async fn wcs_describe_coverage<C: ApplicationContext>(
     workflow: WorkflowId,
     request: DescribeCoverage,

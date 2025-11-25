@@ -49,6 +49,7 @@ where
 
 #[derive(Debug, Deserialize)]
 #[serde(untagged)]
+#[allow(clippy::large_enum_variant)] // variants may have many fields
 pub enum WfsQueryParams {
     GetCapabilities(GetCapabilities),
     GetFeature(GetFeature),
@@ -76,12 +77,12 @@ impl IntoParams for WfsQueryParams {
                 .build(),
         );
 
-        GetCapabilities::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
-        GetFeature::into_params(&parameter_in_provider)
-            .into_iter()
-            .for_each(|p| params.push(p));
+        for p in GetCapabilities::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
+        for p in GetFeature::into_params(&parameter_in_provider) {
+            params.push(p);
+        }
 
         // remove duplicate parameters
         params.sort_by(|a, b| a.name.cmp(&b.name));
