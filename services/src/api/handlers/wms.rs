@@ -2,7 +2,7 @@ use crate::api::model::datatypes::{
     RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
-use crate::api::ogc::util::{OgcProtocol, ogc_endpoint_url};
+use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
 use crate::api::ogc::wms::request::{
     GetCapabilities, GetFeatureInfo, GetLegendGraphic, GetMap, GetMapExceptionFormat, GetStyles,
 };
@@ -43,7 +43,7 @@ where
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "request", rename_all = "PascalCase")]
 #[allow(clippy::large_enum_variant, clippy::enum_variant_names)]
 pub enum WmsQueryParams {
     GetCapabilities(GetCapabilities),
@@ -177,7 +177,7 @@ impl IntoParams for WmsQueryParams {
 async fn wms_handler<C>(
     req: HttpRequest,
     workflow: web::Path<WorkflowId>,
-    request: web::Query<WmsQueryParams>,
+    request: OgcQueryExtractor<WmsQueryParams>,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>

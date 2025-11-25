@@ -1,11 +1,14 @@
 use crate::api::model::datatypes::SpatialReference;
 use actix_web::guard::{Guard, GuardContext};
+use actix_web::{FromRequest, HttpRequest, dev::Payload};
+use futures_util::future::{Ready, ready};
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, DateTime};
 use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
 use reqwest::Url;
+use serde::de::DeserializeOwned;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::{ResultExt, ensure};
 use std::str::FromStr;
 use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
 use utoipa::{PartialSchema, ToSchema};
@@ -14,7 +17,7 @@ use super::wcs::request::WcsBoundingbox;
 use super::wfs::request::WfsResolution;
 use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
 use crate::api::model::datatypes::TimeInterval;
-use crate::error::{self, Result};
+use crate::error::{self, Result, UnableToParseQueryString, UnableToSerializeQueryString};
 use crate::workflows::workflow::WorkflowId;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
@@ -325,6 +328,65 @@ impl Guard for OgcRequestGuard<'_> {
     }
 }
 
+/// a special query extractor for actix-web because some OGC clients use varying casing for query parameter keys
+pub struct OgcQueryExtractor<T>(pub T);
+
+impl<T> OgcQueryExtractor<T> {
+    #[inline]
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T> std::ops::Deref for OgcQueryExtractor<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for OgcQueryExtractor<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> FromRequest for OgcQueryExtractor<T>
+where
+    T: DeserializeOwned + 'static,
+{
+    type Error = crate::error::Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
+        // get raw query string
+        let qs = req.query_string();
+
+        // parse into key-value pairs
+        let params: Result<Vec<(String, String)>> =
+            serde_urlencoded::from_str(qs).context(UnableToParseQueryString);
+
+        let res = params
+            .and_then(|pairs| {
+                // normalize keys to lowercase
+                let normalized: Vec<(String, String)> = pairs
+                    .into_iter()
+                    .map(|(k, v)| (k.to_lowercase(), v))
+                    .collect();
+
+                // re-serialize then deserialize into target type T
+                let new_qs = serde_urlencoded::to_string(&normalized)
+                    .context(UnableToSerializeQueryString)?;
+                let value =
+                    serde_urlencoded::from_str::<T>(&new_qs).context(UnableToParseQueryString)?;
+                Ok(value)
+            })
+            .map(OgcQueryExtractor);
+
+        ready(res)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::api::model::datatypes::SpatialReferenceAuthority;
@@ -552,5 +614,26 @@ mod tests {
             Url::parse("http://example.com/a/sub/folder/wms/b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd")
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn ogc_query_extractor_normalizes_keys() {
+        use actix_web::test;
+        use serde::Deserialize;
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct TestQuery {
+            foo: String,
+            bar: String,
+        }
+
+        let req = test::TestRequest::with_uri("/test?FOO=hello&BaR=world").to_http_request();
+
+        let mut payload = actix_web::dev::Payload::None;
+        let fut = OgcQueryExtractor::<TestQuery>::from_request(&req, &mut payload);
+        let result = futures::executor::block_on(fut).unwrap();
+
+        assert_eq!(result.foo, "hello");
+        assert_eq!(result.bar, "world");
     }
 }

@@ -22,15 +22,8 @@ pub struct GetCapabilities {
     pub version: Option<WmsVersion>,
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetCapabilitiesRequest,
     #[serde(alias = "FORMAT")]
     pub format: Option<GetCapabilitiesFormat>,
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetCapabilitiesRequest {
-    GetCapabilities,
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
@@ -46,8 +39,6 @@ pub struct GetMap {
     pub version: WmsVersion,
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetMapRequest,
     #[serde(alias = "WIDTH")]
     #[serde(deserialize_with = "from_str")]
     #[param(example = 512)]
@@ -95,11 +86,6 @@ pub struct GetMap {
                                                    // TODO: DIM_<name>
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetMapRequest {
-    GetMap,
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetMapExceptionFormat {
     #[serde(rename = "XML", alias = "application/vnd.ogc.se_xml")]
@@ -139,16 +125,9 @@ pub struct GetLegendGraphic {
     pub version: WmsVersion,
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetLegendGraphicRequest,
     #[param(example = "<Workflow Id>")]
     pub layer: String,
     // TODO: remaining fields
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetLegendGraphicRequest {
-    GetLegendGraphic,
 }
 
 #[cfg(test)]
@@ -163,7 +142,6 @@ mod tests {
         let request = GetMap {
             service: WmsService::Wms,
             version: WmsVersion::V1_3_0,
-            request: GetMapRequest::GetMap,
             width: 2,
             layers: "modis_ndvi".into(),
             crs: Some(geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into()),
@@ -198,7 +176,6 @@ mod tests {
         let request = GetMap {
             service: WmsService::Wms,
             version: WmsVersion::V1_3_0,
-            request: GetMapRequest::GetMap,
             width: 2,
             layers: "modis_ndvi".into(),
             crs: Some(geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into()),

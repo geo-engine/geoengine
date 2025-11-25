@@ -1,5 +1,5 @@
 use crate::api::handlers::spatial_references::spatial_reference_specification;
-use crate::api::ogc::util::{OgcProtocol, ogc_endpoint_url};
+use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
 use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::config;
 use crate::config::get_config_element;
@@ -40,7 +40,7 @@ where
 }
 
 #[derive(Debug, Deserialize)]
-#[serde(untagged)]
+#[serde(tag = "request", rename_all = "PascalCase")]
 pub enum WcsQueryParams {
     GetCapabilities(GetCapabilities),
     DescribeCoverage(DescribeCoverage),
@@ -120,7 +120,7 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
 async fn wcs_handler<C: ApplicationContext>(
     req: HttpRequest,
     workflow: web::Path<WorkflowId>,
-    request: web::Query<WcsQueryParams>,
+    request: OgcQueryExtractor<WcsQueryParams>,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
