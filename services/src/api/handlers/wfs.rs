@@ -1,12 +1,12 @@
 use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
+use crate::api::ogc::util::{OgcProtocol, ogc_endpoint_url};
 use crate::api::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::config;
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error;
 use crate::error::Result;
-use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
+use crate::util::server::{CacheControlHeader, connection_closed};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
@@ -86,8 +86,6 @@ impl IntoParams for WfsQueryParams {
         // remove duplicate parameters
         params.sort_by(|a, b| a.name.cmp(&b.name));
         params.dedup_by(|a, b| a.name == b.name);
-
-        dbg!(&params);
 
         params
     }

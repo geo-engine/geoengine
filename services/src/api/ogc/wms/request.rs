@@ -114,7 +114,7 @@ pub enum GetMapFormat {
     ImagePng, // TODO: remaining formats
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetFeatureInfo {
     pub version: String,
     pub query_layers: String,
@@ -122,12 +122,12 @@ pub struct GetFeatureInfo {
                                      // TODO: remaining fields
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetFeatureInfoFormat {
     TextXml, // TODO: remaining formats
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetStyles {
     pub version: String,
     pub layer: String,
