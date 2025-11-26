@@ -77,6 +77,11 @@ pub enum Error {
         source: serde_urlencoded::de::Error,
     },
 
+    #[snafu(display("Unable to serialize query string: {}", source))]
+    UnableToSerializeQueryString {
+        source: serde_urlencoded::ser::Error,
+    },
+
     ServerStartup,
 
     #[snafu(display("Registration failed: {}", reason))]
@@ -613,6 +618,18 @@ impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Self::SerdeJson { source: e }
+    }
+}
+
+impl From<serde_urlencoded::de::Error> for Error {
+    fn from(e: serde_urlencoded::de::Error) -> Self {
+        Self::UnableToParseQueryString { source: e }
+    }
+}
+
+impl From<serde_urlencoded::ser::Error> for Error {
+    fn from(e: serde_urlencoded::ser::Error) -> Self {
+        Self::UnableToSerializeQueryString { source: e }
     }
 }
 

@@ -1,12 +1,12 @@
 use crate::api::handlers::spatial_references::spatial_reference_specification;
-use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
+use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
 use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::config;
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
+use crate::util::server::{CacheControlHeader, connection_closed};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
@@ -22,11 +22,14 @@ use geoengine_operators::engine::{
 use geoengine_operators::util::raster_stream_to_geotiff::{
     GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
 };
+use serde::Deserialize;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::info;
 use url::Url;
+use utoipa::IntoParams;
+use utoipa::openapi::Required;
 use uuid::Uuid;
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
@@ -34,25 +37,64 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(
-        web::resource("/wcs/{workflow}")
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetCapabilities"))
-                    .to(wcs_capabilities_handler::<C>),
-            )
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("DescribeCoverage"))
-                    .to(wcs_describe_coverage_handler::<C>),
-            )
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetCoverage"))
-                    .to(wcs_get_coverage_handler::<C>),
-            )
-            .route(web::get().to(not_implemented_handler)),
-    );
+    cfg.service(web::resource("/wcs/{workflow}").route(web::get().to(wcs_handler::<C>)));
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "request", rename_all = "PascalCase")]
+pub enum WcsQueryParams {
+    GetCapabilities(GetCapabilities),
+    DescribeCoverage(DescribeCoverage),
+    GetCoverage(GetCoverage),
+}
+
+/// manual implementation because derive macro does not support enums
+/// Note, that WCS is not really OpenAPI compatible, so this is just an approximation to enable client generation
+impl IntoParams for WcsQueryParams {
+    fn into_params(
+        _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+    ) -> Vec<utoipa::openapi::path::Parameter> {
+        let pip = || Some(utoipa::openapi::path::ParameterIn::Query);
+
+        let mut params = Vec::new();
+
+        params.push(
+            utoipa::openapi::path::ParameterBuilder::new()
+                .name("request")
+                .required(utoipa::openapi::Required::True)
+                .parameter_in(pip().unwrap_or_default())
+                .description(Some("type of WMS request"))
+                .schema(Some(
+                    utoipa::openapi::ObjectBuilder::new()
+                        .schema_type(utoipa::openapi::schema::Type::String)
+                        .enum_values(Some(vec![
+                            "GetCapabilGetCapabilitiesities",
+                            "DescribeCoverage",
+                            "GetCoverage",
+                        ])),
+                ))
+                .build(),
+        );
+
+        for mut p in GetCapabilities::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in DescribeCoverage::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in GetCoverage::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+
+        // remove duplicate parameters
+        params.sort_by(|a, b| a.name.cmp(&b.name));
+        params.dedup_by(|a, b| a.name == b.name);
+
+        params
+    }
 }
 
 fn wcs_url(workflow: WorkflowId) -> Result<Url> {
@@ -62,11 +104,11 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
     ogc_endpoint_url(&base, OgcProtocol::Wcs, workflow)
 }
 
-/// Get WCS Capabilities
+/// OGC WCS endpoint
 #[utoipa::path(
     tag = "OGC WCS",
     get,
-    path = "/wcs/{workflow}?request=GetCapabilities",
+    path = "/wcs/{workflow}",
     responses(
         (status = 200, description = "OK", content_type = "text/xml", body = String,
             // TODO: add example when utoipa supports more than just json examples
@@ -74,28 +116,47 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
-        GetCapabilities
+        WcsQueryParams
     ),
     security(
         ("session_token" = [])
     )
 )]
+
+async fn wcs_handler<C: ApplicationContext>(
+    req: HttpRequest,
+    workflow: web::Path<WorkflowId>,
+    request: OgcQueryExtractor<WcsQueryParams>,
+    app_ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<HttpResponse> {
+    match request.into_inner() {
+        WcsQueryParams::GetCapabilities(r) => wcs_get_capabilities::<C>(workflow, r, session).await,
+        WcsQueryParams::DescribeCoverage(r) => {
+            wcs_describe_coverage::<C>(workflow.into_inner(), r, app_ctx, session).await
+        }
+        WcsQueryParams::GetCoverage(r) => {
+            wcs_get_coverage::<C>(req, workflow.into_inner(), r, app_ctx, session).await
+        }
+    }
+}
+
 #[allow(
     clippy::unused_async, // the function signature of request handlers requires it
     clippy::no_effect_underscore_binding // need `_session` to quire authentication
 )]
-async fn wcs_capabilities_handler<C: ApplicationContext>(
+async fn wcs_get_capabilities<C: ApplicationContext>(
     workflow: web::Path<WorkflowId>,
-    request: web::Query<GetCapabilities>,
+    request: GetCapabilities,
     _session: C::Session,
 ) -> Result<HttpResponse> {
-    let workflow = workflow.into_inner();
-
     info!("{request:?}");
 
     // TODO: workflow bounding box
     // TODO: host schema file(?)
     // TODO: load ServiceIdentification and ServiceProvider from config
+
+    let workflow = workflow.into_inner();
 
     let wcs_url = wcs_url(workflow)?;
     let mock = format!(
@@ -156,32 +217,14 @@ async fn wcs_capabilities_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
-/// Get WCS Coverage Description
-#[utoipa::path(
-    tag = "OGC WCS",
-    get,
-    path = "/wcs/{workflow}?request=DescribeCoverage",
-    responses(
-        (status = 200, description = "OK", content_type = "text/xml", body = String,
-            // TODO: add example when utoipa supports more than just json examples
-        )
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        DescribeCoverage
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
 #[allow(clippy::too_many_lines)]
-async fn wcs_describe_coverage_handler<C: ApplicationContext>(
-    workflow: web::Path<WorkflowId>,
-    request: web::Query<DescribeCoverage>,
+async fn wcs_describe_coverage<C: ApplicationContext>(
+    workflow: WorkflowId,
+    request: DescribeCoverage,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let endpoint = workflow.into_inner();
+    let endpoint = workflow;
 
     info!("{request:?}");
 
@@ -306,31 +349,15 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
-/// Get WCS Coverage
-#[utoipa::path(
-    tag = "OGC WCS",
-    get,
-    path = "/wcs/{workflow}?request=GetCoverage",
-    responses(
-        (status = 200, response = crate::api::model::responses::PngResponse),
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        GetCoverage
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
 #[allow(clippy::too_many_lines)]
-async fn wcs_get_coverage_handler<C: ApplicationContext>(
+async fn wcs_get_coverage<C: ApplicationContext>(
     req: HttpRequest,
-    workflow: web::Path<WorkflowId>,
-    request: web::Query<GetCoverage>,
+    workflow: WorkflowId,
+    request: GetCoverage,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let endpoint = workflow.into_inner();
+    let endpoint = workflow;
 
     info!("{request:?}");
 

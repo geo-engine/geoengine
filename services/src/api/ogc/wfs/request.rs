@@ -1,9 +1,6 @@
 use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{
-    OgcBoundingBox, parse_ogc_bbox, parse_time_option, parse_wfs_resolution_option,
-};
+use crate::api::ogc::util::{OgcBoundingBox, parse_ogc_bbox, parse_time_option};
 use crate::util::from_str_option;
-use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use serde::{Deserialize, Serialize};
 use utoipa::openapi::Type;
@@ -28,13 +25,6 @@ pub struct GetCapabilities {
     pub version: Option<WfsVersion>,
     #[serde(alias = "SERVICE")]
     pub service: WfsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetCapabilitiesRequest,
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetCapabilitiesRequest {
-    GetCapabilities,
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
@@ -58,8 +48,7 @@ impl ToSchema for TypeNames {}
 pub struct GetFeature {
     pub version: Option<WfsVersion>,
     pub service: WfsService,
-    pub request: GetFeatureRequest,
-    #[serde(deserialize_with = "parse_type_names")]
+    #[serde(deserialize_with = "parse_type_names", alias = "typenames")]
     #[param(example = "<Workflow Id>")]
     pub type_names: TypeNames,
     // TODO: fifths parameter can be CRS
@@ -71,34 +60,21 @@ pub struct GetFeature {
     #[param(value_type = String, example = "2014-04-01T12:00:00.000Z")]
     pub time: Option<TimeInterval>,
     #[param(example = "EPSG:4326", value_type = Option<String>)]
+    #[serde(alias = "srsname")]
     pub srs_name: Option<SpatialReference>,
     pub namespaces: Option<String>, // TODO e.g. xmlns(dog=http://www.example.com/namespaces/dog)
     #[serde(default)]
     #[serde(deserialize_with = "from_str_option")]
     pub count: Option<u64>,
-    pub sort_by: Option<String>,       // TODO: Name[+A|+D] (asc/desc)
-    pub result_type: Option<String>,   // TODO: enum: results/hits?
-    pub filter: Option<String>,        // TODO: parse filters
+    #[serde(alias = "sortby")]
+    pub sort_by: Option<String>, // TODO: Name[+A|+D] (asc/desc)
+    #[serde(alias = "resulttype")]
+    pub result_type: Option<String>, // TODO: enum: results/hits?
+    pub filter: Option<String>, // TODO: parse filters
+    #[serde(alias = "propertyname")]
     pub property_name: Option<String>, // TODO comma separated list
-    // TODO: feature_id, ...
-    /// Vendor parameter for specifying a spatial query resolution
-    #[serde(default)]
-    #[serde(deserialize_with = "parse_wfs_resolution_option")]
-    pub query_resolution: Option<WfsResolution>,
+                                // TODO: feature_id, ...
 }
-
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub struct WfsResolution(pub SpatialResolution);
-
-impl PartialSchema for WfsResolution {
-    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
-        ObjectBuilder::new()
-            .schema_type(SchemaType::Type(Type::String))
-            .into()
-    }
-}
-
-impl ToSchema for WfsResolution {}
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetFeatureRequest {
@@ -140,7 +116,6 @@ mod tests {
 
         let request = GetFeature {
             service: WfsService::Wfs,
-            request: GetFeatureRequest::GetFeature,
             version: Some(WfsVersion::V2_0_0),
             time: None,
             srs_name: None,
@@ -155,7 +130,6 @@ mod tests {
                 feature_type: "test".into(),
             },
             property_name: None,
-            query_resolution: None,
         };
 
         assert_eq!(parsed, request);
@@ -183,14 +157,12 @@ mod tests {
   </And>
 </Filter>"),
             ("propertyName","P1,P2"),
-            ("queryResolution","0.1,0.1"),
         ];
         let query = serde_urlencoded::to_string(params).unwrap();
         let parsed: GetFeature = serde_urlencoded::from_str(&query).unwrap();
 
         let request =GetFeature {
             service: WfsService::Wfs,
-            request: GetFeatureRequest::GetFeature,
             version: Some(WfsVersion::V2_0_0),
             time: Some(geoengine_datatypes::primitives::TimeInterval::new(946_684_800_000, 946_771_200_000).unwrap().into()),
             srs_name: Some(SpatialReference::new(SpatialReferenceAuthority::Epsg, 4326)),
@@ -210,7 +182,6 @@ mod tests {
                 feature_type: "test".into(),
             },
             property_name: Some("P1,P2".into()),
-            query_resolution: Some(WfsResolution(SpatialResolution::zero_point_one())),
         };
 
         assert_eq!(parsed, request);
@@ -234,7 +205,6 @@ mod tests {
 
         let request = GetFeature {
             service: WfsService::Wfs,
-            request: GetFeatureRequest::GetFeature,
             version: Some(WfsVersion::V2_0_0),
             time: None,
             srs_name: None,
@@ -249,7 +219,6 @@ mod tests {
                 feature_type: op,
             },
             property_name: None,
-            query_resolution: None,
         };
 
         assert_eq!(parsed, request);

@@ -2,9 +2,9 @@ use crate::api::model::datatypes::{
     RasterColorizer, SpatialReference, SpatialReferenceOption, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
-use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
+use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
 use crate::api::ogc::wms::request::{
-    GetCapabilities, GetLegendGraphic, GetMap, GetMapExceptionFormat,
+    GetCapabilities, GetFeatureInfo, GetLegendGraphic, GetMap, GetMapExceptionFormat, GetStyles,
 };
 use crate::config;
 use crate::config::get_config_element;
@@ -26,10 +26,13 @@ use geoengine_operators::{
     util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
 use reqwest::Url;
+use serde::Deserialize;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::debug;
+use utoipa::IntoParams;
+use utoipa::openapi::Required;
 use uuid::Uuid;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
@@ -37,32 +40,84 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(
-        web::resource("/wms/{workflow}")
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetCapabilities"))
-                    .to(wms_capabilities_handler::<C>),
-            )
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetMap"))
-                    .to(wms_map_handler::<C>),
-            )
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetLegendGraphic"))
-                    .to(wms_legend_graphic_handler::<C>),
-            )
-            .route(web::get().to(not_implemented_handler)),
-    );
+    cfg.service(web::resource("/wms/{workflow}").route(web::get().to(wms_handler::<C>)));
 }
 
-/// Get WMS Capabilities
+#[derive(Debug, Deserialize)]
+#[serde(tag = "request", rename_all = "PascalCase")]
+#[allow(clippy::large_enum_variant, clippy::enum_variant_names)]
+pub enum WmsQueryParams {
+    GetCapabilities(GetCapabilities),
+    GetMap(GetMap),
+    GetFeatureInfo(GetFeatureInfo),
+    GetStyles(GetStyles),
+    GetLegendGraphic(GetLegendGraphic),
+}
+
+/// manual implementation because derive macro does not support enums
+/// Note, that WMS is not really OpenAPI compatible, so this is just an approximation to enable client generation
+impl IntoParams for WmsQueryParams {
+    fn into_params(
+        _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+    ) -> Vec<utoipa::openapi::path::Parameter> {
+        let pip = || Some(utoipa::openapi::path::ParameterIn::Query);
+
+        let mut params = Vec::new();
+
+        params.push(
+            utoipa::openapi::path::ParameterBuilder::new()
+                .name("request")
+                .required(utoipa::openapi::Required::True)
+                .parameter_in(pip().unwrap_or_default())
+                .description(Some("type of WMS request"))
+                .schema(Some(
+                    utoipa::openapi::ObjectBuilder::new()
+                        .schema_type(utoipa::openapi::schema::Type::String)
+                        .enum_values(Some(vec![
+                            "GetCapabilities",
+                            "GetMap",
+                            "GetFeatureInfo",
+                            "GetStyles",
+                            "GetLegendGraphic",
+                        ])),
+                ))
+                .build(),
+        );
+
+        for mut p in GetCapabilities::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in GetMap::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in GetFeatureInfo::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in GetStyles::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in GetLegendGraphic::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+
+        // remove duplicate parameters
+        params.sort_by(|a, b| a.name.cmp(&b.name));
+        params.dedup_by(|a, b| a.name == b.name);
+
+        params
+    }
+}
+
+/// OGC WMS endpoint
 #[utoipa::path(
     tag = "OGC WMS",
     get,
-    path = "/wms/{workflow}?request=GetCapabilities",
+    path = "/wms/{workflow}",
     responses(
         (status = 200, description = "OK", content_type = "text/xml", body = String,
             // TODO: add example when utoipa supports more than just json examples
@@ -121,23 +176,43 @@ where
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
-        GetCapabilities
+        WmsQueryParams
     ),
     security(
         ("session_token" = [])
     )
 )]
-async fn wms_capabilities_handler<C>(
+async fn wms_handler<C>(
+    req: HttpRequest,
     workflow: web::Path<WorkflowId>,
-    // TODO: incorporate `GetCapabilities` request
-    // _request: web::Query<GetCapabilities>,
+    request: OgcQueryExtractor<WmsQueryParams>,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>
 where
     C: ApplicationContext,
 {
-    let workflow_id = workflow.into_inner();
+    match request.into_inner() {
+        WmsQueryParams::GetCapabilities(_) => {
+            wms_get_capabilities(workflow.into_inner(), app_ctx, session).await
+        }
+        WmsQueryParams::GetMap(get_map) => {
+            wms_get_map(req, workflow.into_inner(), get_map, app_ctx, session).await
+        }
+        WmsQueryParams::GetFeatureInfo(_)
+        | WmsQueryParams::GetStyles(_)
+        | WmsQueryParams::GetLegendGraphic(_) => Ok(not_implemented_handler().await),
+    }
+}
+
+async fn wms_get_capabilities<C>(
+    workflow_id: WorkflowId,
+    app_ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<HttpResponse>
+where
+    C: ApplicationContext,
+{
     let wms_url = wms_url(workflow_id)?;
 
     let ctx = app_ctx.session_context(session);
@@ -225,38 +300,22 @@ fn wms_url(workflow: WorkflowId) -> Result<Url> {
     ogc_endpoint_url(&base, OgcProtocol::Wms, workflow)
 }
 
-/// Get WMS Map
-#[utoipa::path(
-    tag = "OGC WMS",
-    get,
-    path = "/wms/{workflow}?request=GetMap",
-    responses(
-        (status = 200, response = crate::api::model::responses::PngResponse),
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        GetMap
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
 #[allow(clippy::too_many_lines)]
-async fn wms_map_handler<C: ApplicationContext>(
+async fn wms_get_map<C: ApplicationContext>(
     req: HttpRequest,
-    workflow: web::Path<WorkflowId>,
-    request: web::Query<GetMap>,
+    workflow: WorkflowId,
+    request: GetMap,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
     async fn compute_result<C: ApplicationContext>(
         req: HttpRequest,
-        workflow: web::Path<WorkflowId>,
-        request: &web::Query<GetMap>,
+        workflow: WorkflowId,
+        request: &GetMap,
         app_ctx: web::Data<C>,
         session: C::Session,
     ) -> Result<(Vec<u8>, CacheHint)> {
-        let endpoint = workflow.into_inner();
+        let endpoint = workflow;
         let layer = WorkflowId::from_str(&request.layers)?;
 
         ensure!(
@@ -446,36 +505,6 @@ fn raster_colorizer_from_style(styles: &str) -> Result<Option<RasterColorizer>> 
         None => Ok(None),
         Some(suffix) => serde_json::from_str(suffix).map_err(error::Error::from),
     }
-}
-
-/// Get WMS Legend Graphic
-#[utoipa::path(
-    tag = "OGC WMS",
-    get,
-    path = "/wms/{workflow}?request=GetLegendGraphic",
-    responses(
-        (status = 501, description = "Not implemented")
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        GetLegendGraphic
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
-#[allow(
-    clippy::unused_async, // the function signature of request handlers requires it
-    clippy::no_effect_underscore_binding // need `_session` to quire authentication
-)]
-async fn wms_legend_graphic_handler<C: ApplicationContext>(
-    // TODO: incorporate workflow and `GetLegendGraphic` query
-    // _workflow: web::Path<WorkflowId>,
-    // _request: web::Query<GetLegendGraphic>,
-    // _app_ctx: web::Data<C>,
-    _session: C::Session,
-) -> HttpResponse {
-    HttpResponse::NotImplemented().finish()
 }
 
 fn default_time_from_config() -> TimeInterval {

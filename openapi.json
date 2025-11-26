@@ -4192,13 +4192,13 @@
         ]
       }
     },
-    "/wcs/{workflow}?request=DescribeCoverage": {
+    "/wcs/{workflow}": {
       "get": {
         "tags": [
           "OGC WCS"
         ],
-        "summary": "Get WCS Coverage Description",
-        "operationId": "wcs_describe_coverage_handler",
+        "summary": "OGC WCS endpoint",
+        "operationId": "wcs_handler",
         "parameters": [
           {
             "name": "workflow",
@@ -4208,212 +4208,32 @@
             "schema": {
               "$ref": "#/components/schemas/WorkflowId"
             }
-          },
-          {
-            "name": "version",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WcsVersion"
-            }
-          },
-          {
-            "name": "service",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WcsService"
-            }
-          },
-          {
-            "name": "request",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/DescribeCoverageRequest"
-            }
-          },
-          {
-            "name": "identifiers",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "<Workflow Id>"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/xml": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/wcs/{workflow}?request=GetCapabilities": {
-      "get": {
-        "tags": [
-          "OGC WCS"
-        ],
-        "summary": "Get WCS Capabilities",
-        "operationId": "wcs_capabilities_handler",
-        "parameters": [
-          {
-            "name": "workflow",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          },
-          {
-            "name": "version",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/WcsVersion"
-                }
-              ]
-            }
-          },
-          {
-            "name": "service",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WcsService"
-            }
-          },
-          {
-            "name": "request",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetCapabilitiesRequest"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/xml": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/wcs/{workflow}?request=GetCoverage": {
-      "get": {
-        "tags": [
-          "OGC WCS"
-        ],
-        "summary": "Get WCS Coverage",
-        "operationId": "wcs_get_coverage_handler",
-        "parameters": [
-          {
-            "name": "workflow",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          },
-          {
-            "name": "version",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WcsVersion"
-            }
-          },
-          {
-            "name": "service",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WcsService"
-            }
-          },
-          {
-            "name": "request",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetCoverageRequest"
-            }
-          },
-          {
-            "name": "format",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetCoverageFormat"
-            }
-          },
-          {
-            "name": "identifier",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "<Workflow Id>"
           },
           {
             "name": "boundingbox",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             },
             "example": "-90,-180,90,180,urn:ogc:def:crs:EPSG::4326"
           },
           {
-            "name": "gridbasecrs",
+            "name": "format",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string"
-            },
-            "example": "urn:ogc:def:crs:EPSG::4326"
+              "$ref": "#/components/schemas/GetCoverageFormat"
+            }
           },
           {
-            "name": "gridorigin",
+            "name": "gridbasecrs",
             "in": "query",
             "required": false,
             "schema": {
               "type": "string"
             },
-            "example": "90,-180"
+            "example": "urn:ogc:def:crs:EPSG::4326"
           },
           {
             "name": "gridoffsets",
@@ -4425,11 +4245,56 @@
             "example": "-0.1,0.1"
           },
           {
-            "name": "time",
+            "name": "gridorigin",
             "in": "query",
             "required": false,
             "schema": {
               "type": "string"
+            },
+            "example": "90,-180"
+          },
+          {
+            "name": "identifier",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "<Workflow Id>"
+          },
+          {
+            "name": "identifiers",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "<Workflow Id>"
+          },
+          {
+            "name": "nodatavalue",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "number",
+                "null"
+              ],
+              "format": "double"
+            }
+          },
+          {
+            "name": "request",
+            "in": "query",
+            "description": "type of WMS request",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "GetCapabilGetCapabilitiesities",
+                "DescribeCoverage",
+                "GetCoverage"
+              ]
             }
           },
           {
@@ -4457,76 +4322,34 @@
             }
           },
           {
-            "name": "nodatavalue",
+            "name": "service",
             "in": "query",
             "required": false,
             "schema": {
-              "type": [
-                "number",
-                "null"
-              ],
-              "format": "double"
+              "$ref": "#/components/schemas/WcsService"
             }
-          }
-        ],
-        "responses": {
-          "200": {
-            "$ref": "#/components/responses/PngResponse"
-          }
-        },
-        "security": [
+          },
           {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/wfs/{workflow}?request=GetCapabilities": {
-      "get": {
-        "tags": [
-          "OGC WFS"
-        ],
-        "summary": "Get WFS Capabilities",
-        "operationId": "wfs_capabilities_handler",
-        "parameters": [
-          {
-            "name": "workflow",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
+            "name": "time",
+            "in": "query",
+            "required": false,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "type": "string"
             }
           },
           {
             "name": "version",
-            "in": "path",
-            "required": true,
+            "in": "query",
+            "required": false,
             "schema": {
               "oneOf": [
                 {
                   "type": "null"
                 },
                 {
-                  "$ref": "#/components/schemas/WfsVersion"
+                  "$ref": "#/components/schemas/WcsVersion"
                 }
               ]
-            }
-          },
-          {
-            "name": "service",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WfsService"
-            }
-          },
-          {
-            "name": "request",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetCapabilitiesRequest"
             }
           }
         ],
@@ -4549,13 +4372,13 @@
         ]
       }
     },
-    "/wfs/{workflow}?request=GetFeature": {
+    "/wfs/{workflow}": {
       "get": {
         "tags": [
           "OGC WFS"
         ],
-        "summary": "Get WCS Features",
-        "operationId": "wfs_feature_handler",
+        "summary": "OGC WFS endpoint",
+        "operationId": "wfs_handler",
         "parameters": [
           {
             "name": "workflow",
@@ -4567,85 +4390,13 @@
             }
           },
           {
-            "name": "version",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/WfsVersion"
-                }
-              ]
-            }
-          },
-          {
-            "name": "service",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WfsService"
-            }
-          },
-          {
-            "name": "request",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetFeatureRequest"
-            }
-          },
-          {
-            "name": "typeNames",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/TypeNames"
-            },
-            "example": "<Workflow Id>"
-          },
-          {
             "name": "bbox",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/OgcBoundingBox"
             },
             "example": "-90,-180,90,180"
-          },
-          {
-            "name": "time",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "example": "2014-04-01T12:00:00.000Z"
-          },
-          {
-            "name": "srsName",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "example": "EPSG:4326"
-          },
-          {
-            "name": "namespaces",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
           },
           {
             "name": "count",
@@ -4661,29 +4412,18 @@
             }
           },
           {
-            "name": "sortBy",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          {
-            "name": "resultType",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
-          },
-          {
             "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "namespaces",
             "in": "query",
             "required": false,
             "schema": {
@@ -4705,9 +4445,81 @@
             }
           },
           {
-            "name": "queryResolution",
+            "name": "request",
             "in": "query",
-            "description": "Vendor parameter for specifying a spatial query resolution",
+            "description": "type of WFS request",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "GetCapabilities",
+                "GetFeature"
+              ]
+            }
+          },
+          {
+            "name": "resultType",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/WfsService"
+            }
+          },
+          {
+            "name": "sortBy",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "srsName",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "example": "EPSG:4326"
+          },
+          {
+            "name": "time",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2014-04-01T12:00:00.000Z"
+          },
+          {
+            "name": "typeNames",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/TypeNames"
+            },
+            "example": "<Workflow Id>"
+          },
+          {
+            "name": "version",
+            "in": "query",
             "required": false,
             "schema": {
               "oneOf": [
@@ -4715,7 +4527,7 @@
                   "type": "null"
                 },
                 {
-                  "$ref": "#/components/schemas/WfsResolution"
+                  "$ref": "#/components/schemas/WfsVersion"
                 }
               ]
             }
@@ -4835,13 +4647,13 @@
         ]
       }
     },
-    "/wms/{workflow}?request=GetCapabilities": {
+    "/wms/{workflow}": {
       "get": {
         "tags": [
           "OGC WMS"
         ],
-        "summary": "Get WMS Capabilities",
-        "operationId": "wms_capabilities_handler",
+        "summary": "OGC WMS endpoint",
+        "operationId": "wms_handler",
         "parameters": [
           {
             "name": "workflow",
@@ -4851,265 +4663,15 @@
             "schema": {
               "$ref": "#/components/schemas/WorkflowId"
             }
-          },
-          {
-            "name": "version",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/WmsVersion"
-                }
-              ]
-            }
-          },
-          {
-            "name": "service",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WmsService"
-            }
-          },
-          {
-            "name": "request",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetCapabilitiesRequest"
-            }
-          },
-          {
-            "name": "format",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "oneOf": [
-                {
-                  "type": "null"
-                },
-                {
-                  "$ref": "#/components/schemas/GetCapabilitiesFormat"
-                }
-              ]
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "text/xml": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/wms/{workflow}?request=GetLegendGraphic": {
-      "get": {
-        "tags": [
-          "OGC WMS"
-        ],
-        "summary": "Get WMS Legend Graphic",
-        "operationId": "wms_legend_graphic_handler",
-        "parameters": [
-          {
-            "name": "workflow",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          },
-          {
-            "name": "version",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WmsVersion"
-            }
-          },
-          {
-            "name": "service",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WmsService"
-            }
-          },
-          {
-            "name": "request",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetLegendGraphicRequest"
-            }
-          },
-          {
-            "name": "layer",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "<Workflow Id>"
-          }
-        ],
-        "responses": {
-          "501": {
-            "description": "Not implemented"
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/wms/{workflow}?request=GetMap": {
-      "get": {
-        "tags": [
-          "OGC WMS"
-        ],
-        "summary": "Get WMS Map",
-        "operationId": "wms_map_handler",
-        "parameters": [
-          {
-            "name": "workflow",
-            "in": "path",
-            "description": "Workflow id",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          },
-          {
-            "name": "version",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WmsVersion"
-            }
-          },
-          {
-            "name": "service",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WmsService"
-            }
-          },
-          {
-            "name": "request",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetMapRequest"
-            }
-          },
-          {
-            "name": "width",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            },
-            "example": 512
-          },
-          {
-            "name": "height",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "format": "int32",
-              "minimum": 0
-            },
-            "example": 256
           },
           {
             "name": "bbox",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "$ref": "#/components/schemas/OgcBoundingBox"
             },
             "example": "-90,-180,90,180"
-          },
-          {
-            "name": "format",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/GetMapFormat"
-            }
-          },
-          {
-            "name": "layers",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "<Workflow Id>"
-          },
-          {
-            "name": "crs",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            },
-            "example": "EPSG:4326"
-          },
-          {
-            "name": "styles",
-            "in": "query",
-            "required": true,
-            "schema": {
-              "type": "string"
-            },
-            "example": "custom:{\"type\":\"linearGradient\",\"breakpoints\":[{\"value\":1,\"color\":[0,0,0,255]},{\"value\":255,\"color\":[255,255,255,255]}],\"noDataColor\":[0,0,0,0],\"defaultColor\":[0,0,0,0]}"
-          },
-          {
-            "name": "time",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string"
-            },
-            "example": "2014-04-01T12:00:00.000Z"
-          },
-          {
-            "name": "transparent",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": [
-                "boolean",
-                "null"
-              ]
-            }
           },
           {
             "name": "bgcolor",
@@ -5123,7 +4685,7 @@
             }
           },
           {
-            "name": "sld",
+            "name": "crs",
             "in": "query",
             "required": false,
             "schema": {
@@ -5131,18 +4693,8 @@
                 "string",
                 "null"
               ]
-            }
-          },
-          {
-            "name": "sld_body",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": [
-                "string",
-                "null"
-              ]
-            }
+            },
+            "example": "EPSG:4326"
           },
           {
             "name": "elevation",
@@ -5169,11 +4721,181 @@
                 }
               ]
             }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/GetCapabilitiesFormat"
+                }
+              ]
+            }
+          },
+          {
+            "name": "height",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "example": 256
+          },
+          {
+            "name": "info_format",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "layer",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "layers",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "<Workflow Id>"
+          },
+          {
+            "name": "query_layers",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "request",
+            "in": "query",
+            "description": "type of WMS request",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "GetCapabilities",
+                "GetMap",
+                "GetFeatureInfo",
+                "GetStyles",
+                "GetLegendGraphic"
+              ]
+            }
+          },
+          {
+            "name": "service",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "$ref": "#/components/schemas/WmsService"
+            }
+          },
+          {
+            "name": "sld",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "sld_body",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "string",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "styles",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "custom:{\"type\":\"linearGradient\",\"breakpoints\":[{\"value\":1,\"color\":[0,0,0,255]},{\"value\":255,\"color\":[255,255,255,255]}],\"noDataColor\":[0,0,0,0],\"defaultColor\":[0,0,0,0]}"
+          },
+          {
+            "name": "time",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            },
+            "example": "2014-04-01T12:00:00.000Z"
+          },
+          {
+            "name": "transparent",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": [
+                "boolean",
+                "null"
+              ]
+            }
+          },
+          {
+            "name": "version",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "oneOf": [
+                {
+                  "type": "null"
+                },
+                {
+                  "$ref": "#/components/schemas/WmsVersion"
+                }
+              ]
+            }
+          },
+          {
+            "name": "width",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            },
+            "example": 512
           }
         ],
         "responses": {
           "200": {
-            "$ref": "#/components/responses/PngResponse"
+            "description": "OK",
+            "content": {
+              "text/xml": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         },
         "security": [
@@ -6597,12 +6319,6 @@
           }
         }
       },
-      "DescribeCoverageRequest": {
-        "type": "string",
-        "enum": [
-          "DescribeCoverage"
-        ]
-      },
       "EbvPortalDataProviderDefinition": {
         "type": "object",
         "required": [
@@ -7225,34 +6941,16 @@
           "text/xml"
         ]
       },
-      "GetCapabilitiesRequest": {
-        "type": "string",
-        "enum": [
-          "GetCapabilities"
-        ]
-      },
       "GetCoverageFormat": {
         "type": "string",
         "enum": [
           "image/tiff"
         ]
       },
-      "GetCoverageRequest": {
-        "type": "string",
-        "enum": [
-          "GetCoverage"
-        ]
-      },
       "GetFeatureRequest": {
         "type": "string",
         "enum": [
           "GetFeature"
-        ]
-      },
-      "GetLegendGraphicRequest": {
-        "type": "string",
-        "enum": [
-          "GetLegendGraphic"
         ]
       },
       "GetMapExceptionFormat": {
@@ -7266,12 +6964,6 @@
         "type": "string",
         "enum": [
           "image/png"
-        ]
-      },
-      "GetMapRequest": {
-        "type": "string",
-        "enum": [
-          "GetMap"
         ]
       },
       "GfbioAbcdDataProviderDefinition": {
@@ -11150,9 +10842,6 @@
           "1.1.0",
           "1.1.1"
         ]
-      },
-      "WfsResolution": {
-        "type": "string"
       },
       "WfsService": {
         "type": "string",
