@@ -1,13 +1,17 @@
 use crate::error::{self, ExpressionExecutionError};
 use snafu::ResultExt;
-use std::path::{Path, PathBuf};
+use std::{
+    fs::File,
+    io::{BufWriter, Write},
+    path::{Path, PathBuf},
+};
 
 pub type Result<T, E = ExpressionExecutionError> = std::result::Result<T, E>;
 
 const DEPS_CARGO_TOML: &[u8] = std::include_bytes!("../deps-workspace/Cargo.toml");
 const DEPS_CARGO_LOCK: &[u8] = std::include_bytes!("../deps-workspace/Cargo.lock");
 const DEPS_LIB_RS: &[u8] = std::include_bytes!("../deps-workspace/lib.rs");
-const RUST_TOOLCHAIN_TOML: &[u8] = std::include_bytes!("../../rust-toolchain.toml");
+const RUST_TOOLCHAIN_TOML: &str = std::include_str!("../../rust-toolchain.toml");
 
 /// A pre-built workspace for linking dependencies.
 ///
@@ -57,13 +61,27 @@ impl ExpressionDependencies {
     }
 
     fn copy_deps_workspace(cargo_workspace: &Path) -> Result<(), std::io::Error> {
+        const COMPONENTS_LINE_PREFIX: &str = "components = ";
+        const REPLACEMENT_COMPONENTS: &str = r#"["rustc", "cargo", "rust-std"]"#;
+
         std::fs::write(cargo_workspace.join("Cargo.toml"), DEPS_CARGO_TOML)?;
         std::fs::write(cargo_workspace.join("Cargo.lock"), DEPS_CARGO_LOCK)?;
         std::fs::write(cargo_workspace.join("lib.rs"), DEPS_LIB_RS)?;
-        std::fs::write(
-            cargo_workspace.join("rust-toolchain.toml"),
-            RUST_TOOLCHAIN_TOML,
-        )?;
+
+        let file = File::create(cargo_workspace.join("rust-toolchain.toml"))?;
+        let mut file = BufWriter::new(file);
+
+        for line in RUST_TOOLCHAIN_TOML.lines() {
+            if line.starts_with(COMPONENTS_LINE_PREFIX) {
+                writeln!(
+                    &mut file,
+                    "{COMPONENTS_LINE_PREFIX}{REPLACEMENT_COMPONENTS}"
+                )?;
+            } else {
+                writeln!(&mut file, "{line}")?;
+            }
+        }
+
         Ok(())
     }
 }
