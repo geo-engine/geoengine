@@ -6918,12 +6918,6 @@
           "image/tiff"
         ]
       },
-      "GetFeatureRequest": {
-        "type": "string",
-        "enum": [
-          "GetFeature"
-        ]
-      },
       "GetMapExceptionFormat": {
         "type": "string",
         "enum": [

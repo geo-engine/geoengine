@@ -346,7 +346,6 @@ use utoipa::{Modify, OpenApi};
             wfs::request::WfsRequest,
             wfs::request::WfsService,
             wfs::request::WfsVersion,
-            wfs::request::GetFeatureRequest,
             wfs::request::TypeNames,
 
             GeoJson,

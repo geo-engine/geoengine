@@ -83,11 +83,6 @@ pub struct GetFeature {
                                 // TODO: feature_id, ...
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetFeatureRequest {
-    GetFeature,
-}
-
 #[allow(clippy::option_if_let_else)]
 pub fn parse_type_names<'de, D>(deserializer: D) -> Result<TypeNames, D::Error>
 where
