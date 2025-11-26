@@ -162,7 +162,7 @@ impl IntoParams for WmsQueryParams {
             //     </Layer>
             //   </Capability>
             // </WMS_Capabilities>"#
-        ), 
+        ),
         (status = 200, response = crate::api::model::responses::PngResponse),
     ),
     params(
