@@ -32,7 +32,7 @@ use std::str::FromStr;
 use std::time::Duration;
 use tracing::debug;
 use utoipa::IntoParams;
-use utoipa::openapi::Required;
+use utoipa::openapi::{Ref, Required};
 use uuid::Uuid;
 
 pub(crate) fn init_wms_routes<C>(cfg: &mut web::ServiceConfig)
@@ -70,17 +70,7 @@ impl IntoParams for WmsQueryParams {
                 .required(utoipa::openapi::Required::True)
                 .parameter_in(pip().unwrap_or_default())
                 .description(Some("type of WMS request"))
-                .schema(Some(
-                    utoipa::openapi::ObjectBuilder::new()
-                        .schema_type(utoipa::openapi::schema::Type::String)
-                        .enum_values(Some(vec![
-                            "GetCapabilities",
-                            "GetMap",
-                            "GetFeatureInfo",
-                            "GetStyles",
-                            "GetLegendGraphic",
-                        ])),
-                ))
+                .schema(Some(Ref::from_schema_name("WmsRequest")))
                 .build(),
         );
 
@@ -172,7 +162,8 @@ impl IntoParams for WmsQueryParams {
             //     </Layer>
             //   </Capability>
             // </WMS_Capabilities>"#
-        )
+        ), 
+        (status = 200, response = crate::api::model::responses::PngResponse),
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),

@@ -331,17 +331,19 @@ use utoipa::{Modify, OpenApi};
 
             OgcBoundingBox,
 
+            wcs::request::WcsRequest,
             wcs::request::WcsService,
             wcs::request::WcsVersion,
             wcs::request::GetCoverageFormat,
             wcs::request::WcsBoundingbox,
 
+            wms::request::WmsRequest,
             wms::request::WmsService,
             wms::request::WmsVersion,
-            wms::request::GetCapabilitiesFormat,
             wms::request::GetMapExceptionFormat,
-            wms::request::GetMapFormat,
+            wms::request::WmsResponseFormat,
 
+            wfs::request::WfsRequest,
             wfs::request::WfsService,
             wfs::request::WfsVersion,
             wfs::request::GetFeatureRequest,
