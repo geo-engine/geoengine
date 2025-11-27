@@ -1,8 +1,11 @@
-use crate::error::{self, ExpressionExecutionError};
+use crate::{
+    error::{self, ExpressionExecutionError},
+    util::write_minimal_toolchain_file,
+};
 use snafu::ResultExt;
 use std::{
     fs::File,
-    io::{BufWriter, Write},
+    io::BufWriter,
     path::{Path, PathBuf},
 };
 
@@ -61,26 +64,14 @@ impl ExpressionDependencies {
     }
 
     fn copy_deps_workspace(cargo_workspace: &Path) -> Result<(), std::io::Error> {
-        const COMPONENTS_LINE_PREFIX: &str = "components = ";
-        const REPLACEMENT_COMPONENTS: &str = r#"["rustc", "cargo", "rust-std"]"#;
-
         std::fs::write(cargo_workspace.join("Cargo.toml"), DEPS_CARGO_TOML)?;
         std::fs::write(cargo_workspace.join("Cargo.lock"), DEPS_CARGO_LOCK)?;
         std::fs::write(cargo_workspace.join("lib.rs"), DEPS_LIB_RS)?;
 
-        let file = File::create(cargo_workspace.join("rust-toolchain.toml"))?;
-        let mut file = BufWriter::new(file);
-
-        for line in RUST_TOOLCHAIN_TOML.lines() {
-            if line.starts_with(COMPONENTS_LINE_PREFIX) {
-                writeln!(
-                    &mut file,
-                    "{COMPONENTS_LINE_PREFIX}{REPLACEMENT_COMPONENTS}"
-                )?;
-            } else {
-                writeln!(&mut file, "{line}")?;
-            }
-        }
+        write_minimal_toolchain_file(
+            &mut BufWriter::new(File::create(cargo_workspace.join("rust-toolchain.toml"))?),
+            RUST_TOOLCHAIN_TOML,
+        )?;
 
         Ok(())
     }
