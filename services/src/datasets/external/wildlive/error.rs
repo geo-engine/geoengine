@@ -24,7 +24,7 @@ pub enum WildliveError {
     InvalidProjectBounds {
         source: geoengine_datatypes::error::Error,
     },
-    #[snafu(display("Unable to get bounds for project: {project}"))]
+    #[snafu(display("Empty project bounds for project: {project}"))]
     EmptyProjectBounds {
         project: String,
     },

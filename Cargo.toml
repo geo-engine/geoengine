@@ -114,6 +114,7 @@ geo-types = "0.7.17"                                                            
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
 image = "0.25"
+indoc = "2.0"
 itertools = "0.14"
 libloading = "0.8"
 lru = "0.16"

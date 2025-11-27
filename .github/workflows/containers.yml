@@ -27,6 +27,9 @@ jobs:
 
     runs-on: ubuntu-24.04
 
+    permissions:
+      contents: read
+
     env:
       TAG_NAME: nightly
       CONTAINER_REPOSITORY_BRANCH: main
@@ -110,7 +113,12 @@ jobs:
     name: Post to a Slack channel in case of failure
     needs: create-container
     if: always()
+
     runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
     steps:
       - name: Post to a Slack channel
         if: ${{ needs.create-container.result == 'failure' }}

@@ -11,6 +11,7 @@ pub use compiled::LinkedExpression;
 pub use dependencies::ExpressionDependencies;
 pub use functions::FUNCTION_PREFIX;
 pub use parser::ExpressionParser;
+pub use util::write_minimal_toolchain_file;
 
 pub use geoengine_expression_deps::*;
 

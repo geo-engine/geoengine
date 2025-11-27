@@ -15,6 +15,10 @@ use crate::{
             LayerCollectionId, LayerCollectionProvider, ProviderCapabilities, SearchCapabilities,
         },
     },
+    projects::{
+        ColorParam, NumberParam, PointSymbology, StaticColor, StaticNumber, StrokeParam, Symbology,
+        TextSymbology,
+    },
     users::UserId,
     util::{Secret, oidc::RefreshToken, postgres::DatabaseConnectionConfig},
     workflows::workflow::Workflow,
@@ -23,9 +27,10 @@ use async_trait::async_trait;
 use cache::DatasetInDb;
 use datasets::{captures_dataset, project_stations_dataset, projects_dataset};
 use geoengine_datatypes::{
-    collections::VectorDataType,
+    collections::{GeoVectorDataType, VectorDataType},
     dataset::{DataId, DataProviderId, LayerId, NamedData},
     error::BoxedResultExt,
+    operations::image::RgbaColor,
     primitives::{
         CacheTtlSeconds, DateTime, Duration, FeatureDataType, Measurement, RasterQueryRectangle,
         VectorQueryRectangle,
@@ -34,10 +39,11 @@ use geoengine_datatypes::{
 };
 use geoengine_operators::{
     engine::{
-        MetaData, MetaDataProvider, RasterResultDescriptor, StaticMetaData, VectorColumnInfo,
-        VectorOperator, VectorResultDescriptor,
+        MetaData, MetaDataProvider, RasterResultDescriptor, SingleVectorSource, StaticMetaData,
+        VectorColumnInfo, VectorOperator, VectorResultDescriptor,
     },
     mock::MockDatasetDataSourceLoadingInfo,
+    processing::{VectorExpression, VectorExpressionParams},
     source::{
         GdalLoadingInfo, OgrSource, OgrSourceColumnSpec, OgrSourceDataset,
         OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceParameters,
@@ -113,6 +119,7 @@ enum WildliveCollectionId {
 #[serde(tag = "type", rename_all = "camelCase")]
 enum WildliveLayerId {
     Projects,
+    ProjectBounds,
     #[serde(rename_all = "camelCase")]
     Stations {
         project_id: String,
@@ -235,6 +242,7 @@ impl<D: GeoEngineDb> DataProvider for WildliveDataConnector<D> {
     }
 }
 
+#[allow(clippy::too_many_lines)] // TODO: refactor
 #[async_trait]
 impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
     fn capabilities(&self) -> ProviderCapabilities {
@@ -259,13 +267,22 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
     ) -> crate::error::Result<LayerCollection> {
         match WildliveCollectionId::try_from(collection_id.clone())? {
             WildliveCollectionId::Projects => {
-                let mut items: Vec<_> = vec![CollectionItem::Layer(LayerListing {
-                    r#type: Default::default(),
-                    id: self.layer_id(WildliveLayerId::Projects)?,
-                    name: "Projects".to_string(),
-                    description: "Overview of all projects".to_string(),
-                    properties: Vec::new(),
-                })];
+                let mut items: Vec<_> = vec![
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
+                        id: self.layer_id(WildliveLayerId::Projects)?,
+                        name: "Projects".to_string(),
+                        description: "Overview of all projects".to_string(),
+                        properties: Vec::new(),
+                    }),
+                    CollectionItem::Layer(LayerListing {
+                        r#type: Default::default(),
+                        id: self.layer_id(WildliveLayerId::ProjectBounds)?,
+                        name: "Project bounds".to_string(),
+                        description: "Overview of all project bounds".to_string(),
+                        properties: Vec::new(),
+                    }),
+                ];
 
                 let api_token = update_and_get_token_for_request(
                     &self.definition,
@@ -348,30 +365,77 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 name: "Projects".to_string(),
                 description: "Overview of all projects".to_string(),
                 workflow: Workflow {
-                    operator: OgrSource {
-                        params: OgrSourceParameters {
-                            data: self.named_data(WildliveLayerId::Projects)?,
-                            attribute_projection: None,
-                            attribute_filters: None,
+                    operator: VectorExpression {
+                        params: VectorExpressionParams {
+                            expression: "centroid(geom)".into(),
+                            input_columns: Vec::new(),
+                            output_column: GeoVectorDataType::MultiPoint.into(),
+                            geometry_column_name: "geom".into(),
+                            output_measurement: Measurement::Unitless,
+                        },
+                        sources: SingleVectorSource {
+                            vector: OgrSource {
+                                params: OgrSourceParameters {
+                                    data: self.named_data(WildliveLayerId::Projects)?,
+                                    attribute_projection: None,
+                                    attribute_filters: None,
+                                },
+                            }
+                            .boxed(),
                         },
                     }
                     .boxed()
                     .into(),
                 },
-                symbology: None,
+                symbology: Some(Symbology::Point(PointSymbology {
+                    r#type: Default::default(),
+                    radius: NumberParam::Static(StaticNumber {
+                        r#type: Default::default(),
+                        value: 10,
+                    }),
+                    fill_color: ColorParam::Static(StaticColor {
+                        r#type: Default::default(),
+                        color: RgbaColor::new(103, 156, 96, 255),
+                    }),
+                    stroke: StrokeParam {
+                        color: ColorParam::Static(StaticColor {
+                            r#type: Default::default(),
+                            color: RgbaColor::black(),
+                        }),
+                        width: NumberParam::Static(StaticNumber {
+                            r#type: Default::default(),
+                            value: 1,
+                        }),
+                    },
+                    text: Some(TextSymbology {
+                        attribute: "name".into(),
+                        fill_color: ColorParam::Static(StaticColor {
+                            r#type: Default::default(),
+                            color: RgbaColor::white(),
+                        }),
+                        stroke: StrokeParam {
+                            color: ColorParam::Static(StaticColor {
+                                r#type: Default::default(),
+                                color: RgbaColor::black(),
+                            }),
+                            width: NumberParam::Static(StaticNumber {
+                                r#type: Default::default(),
+                                value: 1,
+                            }),
+                        },
+                    }),
+                })),
                 properties: Vec::new(),
                 metadata: Default::default(),
             }),
-            WildliveLayerId::Stations { project_id } => Ok(Layer {
-                id: self.layer_id(WildliveLayerId::Stations {
-                    project_id: project_id.clone(),
-                })?,
-                name: format!("Stations for project {project_id}"),
-                description: format!("Overview of all stations within project {project_id}"),
+            WildliveLayerId::ProjectBounds => Ok(Layer {
+                id: self.layer_id(WildliveLayerId::ProjectBounds)?,
+                name: "Project Bounds".to_string(),
+                description: "Overview of all project bounds".to_string(),
                 workflow: Workflow {
                     operator: OgrSource {
                         params: OgrSourceParameters {
-                            data: self.named_data(WildliveLayerId::Stations { project_id })?,
+                            data: self.named_data(WildliveLayerId::ProjectBounds)?,
                             attribute_projection: None,
                             attribute_filters: None,
                         },
@@ -383,29 +447,99 @@ impl<D: GeoEngineDb> LayerCollectionProvider for WildliveDataConnector<D> {
                 properties: Vec::new(),
                 metadata: Default::default(),
             }),
-            WildliveLayerId::Captures { project_id } => Ok(Layer {
-                id: self.layer_id(WildliveLayerId::Captures {
-                    project_id: project_id.clone(),
-                })?,
-                name: format!("Captures for project {project_id}"),
-                description: format!("Overview of all captures within project {project_id}"),
-                workflow: Workflow {
-                    operator: OgrSource {
-                        params: OgrSourceParameters {
-                            data: self.named_data(WildliveLayerId::Captures { project_id })?,
-                            attribute_projection: None,
-                            attribute_filters: None,
-                        },
-                    }
-                    .boxed()
-                    .into(),
-                },
-                symbology: None,
-                properties: Vec::new(),
-                metadata: Default::default(),
-            }),
+            WildliveLayerId::Stations { project_id } => {
+                let project_name = project_name_by_db_or_request(
+                    self.db.as_ref(),
+                    &self.wildlive_config,
+                    &self.definition,
+                    self.definition.id,
+                    &project_id,
+                )
+                .await?;
+                Ok(Layer {
+                    id: self.layer_id(WildliveLayerId::Stations {
+                        project_id: project_id.clone(),
+                    })?,
+                    name: format!("Stations for project {project_name}"),
+                    description: format!("Overview of all stations within project {project_id}"),
+                    workflow: Workflow {
+                        operator: OgrSource {
+                            params: OgrSourceParameters {
+                                data: self.named_data(WildliveLayerId::Stations { project_id })?,
+                                attribute_projection: None,
+                                attribute_filters: None,
+                            },
+                        }
+                        .boxed()
+                        .into(),
+                    },
+                    symbology: None,
+                    properties: Vec::new(),
+                    metadata: Default::default(),
+                })
+            }
+            WildliveLayerId::Captures { project_id } => {
+                let project_name = project_name_by_db_or_request(
+                    self.db.as_ref(),
+                    &self.wildlive_config,
+                    &self.definition,
+                    self.definition.id,
+                    &project_id,
+                )
+                .await?;
+                Ok(Layer {
+                    id: self.layer_id(WildliveLayerId::Captures {
+                        project_id: project_id.clone(),
+                    })?,
+                    name: format!("Captures for project {project_name}"),
+                    description: format!("Overview of all captures within project {project_id}"),
+                    workflow: Workflow {
+                        operator: OgrSource {
+                            params: OgrSourceParameters {
+                                data: self.named_data(WildliveLayerId::Captures { project_id })?,
+                                attribute_projection: None,
+                                attribute_filters: None,
+                            },
+                        }
+                        .boxed()
+                        .into(),
+                    },
+                    symbology: None,
+                    properties: Vec::new(),
+                    metadata: Default::default(),
+                })
+            }
         }
     }
+}
+
+/// Try to get the project name from the database.
+/// If not found, request it from the Wildlive API.
+/// If that also fails, return the project id as a fallback.
+async fn project_name_by_db_or_request(
+    db: &impl GeoEngineDb,
+    wildlive_config: &config::Wildlive,
+    definition: &WildliveDataConnectorDefinition,
+    provider_id: DataProviderId,
+    project_id: &str,
+) -> Result<String> {
+    if let Some(name) = db.project_name_by_id(provider_id, project_id).await? {
+        return Ok(name);
+    }
+
+    let api_token = update_and_get_token_for_request(definition, &wildlive_config.oidc, db).await?;
+
+    if let Ok(project) = datasets::project(
+        &wildlive_config.api_endpoint,
+        api_token.as_ref(),
+        project_id,
+    )
+    .await
+    {
+        return Ok(project.name);
+    }
+
+    Ok(project_id.to_string())
 }
 
 fn subset_range(offset: u32, limit: u32, length: usize) -> std::ops::Range<usize> {
@@ -564,7 +698,7 @@ async fn meta_data<D: GeoEngineDb>(
     let layer_name = layer_id.table_name().to_string();
 
     match layer_id {
-        WildliveLayerId::Projects => {
+        WildliveLayerId::Projects | WildliveLayerId::ProjectBounds => {
             project_metadata(definition, config, db, db_config, layer_name).await
         }
         WildliveLayerId::Stations { project_id } => {
@@ -1061,6 +1195,38 @@ mod tests {
         };
 
         let layer = connector
+            .load_layer(&WildliveLayerId::ProjectBounds.try_into().unwrap())
+            .await
+            .unwrap();
+        assert_eq!(
+            layer,
+            Layer {
+                id: ProviderLayerId {
+                    provider_id: connector.definition.id,
+                    layer_id: WildliveLayerId::ProjectBounds.try_into().unwrap(),
+                },
+                name: "Project Bounds".to_string(),
+                description: "Overview of all project bounds".to_string(),
+                workflow: Workflow {
+                    operator: OgrSource {
+                        params: OgrSourceParameters {
+                            data: connector
+                                .named_data(WildliveLayerId::ProjectBounds)
+                                .unwrap(),
+                            attribute_projection: None,
+                            attribute_filters: None,
+                        },
+                    }
+                    .boxed()
+                    .into(),
+                },
+                symbology: None,
+                properties: Vec::new(),
+                metadata: Default::default(),
+            }
+        );
+
+        let layer = connector
             .load_layer(&WildliveLayerId::Projects.try_into().unwrap())
             .await
             .unwrap();
@@ -1074,17 +1240,66 @@ mod tests {
                 name: "Projects".to_string(),
                 description: "Overview of all projects".to_string(),
                 workflow: Workflow {
-                    operator: OgrSource {
-                        params: OgrSourceParameters {
-                            data: connector.named_data(WildliveLayerId::Projects).unwrap(),
-                            attribute_projection: None,
-                            attribute_filters: None,
+                    operator: VectorExpression {
+                        params: VectorExpressionParams {
+                            expression: "centroid(geom)".into(),
+                            input_columns: Vec::new(),
+                            output_column: GeoVectorDataType::MultiPoint.into(),
+                            geometry_column_name: "geom".into(),
+                            output_measurement: Measurement::Unitless,
+                        },
+                        sources: SingleVectorSource {
+                            vector: OgrSource {
+                                params: OgrSourceParameters {
+                                    data: connector.named_data(WildliveLayerId::Projects).unwrap(),
+                                    attribute_projection: None,
+                                    attribute_filters: None,
+                                },
+                            }
+                            .boxed(),
                         },
                     }
                     .boxed()
                     .into(),
                 },
-                symbology: None,
+                symbology: Some(Symbology::Point(PointSymbology {
+                    r#type: Default::default(),
+                    radius: NumberParam::Static(StaticNumber {
+                        r#type: Default::default(),
+                        value: 10,
+                    }),
+                    fill_color: ColorParam::Static(StaticColor {
+                        r#type: Default::default(),
+                        color: RgbaColor::new(103, 156, 96, 255),
+                    }),
+                    stroke: StrokeParam {
+                        color: ColorParam::Static(StaticColor {
+                            r#type: Default::default(),
+                            color: RgbaColor::black(),
+                        }),
+                        width: NumberParam::Static(StaticNumber {
+                            r#type: Default::default(),
+                            value: 1,
+                        }),
+                    },
+                    text: Some(TextSymbology {
+                        attribute: "name".into(),
+                        fill_color: ColorParam::Static(StaticColor {
+                            r#type: Default::default(),
+                            color: RgbaColor::white(),
+                        }),
+                        stroke: StrokeParam {
+                            color: ColorParam::Static(StaticColor {
+                                r#type: Default::default(),
+                                color: RgbaColor::black(),
+                            }),
+                            width: NumberParam::Static(StaticNumber {
+                                r#type: Default::default(),
+                                value: 1,
+                            }),
+                        },
+                    }),
+                })),
                 properties: Vec::new(),
                 metadata: Default::default(),
             }
@@ -1212,6 +1427,7 @@ mod tests {
                 request::method("GET"),
                 request::path("/api/objects/wildlive/ef7833589d61b2d2a905"),
             ])
+            .times(2)
             .respond_with(json_responder(test_data!(
                 "wildlive/responses/project.json"
             ))),
@@ -1337,6 +1553,7 @@ mod tests {
         };
 
         let project_id = "wildlive/ef7833589d61b2d2a905";
+        let project_name = "CameraTrapping project in Bolivia";
 
         let layer = connector
             .load_layer(
@@ -1359,7 +1576,7 @@ mod tests {
                     .try_into()
                     .unwrap(),
                 },
-                name: format!("Captures for project {project_id}"),
+                name: format!("Captures for project {project_name}"),
                 description: format!("Overview of all captures within project {project_id}"),
                 workflow: Workflow {
                     operator: OgrSource {
