@@ -96,7 +96,7 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 clap_derive = "4.5"
 config = "0.15"
-convert_case = "0.8"
+convert_case = "0.10"
 criterion = "0.7"
 csv = "1.4"
 erased-serde = "0.4"
