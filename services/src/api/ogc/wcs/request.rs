@@ -11,6 +11,14 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "PascalCase")]
+pub enum WcsRequest {
+    GetCapabilities,
+    DescribeCoverage,
+    GetCoverage,
+}
+
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum WcsService {
     #[serde(rename = "WCS")]

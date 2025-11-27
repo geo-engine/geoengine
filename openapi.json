@@ -4286,15 +4286,10 @@
           {
             "name": "request",
             "in": "query",
-            "description": "type of WMS request",
+            "description": "type of WCS request",
             "required": true,
             "schema": {
-              "type": "string",
-              "enum": [
-                "GetCapabilGetCapabilitiesities",
-                "DescribeCoverage",
-                "GetCoverage"
-              ]
+              "$ref": "#/components/schemas/WcsRequest"
             }
           },
           {
@@ -4450,11 +4445,7 @@
             "description": "type of WFS request",
             "required": true,
             "schema": {
-              "type": "string",
-              "enum": [
-                "GetCapabilities",
-                "GetFeature"
-              ]
+              "$ref": "#/components/schemas/WfsRequest"
             }
           },
           {
@@ -4732,7 +4723,7 @@
                   "type": "null"
                 },
                 {
-                  "$ref": "#/components/schemas/GetCapabilitiesFormat"
+                  "$ref": "#/components/schemas/WmsResponseFormat"
                 }
               ]
             }
@@ -4790,14 +4781,7 @@
             "description": "type of WMS request",
             "required": true,
             "schema": {
-              "type": "string",
-              "enum": [
-                "GetCapabilities",
-                "GetMap",
-                "GetFeatureInfo",
-                "GetStyles",
-                "GetLegendGraphic"
-              ]
+              "$ref": "#/components/schemas/WmsRequest"
             }
           },
           {
@@ -4888,14 +4872,7 @@
         ],
         "responses": {
           "200": {
-            "description": "OK",
-            "content": {
-              "text/xml": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+            "$ref": "#/components/responses/PngResponse"
           }
         },
         "security": [
@@ -6935,22 +6912,10 @@
           }
         }
       },
-      "GetCapabilitiesFormat": {
-        "type": "string",
-        "enum": [
-          "text/xml"
-        ]
-      },
       "GetCoverageFormat": {
         "type": "string",
         "enum": [
           "image/tiff"
-        ]
-      },
-      "GetFeatureRequest": {
-        "type": "string",
-        "enum": [
-          "GetFeature"
         ]
       },
       "GetMapExceptionFormat": {
@@ -6958,12 +6923,6 @@
         "enum": [
           "XML",
           "JSON"
-        ]
-      },
-      "GetMapFormat": {
-        "type": "string",
-        "enum": [
-          "image/png"
         ]
       },
       "GfbioAbcdDataProviderDefinition": {
@@ -10830,6 +10789,14 @@
           }
         }
       },
+      "WcsRequest": {
+        "type": "string",
+        "enum": [
+          "GetCapabilities",
+          "DescribeCoverage",
+          "GetCoverage"
+        ]
+      },
       "WcsService": {
         "type": "string",
         "enum": [
@@ -10841,6 +10808,13 @@
         "enum": [
           "1.1.0",
           "1.1.1"
+        ]
+      },
+      "WfsRequest": {
+        "type": "string",
+        "enum": [
+          "GetCapabilities",
+          "GetFeature"
         ]
       },
       "WfsService": {
@@ -10910,6 +10884,23 @@
             ]
           }
         }
+      },
+      "WmsRequest": {
+        "type": "string",
+        "enum": [
+          "GetCapabilities",
+          "GetMap",
+          "GetFeatureInfo",
+          "GetStyles",
+          "GetLegendGraphic"
+        ]
+      },
+      "WmsResponseFormat": {
+        "type": "string",
+        "enum": [
+          "text/xml",
+          "image/png"
+        ]
       },
       "WmsService": {
         "type": "string",

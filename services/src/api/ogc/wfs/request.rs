@@ -7,6 +7,13 @@ use utoipa::openapi::Type;
 use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
 use utoipa::{IntoParams, PartialSchema, ToSchema};
 
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "PascalCase")]
+pub enum WfsRequest {
+    GetCapabilities,
+    GetFeature,
+}
+
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum WfsService {
     #[serde(rename = "WFS")]
@@ -74,11 +81,6 @@ pub struct GetFeature {
     #[serde(alias = "propertyname")]
     pub property_name: Option<String>, // TODO comma separated list
                                 // TODO: feature_id, ...
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetFeatureRequest {
-    GetFeature,
 }
 
 #[allow(clippy::option_if_let_else)]

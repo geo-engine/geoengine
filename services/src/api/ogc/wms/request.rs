@@ -4,6 +4,17 @@ use crate::util::{bool_option_case_insensitive, from_str};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "PascalCase")]
+#[allow(clippy::enum_variant_names)]
+pub enum WmsRequest {
+    GetCapabilities,
+    GetMap,
+    GetFeatureInfo,
+    GetStyles,
+    GetLegendGraphic,
+}
+
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum WmsService {
     #[serde(rename = "WMS")]
@@ -23,13 +34,15 @@ pub struct GetCapabilities {
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
     #[serde(alias = "FORMAT")]
-    pub format: Option<GetCapabilitiesFormat>,
+    pub format: Option<WmsResponseFormat>,
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetCapabilitiesFormat {
+pub enum WmsResponseFormat {
     #[serde(rename = "text/xml")]
-    TextXml, // TODO: remaining formats
+    TextXml,
+    #[serde(rename = "image/png")]
+    ImagePng, // TODO: remaining formats
 }
 
 // TODO: remove serde aliases and use serde-aux and case insensitive keys
@@ -52,7 +65,7 @@ pub struct GetMap {
     #[param(example = "-90,-180,90,180")]
     pub bbox: OgcBoundingBox,
     #[serde(alias = "FORMAT")]
-    pub format: GetMapFormat,
+    pub format: WmsResponseFormat,
     #[serde(alias = "LAYERS")]
     #[param(example = "<Workflow Id>")]
     pub layers: String,
@@ -92,12 +105,6 @@ pub enum GetMapExceptionFormat {
     Xml,
     #[serde(rename = "JSON", alias = "application/json")]
     Json, // UNSUPPORTED: INIMAGE, BLANK
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetMapFormat {
-    #[serde(rename = "image/png")]
-    ImagePng, // TODO: remaining formats
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
@@ -161,7 +168,7 @@ mod tests {
             elevation: Some("elevation".into()),
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
-            format: GetMapFormat::ImagePng,
+            format: WmsResponseFormat::ImagePng,
             exceptions: Some(GetMapExceptionFormat::Json),
         };
 
@@ -188,7 +195,7 @@ mod tests {
             elevation: None,
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
-            format: GetMapFormat::ImagePng,
+            format: WmsResponseFormat::ImagePng,
             exceptions: None,
         };
 

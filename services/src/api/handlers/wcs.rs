@@ -29,7 +29,7 @@ use std::time::Duration;
 use tracing::info;
 use url::Url;
 use utoipa::IntoParams;
-use utoipa::openapi::Required;
+use utoipa::openapi::{Ref, Required};
 use uuid::Uuid;
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
@@ -63,16 +63,8 @@ impl IntoParams for WcsQueryParams {
                 .name("request")
                 .required(utoipa::openapi::Required::True)
                 .parameter_in(pip().unwrap_or_default())
-                .description(Some("type of WMS request"))
-                .schema(Some(
-                    utoipa::openapi::ObjectBuilder::new()
-                        .schema_type(utoipa::openapi::schema::Type::String)
-                        .enum_values(Some(vec![
-                            "GetCapabilGetCapabilitiesities",
-                            "DescribeCoverage",
-                            "GetCoverage",
-                        ])),
-                ))
+                .description(Some("type of WCS request"))
+                .schema(Some(Ref::from_schema_name("WcsRequest")))
                 .build(),
         );
 

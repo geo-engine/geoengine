@@ -36,7 +36,7 @@ use serde_json::json;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
-use utoipa::openapi::Required;
+use utoipa::openapi::{Ref, Required};
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
@@ -72,11 +72,7 @@ impl IntoParams for WfsQueryParams {
                 .required(utoipa::openapi::Required::True)
                 .parameter_in(pip().unwrap_or_default())
                 .description(Some("type of WFS request"))
-                .schema(Some(
-                    utoipa::openapi::ObjectBuilder::new()
-                        .schema_type(utoipa::openapi::schema::Type::String)
-                        .enum_values(Some(vec!["GetCapabilities", "GetFeature"])),
-                ))
+                .schema(Some(Ref::from_schema_name("WfsRequest")))
                 .build(),
         );
 
