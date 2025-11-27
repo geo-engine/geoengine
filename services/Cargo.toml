@@ -40,6 +40,7 @@ futures-util = { workspace = true }
 gdal = { workspace = true }
 geo = { workspace = true }
 geoengine-datatypes = { path = "../datatypes" }
+geoengine-expression = { path = "../expression" }
 geoengine-macros = { path = "../macros" }
 geoengine-operators = { path = "../operators" }
 geojson = { workspace = true }
