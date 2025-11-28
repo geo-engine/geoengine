@@ -1,7 +1,8 @@
 use clap::{Parser, Subcommand};
 use geoengine_services::cli::{
-    CheckSuccessfulStartup, Heartbeat, OpenAPIGenerate, TileImport, check_heartbeat,
-    check_successful_startup, output_openapi_json, tile_import, output_toolchain_file,
+    CheckSuccessfulStartup, ExpressionToolchainFile, Heartbeat, OpenAPIGenerate, TileImport,
+    check_heartbeat, check_successful_startup, output_openapi_json, output_toolchain_file,
+    tile_import,
 };
 
 /// CLI for Geo Engine Utilities
