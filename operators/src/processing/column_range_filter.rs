@@ -4,6 +4,7 @@ use crate::engine::{
     VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
 use crate::error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use crate::util::input::StringOrNumberRange;
 use crate::{adapters::FeatureCollectionChunkMerger, engine::SingleVectorSource};
@@ -14,7 +15,7 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::primitives::{
-    BoundingBox2D, ColumnSelection, FeatureDataType, FeatureDataValue, Geometry,
+    BoundingBox2D, ColumnSelection, FeatureDataType, FeatureDataValue, Geometry, SpatialResolution,
     VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
@@ -95,6 +96,19 @@ impl InitializedVectorOperator for InitializedColumnRangeFilter {
 
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
+    }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(ColumnRangeFilter {
+            params: self.state.clone(),
+            sources: SingleVectorSource {
+                vector: self.vector_source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
     }
 }
 
@@ -199,14 +213,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
+    use crate::engine::MockExecutionContext;
     use crate::mock::MockFeatureCollectionSource;
     use geoengine_datatypes::collections::{
         ChunksEqualIgnoringCacheHint, FeatureCollectionModifications, MultiPointCollection,
     };
-    use geoengine_datatypes::primitives::CacheHint;
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
+        BoundingBox2D, CacheHint, Coordinate2D, FeatureData, MultiPoint, TimeInterval,
     };
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -283,11 +296,10 @@ mod tests {
         }
         .boxed();
 
+        let exe_ctx = MockExecutionContext::test_default();
+
         let initialized = filter
-            .initialize(
-                WorkflowOperatorPath::initialize_root(),
-                &MockExecutionContext::test_default(),
-            )
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -297,14 +309,13 @@ mod tests {
             panic!();
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query_rectangle = VectorQueryRectangle::new(
+            BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
 
-        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
+        let ctx = exe_ctx.mock_query_context((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 

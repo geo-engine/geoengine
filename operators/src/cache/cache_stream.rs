@@ -162,8 +162,7 @@ mod tests {
         collections::MultiPointCollection,
         primitives::{
             BandSelection, BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint,
-            RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-            VectorQueryRectangle,
+            RasterQueryRectangle, TimeInterval, VectorQueryRectangle,
         },
         raster::{GeoTransform, Grid2D, GridIdx2D, RasterTile2D},
     };
@@ -173,6 +172,7 @@ mod tests {
         cache_stream::CacheStreamInner,
         cache_tiles::{CompressedRasterTile2D, CompressedRasterTileExt},
     };
+    use geoengine_datatypes::raster::GridBoundingBox2D;
 
     fn create_test_raster_data() -> Vec<CompressedRasterTile2D<u8>> {
         let mut data = Vec::new();
@@ -226,12 +226,11 @@ mod tests {
     #[test]
     fn test_cache_stream_inner_raster() {
         let data = Arc::new(create_test_raster_data());
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((2., -2.).into(), (8., -8.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::zero_point_five(),
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([4, 4], [15, 15]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
 
         let mut res = Vec::new();
         let mut inner = CacheStreamInner::new(data, query);
@@ -247,12 +246,11 @@ mod tests {
     #[test]
     fn test_cache_stream_inner_vector() {
         let data = Arc::new(create_test_vecor_data());
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::zero_point_five(),
-            attributes: ColumnSelection::all(),
-        };
+        let query = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked((2.1, 2.1).into(), (7.9, 7.9).into()),
+            TimeInterval::new_unchecked(0, 10),
+            ColumnSelection::all(),
+        );
 
         let mut res = Vec::new();
         let mut inner = CacheStreamInner::new(data, query);

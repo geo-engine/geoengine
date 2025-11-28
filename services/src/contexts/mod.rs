@@ -27,7 +27,10 @@ use geoengine_operators::machine_learning::MlModelLoadingInfo;
 use geoengine_operators::meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking};
 use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use geoengine_operators::source::{
+    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+    OgrSourceDataset,
+};
 use rayon::ThreadPool;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -115,6 +118,7 @@ pub trait GeoEngineDb:
 
 pub struct QueryContextImpl {
     chunk_byte_size: ChunkByteSize,
+    tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     cache: Option<Arc<SharedCache>>,
     quota_tracking: Option<QuotaTracking>,
@@ -124,10 +128,15 @@ pub struct QueryContextImpl {
 }
 
 impl QueryContextImpl {
-    pub fn new(chunk_byte_size: ChunkByteSize, thread_pool: Arc<ThreadPool>) -> Self {
+    pub fn new(
+        chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
+        thread_pool: Arc<ThreadPool>,
+    ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
+            tiling_specification,
             thread_pool,
             cache: None,
             quota_tracking: None,
@@ -139,6 +148,7 @@ impl QueryContextImpl {
 
     pub fn new_with_extensions(
         chunk_byte_size: ChunkByteSize,
+        tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         cache: Option<Arc<SharedCache>>,
         quota_tracking: Option<QuotaTracking>,
@@ -147,6 +157,7 @@ impl QueryContextImpl {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
             chunk_byte_size,
+            tiling_specification,
             thread_pool,
             cache,
             quota_checker,
@@ -157,6 +168,7 @@ impl QueryContextImpl {
     }
 }
 
+#[async_trait::async_trait]
 impl QueryContext for QueryContextImpl {
     fn chunk_byte_size(&self) -> ChunkByteSize {
         self.chunk_byte_size
@@ -174,6 +186,10 @@ impl QueryContext for QueryContextImpl {
         self.abort_trigger
             .take()
             .ok_or(geoengine_operators::error::Error::AbortTriggerAlreadyUsed)
+    }
+
+    fn tiling_specification(&self) -> TilingSpecification {
+        self.tiling_specification
     }
 
     fn quota_tracking(&self) -> Option<&geoengine_operators::meta::quota::QuotaTracking> {
@@ -225,7 +241,11 @@ where
             VectorQueryRectangle,
         > + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
         + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-        + LayerProviderDb
+        + MetaDataProvider<
+            MultiBandGdalLoadingInfo,
+            RasterResultDescriptor,
+            MultiBandGdalLoadingInfoQueryRectangle,
+        > + LayerProviderDb
         + MlModelDb,
 {
     fn thread_pool(&self) -> &Arc<ThreadPool> {
@@ -461,6 +481,49 @@ where
                     })?
                     .meta_data(data_id)
                     .await
+            }
+        }
+    }
+}
+
+#[async_trait]
+impl<D>
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for ExecutionContextImpl<D>
+where
+    D: DatasetDb
+        + MetaDataProvider<
+            MultiBandGdalLoadingInfo,
+            RasterResultDescriptor,
+            MultiBandGdalLoadingInfoQueryRectangle,
+        > + LayerProviderDb,
+{
+    async fn meta_data(
+        &self,
+        data_id: &DataId,
+    ) -> Result<
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
+        geoengine_operators::error::Error,
+    > {
+        match data_id {
+            DataId::Internal { dataset_id: _ } => {
+                self.db.meta_data(&data_id.clone()).await.map_err(|e| {
+                    geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    }
+                })
+            }
+            DataId::External(_external) => {
+                Err(geoengine_operators::error::Error::NotYetImplemented)
             }
         }
     }

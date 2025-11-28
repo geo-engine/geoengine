@@ -1,12 +1,15 @@
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
-    RasterResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, Operator, OperatorName, QueryProcessor, RasterBandDescriptor,
+    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::{StreamExt, TryStreamExt};
 
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::raster::{
     CheckedMulThenAddTransformation, CheckedSubThenDivTransformation, ElementScaling,
     ScalingTransformation,
@@ -101,10 +104,8 @@ impl RasterOperator for RasterScaling {
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: in_desc.data_type,
-
-            bbox: in_desc.bbox,
             time: in_desc.time,
-            resolution: in_desc.resolution,
+            spatial_grid: in_desc.spatial_grid,
             bands: in_desc
                 .bands
                 .iter()
@@ -171,6 +172,24 @@ impl InitializedRasterOperator for InitializedRasterScalingOperator {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(RasterScaling {
+            params: RasterScalingParams {
+                slope: self.slope.clone(),
+                offset: self.offset.clone(),
+                output_measurement: Some(self.result_descriptor.bands[0].measurement.clone()),
+                scaling_mode: self.scaling_mode,
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 struct RasterTransformationProcessor<Q, P, S>
@@ -189,7 +208,7 @@ fn create_boxed_processor<Q, P, S>(
     slope: SlopeOffsetSelection,
     offset: SlopeOffsetSelection,
     source: Q,
-) -> Box<dyn RasterQueryProcessor<RasterType = P>>
+) -> BoxRasterQueryProcessor<P>
 where
     Q: RasterQueryProcessor<RasterType = P> + 'static,
     P: Pixel + FromPrimitive + 'static + Default,
@@ -249,6 +268,34 @@ where
 }
 
 #[async_trait]
+impl<Q, P, S> QueryProcessor for RasterTransformationProcessor<Q, P, S>
+where
+    P: Pixel + FromPrimitive + 'static + Default,
+    f64: AsPrimitive<P>,
+    Q: RasterQueryProcessor<RasterType = P> + 'static,
+    S: Send + Sync + 'static + ScalingTransformation<P>,
+{
+    type Output = RasterTile2D<P>;
+    type SpatialBounds = Q::SpatialBounds;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = Q::Selection;
+
+    async fn _query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
+        let src = self.source.raster_query(query, ctx).await?;
+        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
+        Ok(rs.boxed())
+    }
+
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
+        &self.result_descriptor
+    }
+}
+
+#[async_trait]
 impl<Q, P, S> RasterQueryProcessor for RasterTransformationProcessor<Q, P, S>
 where
     P: Pixel + FromPrimitive + 'static + Default,
@@ -258,58 +305,56 @@ where
 {
     type RasterType = P;
 
-    async fn raster_query<'a>(
+    async fn _time_query<'a>(
         &'a self,
-        query: geoengine_datatypes::primitives::RasterQueryRectangle,
+        query: geoengine_datatypes::primitives::TimeInterval,
         ctx: &'a dyn crate::engine::QueryContext,
-    ) -> Result<
-        futures::stream::BoxStream<
-            'a,
-            Result<geoengine_datatypes::raster::RasterTile2D<Self::RasterType>>,
-        >,
-    > {
-        let src = self.source.raster_query(query, ctx).await?;
-        let rs = src.and_then(move |tile| self.scale_tile_async(tile, ctx.thread_pool().clone()));
-        Ok(rs.boxed())
-    }
-
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
-        &self.result_descriptor
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        self.source.time_query(query, ctx).await
     }
 }
 
 #[cfg(test)]
 mod tests {
 
-    use geoengine_datatypes::{
-        primitives::{
-            BandSelection, CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval,
+    use crate::{
+        engine::{
+            ChunkByteSize, MockExecutionContext, RasterBandDescriptors, SpatialGridDescriptor,
+            TimeDescriptor,
         },
+        mock::{MockRasterSource, MockRasterSourceParams},
+    };
+    use geoengine_datatypes::{
+        primitives::{BandSelection, CacheHint, Coordinate2D, TimeInterval},
         raster::{
-            Grid2D, GridOrEmpty2D, GridShape, MaskedGrid2D, RasterDataType, RasterProperties,
-            TileInformation, TilingSpecification,
+            BoundedGrid, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty2D, GridShape,
+            GridShape2D, MaskedGrid2D, RasterDataType, RasterProperties, TileInformation,
+            TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
-    };
-
-    use crate::{
-        engine::{ChunkByteSize, MockExecutionContext, RasterBandDescriptors},
-        mock::{MockRasterSource, MockRasterSourceParams},
     };
 
     use super::*;
 
     #[tokio::test]
     async fn test_unscale() {
-        let grid_shape = [2, 2].into();
-
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels: grid_shape,
+        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let raster = MaskedGrid2D::from(Grid2D::new(grid_shape, vec![7_u8, 7, 7, 6]).unwrap());
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+        let raster =
+            MaskedGrid2D::from(Grid2D::new(tile_size_in_pixels, vec![7_u8, 7, 7, 6]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -323,7 +368,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: grid_shape,
+                tile_size_in_pixels,
             },
             0,
             raster.into(),
@@ -331,19 +376,10 @@ mod tests {
             CacheHint::default(),
         );
 
-        let spatial_resolution = raster_tile.spatial_resolution();
-
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![raster_tile],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    bbox: None,
-                    time: None,
-                    resolution: Some(spatial_resolution),
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -378,12 +414,11 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            time_interval: TimeInterval::default(),
-            attributes: BandSelection::first(),
-        };
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+            TimeInterval::default(),
+            BandSelection::first(),
+        );
 
         let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {
             panic!("expected TypedRasterQueryProcessor::U8");
@@ -416,14 +451,22 @@ mod tests {
 
     #[tokio::test]
     async fn test_scale() {
-        let grid_shape = [2, 2].into();
-
-        let tiling_specification = TilingSpecification {
-            origin_coordinate: [0.0, 0.0].into(),
-            tile_size_in_pixels: grid_shape,
+        let tile_size_in_pixels = GridShape2D::new_2d(2, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                tile_size_in_pixels.bounding_box(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
         };
 
-        let raster = MaskedGrid2D::from(Grid2D::new(grid_shape, vec![15_u8, 15, 15, 13]).unwrap());
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
+        let raster =
+            MaskedGrid2D::from(Grid2D::new(tile_size_in_pixels, vec![15_u8, 15, 15, 13]).unwrap());
 
         let ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
         let query_ctx = ctx.mock_query_context(ChunkByteSize::test_default());
@@ -437,7 +480,7 @@ mod tests {
             TileInformation {
                 global_geo_transform: TestDefault::test_default(),
                 global_tile_position: [0, 0].into(),
-                tile_size_in_pixels: grid_shape,
+                tile_size_in_pixels,
             },
             0,
             raster.into(),
@@ -445,19 +488,10 @@ mod tests {
             CacheHint::default(),
         );
 
-        let spatial_resolution = raster_tile.spatial_resolution();
-
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![raster_tile],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    bbox: None,
-                    time: None,
-                    resolution: Some(spatial_resolution),
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -494,12 +528,11 @@ mod tests {
 
         let query_processor = initialized_op.query_processor().unwrap();
 
-        let query = geoengine_datatypes::primitives::RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new((0., 0.).into(), (2., -2.).into()).unwrap(),
-            spatial_resolution: SpatialResolution::one(),
-            time_interval: TimeInterval::default(),
-            attributes: BandSelection::first(),
-        };
+        let query = geoengine_datatypes::primitives::RasterQueryRectangle::new(
+            GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+            TimeInterval::default(),
+            BandSelection::first(),
+        );
 
         let TypedRasterQueryProcessor::U8(typed_processor) = query_processor else {
             panic!("expected TypedRasterQueryProcessor::U8");

@@ -46,6 +46,16 @@ impl From<Colorizer> for RasterColorizer {
     }
 }
 
+impl RasterColorizer {
+    /// Returns the no data color of this raster colorizer
+    pub fn no_data_color(&self) -> RgbaColor {
+        match self {
+            RasterColorizer::SingleBand { band_colorizer, .. } => band_colorizer.no_data_color(),
+            RasterColorizer::MultiBand { rgb_params, .. } => rgb_params.no_data_color,
+        }
+    }
+}
+
 /// The parameters for the RGBA colorizer
 #[derive(Copy, Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]

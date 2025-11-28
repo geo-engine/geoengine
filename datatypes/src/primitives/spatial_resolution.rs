@@ -2,6 +2,7 @@ use std::{convert::TryFrom, ops::Add, ops::Div, ops::Mul, ops::Sub};
 
 use crate::primitives::error;
 use crate::util::Result;
+use float_cmp::{ApproxEq, F64Margin, approx_eq};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -35,6 +36,16 @@ impl SpatialResolution {
 
     pub fn one() -> Self {
         SpatialResolution { x: 1., y: 1. }
+    }
+
+    pub fn with_native_resolution_and_gdal_overview_level(
+        native_resolution: SpatialResolution,
+        gdal_overview_level: u32,
+    ) -> SpatialResolution {
+        SpatialResolution::new_unchecked(
+            native_resolution.x * f64::from(gdal_overview_level),
+            native_resolution.y * f64::from(gdal_overview_level),
+        )
     }
 }
 
@@ -90,6 +101,66 @@ impl Div<f64> for SpatialResolution {
     }
 }
 
+impl ApproxEq for SpatialResolution {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m = margin.into();
+        approx_eq!(f64, self.x, other.x, m) && approx_eq!(f64, self.y, other.y, m)
+    }
+}
+
+#[allow(clippy::float_cmp)]
+impl PartialOrd for SpatialResolution {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        if self.x < other.x && self.y < other.y {
+            Some(std::cmp::Ordering::Less)
+        } else if self.x > other.x && self.y > other.y {
+            Some(std::cmp::Ordering::Greater)
+        } else if self.x == other.x && self.y == other.y {
+            // TODO: use `approx_eq`?
+            Some(std::cmp::Ordering::Equal)
+        } else {
+            None
+        }
+    }
+}
+
+/// finds the coarsest overview level that is still at least as fine as the required resolution
+// TODO: add option to only use overview levels available for a given gdal dataset.
+pub fn find_next_best_overview_level(
+    native_resolution: SpatialResolution,
+    target_resolution: SpatialResolution,
+) -> u32 {
+    let mut current_overview_level = 0;
+    let mut next_overview_level = 2;
+
+    while SpatialResolution::with_native_resolution_and_gdal_overview_level(
+        native_resolution,
+        next_overview_level,
+    ) <= target_resolution
+    {
+        current_overview_level = next_overview_level;
+        next_overview_level *= 2;
+    }
+
+    current_overview_level
+}
+
+/// Scale up the given resolution to the next best overview level resolution, i.e., a resolution that is a power of 2 and still finer than the target
+pub fn find_next_best_overview_level_resolution(
+    mut current_resolution: SpatialResolution,
+    target_resolution: SpatialResolution,
+) -> SpatialResolution {
+    debug_assert!(current_resolution <= target_resolution);
+
+    while current_resolution * 2.0 <= target_resolution {
+        current_resolution = current_resolution * 2.0;
+    }
+
+    current_resolution
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -126,5 +197,40 @@ mod test {
     fn div_scalar() {
         let res = SpatialResolution { x: 4., y: 8. } / 2.;
         assert_eq!(res, SpatialResolution { x: 2., y: 4. });
+    }
+
+    #[test]
+    fn it_finds_next_best_overview_level() {
+        assert_eq!(
+            find_next_best_overview_level(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.1, 0.1)
+            ),
+            0
+        );
+
+        assert_eq!(
+            find_next_best_overview_level(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.2, 0.2)
+            ),
+            2
+        );
+
+        assert_eq!(
+            find_next_best_overview_level(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.3, 0.3)
+            ),
+            2
+        );
+
+        assert_eq!(
+            find_next_best_overview_level(
+                SpatialResolution::new_unchecked(0.1, 0.1),
+                SpatialResolution::new_unchecked(0.4, 0.4)
+            ),
+            4
+        );
     }
 }

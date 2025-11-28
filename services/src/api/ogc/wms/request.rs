@@ -4,6 +4,17 @@ use crate::util::{bool_option_case_insensitive, from_str};
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "PascalCase")]
+#[allow(clippy::enum_variant_names)]
+pub enum WmsRequest {
+    GetCapabilities,
+    GetMap,
+    GetFeatureInfo,
+    GetStyles,
+    GetLegendGraphic,
+}
+
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum WmsService {
     #[serde(rename = "WMS")]
@@ -22,21 +33,16 @@ pub struct GetCapabilities {
     pub version: Option<WmsVersion>,
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetCapabilitiesRequest,
     #[serde(alias = "FORMAT")]
-    pub format: Option<GetCapabilitiesFormat>,
+    pub format: Option<WmsResponseFormat>,
 }
 
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetCapabilitiesRequest {
-    GetCapabilities,
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetCapabilitiesFormat {
+pub enum WmsResponseFormat {
     #[serde(rename = "text/xml")]
-    TextXml, // TODO: remaining formats
+    TextXml,
+    #[serde(rename = "image/png")]
+    ImagePng, // TODO: remaining formats
 }
 
 // TODO: remove serde aliases and use serde-aux and case insensitive keys
@@ -46,8 +52,6 @@ pub struct GetMap {
     pub version: WmsVersion,
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetMapRequest,
     #[serde(alias = "WIDTH")]
     #[serde(deserialize_with = "from_str")]
     #[param(example = 512)]
@@ -61,7 +65,7 @@ pub struct GetMap {
     #[param(example = "-90,-180,90,180")]
     pub bbox: OgcBoundingBox,
     #[serde(alias = "FORMAT")]
-    pub format: GetMapFormat,
+    pub format: WmsResponseFormat,
     #[serde(alias = "LAYERS")]
     #[param(example = "<Workflow Id>")]
     pub layers: String,
@@ -95,11 +99,6 @@ pub struct GetMap {
                                                    // TODO: DIM_<name>
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetMapRequest {
-    GetMap,
-}
-
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetMapExceptionFormat {
     #[serde(rename = "XML", alias = "application/vnd.ogc.se_xml")]
@@ -108,13 +107,7 @@ pub enum GetMapExceptionFormat {
     Json, // UNSUPPORTED: INIMAGE, BLANK
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetMapFormat {
-    #[serde(rename = "image/png")]
-    ImagePng, // TODO: remaining formats
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetFeatureInfo {
     pub version: String,
     pub query_layers: String,
@@ -122,12 +115,12 @@ pub struct GetFeatureInfo {
                                      // TODO: remaining fields
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum GetFeatureInfoFormat {
     TextXml, // TODO: remaining formats
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize)]
+#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct GetStyles {
     pub version: String,
     pub layer: String,
@@ -139,16 +132,9 @@ pub struct GetLegendGraphic {
     pub version: WmsVersion,
     #[serde(alias = "SERVICE")]
     pub service: WmsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetLegendGraphicRequest,
     #[param(example = "<Workflow Id>")]
     pub layer: String,
     // TODO: remaining fields
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetLegendGraphicRequest {
-    GetLegendGraphic,
 }
 
 #[cfg(test)]
@@ -163,7 +149,6 @@ mod tests {
         let request = GetMap {
             service: WmsService::Wms,
             version: WmsVersion::V1_3_0,
-            request: GetMapRequest::GetMap,
             width: 2,
             layers: "modis_ndvi".into(),
             crs: Some(geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into()),
@@ -183,7 +168,7 @@ mod tests {
             elevation: Some("elevation".into()),
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
-            format: GetMapFormat::ImagePng,
+            format: WmsResponseFormat::ImagePng,
             exceptions: Some(GetMapExceptionFormat::Json),
         };
 
@@ -198,7 +183,6 @@ mod tests {
         let request = GetMap {
             service: WmsService::Wms,
             version: WmsVersion::V1_3_0,
-            request: GetMapRequest::GetMap,
             width: 2,
             layers: "modis_ndvi".into(),
             crs: Some(geoengine_datatypes::spatial_reference::SpatialReference::epsg_4326().into()),
@@ -211,7 +195,7 @@ mod tests {
             elevation: None,
             bbox: OgcBoundingBox::new(1., 2., 3., 4.),
             height: 2,
-            format: GetMapFormat::ImagePng,
+            format: WmsResponseFormat::ImagePng,
             exceptions: None,
         };
 

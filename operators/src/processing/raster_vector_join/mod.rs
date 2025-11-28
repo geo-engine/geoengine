@@ -16,7 +16,7 @@ use crate::util::Result;
 use crate::processing::raster_vector_join::aggregated::RasterVectorAggregateJoinProcessor;
 use async_trait::async_trait;
 use geoengine_datatypes::collections::VectorDataType;
-use geoengine_datatypes::primitives::FeatureDataType;
+use geoengine_datatypes::primitives::{FeatureDataType, find_next_best_overview_level_resolution};
 use geoengine_datatypes::raster::{Pixel, RasterDataType, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -350,6 +350,34 @@ impl InitializedVectorOperator for InitializedRasterVectorJoin {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: geoengine_datatypes::primitives::SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, crate::optimization::OptimizationError> {
+        Ok(RasterVectorJoin {
+            params: self.state.clone(),
+            sources: SingleVectorMultipleRasterSources {
+                vector: self.vector_source.optimize(target_resolution)?,
+                rasters: self
+                    .raster_sources
+                    .iter()
+                    .map(|r| {
+                        // optimize the raster source to the next best overview level w.r.t. the target resolution
+                        let rd = r.result_descriptor();
+                        let mut res = rd.spatial_grid.spatial_resolution();
+
+                        if res < target_resolution {
+                            res = find_next_best_overview_level_resolution(res, target_resolution);
+                        }
+
+                        r.optimize(res)
+                    })
+                    .collect::<Result<Vec<_>, crate::optimization::OptimizationError>>()?,
+            },
+        }
+        .boxed())
+    }
 }
 
 pub fn create_feature_aggregator<P: Pixel>(
@@ -385,8 +413,9 @@ mod tests {
     use std::str::FromStr;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor,
-        RasterBandDescriptor, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        ChunkByteSize, MockExecutionContext, QueryProcessor, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+        TimeDescriptor,
     };
     use crate::mock::{MockFeatureCollectionSource, MockRasterSource, MockRasterSourceParams};
     use crate::source::{GdalSource, GdalSourceParameters};
@@ -396,10 +425,10 @@ mod tests {
     use geoengine_datatypes::dataset::NamedData;
     use geoengine_datatypes::primitives::{
         BoundingBox2D, ColumnSelection, DataRef, DateTime, FeatureDataRef, MultiPoint,
-        SpatialResolution, TimeInterval, VectorQueryRectangle,
+        TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, Measurement};
-    use geoengine_datatypes::raster::RasterTile2D;
+    use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, RasterTile2D};
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::{gdal::hide_gdal_errors, test::TestDefault};
     use serde_json::json;
@@ -451,7 +480,7 @@ mod tests {
 
     fn ndvi_source(name: NamedData) -> Box<dyn RasterOperator> {
         let gdal_source = GdalSource {
-            params: GdalSourceParameters { data: name },
+            params: GdalSourceParameters::new(name),
         };
 
         gdal_source.boxed()
@@ -488,7 +517,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ColumnNames::Default,
+                names: ColumnNames::Names(vec!["ndvi".to_owned()]),
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::First,
@@ -510,14 +539,12 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -567,7 +594,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ColumnNames::Default,
+                names: ColumnNames::Names(vec!["ndvi".to_owned()]),
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -589,14 +616,12 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -649,7 +674,7 @@ mod tests {
 
         let operator = RasterVectorJoin {
             params: RasterVectorJoinParams {
-                names: ColumnNames::Default,
+                names: ColumnNames::Names(vec!["ndvi".to_owned()]),
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: false,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
@@ -671,14 +696,12 @@ mod tests {
 
         let result = query_processor
             .query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: ColumnSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    ColumnSelection::all(),
+                ),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap()
@@ -777,9 +800,13 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: crate::engine::TimeDescriptor::new_irregular(Some(
+                        TimeInterval::default(),
+                    )),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::test_default(),
+                        GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),
@@ -796,9 +823,11 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(Some(TimeInterval::default())),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::test_default(),
+                        GridBoundingBox2D::new_min_max(0, 0, 2, 2).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new(vec![
                         RasterBandDescriptor::new_unitless("band_0".into()),
                         RasterBandDescriptor::new_unitless("band_1".into()),

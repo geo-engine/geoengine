@@ -1017,7 +1017,7 @@ mod tests {
         dataset::ExternalDataId,
         primitives::{
             BoundingBox2D, CacheTtlSeconds, ColumnSelection, Coordinate2D, FeatureDataType,
-            Measurement, SpatialResolution, TimeInterval,
+            Measurement, TimeInterval,
         },
         spatial_reference::SpatialReference,
         test_data,
@@ -1316,16 +1316,15 @@ mod tests {
             .unwrap();
 
         let loading_info = metadata
-            .loading_info(VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
+            .loading_info(VectorQueryRectangle::new(
+                BoundingBox2D::new(
                     Coordinate2D { x: 0.0, y: 0.0 },
                     Coordinate2D { x: 1.0, y: 1.0 },
                 )
                 .unwrap(),
-                time_interval: TimeInterval::new(0, 1).unwrap(),
-                spatial_resolution: SpatialResolution::new(1.0, 1.0).unwrap(),
-                attributes: ColumnSelection::all(),
-            })
+                TimeInterval::new(0, 1).unwrap(),
+                ColumnSelection::all(),
+            ))
             .await
             .unwrap();
 
@@ -1611,16 +1610,15 @@ mod tests {
             .unwrap();
 
         let loading_info = metadata
-            .loading_info(VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
+            .loading_info(VectorQueryRectangle::new(
+                BoundingBox2D::new(
                     Coordinate2D { x: 0.0, y: 0.0 },
                     Coordinate2D { x: 1.0, y: 1.0 },
                 )
                 .unwrap(),
-                time_interval: TimeInterval::new(0, 1).unwrap(),
-                spatial_resolution: SpatialResolution::new(1.0, 1.0).unwrap(),
-                attributes: ColumnSelection::all(),
-            })
+                TimeInterval::new(0, 1).unwrap(),
+                ColumnSelection::all(),
+            ))
             .await
             .unwrap();
 

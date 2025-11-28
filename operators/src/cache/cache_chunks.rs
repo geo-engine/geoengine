@@ -179,12 +179,12 @@ where
         // If the chunk has no time bounds it must be empty so we can skip the temporal check and return true.
         let temporal_hit = self
             .time_interval
-            .is_none_or(|tb| tb.intersects(&query.time_interval));
+            .is_none_or(|tb| tb.intersects(&query.time_interval()));
 
         // If the chunk has no spatial bounds it is either an empty collection or a no geometry collection.
         let spatial_hit = self
             .spatial_bounds
-            .is_none_or(|sb| sb.intersects_bbox(&query.spatial_bounds));
+            .is_none_or(|sb| sb.intersects_bbox(&query.spatial_bounds()));
 
         temporal_hit && spatial_hit
     }
@@ -258,7 +258,7 @@ impl CacheElementSpatialBounds for FeatureCollection<NoGeometry> {
         let time_filter_bools = self
             .time_intervals()
             .iter()
-            .map(|t| t.intersects(&query_rect.time_interval))
+            .map(|t| t.intersects(&query_rect.time_interval()))
             .collect::<Vec<bool>>();
         self.filter(time_filter_bools)
             .map_err(|_err| CacheError::CouldNotFilterResults)
@@ -283,14 +283,14 @@ macro_rules! impl_cache_result_check {
             ) -> Result<Self, CacheError> {
                 let geoms_filter_bools = self.geometries().map(|g| {
                     g.bbox()
-                        .map(|bbox| bbox.intersects_bbox(&query_rect.spatial_bounds))
+                        .map(|bbox| bbox.intersects_bbox(&query_rect.spatial_bounds()))
                         .unwrap_or(false)
                 });
 
                 let time_filter_bools = self
                     .time_intervals()
                     .iter()
-                    .map(|t| t.intersects(&query_rect.time_interval));
+                    .map(|t| t.intersects(&query_rect.time_interval()));
 
                 let filter_bools = geoms_filter_bools
                     .zip(time_filter_bools)
@@ -496,8 +496,8 @@ mod tests {
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         primitives::{
-            BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint, SpatialResolution,
-            TimeInterval, VectorQueryRectangle,
+            BoundingBox2D, CacheHint, ColumnSelection, FeatureData, MultiPoint, TimeInterval,
+            VectorQueryRectangle,
         },
     };
     use std::{collections::HashMap, sync::Arc};
@@ -561,12 +561,11 @@ mod tests {
     #[test]
     fn landing_zone_to_cache_entry() {
         let cols = create_test_collection();
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked((0., 0.).into(), (1., 1.).into()),
+            Default::default(),
+            ColumnSelection::all(),
+        );
         let mut lq = VectorLandingQueryEntry::create_empty::<CompressedFeatureCollection<MultiPoint>>(
             query.clone(),
         );
@@ -584,36 +583,33 @@ mod tests {
         let cols = create_test_collection();
 
         // elemtes are all fully contained
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (12., 12.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked((0., 0.).into(), (12., 12.).into()),
+            Default::default(),
+            ColumnSelection::all(),
+        );
 
         for c in &cols {
             assert!(c.intersects_query(&query));
         }
 
         // first element is not contained
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
+            Default::default(),
+            ColumnSelection::all(),
+        );
         assert!(!cols[0].intersects_query(&query));
         for c in &cols[1..] {
             assert!(c.intersects_query(&query));
         }
 
         // all elements are not contained
-        let query = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((13., 13.).into(), (26., 26.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked((13., 13.).into(), (26., 26.).into()),
+            Default::default(),
+            ColumnSelection::all(),
+        );
         for col in &cols {
             assert!(!col.intersects_query(&query));
         }
@@ -623,12 +619,11 @@ mod tests {
     fn cache_entry_matches() {
         let cols = create_test_collection();
 
-        let cache_entry_bounds = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((1., 1.).into(), (11., 11.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: ColumnSelection::all(),
-        };
+        let cache_entry_bounds = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked((1., 1.).into(), (11., 11.).into()),
+            Default::default(),
+            ColumnSelection::all(),
+        );
 
         let cache_query_entry = VectorCacheQueryEntry {
             query: cache_entry_bounds.clone(),
@@ -640,21 +635,19 @@ mod tests {
         assert!(cache_query_entry.query().is_match(&query));
 
         // query is fully contained
-        let query2 = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query2 = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked((2., 2.).into(), (10., 10.).into()),
+            Default::default(),
+            ColumnSelection::all(),
+        );
         assert!(cache_query_entry.query().is_match(&query2));
 
         // query is exceeds cached bounds
-        let query3 = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new_unchecked((0., 0.).into(), (8., 8.).into()),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: ColumnSelection::all(),
-        };
+        let query3 = VectorQueryRectangle::new(
+            BoundingBox2D::new_unchecked((0., 0.).into(), (8., 8.).into()),
+            Default::default(),
+            ColumnSelection::all(),
+        );
         assert!(!cache_query_entry.query().is_match(&query3));
     }
 }

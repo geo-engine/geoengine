@@ -1,9 +1,6 @@
 use geoengine_datatypes::{
     operations::reproject::{CoordinateProjection, CoordinateProjector, ReprojectClipped},
-    primitives::{
-        AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, RasterQueryRectangle,
-        SpatialPartitioned,
-    },
+    primitives::{AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, QueryRectangle},
     spatial_reference::SpatialReference,
 };
 use snafu::{ResultExt, Snafu};
@@ -14,6 +11,8 @@ use crate::util::join_base_url_and_path;
 // API limits
 const MAX_NUM_PAGES: usize = 100;
 const MAX_PAGE_SIZE: usize = 1000;
+
+pub type StacQueryRectangle = QueryRectangle<BoundingBox2D, ()>;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -41,22 +40,18 @@ pub enum CopernicusStacError {
 }
 
 fn bbox_time_query(
-    query: &RasterQueryRectangle,
+    query: &StacQueryRectangle,
     query_projection: SpatialReference,
 ) -> Result<[(&'static str, String); 2], CopernicusStacError> {
     // TODO: add query buffer like in Element84 provider?
-    let time_start = query.time_interval.start();
-    let time_end = query.time_interval.end();
+    let time_start = query.time_interval().start();
+    let time_end = query.time_interval().end();
 
     let projector =
         CoordinateProjector::from_known_srs(query_projection, SpatialReference::epsg_4326())
             .context(CannotReprojectBbox)?;
 
-    let spatial_partition = query.spatial_partition(); // TODO: use SpatialPartition2D directly
-    let bbox = BoundingBox2D::new_upper_left_lower_right_unchecked(
-        spatial_partition.upper_left(),
-        spatial_partition.lower_right(),
-    );
+    let bbox = query.spatial_bounds(); // TODO: use SpatialPartition2D directly
 
     // TODO: query the whole zone instead? (for Sentinel-2)
     let bbox = bbox
@@ -97,7 +92,7 @@ fn bbox_time_query(
 pub async fn load_stac_items(
     stac_url: Url,
     collection: &str,
-    query: RasterQueryRectangle,
+    query: StacQueryRectangle,
     query_projection: SpatialReference,
     product_type: &str,
 ) -> Result<Vec<stac::Item>, CopernicusStacError> {

@@ -8,4 +8,4 @@ pub use colorizer::{
 };
 pub use into_lossy::LossyInto;
 pub use rgba_transmutable::RgbaTransmutable;
-pub use to_png::ToPng;
+pub use to_png::{ToPng, create_empty_no_data_color_png_bytes};

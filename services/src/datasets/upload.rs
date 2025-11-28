@@ -9,8 +9,6 @@ use crate::{
     error,
 };
 use async_trait::async_trait;
-use geoengine_datatypes::test_data;
-use geoengine_datatypes::util::test::TestDefault;
 use serde::{Deserialize, Deserializer, Serialize};
 use utoipa::ToSchema;
 
@@ -71,27 +69,58 @@ pub struct Volumes {
 
 impl Default for Volumes {
     fn default() -> Self {
-        Self {
-            volumes: crate::config::get_config_element::<crate::config::Data>()
+        // TODO: implement proper volume management in the database
+        #[cfg(test)]
+        {
+            let exe_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .canonicalize() // get a full path
+                .expect("should be available during testing")
+                .parent()
+                .expect("should be available during testing")
+                .to_path_buf();
+
+            let volumes = crate::config::get_config_element::<crate::config::Data>()
+                .expect("volumes should be defined, because they are in the default config")
+                .volumes
+                .into_iter()
+                .map(|(name, path)| {
+                    // make relative paths absolute with respect to executable for tests (because tests have different working directories depending on how they are run)
+                    let path = if path.is_relative() {
+                        exe_dir.join(path)
+                    } else {
+                        path
+                    };
+
+                    Volume { name, path }
+                })
+                .collect::<Vec<_>>();
+
+            Self { volumes }
+        }
+        #[cfg(not(test))]
+        {
+            let volumes = crate::config::get_config_element::<crate::config::Data>()
                 .expect("volumes should be defined, because they are in the default config")
                 .volumes
                 .into_iter()
                 .map(|(name, path)| Volume { name, path })
-                .collect::<Vec<_>>(),
+                .collect::<Vec<_>>();
+
+            Self { volumes }
         }
     }
 }
 
-impl TestDefault for Volumes {
-    fn test_default() -> Self {
-        Self {
-            volumes: vec![Volume {
-                name: VolumeName("test_data".to_string()),
-                path: test_data!("").to_path_buf(),
-            }],
-        }
-    }
-}
+// impl TestDefault for Volumes {
+//     fn test_default() -> Self {
+//         Self {
+//             volumes: vec![Volume {
+//                 name: VolumeName("test_data".to_string()),
+//                 path: test_data!("").to_path_buf(),
+//             }],
+//         }
+//     }
+// }
 
 pub trait UploadRootPath {
     fn root_path(&self) -> Result<PathBuf>;

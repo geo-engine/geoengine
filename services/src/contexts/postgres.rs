@@ -354,6 +354,7 @@ where
 
         Ok(QueryContextImpl::new_with_extensions(
             self.context.query_ctx_chunk_size,
+            self.context.exe_ctx_tiling_spec,
             self.context.thread_pool.clone(),
             Some(self.context.tile_cache.clone()),
             Some(
@@ -395,7 +396,7 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct PostgresDb<Tls>
 where
     Tls: MakeTlsConnect<Socket> + Clone + Send + Sync + 'static + std::fmt::Debug,
@@ -462,70 +463,84 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::QuotaTrackingMode;
-    use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
-    use crate::datasets::listing::{DatasetListOptions, DatasetListing, ProvenanceOutput};
-    use crate::datasets::listing::{DatasetProvider, Provenance};
-    use crate::datasets::storage::{DatasetStore, MetaDataDefinition};
-    use crate::datasets::upload::{FileId, UploadId};
-    use crate::datasets::upload::{FileUpload, Upload, UploadDb};
-    use crate::datasets::{AddDataset, DatasetIdAndName};
-    use crate::ge_context;
-    use crate::layers::add_from_directory::UNSORTED_COLLECTION_ID;
-    use crate::layers::layer::{
-        AddLayer, AddLayerCollection, CollectionItem, LayerCollection, LayerCollectionListOptions,
-        LayerCollectionListing, LayerListing, ProviderLayerCollectionId, ProviderLayerId,
+    use crate::{
+        config::QuotaTrackingMode,
+        datasets::{
+            AddDataset, DatasetIdAndName,
+            external::netcdfcf::NetCdfCfDataProviderDefinition,
+            listing::{
+                DatasetListOptions, DatasetListing, DatasetProvider, Provenance, ProvenanceOutput,
+            },
+            storage::{DatasetStore, MetaDataDefinition},
+            upload::{FileId, FileUpload, Upload, UploadDb, UploadId},
+        },
+        ge_context,
+        layers::{
+            add_from_directory::UNSORTED_COLLECTION_ID,
+            layer::{
+                AddLayer, AddLayerCollection, CollectionItem, LayerCollection,
+                LayerCollectionListOptions, LayerCollectionListing, LayerListing,
+                ProviderLayerCollectionId, ProviderLayerId,
+            },
+            listing::{LayerCollectionId, LayerCollectionProvider, SearchParameters, SearchType},
+            storage::{
+                INTERNAL_PROVIDER_ID, LayerDb, LayerProviderDb, LayerProviderListing,
+                LayerProviderListingOptions,
+            },
+        },
+        machine_learning::{MlModel, MlModelDb, MlModelIdAndName},
+        permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId},
+        projects::{
+            CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
+            ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
+            UpdateProject,
+        },
+        users::{
+            OidcTokens, RoleDb, SessionTokenStore, UserClaims, UserCredentials, UserDb, UserId,
+            UserRegistration,
+        },
+        util::tests::{
+            MockQuotaTracking, admin_login,
+            mock_oidc::{MockRefreshServerConfig, mock_refresh_server},
+            register_ndvi_workflow_helper,
+        },
+        workflows::{registry::WorkflowRegistry, workflow::Workflow},
     };
-    use crate::layers::listing::{
-        LayerCollectionId, LayerCollectionProvider, SearchParameters, SearchType,
-    };
-    use crate::layers::storage::{
-        INTERNAL_PROVIDER_ID, LayerDb, LayerProviderDb, LayerProviderListing,
-        LayerProviderListingOptions,
-    };
-    use crate::machine_learning::{MlModel, MlModelDb, MlModelIdAndName};
-    use crate::permissions::{Permission, PermissionDb, Role, RoleDescription, RoleId};
-    use crate::projects::{
-        CreateProject, LayerUpdate, LoadVersion, OrderBy, Plot, PlotUpdate, PointSymbology,
-        ProjectDb, ProjectId, ProjectLayer, ProjectListOptions, ProjectListing, STRectangle,
-        UpdateProject,
-    };
-    use crate::users::{OidcTokens, SessionTokenStore};
-    use crate::users::{RoleDb, UserClaims, UserCredentials, UserDb, UserId, UserRegistration};
-    use crate::util::tests::mock_oidc::{MockRefreshServerConfig, mock_refresh_server};
-    use crate::util::tests::{MockQuotaTracking, admin_login, register_ndvi_workflow_helper};
-    use crate::workflows::registry::WorkflowRegistry;
-    use crate::workflows::workflow::Workflow;
     use bb8_postgres::tokio_postgres::NoTls;
     use futures::join;
-    use geoengine_datatypes::collections::VectorDataType;
-    use geoengine_datatypes::dataset::{DataProviderId, LayerId};
-    use geoengine_datatypes::machine_learning::MlTensorShape3D;
-    use geoengine_datatypes::primitives::{
-        BoundingBox2D, Coordinate2D, DateTime, Duration, FeatureDataType, Measurement,
-        RasterQueryRectangle, SpatialResolution, TimeGranularity, TimeInstance, TimeInterval,
-        TimeStep, VectorQueryRectangle,
+    use geoengine_datatypes::{
+        collections::VectorDataType,
+        dataset::{DataProviderId, LayerId},
+        machine_learning::MlTensorShape3D,
+        primitives::{
+            BoundingBox2D, CacheTtlSeconds, ColumnSelection, Coordinate2D, DateTime, Duration,
+            FeatureDataType, Measurement, RasterQueryRectangle, TimeGranularity, TimeInstance,
+            TimeInterval, TimeStep, VectorQueryRectangle,
+        },
+        raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
+        spatial_reference::{SpatialReference, SpatialReferenceOption},
+        test_data,
+        util::Identifier,
     };
-    use geoengine_datatypes::primitives::{CacheTtlSeconds, ColumnSelection};
-    use geoengine_datatypes::raster::RasterDataType;
-    use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceOption};
-    use geoengine_datatypes::test_data;
-    use geoengine_datatypes::util::Identifier;
-    use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
-        RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TypedOperator,
-        TypedResultDescriptor, VectorColumnInfo, VectorOperator, VectorResultDescriptor,
+    use geoengine_operators::{
+        engine::{
+            MetaData, MetaDataProvider, MultipleRasterOrSingleVectorSource, PlotOperator,
+            RasterBandDescriptors, RasterResultDescriptor, StaticMetaData, TimeDescriptor,
+            TypedOperator, TypedResultDescriptor, VectorColumnInfo, VectorOperator,
+            VectorResultDescriptor,
+        },
+        machine_learning::MlModelMetadata,
+        mock::{MockPointSource, MockPointSourceParams},
+        plot::{Statistics, StatisticsParams},
+        source::{
+            CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
+            GdalDatasetParameters, GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular,
+            GdalMetaDataStatic, GdalMetadataNetCdfCf, OgrSourceColumnSpec, OgrSourceDataset,
+            OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
+            OgrSourceTimeFormat,
+        },
+        util::input::MultiRasterOrVectorOperator::Raster,
     };
-    use geoengine_operators::machine_learning::MlModelMetadata;
-    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
-    use geoengine_operators::plot::{Statistics, StatisticsParams};
-    use geoengine_operators::source::{
-        CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetGeoTransform,
-        GdalDatasetParameters, GdalLoadingInfo, GdalMetaDataList, GdalMetaDataRegular,
-        GdalMetaDataStatic, GdalMetadataNetCdfCf, OgrSourceColumnSpec, OgrSourceDataset,
-        OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec, OgrSourceTimeFormat,
-    };
-    use geoengine_operators::util::input::MultiRasterOrVectorOperator::Raster;
     use httptest::Server;
     use oauth2::{AccessToken, RefreshToken};
     use openidconnect::SubjectIdentifier;
@@ -718,9 +733,7 @@ mod tests {
             .register_workflow(Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                        },
+                        params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
                     .boxed(),
                 ),
@@ -964,9 +977,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -985,7 +996,7 @@ mod tests {
         let json = serde_json::to_string(&workflow).unwrap();
         assert_eq!(
             json,
-            r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}]}}}"#
+            r#"{"type":"Vector","operator":{"type":"MockPointSource","params":{"points":[{"x":1.0,"y":2.0},{"x":1.0,"y":2.0},{"x":1.0,"y":2.0}],"spatialBounds":{"type":"none"}}}}"#
         );
     }
 
@@ -1071,6 +1082,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data,
+                None,
             )
             .await
             .unwrap();
@@ -1098,6 +1110,7 @@ mod tests {
                 source_operator: "OgrSource".to_owned(),
                 symbology: None,
                 tags: vec!["upload".to_owned(), "test".to_owned()],
+                // create a TypedResultDescriptor object then concert it to the API model
                 result_descriptor: TypedResultDescriptor::Vector(VectorResultDescriptor {
                     data_type: VectorDataType::MultiPoint,
                     spatial_reference: SpatialReference::epsg_4326().into(),
@@ -1113,6 +1126,7 @@ mod tests {
                     time: None,
                     bbox: None,
                 })
+                .into()
             },
         );
 
@@ -1135,15 +1149,11 @@ mod tests {
 
         assert_eq!(
             meta_data
-                .loading_info(VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new_unchecked(
-                        (-180., -90.).into(),
-                        (180., 90.).into()
-                    ),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::zero_point_one(),
-                    attributes: ColumnSelection::all()
-                })
+                .loading_info(VectorQueryRectangle::new(
+                    BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into()),
+                    TimeInterval::default(),
+                    ColumnSelection::all()
+                ))
                 .await
                 .unwrap(),
             loading_info
@@ -1269,7 +1279,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let _id = db1.add_dataset(ds, meta.into()).await.unwrap();
+        let _id = db1.add_dataset(ds, meta.into(), None).await.unwrap();
 
         let list1 = db1
             .list_datasets(DatasetListOptions {
@@ -1343,7 +1353,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into(), None).await.unwrap().id;
 
         assert!(db1.load_provenance(&id).await.is_ok());
 
@@ -1395,7 +1405,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into(), None).await.unwrap().id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1453,7 +1463,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into(), None).await.unwrap().id;
 
         assert!(db1.load_dataset(&id).await.is_ok());
 
@@ -1511,7 +1521,7 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db1.add_dataset(ds, meta.into()).await.unwrap().id;
+        let id = db1.add_dataset(ds, meta.into(), None).await.unwrap().id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1554,9 +1564,11 @@ mod tests {
         let raster_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
-            bbox: None,
-            resolution: None,
+            time: TimeDescriptor::new_irregular(None),
+            spatial_grid: geoengine_operators::engine::SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([0, 0], [1, 1]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -1618,7 +1630,11 @@ mod tests {
             phantom: Default::default(),
         };
 
-        let id = db.add_dataset(vector_ds, meta.into()).await.unwrap().id;
+        let id = db
+            .add_dataset(vector_ds, meta.into(), None)
+            .await
+            .unwrap()
+            .id;
 
         let meta: geoengine_operators::util::Result<
             Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
@@ -1639,7 +1655,7 @@ mod tests {
         };
 
         let id = db
-            .add_dataset(raster_ds.clone(), meta.into())
+            .add_dataset(raster_ds.clone(), meta.into(), None)
             .await
             .unwrap()
             .id;
@@ -1658,7 +1674,7 @@ mod tests {
         };
 
         let id = db
-            .add_dataset(raster_ds.clone(), meta.into())
+            .add_dataset(raster_ds.clone(), meta.into(), None)
             .await
             .unwrap()
             .id;
@@ -1675,7 +1691,7 @@ mod tests {
         };
 
         let id = db
-            .add_dataset(raster_ds.clone(), meta.into())
+            .add_dataset(raster_ds.clone(), meta.into(), None)
             .await
             .unwrap()
             .id;
@@ -1700,7 +1716,7 @@ mod tests {
         };
 
         let id = db
-            .add_dataset(raster_ds.clone(), meta.into())
+            .add_dataset(raster_ds.clone(), meta.into(), None)
             .await
             .unwrap()
             .id;
@@ -1748,9 +1764,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -1948,9 +1962,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -2308,6 +2320,7 @@ mod tests {
                 MockPointSource {
                     params: MockPointSourceParams {
                         points: vec![Coordinate2D::new(1., 2.); 3],
+                        spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
                     },
                 }
                 .boxed(),
@@ -2828,9 +2841,7 @@ mod tests {
         let workflow = Workflow {
             operator: TypedOperator::Vector(
                 MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![Coordinate2D::new(1., 2.); 3],
-                    },
+                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                 }
                 .boxed(),
             ),
@@ -3012,6 +3023,7 @@ mod tests {
                 MockPointSource {
                     params: MockPointSourceParams {
                         points: vec![Coordinate2D::new(1., 2.); 3],
+                        spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
                     },
                 }
                 .boxed(),
@@ -3546,9 +3558,7 @@ mod tests {
             workflow: Workflow {
                 operator: TypedOperator::Vector(
                     MockPointSource {
-                        params: MockPointSourceParams {
-                            points: vec![Coordinate2D::new(1., 2.); 3],
-                        },
+                        params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
                     }
                     .boxed(),
                 ),
@@ -3744,9 +3754,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),
@@ -3813,9 +3824,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),
@@ -3837,9 +3849,10 @@ mod tests {
                     workflow: Workflow {
                         operator: TypedOperator::Vector(
                             MockPointSource {
-                                params: MockPointSourceParams {
-                                    points: vec![Coordinate2D::new(1., 2.); 3],
-                                },
+                                params: MockPointSourceParams::new(vec![
+                                    Coordinate2D::new(1., 2.);
+                                    3
+                                ]),
                             }
                             .boxed(),
                         ),
@@ -3989,6 +4002,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data,
+                None,
             )
             .await
             .unwrap()
@@ -4080,6 +4094,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data,
+                None,
             )
             .await
             .unwrap()
@@ -4769,6 +4784,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data.clone(),
+                None,
             )
             .await
             .unwrap();
@@ -4795,6 +4811,7 @@ mod tests {
                     tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
                 },
                 meta_data,
+                None,
             )
             .await
             .unwrap();

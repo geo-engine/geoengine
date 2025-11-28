@@ -6,15 +6,19 @@ use crate::engine::{
 };
 use crate::engine::{QueryProcessor, SingleVectorSource};
 use crate::error::Error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
 use geoengine_datatypes::collections::FeatureCollectionInfos;
 use geoengine_datatypes::plots::{Plot, PlotData};
-use geoengine_datatypes::primitives::{FeatureDataRef, Measurement, PlotQueryRectangle};
+use geoengine_datatypes::primitives::{
+    ColumnSelection, FeatureDataRef, Measurement, PlotQueryRectangle, SpatialResolution,
+    VectorQueryRectangle,
+};
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::collections::HashMap;
+use std::collections::{BTreeMap, HashMap};
 
 pub const PIE_CHART_OPERATOR_NAME: &str = "PieChart";
 
@@ -108,7 +112,7 @@ pub struct InitializedCountPieChart<Op> {
     result_descriptor: PlotResultDescriptor,
     column_name: String,
     column_label: String,
-    class_mapping: Option<HashMap<u8, String>>,
+    class_mapping: Option<BTreeMap<u8, String>>,
     donut: bool,
 }
 
@@ -119,7 +123,7 @@ impl<Op> InitializedCountPieChart<Op> {
         result_descriptor: PlotResultDescriptor,
         column_name: String,
         column_label: String,
-        class_mapping: Option<HashMap<u8, String>>,
+        class_mapping: Option<BTreeMap<u8, String>>,
         donut: bool,
     ) -> Self {
         Self {
@@ -154,6 +158,22 @@ impl InitializedPlotOperator for InitializedCountPieChart<Box<dyn InitializedVec
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(PieChart {
+            params: PieChartParams::Count {
+                column_name: self.column_name.clone(),
+                donut: self.donut,
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 /// A query processor that calculates the Histogram about its vector inputs.
@@ -161,7 +181,7 @@ pub struct CountPieChartVectorQueryProcessor {
     input: TypedVectorQueryProcessor,
     column_label: String,
     column_name: String,
-    class_mapping: Option<HashMap<u8, String>>,
+    class_mapping: Option<BTreeMap<u8, String>>,
     donut: bool,
 }
 
@@ -186,7 +206,7 @@ impl PlotQueryProcessor for CountPieChartVectorQueryProcessor {
 /// Null-values are empty strings.
 pub fn feature_data_strings_iter<'f>(
     feature_data: &'f FeatureDataRef,
-    class_mapping: Option<&'f HashMap<u8, String>>,
+    class_mapping: Option<&'f BTreeMap<u8, String>>,
 ) -> Box<dyn Iterator<Item = String> + 'f> {
     match (feature_data, class_mapping) {
         (FeatureDataRef::Category(feature_data_ref), Some(class_mapping)) => {
@@ -227,9 +247,12 @@ impl CountPieChartVectorQueryProcessor {
         let mut slices: HashMap<String, f64> = HashMap::new();
 
         // TODO: parallelize
+        let query: VectorQueryRectangle = query.select_attributes(ColumnSelection::all());
 
         call_on_generic_vector_processor!(&self.input, processor => {
-            let mut query = processor.query(query.into(), ctx).await?;
+
+
+            let mut query = processor.query(query, ctx).await?;
 
             while let Some(collection) = query.next().await {
                 let collection = collection?;
@@ -285,8 +308,8 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        ChunkByteSize, MockExecutionContext, MockQueryContext, StaticMetaData, VectorColumnInfo,
-        VectorOperator, VectorResultDescriptor,
+        ChunkByteSize, MockExecutionContext, StaticMetaData, VectorColumnInfo, VectorOperator,
+        VectorResultDescriptor,
     };
     use crate::mock::MockFeatureCollectionSource;
     use crate::source::{
@@ -296,8 +319,8 @@ mod tests {
     use crate::test_data;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, PlotSeriesSelection,
-        SpatialResolution, TimeInterval,
+        BoundingBox2D, FeatureData, FeatureDataType, NoGeometry, PlotQueryRectangle,
+        PlotSeriesSelection, TimeInterval,
     };
     use geoengine_datatypes::primitives::{CacheTtlSeconds, VectorQueryRectangle};
     use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -399,14 +422,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -478,14 +499,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -625,14 +644,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap_err();
@@ -674,14 +691,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -757,14 +772,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -824,14 +837,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &execution_context.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

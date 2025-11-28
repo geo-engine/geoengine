@@ -51,6 +51,31 @@ CREATE TYPE "TimeStep" AS (
     step OID
 );
 
+CREATE TYPE "GridBoundingBox2D" AS (
+    y_min bigint,
+    y_max bigint,
+    x_min bigint,
+    x_max bigint
+);
+
+CREATE TYPE "GeoTransform" AS (
+    origin_coordinate "Coordinate2D",
+    x_pixel_size double precision,
+    y_pixel_size double precision
+);
+
+CREATE TYPE "SpatialGridDefinition" AS (
+    geo_transform "GeoTransform",
+    grid_bounds "GridBoundingBox2D"
+);
+
+CREATE TYPE "SpatialGridDescriptorState" AS ENUM ('Source', 'Merged');
+
+CREATE TYPE "SpatialGridDescriptor" AS (
+    "state" "SpatialGridDescriptorState",
+    spatial_grid "SpatialGridDefinition"
+);
+
 CREATE TYPE "DatasetName" AS (namespace text, name text);
 
 CREATE TYPE "Provenance" AS (
@@ -249,14 +274,33 @@ CREATE TYPE "RasterBandDescriptor" AS (
     measurement "Measurement"
 );
 
+CREATE TYPE "RegularTimeDimension" AS (
+    origin bigint,
+    step "TimeStep"
+);
+
+CREATE TYPE "TimeDimensionDiscriminator" AS ENUM (
+    'Regular',
+    'Irregular'
+);
+
+CREATE TYPE "TimeDimension" AS (
+    regular_dimension "RegularTimeDimension",
+    discriminant "TimeDimensionDiscriminator"
+);
+
+CREATE TYPE "TimeDescriptor" AS (
+    bounds "TimeInterval",
+    dimension "TimeDimension"
+);
+
 CREATE TYPE "RasterResultDescriptor" AS (
     data_type "RasterDataType",
     -- SpatialReferenceOption
     spatial_reference "SpatialReference",
-    "time" "TimeInterval",
-    bbox "SpatialPartition2D",
-    resolution "SpatialResolution",
-    bands "RasterBandDescriptor" []
+    bands "RasterBandDescriptor" [],
+    spatial_grid "SpatialGridDescriptor",
+    "time" "TimeDescriptor"
 );
 
 CREATE TYPE "VectorResultDescriptor" AS (
@@ -517,6 +561,10 @@ CREATE TYPE "GdalMetaDataList" AS (
     params "GdalLoadingInfoTemporalSlice" []
 );
 
+CREATE TYPE "GdalMultiBand" AS (
+    result_descriptor "RasterResultDescriptor"
+);
+
 CREATE TYPE "MetaDataDefinition" AS (
     -- oneOf
     mock_meta_data "MockMetaData",
@@ -524,7 +572,8 @@ CREATE TYPE "MetaDataDefinition" AS (
     gdal_meta_data_regular "GdalMetaDataRegular",
     gdal_static "GdalMetaDataStatic",
     gdal_metadata_net_cdf_cf "GdalMetadataNetCdfCf",
-    gdal_meta_data_list "GdalMetaDataList"
+    gdal_meta_data_list "GdalMetaDataList",
+    gdal_multi_band "GdalMultiBand"
 );
 
 -- seperate table for projects used in foreign key constraints
@@ -590,6 +639,12 @@ CREATE TABLE workflows (
 
 -- TODO: add length constraints
 
+CREATE TYPE "DataPath" AS (
+    -- oneOf
+    volume_name text,
+    upload_id uuid
+);
+
 CREATE TABLE datasets (
     id uuid PRIMARY KEY,
     name "DatasetName" UNIQUE NOT NULL,
@@ -600,7 +655,8 @@ CREATE TABLE datasets (
     result_descriptor "ResultDescriptor" NOT NULL,
     meta_data "MetaDataDefinition" NOT NULL,
     symbology "Symbology",
-    provenance "Provenance" []
+    provenance "Provenance" [],
+    data_path "DataPath" -- TODO: NOT NULL for GdalMultiBand?
 );
 
 -- TODO: add constraint not null
@@ -765,17 +821,6 @@ CREATE TYPE "DatasetLayerListingProviderDefinition" AS (
     priority smallint
 );
 
-CREATE TYPE "StacBand" AS (
-    "name" text,
-    no_data_value double precision,
-    data_type "RasterDataType"
-);
-
-CREATE TYPE "StacZone" AS (
-    "name" text,
-    epsg oid
-);
-
 CREATE TYPE "StacApiRetries" AS (
     number_of_retries bigint,
     initial_delay_ms bigint,
@@ -795,8 +840,6 @@ CREATE TYPE "SentinelS2L2ACogsProviderDefinition" AS (
     "name" text,
     id uuid,
     api_url text,
-    bands "StacBand" [],
-    zones "StacZone" [],
     stac_api_retries "StacApiRetries",
     gdal_retries "GdalRetries",
     cache_ttl int,
@@ -1281,3 +1324,69 @@ CREATE TABLE quota_log (
 );
 
 CREATE INDEX ON quota_log (user_id, timestamp, computation_id);
+
+CREATE TABLE dataset_tiles (
+    id uuid NOT NULL PRIMARY KEY,
+    dataset_id uuid NOT NULL,
+    time "TimeInterval" NOT NULL, -- noqa: references.keywords
+    bbox "SpatialPartition2D" NOT NULL,
+    band oid NOT NULL,
+    z_index oid NOT NULL,
+    gdal_params "GdalDatasetParameters" NOT NULL
+);
+
+CREATE UNIQUE INDEX dataset_tiles_unique_idx ON dataset_tiles (
+    dataset_id,
+    time,
+    bbox,
+    band,
+    z_index
+);
+
+-- helper type for batch checking tile validity
+CREATE TYPE "TileKey" AS (
+    time "TimeInterval",
+    bbox "SpatialPartition2D",
+    band oid,
+    z_index oid
+);
+
+-- helper type for batch inserting tiles
+CREATE TYPE "TileEntry" AS (
+    id uuid,
+    dataset_id uuid,
+    time "TimeInterval",
+    bbox "SpatialPartition2D",
+    band oid,
+    z_index oid,
+    gdal_params "GdalDatasetParameters"
+);
+
+-- Returns true if the partitions have any space in common
+CREATE OR REPLACE FUNCTION SPATIAL_PARTITION2D_INTERSECTS(
+    a "SpatialPartition2D", b "SpatialPartition2D"
+) RETURNS boolean AS $$
+SELECT NOT (
+    ( (a).lower_right_coordinate.x <= (b).upper_left_coordinate.x ) OR
+    ( (a).upper_left_coordinate.x >= (b).lower_right_coordinate.x ) OR
+    ( (a).lower_right_coordinate.y >= (b).upper_left_coordinate.y ) OR
+    ( (a).upper_left_coordinate.y <= (b).lower_right_coordinate.y )
+);
+$$ LANGUAGE sql IMMUTABLE;
+
+
+-- Returns true if two TimeIntervals overlap
+CREATE OR REPLACE FUNCTION TIME_INTERVAL_INTERSECTS(
+    a "TimeInterval", b "TimeInterval"
+) RETURNS boolean AS $$
+SELECT
+    -- If a is an instant
+    ((a).start = (a)."end" AND (a).start >= (b).start AND (a).start < (b)."end")
+    OR
+    -- If b is an instant
+    ((b).start = (b)."end" AND (b).start >= (a).start AND (b).start < (a)."end")
+    OR
+    -- Regular overlap for intervals
+    ((a).start < (b)."end" AND (b).start < (a)."end")
+;
+$$ LANGUAGE sql IMMUTABLE;

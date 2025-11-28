@@ -1,20 +1,22 @@
 use crate::api::model::datatypes::SpatialReference;
 use actix_web::guard::{Guard, GuardContext};
+use actix_web::{FromRequest, HttpRequest, dev::Payload};
+use futures_util::future::{Ready, ready};
+use geoengine_datatypes::primitives::Coordinate2D;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, BoundingBox2D, DateTime};
-use geoengine_datatypes::primitives::{Coordinate2D, SpatialResolution};
 use reqwest::Url;
+use serde::de::DeserializeOwned;
 use serde::de::Error;
 use serde::{Deserialize, Serialize};
-use snafu::ensure;
+use snafu::{ResultExt, ensure};
 use std::str::FromStr;
 use utoipa::openapi::schema::{ObjectBuilder, SchemaType};
-use utoipa::{PartialSchema, ToSchema};
+use utoipa::{IntoParams, PartialSchema, ToSchema};
 
 use super::wcs::request::WcsBoundingbox;
-use super::wfs::request::WfsResolution;
 use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
 use crate::api::model::datatypes::TimeInterval;
-use crate::error::{self, Result};
+use crate::error::{self, Result, UnableToParseQueryString, UnableToSerializeQueryString};
 use crate::workflows::workflow::WorkflowId;
 
 #[derive(PartialEq, Debug, Deserialize, Serialize, Clone, Copy)]
@@ -139,34 +141,6 @@ where
     }
 }
 
-/// Parse a spatial resolution, format is: "resolution" or "xResolution,yResolution"
-pub fn parse_wfs_resolution_option<'de, D>(
-    deserializer: D,
-) -> Result<Option<WfsResolution>, D::Error>
-where
-    D: serde::Deserializer<'de>,
-{
-    let s = String::deserialize(deserializer)?;
-
-    if s.is_empty() {
-        return Ok(None);
-    }
-
-    let split: Vec<Result<f64, std::num::ParseFloatError>> = s.split(',').map(str::parse).collect();
-
-    let spatial_resolution = match *split.as_slice() {
-        [Ok(resolution)] => {
-            SpatialResolution::new(resolution, resolution).map_err(D::Error::custom)?
-        }
-        [Ok(x_resolution), Ok(y_resolution)] => {
-            SpatialResolution::new(x_resolution, y_resolution).map_err(D::Error::custom)?
-        }
-        _ => return Err(D::Error::custom("Invalid spatial resolution")),
-    };
-
-    Ok(Some(WfsResolution(spatial_resolution)))
-}
-
 /// Parse wcs 1.1.1 bbox, format is: "x1,y1,x2,y2,crs", crs format is like `urn:ogc:def:crs:EPSG::4326`
 #[allow(clippy::missing_panics_doc)]
 pub fn parse_wcs_bbox<'de, D>(deserializer: D) -> Result<WcsBoundingbox, D::Error>
@@ -249,11 +223,12 @@ pub fn rectangle_from_ogc_params<A: AxisAlignedRectangle>(
     spatial_reference: SpatialReference,
 ) -> Result<A> {
     let [a, b, c, d] = values;
-    match spatial_reference_specification(&spatial_reference.proj_string()?)?
+    let axis_order = spatial_reference_specification(spatial_reference)?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
-        })? {
+        })?;
+    match axis_order {
         AxisOrder::EastNorth => A::from_min_max((a, b).into(), (c, d).into()).map_err(Into::into),
         AxisOrder::NorthEast => A::from_min_max((b, a).into(), (d, c).into()).map_err(Into::into),
     }
@@ -265,7 +240,7 @@ pub fn tuple_from_ogc_params(
     b: f64,
     spatial_reference: SpatialReference,
 ) -> Result<(f64, f64)> {
-    match spatial_reference_specification(&spatial_reference.proj_string()?)?
+    match spatial_reference_specification(spatial_reference)?
         .axis_order
         .ok_or(error::Error::AxisOrderingNotKnownForSrs {
             srs_string: spatial_reference.srs_string(),
@@ -300,6 +275,7 @@ pub fn ogc_endpoint_url(base: &Url, protocol: OgcProtocol, workflow: WorkflowId)
         .map_err(Into::into)
 }
 
+// TODO: remove when all OGC handlers are using only one handler
 pub struct OgcRequestGuard<'a> {
     request: &'a str,
 }
@@ -316,6 +292,78 @@ impl Guard for OgcRequestGuard<'_> {
             q.contains(&format!("request={}", self.request))
                 || q.contains(&format!("REQUEST={}", self.request))
         })
+    }
+}
+
+/// a special query extractor for actix-web because some OGC clients use varying casing for query parameter keys
+pub struct OgcQueryExtractor<T>(pub T);
+
+impl<T> OgcQueryExtractor<T> {
+    #[inline]
+    pub fn into_inner(self) -> T {
+        self.0
+    }
+}
+
+impl<T> std::ops::Deref for OgcQueryExtractor<T> {
+    type Target = T;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl<T> std::ops::DerefMut for OgcQueryExtractor<T> {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.0
+    }
+}
+
+impl<T> FromRequest for OgcQueryExtractor<T>
+where
+    T: DeserializeOwned + 'static,
+{
+    type Error = crate::error::Error;
+    type Future = Ready<Result<Self, Self::Error>>;
+
+    fn from_request(req: &HttpRequest, _: &mut Payload) -> Self::Future {
+        // get raw query string
+        let qs = req.query_string();
+
+        // parse into key-value pairs
+        let params: Result<Vec<(String, String)>> =
+            serde_urlencoded::from_str(qs).context(UnableToParseQueryString);
+
+        let res = params
+            .and_then(|pairs| {
+                // normalize keys to lowercase
+                let normalized: Vec<(String, String)> = pairs
+                    .into_iter()
+                    .map(|(k, v)| (k.to_lowercase(), v))
+                    .collect();
+
+                // re-serialize then deserialize into target type T
+                let new_qs = serde_urlencoded::to_string(&normalized)
+                    .context(UnableToSerializeQueryString)?;
+                let value =
+                    serde_urlencoded::from_str::<T>(&new_qs).context(UnableToParseQueryString)?;
+                Ok(value)
+            })
+            .map(OgcQueryExtractor);
+
+        ready(res)
+    }
+}
+
+// Tell `utoipa` that our wrapper is a query-parameter extractor by forwarding
+// `IntoParams` to the inner type and specifying `ParameterIn::Query`.
+impl<T> IntoParams for OgcQueryExtractor<T>
+where
+    T: IntoParams,
+{
+    fn into_params(
+        _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+    ) -> Vec<utoipa::openapi::path::Parameter> {
+        T::into_params(|| Some(utoipa::openapi::path::ParameterIn::Query))
     }
 }
 
@@ -454,31 +502,6 @@ mod tests {
     }
 
     #[test]
-    fn it_parses_spatial_resolution_options() {
-        assert_eq!(
-            parse_wfs_resolution_option(to_deserializer("")).unwrap(),
-            None
-        );
-
-        assert_eq!(
-            parse_wfs_resolution_option(to_deserializer("0.1")).unwrap(),
-            Some(WfsResolution(SpatialResolution::zero_point_one()))
-        );
-        assert_eq!(
-            parse_wfs_resolution_option(to_deserializer("1")).unwrap(),
-            Some(WfsResolution(SpatialResolution::one()))
-        );
-
-        assert_eq!(
-            parse_wfs_resolution_option(to_deserializer("0.1,0.2")).unwrap(),
-            Some(WfsResolution(SpatialResolution::new(0.1, 0.2).unwrap()))
-        );
-
-        assert!(parse_wfs_resolution_option(to_deserializer(",")).is_err());
-        assert!(parse_wfs_resolution_option(to_deserializer("0.1,0.2,0.3")).is_err());
-    }
-
-    #[test]
     fn it_parses_wcs_bbox() {
         let s = "-162,-81,162,81,urn:ogc:def:crs:EPSG::3857";
 
@@ -546,5 +569,26 @@ mod tests {
             Url::parse("http://example.com/a/sub/folder/wms/b9a7b1a0-efd6-4de9-9973-c3aeaf9282bd")
                 .unwrap()
         );
+    }
+
+    #[test]
+    fn ogc_query_extractor_normalizes_keys() {
+        use actix_web::test;
+        use serde::Deserialize;
+
+        #[derive(Debug, Deserialize, PartialEq)]
+        struct TestQuery {
+            foo: String,
+            bar: String,
+        }
+
+        let req = test::TestRequest::with_uri("/test?FOO=hello&BaR=world").to_http_request();
+
+        let mut payload = actix_web::dev::Payload::None;
+        let fut = OgcQueryExtractor::<TestQuery>::from_request(&req, &mut payload);
+        let result = futures::executor::block_on(fut).unwrap();
+
+        assert_eq!(result.foo, "hello");
+        assert_eq!(result.bar, "world");
     }
 }

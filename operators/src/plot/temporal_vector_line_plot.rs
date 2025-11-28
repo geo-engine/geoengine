@@ -1,25 +1,21 @@
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedPlotOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, PlotOperator, PlotQueryProcessor,
-    PlotResultDescriptor, QueryContext, SingleVectorSource, TypedPlotQueryProcessor,
-    VectorQueryProcessor, WorkflowOperatorPath,
+    PlotResultDescriptor, QueryContext, QueryProcessor, SingleVectorSource,
+    TypedPlotQueryProcessor, VectorColumnInfo, VectorQueryProcessor, WorkflowOperatorPath,
 };
-use crate::engine::{QueryProcessor, VectorColumnInfo};
 use crate::error;
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::TryStreamExt;
-use geoengine_datatypes::primitives::{FeatureDataType, PlotQueryRectangle};
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::{
-    collections::FeatureCollection,
-    plots::{Plot, PlotData},
-};
-use geoengine_datatypes::{
-    collections::FeatureCollectionInfos,
-    plots::{DataPoint, MultiLineChart},
-};
-use geoengine_datatypes::{
-    primitives::{Geometry, Measurement, TimeInterval},
+    collections::{FeatureCollection, FeatureCollectionInfos},
+    plots::{DataPoint, MultiLineChart, Plot, PlotData},
+    primitives::{
+        ColumnSelection, FeatureDataType, Geometry, Measurement, PlotQueryRectangle, TimeInterval,
+    },
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
@@ -143,6 +139,19 @@ impl InitializedPlotOperator for InitializedFeatureAttributeValuesOverTime {
     fn canonic_name(&self) -> CanonicOperatorName {
         self.name.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn PlotOperator>, OptimizationError> {
+        Ok(FeatureAttributeValuesOverTime {
+            params: self.state.clone(),
+            sources: SingleVectorSource {
+                vector: self.vector_source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 /// A query processor that calculates the `TemporalVectorLinePlot` on its input.
@@ -172,9 +181,11 @@ where
     ) -> Result<Self::OutputFormat> {
         let values = FeatureAttributeValues::<MAX_FEATURES>::default();
 
+        let query = query.select_attributes(ColumnSelection::all());
+
         let values = self
             .features
-            .query(query.into(), ctx)
+            .query(query, ctx)
             .await?
             .try_fold(values, |mut acc, features| async move {
                 let ids = features.data(&self.params.id_column)?;
@@ -275,21 +286,19 @@ impl<const LENGTH: usize> FeatureAttributeValues<LENGTH> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::{
+        engine::{ChunkByteSize, MockExecutionContext, VectorOperator},
+        mock::MockFeatureCollectionSource,
+    };
+    use geoengine_datatypes::primitives::PlotQueryRectangle;
     use geoengine_datatypes::primitives::{CacheHint, PlotSeriesSelection};
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_datatypes::{
         collections::MultiPointCollection,
         plots::PlotMetaData,
-        primitives::{
-            BoundingBox2D, DateTime, FeatureData, MultiPoint, SpatialResolution, TimeInterval,
-        },
+        primitives::{BoundingBox2D, DateTime, FeatureData, MultiPoint, TimeInterval},
     };
     use serde_json::{Value, json};
-
-    use crate::{
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, VectorOperator},
-        mock::MockFeatureCollectionSource,
-    };
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -352,14 +361,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -501,14 +508,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &exe_ctc.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();
@@ -618,7 +623,7 @@ mod tests {
         )
         .boxed();
 
-        let exe_ctc = MockExecutionContext::test_default();
+        let exe_ctx = MockExecutionContext::test_default();
 
         let operator = FeatureAttributeValuesOverTime {
             params: FeatureAttributeValuesOverTimeParams {
@@ -630,7 +635,7 @@ mod tests {
 
         let operator = operator
             .boxed()
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctc)
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
             .await
             .unwrap();
 
@@ -638,14 +643,12 @@ mod tests {
 
         let result = query_processor
             .plot_query(
-                PlotQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into())
-                        .unwrap(),
-                    time_interval: TimeInterval::default(),
-                    spatial_resolution: SpatialResolution::new(0.1, 0.1).unwrap(),
-                    attributes: PlotSeriesSelection::all(),
-                },
-                &MockQueryContext::new(ChunkByteSize::MIN),
+                PlotQueryRectangle::new(
+                    BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+                    TimeInterval::default(),
+                    PlotSeriesSelection::all(),
+                ),
+                &exe_ctx.mock_query_context(ChunkByteSize::MIN),
             )
             .await
             .unwrap();

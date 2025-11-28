@@ -1,16 +1,20 @@
-use super::query::QueryAbortRegistration;
 use super::{
     CreateSpan, InitializedPlotOperator, InitializedRasterOperator, InitializedVectorOperator,
     MockQueryContext,
 };
+use crate::cache::shared_cache::SharedCache;
 use crate::engine::{
     ChunkByteSize, RasterResultDescriptor, ResultDescriptor, VectorResultDescriptor,
 };
 use crate::error::Error;
 use crate::machine_learning::MlModelLoadingInfo;
+use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
-use crate::source::{GdalLoadingInfo, OgrSourceDataset};
+use crate::source::{
+    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+    OgrSourceDataset,
+};
 use crate::util::{Result, create_rayon_thread_pool};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, NamedData};
@@ -33,6 +37,11 @@ pub trait ExecutionContext: Send
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    + MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    >
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
@@ -157,17 +166,40 @@ impl MockExecutionContext {
         }
     }
 
+    pub fn mock_query_context_test_default(&self) -> MockQueryContext {
+        MockQueryContext::new(ChunkByteSize::test_default(), self.tiling_specification)
+    }
+
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
-        let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
-        MockQueryContext {
+        MockQueryContext::new(chunk_byte_size, self.tiling_specification)
+    }
+
+    pub fn mock_query_context_with_query_extensions(
+        &self,
+        chunk_byte_size: ChunkByteSize,
+        cache: Option<Arc<SharedCache>>,
+        quota_tracking: Option<QuotaTracking>,
+        quota_checker: Option<QuotaChecker>,
+    ) -> MockQueryContext {
+        MockQueryContext::new_with_query_extensions(
             chunk_byte_size,
-            thread_pool: self.thread_pool.clone(),
-            cache: None,
-            quota_checker: None,
-            quota_tracking: None,
-            abort_registration,
-            abort_trigger: Some(abort_trigger),
-        }
+            self.tiling_specification,
+            cache,
+            quota_tracking,
+            quota_checker,
+        )
+    }
+
+    pub fn mock_query_context_with_chunk_size_and_thread_count(
+        &self,
+        chunk_byte_size: ChunkByteSize,
+        num_threads: usize,
+    ) -> MockQueryContext {
+        MockQueryContext::with_chunk_size_and_thread_count(
+            chunk_byte_size,
+            self.tiling_specification,
+            num_threads,
+        )
     }
 }
 
@@ -360,6 +392,23 @@ impl TestDefault for StatisticsWrappingMockExecutionContext {
         Self {
             inner: MockExecutionContext::test_default(),
         }
+    }
+}
+
+impl StatisticsWrappingMockExecutionContext {
+    pub fn mock_query_context_with_query_extensions(
+        &self,
+        chunk_byte_size: ChunkByteSize,
+        cache: Option<Arc<SharedCache>>,
+        quota_tracking: Option<QuotaTracking>,
+        quota_checker: Option<QuotaChecker>,
+    ) -> MockQueryContext {
+        self.inner.mock_query_context_with_query_extensions(
+            chunk_byte_size,
+            cache,
+            quota_tracking,
+            quota_checker,
+        )
     }
 }
 

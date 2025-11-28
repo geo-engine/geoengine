@@ -1,5 +1,21 @@
 use std::{borrow::Cow, collections::HashMap, str::FromStr};
 
+use async_trait::async_trait;
+use geoengine_datatypes::{
+    dataset::{DataId, LayerId},
+    primitives::{RasterQueryRectangle, VectorQueryRectangle},
+};
+use geoengine_operators::{
+    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
+    mock::MockDatasetDataSourceLoadingInfo,
+    source::{
+        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+        OgrSourceDataset,
+    },
+};
+use postgres_types::{FromSql, ToSql};
+use serde::{Deserialize, Serialize};
+
 use crate::{
     contexts::GeoEngineDb,
     datasets::listing::DatasetProvider,
@@ -18,18 +34,6 @@ use crate::{
     util::operators::source_operator_from_dataset,
     workflows::workflow::Workflow,
 };
-use async_trait::async_trait;
-use geoengine_datatypes::{
-    dataset::{DataId, LayerId},
-    primitives::{RasterQueryRectangle, VectorQueryRectangle},
-};
-use geoengine_operators::{
-    engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
-    mock::MockDatasetDataSourceLoadingInfo,
-    source::{GdalLoadingInfo, OgrSourceDataset},
-};
-use postgres_types::{FromSql, ToSql};
-use serde::{Deserialize, Serialize};
 
 use geoengine_datatypes::dataset::{DataProviderId, DatasetId};
 
@@ -420,6 +424,34 @@ where
     }
 }
 
+#[async_trait]
+impl<D>
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for DatasetLayerListingProvider<D>
+where
+    D: DatasetProvider + Send + Sync + 'static,
+{
+    async fn meta_data(
+        &self,
+        _id: &geoengine_datatypes::dataset::DataId,
+    ) -> Result<
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
+        geoengine_operators::error::Error,
+    > {
+        // never called but handled by the dataset provider
+        Err(geoengine_operators::error::Error::NotImplemented)
+    }
+}
+
 fn tags_from_collection_id(collection_id: &LayerCollectionId) -> Result<Option<Vec<String>>> {
     let collection_str = &collection_id.0;
 
@@ -462,11 +494,11 @@ mod tests {
     use geoengine_datatypes::{
         collections::VectorDataType,
         primitives::{CacheTtlSeconds, TimeGranularity, TimeStep},
-        raster::RasterDataType,
+        raster::{GeoTransform, GridBoundingBox, RasterDataType},
         spatial_reference::SpatialReferenceOption,
     };
     use geoengine_operators::{
-        engine::{RasterBandDescriptors, StaticMetaData},
+        engine::{RasterBandDescriptors, SpatialGridDescriptor, StaticMetaData, TimeDescriptor},
         source::{
             FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters,
             GdalMetaDataRegular, OgrSourceErrorSpec,
@@ -709,9 +741,11 @@ mod tests {
         let raster_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReferenceOption::Unreferenced,
-            time: None,
-            bbox: None,
-            resolution: None,
+            time: TimeDescriptor::new_irregular(None),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new((0., 0.).into(), 1., -1.),
+                GridBoundingBox::new([0, 0], [0, 0]).unwrap(),
+            ),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
@@ -743,8 +777,8 @@ mod tests {
                 x_pixel_size: 0.0,
                 y_pixel_size: 0.0,
             },
-            width: 0,
-            height: 0,
+            width: 1,
+            height: 1,
             file_not_found_handling: FileNotFoundHandling::NoData,
             no_data_value: None,
             properties_mapping: None,
@@ -785,10 +819,13 @@ mod tests {
             cache_ttl: CacheTtlSeconds::default(),
         };
 
-        let _ = db.add_dataset(vector_ds, vector_meta.into()).await.unwrap();
+        let _ = db
+            .add_dataset(vector_ds, vector_meta.into(), None)
+            .await
+            .unwrap();
 
         let _ = db
-            .add_dataset(raster_ds.clone(), raster_meta.into())
+            .add_dataset(raster_ds.clone(), raster_meta.into(), None)
             .await
             .unwrap();
     }

@@ -64,6 +64,7 @@ proj-sys = { workspace = true }
 pwhash = { workspace = true }
 rand = { workspace = true }
 rayon = { workspace = true }
+regex = { workspace = true }
 reqwest = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -109,6 +110,10 @@ vergen-gitcl = { workspace = true, features = ["build"] }
 
 [[bench]]
 name = "quota_check"
+harness = false
+
+[[bench]]
+name = "tiled_gdal_source"
 harness = false
 
 [lints]

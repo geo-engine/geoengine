@@ -6,6 +6,7 @@ use crate::engine::{
     SourceOperator, TypedVectorQueryProcessor, VectorOperator, VectorQueryProcessor,
     VectorResultDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{self, BoxStream, StreamExt};
@@ -13,6 +14,7 @@ use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
 use geoengine_datatypes::dataset::NamedData;
+use geoengine_datatypes::primitives::SpatialResolution;
 use geoengine_datatypes::primitives::{
     Geometry, Measurement, MultiLineString, MultiPoint, MultiPolygon, NoGeometry, TimeInterval,
     VectorQueryRectangle,
@@ -49,7 +51,7 @@ where
         let stream = stream::iter(
             self.collections
                 .iter()
-                .map(move |c| filter_time_intervals(c, query.time_interval)),
+                .map(move |c| filter_time_intervals(c, query.time_interval())),
         );
 
         Ok(stream.boxed())
@@ -139,9 +141,10 @@ where
     }
 }
 
-pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry> {
+pub struct InitializedMockFeatureCollectionSource<R: ResultDescriptor, G: Geometry + ArrowTyped> {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    params: MockFeatureCollectionSourceParams<G>,
     result_descriptor: R,
     collections: Vec<FeatureCollection<G>>,
 }
@@ -204,6 +207,7 @@ macro_rules! impl_mock_feature_collection_source {
                 Ok(InitializedMockFeatureCollectionSource {
                     name: CanonicOperatorName::from(&self),
                     path,
+                    params: self.params.clone(),
                     result_descriptor,
                     collections: self.params.collections,
                 }
@@ -237,6 +241,16 @@ macro_rules! impl_mock_feature_collection_source {
             fn path(&self) -> WorkflowOperatorPath {
                 self.path.clone()
             }
+
+            fn optimize(
+                &self,
+                _target_resolution: SpatialResolution,
+            ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+                Ok(MockFeatureCollectionSource {
+                    params: self.params.clone(),
+                }
+                .boxed())
+            }
         }
     };
 }
@@ -249,14 +263,15 @@ impl_mock_feature_collection_source!(MultiPolygon, MultiPolygon);
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContext;
     use crate::engine::QueryProcessor;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
-    use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
-    use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D, FeatureData, TimeInterval};
-    use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
+    use geoengine_datatypes::collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection};
+    use geoengine_datatypes::primitives::{
+        BoundingBox2D, CacheHint, ColumnSelection, Coordinate2D, FeatureData, TimeInterval,
+    };
+
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::{collections::MultiPointCollection, primitives::SpatialResolution};
 
     #[test]
     #[allow(clippy::too_many_lines)]
@@ -413,13 +428,13 @@ mod tests {
             panic!()
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
+        let query_rectangle = VectorQueryRectangle::new(
+            BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = processor.query(query_rectangle, &ctx).await.unwrap();
 
