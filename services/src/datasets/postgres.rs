@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
-use crate::api::handlers::datasets::AddDatasetTile;
+use crate::api::handlers::datasets::{AddDatasetTile, DatasetTile, GetDatasetTilesParams};
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::{DataPath, UpdateDataset};
+use crate::config::Gdal;
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
@@ -1320,6 +1321,54 @@ where
         tx.commit().await?;
 
         Ok(())
+    }
+
+    async fn get_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        params: &GetDatasetTilesParams,
+    ) -> Result<Vec<DatasetTile>> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        let rows = tx
+            .query(
+                "
+            SELECT
+                id, time, bbox, band, z_index, gdal_params
+            FROM
+                dataset_tiles
+            WHERE
+                dataset_id = $1
+            ORDER BY
+                (time).start, 
+                band, 
+                (bbox).upper_left_coordinate.x, 
+                (bbox).upper_left_coordinate.y, 
+                z_index
+            OFFSET $2
+            LIMIT $3",
+                &[&dataset, &(params.offset as i64), &(params.limit as i64)],
+            )
+            .await?;
+
+        let tiles: Vec<DatasetTile> = rows
+            .into_iter()
+            .map(|row| DatasetTile {
+                id: row.get(0),
+                time: row.get(1),
+                spatial_partition: row.get(2),
+                band: row.get(3),
+                z_index: row.get(4),
+                params: row.get::<_, GdalDatasetParameters>(5).into(),
+            })
+            .collect();
+
+        Ok(tiles)
     }
 }
 

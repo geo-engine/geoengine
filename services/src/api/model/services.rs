@@ -177,6 +177,7 @@ pub struct UpdateDataset {
     pub description: String,
     #[validate(custom(function = "validate_tags"))]
     pub tags: Vec<String>,
+    // TODO: result descriptor update? or change the model so that the result descriptor is only part of the metadata
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, ToSchema, Validate)]

@@ -15,6 +15,7 @@ use crate::{
     datasets::{
         DatasetName,
         listing::{DatasetListOptions, DatasetListing, DatasetProvider},
+        postgres::DatasetTileId,
         storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, VolumeName, Volumes},
     },
@@ -28,7 +29,7 @@ use crate::{
 };
 use actix_web::{
     FromRequest, HttpResponse, HttpResponseBuilder, Responder,
-    web::{self, Json},
+    web::{self, Json, Query},
 };
 use gdal::{
     DatasetOptions,
@@ -63,7 +64,8 @@ use std::{
     convert::{TryFrom, TryInto},
     path::Path,
 };
-use utoipa::{ToResponse, ToSchema};
+use utoipa::{IntoParams, ToResponse, ToSchema};
+use validator::Validate;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -96,7 +98,8 @@ where
             )
             .service(
                 web::resource("/{dataset}/tiles")
-                    .route(web::post().to(add_dataset_tiles_handler::<C>)),
+                    .route(web::post().to(add_dataset_tiles_handler::<C>))
+                    .route(web::get().to(get_dataset_tiles_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -246,7 +249,6 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
         &dataset
             .data_path
             .ok_or(AddDatasetTilesError::DatasetIsMissingDataPath)?,
-        &session_context,
     )
     .context(CannotAddTilesToDataset)?;
 
@@ -345,24 +347,17 @@ fn validate_tile(
     Ok(())
 }
 
-fn file_path_from_data_path<T: SessionContext>(
-    data_path: &DataPath,
-    session_context: &T,
-) -> Result<std::path::PathBuf> {
+fn file_path_from_data_path(data_path: &DataPath) -> Result<std::path::PathBuf> {
     Ok(match data_path {
-        DataPath::Volume(volume_name) => session_context
-            .volumes()?
+        DataPath::Volume(volume_name) => Volumes::default()
+            .volumes
             .iter()
-            .find(|v| v.name == volume_name.0)
+            .find(|v| v.name == *volume_name)
             .ok_or(Error::UnknownVolumeName {
                 volume_name: volume_name.0.clone(),
             })?
             .path
-            .clone()
-            .ok_or(Error::CannotAccessVolumePath {
-                volume_name: volume_name.0.clone(),
-            })?
-            .into(),
+            .clone(),
         DataPath::Upload(upload_id) => upload_id.root_path()?,
     })
 }
@@ -443,6 +438,71 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
     let dataset: Dataset = dataset.into();
 
     Ok(web::Json(dataset))
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+pub struct DatasetTile {
+    pub id: DatasetTileId,
+    pub time: crate::api::model::datatypes::TimeInterval,
+    pub spatial_partition: SpatialPartition2D,
+    pub band: u32,
+    pub z_index: u32,
+    pub params: GdalDatasetParameters,
+}
+
+#[derive(Debug, Deserialize, IntoParams, Validate)]
+pub struct GetDatasetTilesParams {
+    pub offset: u32,
+    #[validate(range(min = 1, max = 100))]
+    pub limit: u32,
+    // TODO: filter by time, space, filename, ...
+}
+
+/// Retrieves details about a dataset using the internal name.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/{dataset}/tiles",
+    responses(
+        (status = 200, description = "OK", body = Vec<DatasetTile>),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+        GetDatasetTilesParams
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn get_dataset_tiles_handler<C: ApplicationContext>(
+    dataset: web::Path<DatasetName>,
+    session: C::Session,
+    params: Query<GetDatasetTilesParams>,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder, GetDatasetTilesError> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await
+        .context(CannotLoadDatasetForGettingTiles)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: real_dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForGettingTiles)?;
+
+    let tiles = session_ctx
+        .get_dataset_tiles(dataset_id, &params.into_inner())
+        .await
+        .context(CannotLoadDatasetTiles)?;
+
+    Ok(web::Json(tiles))
 }
 
 /// Update details about a dataset using the internal name.
