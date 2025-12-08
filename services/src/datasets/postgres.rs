@@ -1,9 +1,10 @@
 use std::path::PathBuf;
 
-use crate::api::handlers::datasets::{AddDatasetTile, DatasetTile, GetDatasetTilesParams};
+use crate::api::handlers::datasets::{
+    AddDatasetTile, DatasetTile, GetDatasetTilesParams, UpdateDatasetTile,
+};
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::{DataPath, UpdateDataset};
-use crate::config::Gdal;
 use crate::contexts::PostgresDb;
 use crate::datasets::listing::Provenance;
 use crate::datasets::listing::{DatasetListOptions, DatasetListing, DatasetProvider};
@@ -1369,6 +1370,41 @@ where
             .collect();
 
         Ok(tiles)
+    }
+
+    async fn update_dataset_tile(
+        &self,
+        dataset: DatasetId,
+        tile_id: DatasetTileId,
+        tile: UpdateDatasetTile,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.query(
+            "
+             UPDATE dataset_tiles 
+             SET dataset_id = $2, time = $3, bbox = $4, band = $5, z_index = $6, gdal_params = $7
+             WHERE id = $1;",
+            &[
+                &tile_id,
+                &dataset,
+                &tile.time,
+                &tile.spatial_partition,
+                &tile.band,
+                &tile.z_index,
+                &(GdalDatasetParameters::from(tile.params)),
+            ],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
     }
 }
 

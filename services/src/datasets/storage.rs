@@ -1,9 +1,12 @@
 use super::listing::Provenance;
 use super::postgres::DatasetMetaData;
 use super::{DatasetIdAndName, DatasetName};
-use crate::api::handlers::datasets::{AddDatasetTile, DatasetTile, GetDatasetTilesParams};
+use crate::api::handlers::datasets::{
+    AddDatasetTile, DatasetTile, GetDatasetTilesParams, UpdateDatasetTile,
+};
 use crate::api::model::services::{DataPath, UpdateDataset};
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
+use crate::datasets::postgres::DatasetTileId;
 use crate::datasets::upload::UploadDb;
 use crate::datasets::upload::UploadId;
 use crate::error::Result;
@@ -329,4 +332,11 @@ pub trait DatasetStore {
         dataset: DatasetId,
         params: &GetDatasetTilesParams,
     ) -> Result<Vec<DatasetTile>>;
+
+    async fn update_dataset_tile(
+        &self,
+        dataset: DatasetId,
+        tile_id: DatasetTileId,
+        tile: UpdateDatasetTile,
+    ) -> Result<()>;
 }

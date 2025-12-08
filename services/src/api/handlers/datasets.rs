@@ -97,6 +97,10 @@ where
                     .route(web::put().to(update_dataset_provenance_handler::<C>)),
             )
             .service(
+                web::resource("/{dataset}/tiles/{tile}")
+                    .route(web::put().to(update_dataset_tile_handler::<C>)),
+            )
+            .service(
                 web::resource("/{dataset}/tiles")
                     .route(web::post().to(add_dataset_tiles_handler::<C>))
                     .route(web::get().to(get_dataset_tiles_handler::<C>)),
@@ -503,6 +507,66 @@ pub async fn get_dataset_tiles_handler<C: ApplicationContext>(
         .context(CannotLoadDatasetTiles)?;
 
     Ok(web::Json(tiles))
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+pub struct UpdateDatasetTile {
+    pub time: crate::api::model::datatypes::TimeInterval,
+    pub spatial_partition: SpatialPartition2D,
+    pub band: u32,
+    pub z_index: u32,
+    pub params: GdalDatasetParameters,
+}
+
+/// Retrieves details about a dataset using the internal name.
+#[utoipa::path(
+    tag = "Datasets",
+    put,
+    path = "/dataset/{dataset}/tiles/{tile}",
+    responses(
+        (status = 200, description = "OK"),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+        ("tile" = DatasetTileId, description = "Tile Id"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn update_dataset_tile_handler<C: ApplicationContext>(
+    dataset: web::Path<(DatasetName, DatasetTileId)>,
+    session: C::Session,
+    tile: web::Json<UpdateDatasetTile>,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder, UpdateDatasetTileError> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let (dataset, tile_id) = dataset.into_inner();
+
+    let real_dataset = dataset;
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await
+        .context(CannotLoadDatasetForUpdatingTile)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: real_dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForUpdatingTile)?;
+
+    // TODO: validate the tile like in add tiles
+
+    session_ctx
+        .update_dataset_tile(dataset_id, tile_id, tile.into_inner())
+        .await
+        .context(CannotUpdateDatasetTile)?;
+
+    Ok(HttpResponse::Ok())
 }
 
 /// Update details about a dataset using the internal name.
@@ -5459,6 +5523,142 @@ mod tests {
                 )
                 .unwrap(),
             ]
+        );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_gets_and_updates_tiles(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        // add data
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi (tiled)".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: create_ndvi_result_descriptor(true).into(),
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        // add tile
+        let tiles = create_ndvi_tiles()[0..1].to_vec();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(
+            res.status(),
+            200,
+            "response: {read_body}",
+            read_body = actix_web::test::read_body_json::<ErrorResponse, _>(res).await
+        );
+
+        // get tile
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/tiles?offset=0&limit=10"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(
+            res.status(),
+            200,
+            "response: {read_body}",
+            read_body = actix_web::test::read_body_json::<ErrorResponse, _>(res).await
+        );
+
+        let returned_tiles: Vec<DatasetTile> = actix_web::test::read_body_json(res).await;
+        assert_eq!(returned_tiles.len(), 1);
+        assert_eq!(
+            returned_tiles[0],
+            DatasetTile {
+                id: returned_tiles[0].id,
+                time: tiles[0].time.clone(),
+                spatial_partition: tiles[0].spatial_partition.clone(),
+                band: tiles[0].band,
+                z_index: tiles[0].z_index,
+                params: tiles[0].params.clone()
+            }
+        );
+
+        let update_tile = UpdateDatasetTile {
+            time: tiles[0].time.clone(),
+            spatial_partition: tiles[0].spatial_partition.clone(),
+            band: tiles[0].band,
+            z_index: tiles[0].z_index + 1,
+            params: tiles[0].params.clone(),
+        };
+
+        let req = actix_web::test::TestRequest::put()
+            .uri(&format!(
+                "/dataset/{dataset_name}/tiles/{}",
+                returned_tiles[0].id
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&update_tile)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/tiles?offset=0&limit=10"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        let returned_tiles: Vec<DatasetTile> = actix_web::test::read_body_json(res).await;
+        assert_eq!(returned_tiles.len(), 1);
+        assert_eq!(
+            returned_tiles[0],
+            DatasetTile {
+                id: returned_tiles[0].id,
+                time: tiles[0].time.clone(),
+                spatial_partition: tiles[0].spatial_partition.clone(),
+                band: tiles[0].band,
+                z_index: tiles[0].z_index + 1,
+                params: tiles[0].params.clone()
+            }
         );
 
         Ok(())

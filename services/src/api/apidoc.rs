@@ -1,7 +1,9 @@
 #![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
 
 use crate::api::handlers;
-use crate::api::handlers::datasets::{AddDatasetTile, DatasetTile, VolumeFileLayersResponse};
+use crate::api::handlers::datasets::{
+    AddDatasetTile, DatasetTile, UpdateDatasetTile, VolumeFileLayersResponse,
+};
 use crate::api::handlers::permissions::{
     PermissionListOptions, PermissionListing, PermissionRequest, Resource,
 };
@@ -68,6 +70,7 @@ use crate::api::{
 };
 use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
+use crate::datasets::postgres::DatasetTileId;
 use crate::datasets::storage::{AutoCreateDataset, SuggestMetaData};
 use crate::datasets::upload::{UploadId, VolumeName};
 use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
@@ -119,6 +122,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::update_loading_info_handler,
         handlers::datasets::add_dataset_tiles_handler,
         handlers::datasets::get_dataset_tiles_handler,
+        handlers::datasets::update_dataset_tile_handler,
         handlers::layers::add_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::add_existing_layer_to_collection,
@@ -408,6 +412,8 @@ use utoipa::{Modify, OpenApi};
             DataPath,
             AddDatasetTile,
             DatasetTile,
+            DatasetTileId,
+            UpdateDatasetTile,
 
             PlotOutputFormat,
             WrappedPlotOutput,
