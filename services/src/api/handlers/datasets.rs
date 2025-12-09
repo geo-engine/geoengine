@@ -195,12 +195,12 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     Ok(web::Json(list))
 }
 
-/// Add a tile to a gdal dataset.
+/// Add tiles to a gdal dataset.
 #[utoipa::path(
     tag = "Datasets",
     post,
     path = "/dataset/{dataset}/tiles",
-    request_body = AutoCreateDataset,
+    request_body = [AddDatasetTile],
     responses(
         (status = 200),
     ),
@@ -523,6 +523,7 @@ pub struct UpdateDatasetTile {
     tag = "Datasets",
     put,
     path = "/dataset/{dataset}/tiles/{tile}",
+    request_body = UpdateDatasetTile,
     responses(
         (status = 200, description = "OK"),
         (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
