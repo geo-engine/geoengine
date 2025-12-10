@@ -103,7 +103,8 @@ where
             .service(
                 web::resource("/{dataset}/tiles")
                     .route(web::post().to(add_dataset_tiles_handler::<C>))
-                    .route(web::get().to(get_dataset_tiles_handler::<C>)),
+                    .route(web::get().to(get_dataset_tiles_handler::<C>))
+                    .route(web::delete().to(delete_dataset_tiles_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -503,6 +504,59 @@ pub async fn get_dataset_tiles_handler<C: ApplicationContext>(
 
     let tiles = session_ctx
         .get_dataset_tiles(dataset_id, &params.into_inner())
+        .await
+        .context(CannotLoadDatasetTiles)?;
+
+    Ok(web::Json(tiles))
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteDatasetTiles {
+    pub tile_ids: Vec<DatasetTileId>,
+}
+
+/// Retrieves details about a dataset using the internal name.
+#[utoipa::path(
+    tag = "Datasets",
+    delete,
+    path = "/dataset/{dataset}/tiles",
+    request_body = DeleteDatasetTiles,
+    responses(
+        (status = 200, description = "OK"),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn delete_dataset_tiles_handler<C: ApplicationContext>(
+    dataset: web::Path<DatasetName>,
+    session: C::Session,
+    delete: web::Json<DeleteDatasetTiles>,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder, GetDatasetTilesError> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await
+        .context(CannotLoadDatasetForGettingTiles)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: real_dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForGettingTiles)?;
+
+    let tiles = session_ctx
+        .delete_dataset_tiles(dataset_id, delete.into_inner().tile_ids)
         .await
         .context(CannotLoadDatasetTiles)?;
 
@@ -5531,7 +5585,7 @@ mod tests {
 
     #[ge_context::test]
     #[allow(clippy::too_many_lines)]
-    async fn it_gets_and_updates_tiles(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+    async fn it_gets_and_updates_and_deletes_tiles(app_ctx: PostgresContext<NoTls>) -> Result<()> {
         let volume = VolumeName("test_data".to_string());
 
         // add data
@@ -5661,6 +5715,29 @@ mod tests {
                 params: tiles[0].params.clone()
             }
         );
+
+        let update_tile = DeleteDatasetTiles {
+            tile_ids: vec![returned_tiles[0].id],
+        };
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}/tiles",))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&update_tile)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/tiles?offset=0&limit=10"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        let returned_tiles: Vec<DatasetTile> = actix_web::test::read_body_json(res).await;
+        assert_eq!(returned_tiles.len(), 0);
 
         Ok(())
     }

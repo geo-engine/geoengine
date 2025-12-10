@@ -339,4 +339,10 @@ pub trait DatasetStore {
         tile_id: DatasetTileId,
         tile: UpdateDatasetTile,
     ) -> Result<()>;
+
+    async fn delete_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        tile_ids: Vec<DatasetTileId>,
+    ) -> Result<()>;
 }

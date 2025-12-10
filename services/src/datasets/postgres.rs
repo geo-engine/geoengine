@@ -1406,6 +1406,31 @@ where
 
         Ok(())
     }
+
+    async fn delete_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        tile_ids: Vec<DatasetTileId>,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.execute(
+            "
+            DELETE FROM dataset_tiles 
+            WHERE dataset_id = $1 AND id = ANY($2);",
+            &[&dataset, &tile_ids],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
 }
 
 async fn validate_time(

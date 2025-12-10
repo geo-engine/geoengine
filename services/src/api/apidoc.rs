@@ -2,7 +2,7 @@
 
 use crate::api::handlers;
 use crate::api::handlers::datasets::{
-    AddDatasetTile, DatasetTile, UpdateDatasetTile, VolumeFileLayersResponse,
+    AddDatasetTile, DatasetTile, DeleteDatasetTiles, UpdateDatasetTile, VolumeFileLayersResponse,
 };
 use crate::api::handlers::permissions::{
     PermissionListOptions, PermissionListing, PermissionRequest, Resource,
@@ -123,6 +123,7 @@ use utoipa::{Modify, OpenApi};
         handlers::datasets::add_dataset_tiles_handler,
         handlers::datasets::get_dataset_tiles_handler,
         handlers::datasets::update_dataset_tile_handler,
+        handlers::datasets::delete_dataset_tiles_handler,
         handlers::layers::add_collection,
         handlers::layers::add_existing_collection_to_collection,
         handlers::layers::add_existing_layer_to_collection,
@@ -414,6 +415,7 @@ use utoipa::{Modify, OpenApi};
             DatasetTile,
             DatasetTileId,
             UpdateDatasetTile,
+            DeleteDatasetTiles,
 
             PlotOutputFormat,
             WrappedPlotOutput,
