@@ -324,8 +324,11 @@ pub trait DatasetStore {
 
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
 
-    async fn add_dataset_tiles(&self, dataset: DatasetId, tiles: Vec<AddDatasetTile>)
-    -> Result<()>;
+    async fn add_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        tiles: Vec<AddDatasetTile>,
+    ) -> Result<Vec<DatasetTileId>>;
 
     async fn get_dataset_tiles(
         &self,

@@ -203,7 +203,7 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     path = "/dataset/{dataset}/tiles",
     request_body = [AddDatasetTile],
     responses(
-        (status = 200),
+        (status = 200, description = "OK", body = [DatasetTileId]),
     ),
     params(
         ("dataset" = DatasetName, description = "Dataset Name"),
@@ -261,11 +261,12 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
         validate_tile(tile, &data_path_file_path, &dataset_descriptor)?;
     }
 
-    db.add_dataset_tiles(dataset_id, tiles)
+    let tile_ids = db
+        .add_dataset_tiles(dataset_id, tiles)
         .await
         .context(CannotAddTilesToDataset)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::Ok().json(tile_ids))
 }
 
 fn validate_tile(
@@ -3721,6 +3722,8 @@ mod tests {
         let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "response: {res:?}");
+        let tile_ids: Vec<DatasetTileId> = actix_web::test::read_body_json(res).await;
+        assert_eq!(tile_ids.len(), tiles.len());
 
         // create workflow
         let workflow = Workflow {

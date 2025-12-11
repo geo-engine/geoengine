@@ -1303,7 +1303,7 @@ where
         &self,
         dataset: DatasetId,
         tiles: Vec<AddDatasetTile>,
-    ) -> Result<()> {
+    ) -> Result<Vec<DatasetTileId>> {
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
@@ -1315,13 +1315,13 @@ where
 
         validate_z_index(&tx, dataset, &tiles).await?;
 
-        batch_insert_tiles(&tx, dataset, &tiles).await?;
+        let tile_ids = batch_insert_tiles(&tx, dataset, &tiles).await?;
 
         update_dataset_extents(&tx, dataset, &tiles).await?;
 
         tx.commit().await?;
 
-        Ok(())
+        Ok(tile_ids)
     }
 
     async fn get_dataset_tiles(
@@ -1549,7 +1549,7 @@ async fn batch_insert_tiles(
     tx: &Transaction<'_>,
     dataset: DatasetId,
     tiles: &[AddDatasetTile],
-) -> Result<()> {
+) -> Result<Vec<DatasetTileId>> {
     // batch insert using array unnesting
     let tile_entries = tiles
         .iter()
@@ -1564,16 +1564,20 @@ async fn batch_insert_tiles(
         })
         .collect::<Vec<_>>();
 
-    tx.execute(
-        r#"
+    let rows = tx
+        .query(
+            r#"
             INSERT INTO dataset_tiles (id, dataset_id, time, bbox, band, z_index, gdal_params)
-                SELECT * FROM unnest($1::"TileEntry"[]);
+                SELECT * FROM unnest($1::"TileEntry"[])
+            RETURNING id;
             "#,
-        &[&tile_entries],
-    )
-    .await?;
+            &[&tile_entries],
+        )
+        .await?;
 
-    Ok(())
+    let tile_ids = rows.into_iter().map(|row| row.get(0)).collect();
+
+    Ok(tile_ids)
 }
 
 async fn update_dataset_extents(
