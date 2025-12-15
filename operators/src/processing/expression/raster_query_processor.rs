@@ -289,7 +289,7 @@ where
                 }
                 // if there is no error, the source did not produce all bands, which likely means a bug in an operator
                 return Err(crate::error::Error::MustNotHappen {
-                    message: "source did not produce all bands".to_string(),
+                    message: "source did not produce all bands (N: 2)".to_string(),
                 });
             }
 
@@ -461,7 +461,7 @@ macro_rules! impl_expression_tuple_processor {
                         }
                         // if there is no error, the source did not produce all bands, which likely means a bug in an operator
                         return Err(crate::error::Error::MustNotHappen {
-                            message: "source did not produce all bands".to_string(),
+                            message: format!("source did not produce all bands, (N: {})", $N),
                         });
                     }
 

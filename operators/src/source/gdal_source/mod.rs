@@ -690,7 +690,8 @@ where
         };
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
-            filled_loading_info_stream,
+            filled_loading_info_stream
+                .inspect_ok(|r| debug!("GdalSource _query now producing time slice: {:?}", r.time)),
             query.spatial_bounds(),
             tiling_strategy,
             reader_mode,
@@ -726,7 +727,7 @@ where
         let ldif = self.meta_data.loading_info(q_rect).await?;
         let unique_times = ldif.info.map(|s| s.map(|s| s.time));
 
-        match rdt.dimension {
+        let res_stream = match rdt.dimension {
             geoengine_datatypes::primitives::TimeDimension::Regular(regular_time_dimension) => {
                 let times_fill_iter = unique_times.try_time_regular_range_fill(
                     regular_time_dimension,
@@ -737,7 +738,7 @@ where
                             .expect("end time must be set for irregular time dimension"),
                     ),
                 );
-                Ok(stream::iter(times_fill_iter).boxed())
+                stream::iter(times_fill_iter).boxed()
             }
             geoengine_datatypes::primitives::TimeDimension::Irregular => {
                 let times_fill_iter =
@@ -747,9 +748,13 @@ where
                         ldif.end_time_of_output_stream
                             .expect("end time must be set for regular time dimension"),
                     ));
-                Ok(stream::iter(times_fill_iter).boxed())
+                stream::iter(times_fill_iter).boxed()
             }
-        }
+        };
+
+        Ok(res_stream
+            .inspect_ok(|ti| debug!("GdalSource time_query producing time interval: {:?}", ti))
+            .boxed())
     }
 }
 
