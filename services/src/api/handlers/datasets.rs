@@ -556,12 +556,12 @@ pub async fn delete_dataset_tiles_handler<C: ApplicationContext>(
         })
         .context(CannotLoadDatasetForGettingTiles)?;
 
-    let tiles = session_ctx
+    session_ctx
         .delete_dataset_tiles(dataset_id, delete.into_inner().tile_ids)
         .await
         .context(CannotLoadDatasetTiles)?;
 
-    Ok(web::Json(tiles))
+    Ok(HttpResponse::Ok())
 }
 
 #[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
@@ -5670,8 +5670,8 @@ mod tests {
             returned_tiles[0],
             DatasetTile {
                 id: returned_tiles[0].id,
-                time: tiles[0].time.clone(),
-                spatial_partition: tiles[0].spatial_partition.clone(),
+                time: tiles[0].time,
+                spatial_partition: tiles[0].spatial_partition,
                 band: tiles[0].band,
                 z_index: tiles[0].z_index,
                 params: tiles[0].params.clone()
@@ -5679,8 +5679,8 @@ mod tests {
         );
 
         let update_tile = UpdateDatasetTile {
-            time: tiles[0].time.clone(),
-            spatial_partition: tiles[0].spatial_partition.clone(),
+            time: tiles[0].time,
+            spatial_partition: tiles[0].spatial_partition,
             band: tiles[0].band,
             z_index: tiles[0].z_index + 1,
             params: tiles[0].params.clone(),
@@ -5711,8 +5711,8 @@ mod tests {
             returned_tiles[0],
             DatasetTile {
                 id: returned_tiles[0].id,
-                time: tiles[0].time.clone(),
-                spatial_partition: tiles[0].spatial_partition.clone(),
+                time: tiles[0].time,
+                spatial_partition: tiles[0].spatial_partition,
                 band: tiles[0].band,
                 z_index: tiles[0].z_index + 1,
                 params: tiles[0].params.clone()

@@ -1353,7 +1353,11 @@ where
                 z_index
             OFFSET $2
             LIMIT $3",
-                &[&dataset, &(params.offset as i64), &(params.limit as i64)],
+                &[
+                    &dataset,
+                    &i64::from(params.offset),
+                    &i64::from(params.limit),
+                ],
             )
             .await?;
 

@@ -806,11 +806,72 @@
       }
     },
     "/dataset/{dataset}/tiles": {
+      "get": {
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Retrieves details about a dataset using the internal name.",
+        "operationId": "get_dataset_tiles_handler",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "description": "Dataset Name",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DatasetName"
+            }
+          },
+          {
+            "name": "offset",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32",
+              "minimum": 0
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetTile"
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedUserResponse"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      },
       "post": {
         "tags": [
           "Datasets"
         ],
-        "summary": "Add a tile to a gdal dataset.",
+        "summary": "Add tiles to a gdal dataset.",
         "operationId": "add_dataset_tiles_handler",
         "parameters": [
           {
@@ -827,7 +888,10 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AutoCreateDataset"
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/AddDatasetTile"
+                }
               }
             }
           },
@@ -835,7 +899,110 @@
         },
         "responses": {
           "200": {
-            "description": ""
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/DatasetTileId"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      },
+      "delete": {
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Retrieves details about a dataset using the internal name.",
+        "operationId": "delete_dataset_tiles_handler",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "description": "Dataset Name",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DatasetName"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeleteDatasetTiles"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedUserResponse"
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/dataset/{dataset}/tiles/{tile}": {
+      "put": {
+        "tags": [
+          "Datasets"
+        ],
+        "summary": "Retrieves details about a dataset using the internal name.",
+        "operationId": "update_dataset_tile_handler",
+        "parameters": [
+          {
+            "name": "dataset",
+            "in": "path",
+            "description": "Dataset Name",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DatasetName"
+            }
+          },
+          {
+            "name": "tile",
+            "in": "path",
+            "description": "Tile Id",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DatasetTileId"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateDatasetTile"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          },
+          "401": {
+            "$ref": "#/components/responses/UnauthorizedUserResponse"
           }
         },
         "security": [
@@ -6240,11 +6407,64 @@
           }
         }
       },
+      "DatasetTile": {
+        "type": "object",
+        "required": [
+          "id",
+          "time",
+          "spatial_partition",
+          "band",
+          "z_index",
+          "params"
+        ],
+        "properties": {
+          "band": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "id": {
+            "$ref": "#/components/schemas/DatasetTileId"
+          },
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
+          },
+          "spatial_partition": {
+            "$ref": "#/components/schemas/SpatialPartition2D"
+          },
+          "time": {
+            "$ref": "#/components/schemas/TimeInterval"
+          },
+          "z_index": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "DatasetTileId": {
+        "type": "string",
+        "format": "uuid"
+      },
       "DateTimeParseFormat": {
         "type": "string"
       },
       "DateTimeString": {
         "type": "string"
+      },
+      "DeleteDatasetTiles": {
+        "type": "object",
+        "required": [
+          "tileIds"
+        ],
+        "properties": {
+          "tileIds": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/DatasetTileId"
+            }
+          }
+        }
       },
       "DerivedColor": {
         "type": "object",
@@ -10284,6 +10504,37 @@
             "items": {
               "type": "string"
             }
+          }
+        }
+      },
+      "UpdateDatasetTile": {
+        "type": "object",
+        "required": [
+          "time",
+          "spatial_partition",
+          "band",
+          "z_index",
+          "params"
+        ],
+        "properties": {
+          "band": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "params": {
+            "$ref": "#/components/schemas/GdalDatasetParameters"
+          },
+          "spatial_partition": {
+            "$ref": "#/components/schemas/SpatialPartition2D"
+          },
+          "time": {
+            "$ref": "#/components/schemas/TimeInterval"
+          },
+          "z_index": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
           }
         }
       },
