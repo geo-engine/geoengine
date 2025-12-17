@@ -670,6 +670,11 @@ pub async fn update_dataset_handler<C: ApplicationContext>(
         })
         .context(CannotLoadDatasetForUpdate)?;
 
+    // TODO: if the data_path is changed, validate that
+    // - it exists
+    // - it is accessible
+    // - all files referenced by the dataset still exist?
+
     session_ctx
         .update_dataset(dataset_id, update.into_inner())
         .await
@@ -1807,7 +1812,10 @@ mod tests {
         },
         raster::{GridShape2D, TilingSpecification},
         spatial_reference::SpatialReferenceOption,
-        util::{assert_image_equals, test::assert_eq_two_list_of_tiles},
+        util::{
+            assert_image_equals,
+            test::{TestDefault, assert_eq_two_list_of_tiles},
+        },
     };
     use geoengine_operators::{
         engine::{
@@ -3250,6 +3258,7 @@ mod tests {
             display_name: "new display name".to_string(),
             description: "new description".to_string(),
             tags: vec!["foo".to_string(), "bar".to_string()],
+            data_path: Some(DataPath::test_default()),
         };
 
         let req = actix_web::test::TestRequest::post()
@@ -3268,6 +3277,7 @@ mod tests {
         assert_eq!(dataset.display_name, update.display_name);
         assert_eq!(dataset.description, update.description);
         assert_eq!(dataset.tags, Some(update.tags));
+        assert_eq!(dataset.data_path, update.data_path);
 
         Ok(())
     }

@@ -1171,13 +1171,14 @@ where
             .boxed_context(crate::error::PermissionDb)?;
 
         tx.execute(
-            "UPDATE datasets SET name = $2, display_name = $3, description = $4, tags = $5 WHERE id = $1;",
+            "UPDATE datasets SET name = $2, display_name = $3, description = $4, tags = $5, data_path = $6 WHERE id = $1;",
             &[
                 &dataset,
                 &update.name,
                 &update.display_name,
                 &update.description,
                 &update.tags,
+                &update.data_path,
             ],
         )
         .await?;
