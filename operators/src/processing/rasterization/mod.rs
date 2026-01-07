@@ -5,37 +5,29 @@ use crate::engine::{
     RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
     SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
-use arrow::datatypes::ArrowNativeTypeOp;
-use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
-
 use crate::error;
 use crate::processing::rasterization::GridOrDensity::Grid;
 use crate::util;
-
+use arrow::datatypes::ArrowNativeTypeOp;
 use async_trait::async_trait;
-
 use futures::stream::BoxStream;
 use futures::{StreamExt, stream};
 use geoengine_datatypes::collections::GeometryCollection;
-
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
     SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
 };
+use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
     GeoTransform, Grid2D, GridOrEmpty, GridSize, GridSpaceToLinearSpace, RasterDataType,
     RasterTile2D, TilingSpecification,
 };
-
 use num_traits::FloatConst;
 use rayon::prelude::*;
-
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
 use crate::util::{spawn_blocking, spawn_blocking_with_thread_pool};
-
-use typetag::serde;
 
 /// An operator that rasterizes vector data
 pub type Rasterization = Operator<GridOrDensity, SingleVectorSource>;
