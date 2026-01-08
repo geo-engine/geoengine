@@ -8,6 +8,7 @@ use tracing_appender::{
     non_blocking::WorkerGuard,
     rolling::{RollingFileAppender, Rotation},
 };
+use tracing_flame::FlameLayer;
 use tracing_subscriber::{
     EnvFilter, Layer,
     field::RecordFields,
@@ -55,7 +56,17 @@ pub async fn start_server() -> Result<()> {
     } else {
         (None, None)
     };
-    let registry = registry.with(file_layer);
+
+    let (flame_layer, _flame_drop_guard) = if logging_config.log_to_flame {
+        let (flame_layer, flame_drop_quard) =
+            FlameLayer::with_file(format!("{}.folded", &logging_config.filename_prefix))
+                .expect("to create flame layer");
+        (Some(flame_layer), Some(flame_drop_quard))
+    } else {
+        (None, None)
+    };
+
+    let registry = registry.with(file_layer).with(flame_layer);
 
     // create a telemetry layer for output to opentelemetry and add it to the registry
     let open_telemetry_config: geoengine_services::config::OpenTelemetry = get_config_element()?;

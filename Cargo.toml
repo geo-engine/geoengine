@@ -24,6 +24,7 @@ repository = "https://github.com/geo-engine/geoengine"
 # TODO: Maybe https://rust-lang.github.io/rust-clippy/stable/index.html#missing_inline_in_public_items is more suitable
 [profile.release]
 lto = true
+debug = true
 
 [profile.ci]
 inherits = "test"
@@ -98,6 +99,7 @@ clap_derive = "4.5"
 config = "0.15"
 convert_case = "0.8"
 criterion = "0.7"
+crs-definitions = { git = "https://github.com/jdroenner/crs-definitions.git", branch = "area_of_use_and_extent"}
 csv = "1.4"
 erased-serde = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
@@ -111,6 +113,7 @@ gdal-sys = "0.11"
 geo = "0.31.0"
 geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.31.0" } # TODO: revert back to "0.5" when it is released
 geo-types = "0.7.17"                                                                                   # important for compatibility when linking expressions
+geodesy = { version = "0.14", default-features = false }
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
 image = "0.25"
@@ -191,8 +194,9 @@ tonic = { version = "0.11", features = [
     "tls",
     "tls-roots",
 ] } # must be compatible with `aruna-rust-api`
-tracing = { version = "0.1", features = ["release_max_level_debug"] }
+tracing = { version = "0.1" }
 tracing-actix-web = "0.7"
+tracing-flame = "0.2.0"
 tracing-opentelemetry = "0.32" # As of 0.26, tracing-opentelemetry is one version ahead of the opentelemetry crates
 tracing-subscriber = { version = "0.3", features = [
     "local-time",

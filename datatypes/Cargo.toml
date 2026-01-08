@@ -17,11 +17,13 @@ arrow-ord = { workspace = true }
 arrow-schema = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
+crs-definitions = { workspace = true }
 fallible-iterator = { workspace = true }
 futures = { workspace = true }
 float-cmp = { workspace = true }
 gdal = { workspace = true }
 geo = { workspace = true }
+geodesy = { workspace = true }
 geojson = { workspace = true }
 image = { workspace = true }
 num = { workspace = true }
@@ -40,6 +42,7 @@ uuid = { workspace = true }
 wkt = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
+tracing = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }
@@ -58,6 +61,10 @@ harness = false
 
 [[bench]]
 name = "masked_grid_mapping"
+harness = false
+
+[[bench]]
+name = "reprojection"
 harness = false
 
 [lints]

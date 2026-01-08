@@ -1483,6 +1483,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
+name = "crs-definitions"
+version = "0.3.1"
+source = "git+https://github.com/jdroenner/crs-definitions.git?branch=area_of_use_and_extent#c6e13a4fcdf5f2bfbc0c0c20d52d023f73d2622a"
+
+[[package]]
 name = "crunchy"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2089,6 +2094,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "float_eq"
+version = "1.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "28a80e3145d8ad11ba0995949bbcf48b9df2be62772b3d351ef017dff6ecb853"
+
+[[package]]
 name = "float_next_after"
 version = "1.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2320,6 +2331,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "geodesy"
+version = "0.14.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1c1778eaef1f258c89d8d3f0fadb42ef70f4c714d237714fede0936285661c20"
+dependencies = [
+ "float_eq",
+ "log",
+ "thiserror 1.0.69",
+ "uuid",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "geoengine-datatypes"
 version = "0.9.0"
 dependencies = [
@@ -2330,11 +2354,13 @@ dependencies = [
  "bytes",
  "chrono",
  "criterion",
+ "crs-definitions",
  "fallible-iterator",
  "float-cmp",
  "futures",
  "gdal",
  "geo",
+ "geodesy",
  "geojson",
  "image",
  "num",
@@ -2351,6 +2377,7 @@ dependencies = [
  "snafu",
  "strum",
  "tempfile",
+ "tracing",
  "uuid",
  "wkt",
 ]
@@ -2527,6 +2554,7 @@ dependencies = [
  "tracing",
  "tracing-actix-web",
  "tracing-appender",
+ "tracing-flame",
  "tracing-opentelemetry",
  "tracing-subscriber",
  "url",
@@ -6792,6 +6820,17 @@ checksum = "b9d12581f227e93f094d3af2ae690a574abb8a2b9b7a96e7cfe9647b2b617678"
 dependencies = [
  "once_cell",
  "valuable",
+]
+
+[[package]]
+name = "tracing-flame"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "0bae117ee14789185e129aaee5d93750abe67fdc5a9a62650452bfe4e122a3a9"
+dependencies = [
+ "lazy_static",
+ "tracing",
+ "tracing-subscriber",
 ]
 
 [[package]]
