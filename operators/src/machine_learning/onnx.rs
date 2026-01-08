@@ -229,7 +229,7 @@ where
         // TODO: re-use session accross queries?
         // TODO: use another method: https://github.com/pykeio/ort/issues/402#issuecomment-2949993914
         let mut session = load_onnx_model_from_loading_info(&self.model_loading_info)?;
-        let input_name = session.inputs[0].name.clone(); // clone input name to avoid mutability problems
+        let input_name = session.inputs()[0].name().to_string(); // clone input name to avoid mutability problems
 
         let stream = self
             .source
@@ -502,7 +502,7 @@ mod tests {
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name.clone();
+        let input_name = &session.inputs()[0].name().to_string();
 
         let new_samples = arr2(&[[0.1f32, 0.2], [0.2, 0.3], [0.2, 0.2], [0.3, 0.1]]);
 
@@ -525,7 +525,7 @@ mod tests {
             .commit_from_file(test_data!("ml/onnx/test_classification.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name.clone();
+        let input_name = &session.inputs()[0].name().to_string();
 
         let pixels = vec![
             vec![0.1f32, 0.2],
@@ -561,7 +561,7 @@ mod tests {
             .commit_from_file(test_data!("ml/onnx/test_regression.onnx"))
             .unwrap();
 
-        let input_name = &session.inputs[0].name.clone();
+        let input_name = &session.inputs()[0].name().to_string();
 
         let pixels = vec![
             vec![0.1f32, 0.1, 0.2],
