@@ -678,11 +678,8 @@ pub struct AddRole {
     path = "/roles",
     request_body = AddRole,
     responses(
-        (status = 200, description = "Role was added", body = RoleId,
-        example = json!({
-            "id": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-        })
-    )),
+        (status = 200, response = IdResponse<RoleId>)
+    ),
     security(
         ("session_token" = [])
     )
