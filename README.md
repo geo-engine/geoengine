@@ -78,7 +78,7 @@ For running the PostgreSQL tests, you need to have it installed.
 Furthermore, you need to create a default user `geoengine` with the password `geoengine`.
 
 ```bash
-sudo -u postgres psql << EOF
+postgres psql --host=localhost --user=geoengine << EOF
 \set AUTOCOMMIT on
 CREATE USER geoengine WITH PASSWORD 'geoengine' CREATEDB;
 CREATE DATABASE geoengine OWNER geoengine;
@@ -100,12 +100,12 @@ For running the NFDI/GFBio ABCD data providers (`GfbioAbcdDataProviderDefinition
 
 ```bash
 # delete existing data
-sudo -u postgres psql --dbname=geoengine -c \
+psql --host=localhost --user=geoengine --dbname=geoengine -c \
   "DROP SCHEMA IF EXISTS abcd CASCADE;"
 
 # insert data
 cat test_data/gfbio/init_test_data.sql test_data/gfbio/test_data.sql | \
-  sudo -u postgres psql --dbname=geoengine --single-transaction --file -
+  psql --host=localhost --user=geoengine --dbname=geoengine --single-transaction --file -
 ```
 
 ##### GBIF
@@ -114,12 +114,12 @@ For running the GBIF data provider (`GbifDataProviderDefinition`) during develop
 
 ```bash
 # delete existing data
-sudo -u postgres psql --dbname=geoengine -c \
+psql --host=localhost --user=geoengine --dbname=geoengine -c \
   "DROP SCHEMA IF EXISTS gbif CASCADE;"
 
 # insert data
 cat test_data/gbif/init_test_data.sql test_data/gbif/test_data.sql | \
-  sudo -u postgres psql --dbname=geoengine --single-transaction --file -
+  psql --host=localhost --user=geoengine --dbname=geoengine --single-transaction --file -
 ```
 
 ### OpenAPI spec
