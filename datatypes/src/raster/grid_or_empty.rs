@@ -17,6 +17,7 @@ pub type GridOrEmpty3D<T> = GridOrEmpty<GridShape3D, T>;
 
 #[derive(Debug, Eq, PartialEq, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
+// TODO: remove tag once mocksource can work without it
 #[serde(tag = "type")]
 pub enum GridOrEmpty<D, T> {
     Grid(MaskedGrid<D, T>),

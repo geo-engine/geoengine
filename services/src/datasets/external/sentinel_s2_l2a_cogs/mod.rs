@@ -17,15 +17,14 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::operations::image::{RasterColorizer, RgbaColor};
-use geoengine_datatypes::operations::reproject::{
-    CoordinateProjection, CoordinateProjector, Reproject,
-};
+use geoengine_datatypes::operations::reproject::Reproject;
 use geoengine_datatypes::primitives::{AxisAlignedRectangle, CacheTtlSeconds};
 use geoengine_datatypes::primitives::{
     DateTime, Duration, RasterQueryRectangle, TimeInstance, TimeInterval, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GeoTransform, SpatialGridDefinition};
 use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
+use geoengine_datatypes::util::mixed_projector::MixedCoordinateProjector;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, OperatorName, RasterBandDescriptors, RasterOperator,
     RasterResultDescriptor, SpatialGridDescriptor, TypedOperator, VectorResultDescriptor,
@@ -661,7 +660,8 @@ impl SentinelS2L2aCogsMetaData {
         let native_spatial_ref =
             SpatialReference::new(SpatialReferenceAuthority::Epsg, self.zone.epsg_code());
         let epsg_4326_ref = SpatialReference::epsg_4326();
-        let projector = CoordinateProjector::from_known_srs(native_spatial_ref, epsg_4326_ref)?;
+        let projector =
+            MixedCoordinateProjector::from_known_srs(native_spatial_ref, epsg_4326_ref)?;
         let native_bounds = self.zone.native_extent();
 
         // request all features in zone in order to be able to determine the temporal validity of individual tile

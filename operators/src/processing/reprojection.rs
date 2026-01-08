@@ -28,17 +28,14 @@ use futures::{StreamExt, stream};
 use geoengine_datatypes::{
     collections::FeatureCollection,
     error::BoxedResultExt,
-    operations::reproject::{
-        CoordinateProjection, CoordinateProjector, Reproject, ReprojectClipped,
-        reproject_spatial_query,
-    },
+    operations::reproject::{Reproject, ReprojectClipped, reproject_spatial_query},
     primitives::{
         BandSelection, BoundingBox2D, ColumnSelection, Geometry, RasterQueryRectangle,
         SpatialPartition2D, SpatialResolution, VectorQueryRectangle,
     },
     raster::{GridBoundingBox2D, Pixel, RasterTile2D, TilingSpecification},
     spatial_reference::SpatialReference,
-    util::arrow::ArrowTyped,
+    util::{arrow::ArrowTyped, mixed_projector::MixedCoordinateProjector},
 };
 use serde::{Deserialize, Serialize};
 use tracing::trace;
@@ -109,7 +106,7 @@ impl InitializedVectorReprojection {
 
         let bbox = if let Some(bbox) = in_desc.bbox {
             let projector =
-                CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+                MixedCoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
 
             bbox.reproject_clipped(&projector)? // TODO: if this is none then we could skip the whole reprojection similar to raster?
         } else {
@@ -144,13 +141,27 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         source_raster_operator: O,
         tiling_spec: TilingSpecification,
     ) -> Result<Self> {
+        let start_time = std::time::Instant::now();
+
         let in_desc: RasterResultDescriptor = source_raster_operator.result_descriptor().clone();
         let in_srs = Into::<Option<SpatialReference>>::into(in_desc.spatial_reference)
             .ok_or(Error::AllSourcesMustHaveSameSpatialReference)?;
 
+        trace!(
+            "in result descriptor loading took: {}ns",
+            start_time.elapsed().as_nanos()
+        );
+
         // calculate the intersection of input and output srs in both coordinate systems
         let proj_from_to =
-            CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+            MixedCoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+
+        let out_spatial_grid_start = start_time.elapsed();
+        trace!(
+            "Starting the InitializedRasterReprojection out_spatial_grid {:#?} computation after: {}ns",
+            params.derive_out_spec,
+            out_spatial_grid_start.as_nanos()
+        );
 
         let out_spatial_grid = match params.derive_out_spec {
             DeriveOutRasterSpecsSource::DataBounds => in_desc
@@ -174,6 +185,13 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
         // Operator will return an error when there is no intersection between data and output projection bounds!
         let out_spatial_grid = out_spatial_grid.ok_or(error::Error::ReprojectionFailed)?; // TODO: better error!
 
+        let out_spatial_grid_duration = start_time.elapsed() - out_spatial_grid_start;
+
+        trace!(
+            "Creating the InitializedRasterReprojection out_spatial_grid took: {}ns",
+            out_spatial_grid_duration.as_nanos()
+        );
+
         let out_desc = RasterResultDescriptor {
             spatial_reference: params.target_spatial_reference.into(),
             data_type: in_desc.data_type,
@@ -191,6 +209,13 @@ impl<O: InitializedRasterOperator> InitializedRasterReprojection<O> {
                 .tiling_grid_definition(tiling_spec)
                 .tiling_spatial_grid_definition(),
         };
+
+        trace!(
+            "InitializedRasterReprojection created with source SRS: {:?}, target SRS: {:?}. Took: {}ns",
+            in_srs,
+            params.target_spatial_reference,
+            start_time.elapsed().as_nanos()
+        );
 
         Ok(InitializedRasterReprojection {
             name,
@@ -212,7 +237,7 @@ fn compute_output_spatial_grid(
     params: ReprojectionParams,
 ) -> Result<SpatialGridDescriptor> {
     let proj_from_to =
-        CoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
+        MixedCoordinateProjector::from_known_srs(in_srs, params.target_spatial_reference)?;
     let out_spatial_grid = match params.derive_out_spec {
         DeriveOutRasterSpecsSource::DataBounds => {
             in_spatial_grid_descriptor.reproject_clipped(&proj_from_to)?
@@ -396,7 +421,7 @@ where
             Selection = ColumnSelection,
             ResultDescription = VectorResultDescriptor,
         >,
-    FeatureCollection<G>: Reproject<CoordinateProjector, Out = FeatureCollection<G>>,
+    FeatureCollection<G>: Reproject<MixedCoordinateProjector, Out = FeatureCollection<G>>,
     G: Geometry + ArrowTyped,
 {
     type Output = FeatureCollection<G>;
@@ -421,8 +446,8 @@ where
                 .await?
                 .map(move |collection_result| {
                     collection_result.and_then(|collection| {
-                        CoordinateProjector::from_known_srs(self.from, self.to)
-                            .and_then(|projector| collection.reproject(projector.as_ref()))
+                        MixedCoordinateProjector::from_known_srs(self.from, self.to)
+                            .and_then(|projector| collection.reproject(&projector))
                             .map_err(Into::into)
                     })
                 })
@@ -868,8 +893,8 @@ mod tests {
             Identifier,
             test::TestDefault,
             well_known_data::{
-                COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
-                MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
+                COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
+                MARBURG_EPSG_3857, MARBURG_EPSG_4326,
             },
         },
     };
@@ -892,9 +917,9 @@ mod tests {
         )?;
 
         let expected = MultiPoint::many(vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
         ])
         .unwrap();
 
@@ -968,9 +993,9 @@ mod tests {
         )?;
 
         let expected = [MultiLineString::new(vec![vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
         ]])
         .unwrap()];
 
@@ -1050,10 +1075,10 @@ mod tests {
         )?;
 
         let expected = [MultiPolygon::new(vec![vec![vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
-            MARBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
+            MARBURG_EPSG_3857,
         ]]])
         .unwrap()];
 
@@ -1887,7 +1912,7 @@ mod tests {
         let grid_bounds = GridBoundingBox2D::new_min_max(-850, 849, -1800, 1799).unwrap();
         let spatial_grid = SpatialGridDefinition::new(geo_transform, grid_bounds);
 
-        let projector = CoordinateProjector::from_known_srs(in_proj, out_proj).unwrap();
+        let projector = MixedCoordinateProjector::from_known_srs(in_proj, out_proj).unwrap();
 
         let out_spatial_grid = spatial_grid.reproject(&projector).unwrap();
 

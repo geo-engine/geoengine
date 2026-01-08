@@ -1,15 +1,16 @@
 use crate::{
     error,
-    operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
+    operations::reproject::{Reproject},
     primitives::AxisAlignedRectangle,
-    util::Result,
+    util::{
+        Result, crs_definitions::StaticAreaofUseProvider, mixed_projector::MixedCoordinateProjector, proj_projector::{ProjAreaOfUseProvider}
+    },
 };
 use gdal::spatial_ref::SpatialRef;
 
 use postgres_types::private::BytesMut;
 
 use postgres_types::{FromSql, IsNull, ToSql, Type};
-use proj::Proj;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
@@ -17,6 +18,7 @@ use snafu::Error;
 use snafu::ResultExt;
 use std::str::FromStr;
 use std::{convert::TryFrom, fmt::Formatter};
+use tracing::instrument;
 
 /// A spatial reference authority that is part of a spatial reference definition
 #[derive(
@@ -45,6 +47,14 @@ impl std::fmt::Display for SpatialReferenceAuthority {
     }
 }
 
+pub trait AreaOfUseProvider {
+    fn new_known_crs(def: SpatialReference) -> Result<Self>
+    where
+        Self: Sized;
+    fn area_of_use<A: AxisAlignedRectangle>(&self) -> Result<A>;
+    fn area_of_use_projected<A: AxisAlignedRectangle>(&self) -> Result<A>;
+}
+
 /// A spatial reference consists of an authority and a code
 #[derive(Debug, Copy, Clone, Eq, PartialEq, Ord, PartialOrd, ToSql, FromSql)]
 pub struct SpatialReference {
@@ -70,10 +80,12 @@ impl SpatialReference {
         Self::new(SpatialReferenceAuthority::Epsg, 4326)
     }
 
+    #[instrument]
     pub fn proj_string(self) -> Result<String> {
         match self.authority {
+            
             SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 | SpatialReferenceAuthority::Esri => {
-                Ok(format!("{}:{}", self.authority, self.code))
+                Ok(self.srs_string())
             }
             // poor-mans integration of Meteosat Second Generation 
             SpatialReferenceAuthority::SrOrg if self.code == 81 => Ok("+proj=geos +lon_0=0 +h=35785831 +x_0=0 +y_0=0 +ellps=WGS84 +units=m +no_defs +type=crs".to_owned()),
@@ -85,30 +97,29 @@ impl SpatialReference {
     }
 
     /// Return the area of use in EPSG:4326 projection
+    #[instrument]
     pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
-        let proj_string = self.proj_string()?;
+        let static_provider = StaticAreaofUseProvider::new_known_crs(self)?;
+        if let Ok(aou) = static_provider.area_of_use() {
+            tracing::debug!("Area of use found in static definitions");
+            return Ok(aou);
+        }
 
-        let proj = Proj::new(&proj_string).map_err(|_| error::Error::InvalidProjDefinition {
-            proj_definition: proj_string.clone(),
-        })?;
-        let area = proj
-            .area_of_use()
-            .context(error::ProjInternal)?
-            .0
-            .ok_or(error::Error::NoAreaOfUseDefined { proj_string })?;
-        A::from_min_max(
-            (area.west, area.south).into(),
-            (area.east, area.north).into(),
-        )
+        let provider = ProjAreaOfUseProvider::new_known_crs(self)?;
+        provider.area_of_use()
     }
 
     /// Return the area of use in current projection
+    #[instrument]
     pub fn area_of_use_projected<A: AxisAlignedRectangle>(self) -> Result<A> {
-        if self == Self::epsg_4326() {
-            return self.area_of_use();
+        let static_provider = StaticAreaofUseProvider::new_known_crs(self)?;
+        if let Ok(aou) = static_provider.area_of_use_projected() {
+            tracing::debug!("Projected bounds found in static definitions");
+            return Ok(aou);
         }
-        let p = CoordinateProjector::from_known_srs(Self::epsg_4326(), self)?;
-        self.area_of_use::<A>()?.reproject(&p)
+
+        let provider = ProjAreaOfUseProvider::new_known_crs(self)?;
+        provider.area_of_use_projected()
     }
 
     /// Return the srs-string "authority:code"
@@ -119,13 +130,14 @@ impl SpatialReference {
 
     /// Compute the bounding box of this spatial reference that is also valid in the `other` spatial reference. Might be None.
     #[allow(clippy::trivially_copy_pass_by_ref)]
+    #[instrument]
     pub fn area_of_use_intersection<T>(&self, other: &SpatialReference) -> Result<Option<T>>
     where
         T: AxisAlignedRectangle,
     {
         // generate a projector which transforms wgs84 into the projection we want to produce.
         let valid_bounds_proj =
-            CoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), *self)?;
+            MixedCoordinateProjector::from_known_srs(SpatialReference::epsg_4326(), *self)?;
 
         // transform the bounds of the input srs (coordinates are in wgs84) into the output projection.
         // TODO check if  there is a better / smarter way to check if the coordinates are valid.
