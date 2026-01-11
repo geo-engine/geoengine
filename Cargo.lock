@@ -5263,15 +5263,15 @@ dependencies = [
 
 [[package]]
 name = "proj"
-version = "0.28.0"
+version = "0.29.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee58a47991424a46bd2219d3caeda1804e64a85094a52958ee7810fe9754f7"
+checksum = "3939f58cd2f8e5f3bba7fb76b3854956d39b1b76cec4fe5f65481d18f9c92d22"
 dependencies = [
  "geo-types",
  "libc",
  "num-traits",
  "proj-sys",
- "thiserror 1.0.69",
+ "thiserror 2.0.17",
 ]
 
 [[package]]
