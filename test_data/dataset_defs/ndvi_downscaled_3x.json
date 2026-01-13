@@ -294,12 +294,12 @@
       },
       "time": {
         "bounds": {
-          "start": "2025-01-01T00:00:00.000Z",
-          "end": "2025-05-01T00:00:00.000Z"
+          "start": "2014-01-01T00:00:00.000Z",
+          "end": "2014-02-01T00:00:00.000Z"
         },
         "dimension": {
           "regular": {
-            "origin": "2025-01-01T00:00:00.000Z",
+            "origin": "2014-01-01T00:00:00.000Z",
             "step": {
               "granularity": "months",
               "step": 1
@@ -315,8 +315,8 @@
               "x": -180.0,
               "y": 90.0
             },
-            "xPixelSize": 0.1,
-            "yPixelSize": -0.1
+            "xPixelSize": 0.3,
+            "yPixelSize": -0.3
           },
           "gridBounds": {
             "min": [0, 0],
