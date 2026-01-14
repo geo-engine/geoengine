@@ -3501,17 +3501,7 @@
         },
         "responses": {
           "200": {
-            "description": "Role was added",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/RoleId"
-                },
-                "example": {
-                  "id": "5b4466d2-8bab-4ed8-a182-722af3c80958"
-                }
-              }
-            }
+            "$ref": "#/components/responses/IdResponse"
           }
         },
         "security": [

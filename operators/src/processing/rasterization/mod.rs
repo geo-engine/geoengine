@@ -8,8 +8,7 @@ use crate::engine::{
 };
 use crate::error;
 use crate::optimization::{OptimizableOperator, OptimizationError};
-use crate::util::spawn_blocking;
-use crate::util::{self, spawn_blocking_with_thread_pool};
+use crate::util::{self, spawn_blocking, spawn_blocking_with_thread_pool};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, stream};
@@ -30,7 +29,6 @@ use num_traits::FloatConst;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use tracing::warn;
-use typetag::serde;
 
 /// An operator that rasterizes vector data
 pub type Rasterization = Operator<RasterizationParams, SingleVectorSource>;
