@@ -319,10 +319,7 @@ impl PlotQueryProcessor for BoxPlotVectorQueryProcessor {
 
                 for accum in &mut accums {
                     let feature_data = collection.data(&accum.name).expect("checked in param");
-                    let iter = feature_data.float_options_iter().map(|o| match o {
-                        Some(v) => v,
-                        None => f64::NAN,
-                    });
+                    let iter = feature_data.float_options_iter().map(|o| o.unwrap_or(f64::NAN));
                     accum.update(iter)?;
                 }
             }

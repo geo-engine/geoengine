@@ -71,16 +71,16 @@ actix-files = "0.6"
 actix-http = { version = "3.11", features = ["ws"] }
 actix-multipart = "0.7"
 actix-rt = "2.9"
-actix-web = "4.11"
+actix-web = "4.12"
 actix-web-httpauth = "0.8"
 actix-ws = "0.3"
 aes-gcm = "0.10.3"
 anyhow = "1.0"
 approx = "0.5"
-arrow = { version = "57.0", features = ["ipc_compression"] }
-arrow-array = "57.0"
-arrow-ord = "57.0"
-arrow-schema = { version = "57.0", features = ["serde"] }
+arrow = { version = "57.1", features = ["ipc_compression"] }
+arrow-array = "57.1"
+arrow-ord = "57.1"
+arrow-schema = { version = "57.1", features = ["serde"] }
 aruna-rust-api = "2.0.2"
 assert_cmd = "2.0"
 async-stream = "0.3"
@@ -96,9 +96,9 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 clap_derive = "4.5"
 config = "0.15"
-convert_case = "0.8"
-criterion = "0.7"
 crs-definitions = { git = "https://github.com/jdroenner/crs-definitions.git", branch = "area_of_use_and_extent"}
+convert_case = "0.10"
+criterion = "0.8"
 csv = "1.4"
 erased-serde = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
@@ -106,23 +106,23 @@ flexi_logger = { version = "0.31", features = ["trc"] }
 float-cmp = "0.10"
 futures = "0.3"
 futures-util = "0.3"
-gdal = "0.18"
-gdal-sys = "0.11"
-# when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
-geo = "0.31.0"
-geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.31.0" } # TODO: revert back to "0.5" when it is released
-geo-types = "0.7.17"                                                                                   # important for compatibility when linking expressions
+gdal = "0.19"
+gdal-sys = "0.12"
 geodesy = { version = "0.14", default-features = false }
+# when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
+geo = "0.32.0"
+geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.32.0" } # TODO: revert back to "0.5" when it is released
+geo-types = "0.7.18"                                                                                   # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
 image = "0.25"
 indoc = "2.0"
 itertools = "0.14"
-libloading = "0.8"
+libloading = "0.9"
 lru = "0.16"
-lz4_flex = "0.11"
+lz4_flex = "0.12"
 mime = "0.3"
-ndarray = { version = "0.16", features = ["approx"] }                                                  # has to match with `ort`
+ndarray = { version = "0.17", features = ["approx"] }                                                  # has to match with `ort`
 num = "0.4"
 num-traits = "0.2"
 oauth2 = "5.0"
@@ -134,7 +134,7 @@ opentelemetry = { version = "0.31", default-features = false, features = [
 ] }
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
-ort = { version = "2.0.0-rc.10", features = ["ndarray"] }
+ort = { version = "2.0.0-rc.11", features = ["ndarray"] }
 ouroboros = "0.18"
 paste = "1.0"
 pbkdf2 = "0.12.2"
@@ -168,18 +168,18 @@ rustc-hash = { version = "2.1", default-features = false }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
-serde_with = "3.15"
-serial_test = "3.0"
+serde_with = "3.16"
+serial_test = "3.3"
 sha2 = "0.10"
 snafu = "0.8"
-stac = "0.13"
+stac = "0.16"
 stream-cancel = "0.8"
 strum = { version = "0.27", features = ["derive"] }
 strum_macros = "0.27"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-tempfile = "3.23"
+tempfile = "3.24"
 time = "0.3"
-tokio = { version = "1.48", features = [
+tokio = { version = "1.49", features = [
     "fs",
     "macros",
     "signal",
@@ -202,7 +202,7 @@ tracing-subscriber = { version = "0.3", features = [
     "ansi",
     "tracing-log",
 ] }
-tracing-appender = "0.2.3"
+tracing-appender = "0.2"
 typetag = "0.2"
 url = { version = "2.5", features = ["serde"] }
 utoipa = { version = "5.4", features = [
@@ -223,5 +223,5 @@ vergen = "9.0"
 vergen-gitcl = "1.0"
 walkdir = "2.4"
 wkt = "0.14"
-xml = "1.1"
-zip = "6.0"
+xml = "1.2"
+zip = "7.0"

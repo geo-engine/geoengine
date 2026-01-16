@@ -147,7 +147,7 @@ pub fn check_onnx_model_input_matches_metadata(
     metadata_input: MlTensorShape3D,
     metadata_input_type: RasterDataType,
 ) -> Result<(), MachineLearningError> {
-    let inputs = &session.inputs;
+    let inputs = &session.inputs();
     ensure!(
         inputs.len() == 1,
         MultipleInputsNotSupported {
@@ -157,12 +157,11 @@ pub fn check_onnx_model_input_matches_metadata(
 
     let input = &inputs[0];
 
-    let (Some(input_tensor_type), Some(tensor_shape)) = (
-        input.input_type.tensor_type(),
-        input.input_type.tensor_shape(),
-    ) else {
+    let (Some(input_tensor_type), Some(tensor_shape)) =
+        (input.dtype().tensor_type(), input.dtype().tensor_shape())
+    else {
         return Err(MachineLearningError::InvalidInputType {
-            input_type: input.input_type.clone(),
+            input_type: input.dtype().clone(),
         });
     };
 
@@ -203,20 +202,20 @@ pub fn check_onnx_model_output_matches_metadata(
     metadata_output: MlTensorShape3D,
     metadata_output_type: RasterDataType,
 ) -> Result<(), MachineLearningError> {
-    let outputs = &session.outputs;
+    let outputs = &session.outputs();
 
     // we assume that the first output is the one to use
     // TODO: make this configurable?
     let output = &outputs[0];
     ensure!(
-        output.output_type.is_tensor(),
+        output.dtype().is_tensor(),
         InvalidOutputType {
-            output_type: output.output_type.clone()
+            output_type: output.dtype().clone()
         }
     );
 
     let dimensions = output
-        .output_type
+        .dtype()
         .tensor_shape()
         .expect("input must be a tensor. checked before!");
 
@@ -232,7 +231,7 @@ pub fn check_onnx_model_output_matches_metadata(
     );
 
     let output_tensor_type = output
-        .output_type
+        .dtype()
         .tensor_type()
         .expect("output must be a tensor. ckecked above!");
     let output_raster_type = try_raster_datatype_from_tensor_element_type(output_tensor_type)?;
