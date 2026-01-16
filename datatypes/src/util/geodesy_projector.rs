@@ -37,6 +37,13 @@ pub struct Transformer<C: geodesy::ctx::Context = geodesy::ctx::Minimal> {
 }
 
 impl Transformer<geodesy::ctx::Minimal> {
+    pub fn pro4_string_modifications(code: u16, proj4: &str) -> String {
+        match (code, proj4) {
+            (3857, _) => proj4.replace("merc", "webmerc"),
+            _ => proj4.to_string(),
+        }
+    }
+
     pub fn from_spatial_references(
         source: SpatialReference,
         target: SpatialReference,
@@ -80,8 +87,11 @@ impl Transformer<geodesy::ctx::Minimal> {
         let source_latlon = source_def.proj4.starts_with("+proj=longlat");
         let target_latlon = target_def.proj4.starts_with("+proj=longlat");
 
-        let source_geodesy_string = geodesy::authoring::parse_proj(source_def.proj4)?;
-        let target_geodesy_string = geodesy::authoring::parse_proj(target_def.proj4)?;
+        let source_proj_string = Self::pro4_string_modifications(source_crs, source_def.proj4);
+        let target_proj_string = Self::pro4_string_modifications(target_crs, target_def.proj4);
+
+        let source_geodesy_string = geodesy::authoring::parse_proj(&source_proj_string)?;
+        let target_geodesy_string = geodesy::authoring::parse_proj(&target_proj_string)?;
 
         tracing::trace!(
             "Geodesy source / target string: {source_geodesy_string} / {target_geodesy_string}"

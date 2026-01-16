@@ -1253,9 +1253,8 @@ mod tests {
 
     #[test]
     fn reproject_epsg4326_epsg900913() {
-        use crate::operations::reproject::CoordinateProjection;
         use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
-        use crate::util::proj_projector::ProjCoordinateProjector;
+        use crate::util::mixed_projector::MixedCoordinateProjector;
 
         use crate::util::well_known_data::{
             COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
@@ -1264,7 +1263,7 @@ mod tests {
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = ProjCoordinateProjector::from_known_srs(from, to).unwrap();
+        let projector = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![
@@ -1307,9 +1306,8 @@ mod tests {
 
     #[test]
     fn reproject_epsg4326_epsg900913_collections_equal() {
-        use crate::operations::reproject::CoordinateProjection;
         use crate::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
-        use crate::util::proj_projector::ProjCoordinateProjector;
+        use crate::util::mixed_projector::MixedCoordinateProjector;
 
         use crate::util::well_known_data::{
             COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
@@ -1318,7 +1316,7 @@ mod tests {
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = ProjCoordinateProjector::from_known_srs(from, to).unwrap();
+        let projector = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let pc = MultiPointCollection::from_data(
             MultiPoint::many(vec![

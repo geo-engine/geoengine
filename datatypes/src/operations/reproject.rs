@@ -683,13 +683,15 @@ pub fn reproject_and_unify_proj_bounds<T: AxisAlignedRectangle>(
     let proj_from_to = MixedCoordinateProjector::from_known_srs(source, target)?;
     let proj_to_from = MixedCoordinateProjector::from_known_srs(target, source)?;
 
-    let target_bbox_clipped = source
-        .area_of_use_projected::<T>()?
-        .reproject_clipped(&proj_from_to)?; // TODO: can we intersect areas of use first?
+    let source_bbox = source.area_of_use_projected::<T>()?;
+
+    let target_bbox_clipped = source_bbox.reproject_clipped(&proj_from_to)?; // TODO: can we intersect areas of use first?
 
     if let Some(target_b) = target_bbox_clipped {
-        let source_bbox_clipped = target_b.reproject(&proj_to_from)?;
-        Ok((Some(source_bbox_clipped), target_bbox_clipped))
+        let source_bbox_clipped = target_b
+            .reproject(&proj_to_from)?
+            .intersection(&source_bbox);
+        Ok((source_bbox_clipped, target_bbox_clipped))
     } else {
         Ok((None, None))
     }
@@ -704,7 +706,7 @@ mod tests {
         COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
         MARBURG_EPSG_3857, MARBURG_EPSG_4326,
     };
-    use float_cmp::approx_eq;
+    use float_cmp::{approx_eq, assert_approx_eq};
 
     use super::*;
 
@@ -1018,9 +1020,17 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            input.unwrap(),
-            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into())
+        let expected = SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
+
+        assert_approx_eq!(
+            Coordinate2D,
+            input.unwrap().lower_left(),
+            expected.lower_left()
+        );
+        assert_approx_eq!(
+            Coordinate2D,
+            input.unwrap().upper_right(),
+            expected.upper_right()
         );
 
         assert_eq!(

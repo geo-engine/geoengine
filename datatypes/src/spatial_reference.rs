@@ -1,9 +1,10 @@
 use crate::{
     error,
-    operations::reproject::{Reproject},
+    operations::reproject::Reproject,
     primitives::AxisAlignedRectangle,
     util::{
-        Result, crs_definitions::StaticAreaofUseProvider, mixed_projector::MixedCoordinateProjector, proj_projector::{ProjAreaOfUseProvider}
+        Result,
+        mixed_projector::{MixedAreaOfUseProvider, MixedCoordinateProjector},
     },
 };
 use gdal::spatial_ref::SpatialRef;
@@ -83,7 +84,7 @@ impl SpatialReference {
     #[instrument]
     pub fn proj_string(self) -> Result<String> {
         match self.authority {
-            
+            // FIXME: why does this method retun EPSG:CODE instead of proj string?
             SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 | SpatialReferenceAuthority::Esri => {
                 Ok(self.srs_string())
             }
@@ -99,26 +100,14 @@ impl SpatialReference {
     /// Return the area of use in EPSG:4326 projection
     #[instrument]
     pub fn area_of_use<A: AxisAlignedRectangle>(self) -> Result<A> {
-        let static_provider = StaticAreaofUseProvider::new_known_crs(self)?;
-        if let Ok(aou) = static_provider.area_of_use() {
-            tracing::debug!("Area of use found in static definitions");
-            return Ok(aou);
-        }
-
-        let provider = ProjAreaOfUseProvider::new_known_crs(self)?;
+        let provider = MixedAreaOfUseProvider::new_known_crs(self)?;
         provider.area_of_use()
     }
 
     /// Return the area of use in current projection
     #[instrument]
     pub fn area_of_use_projected<A: AxisAlignedRectangle>(self) -> Result<A> {
-        let static_provider = StaticAreaofUseProvider::new_known_crs(self)?;
-        if let Ok(aou) = static_provider.area_of_use_projected() {
-            tracing::debug!("Projected bounds found in static definitions");
-            return Ok(aou);
-        }
-
-        let provider = ProjAreaOfUseProvider::new_known_crs(self)?;
+        let provider = MixedAreaOfUseProvider::new_known_crs(self)?;
         provider.area_of_use_projected()
     }
 

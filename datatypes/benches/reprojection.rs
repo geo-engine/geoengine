@@ -1,11 +1,13 @@
 use criterion::{Criterion, criterion_group, criterion_main};
+use geoengine_datatypes::util::mixed_projector::{
+    MixedAreaOfUseProvider, MixedCoordinateProjector,
+};
 use std::hint::black_box;
 
 use geoengine_datatypes::operations::reproject::CoordinateProjection;
 use geoengine_datatypes::primitives::{BoundingBox2D, Coordinate2D};
 use geoengine_datatypes::spatial_reference::{AreaOfUseProvider, SpatialReference};
 use geoengine_datatypes::util::geodesy_projector::Transformer;
-use geoengine_datatypes::util::proj_projector::{ProjAreaOfUseProvider, ProjCoordinateProjector};
 
 fn bench_proj_reproject_batch(c: &mut Criterion) {
     let from = SpatialReference::epsg_4326();
@@ -14,7 +16,7 @@ fn bench_proj_reproject_batch(c: &mut Criterion) {
         3857,
     );
 
-    let projector = ProjCoordinateProjector::from_known_srs(from, to).unwrap();
+    let projector = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
 
     let coords: Vec<Coordinate2D> = (0..1000)
         .map(|i| {
@@ -61,7 +63,7 @@ fn bench_proj_projector_creation(c: &mut Criterion) {
     );
     c.bench_function("create_projector", |b| {
         b.iter(|| {
-            black_box(ProjCoordinateProjector::from_known_srs(
+            black_box(MixedCoordinateProjector::from_known_srs(
                 black_box(from),
                 black_box(to),
             ))
@@ -82,7 +84,7 @@ fn bench_geodesy_projector_creation(c: &mut Criterion) {
 fn bench_area_of_use(c: &mut Criterion) {
     let def = SpatialReference::epsg_4326();
 
-    let projector = ProjAreaOfUseProvider::new_known_crs(def).unwrap();
+    let projector = MixedAreaOfUseProvider::new_known_crs(def).unwrap();
 
     c.bench_function("area_of_use", |b| {
         b.iter(|| black_box(projector.area_of_use::<BoundingBox2D>()))
@@ -92,7 +94,7 @@ fn bench_area_of_use(c: &mut Criterion) {
 fn bench_area_of_use_projected(c: &mut Criterion) {
     let def = SpatialReference::epsg_4326();
 
-    let projector = ProjAreaOfUseProvider::new_known_crs(def).unwrap();
+    let projector = MixedAreaOfUseProvider::new_known_crs(def).unwrap();
 
     c.bench_function("area_of_use_projected", |b| {
         b.iter(|| black_box(projector.area_of_use_projected::<BoundingBox2D>()))
