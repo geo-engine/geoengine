@@ -75,10 +75,6 @@ name = "expression"
 harness = false
 
 [[bench]]
-name = "workflows"
-harness = false
-
-[[bench]]
 name = "thread_pool"
 harness = false
 
