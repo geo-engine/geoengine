@@ -409,7 +409,6 @@ async fn wcs_get_coverage<C: ApplicationContext>(
             Some(request_partition.upper_left()), // TODO: set none if not changed? But how to handle mapping to grid?
             request_resolution,
             request_spatial_ref,
-            tiling_spec,
             &execution_context,
         )
         .await?;
