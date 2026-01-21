@@ -367,7 +367,6 @@ async fn wms_get_map<C: ApplicationContext>(
                 None, // this needs to be `None`` to avoid moving the data origin to a png pixel origin. Since the WMS requests are not consistent with their origins using them distortes the results more then it helps.
                 Some(request_resolution),
                 request_spatial_ref.into(),
-                tiling_spec,
                 &execution_context,
             )
             .await?;
