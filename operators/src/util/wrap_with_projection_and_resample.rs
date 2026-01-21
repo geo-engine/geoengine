@@ -1,19 +1,18 @@
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, RasterOperator,
-    RasterResultDescriptor, ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
+    ExecutionContext, InitializedRasterOperator, RasterOperator, RasterResultDescriptor,
+    ResultDescriptor, SingleRasterOrVectorSource, WorkflowOperatorPath,
 };
 use crate::error::{self, Optimization};
 use crate::processing::{
     DeriveOutRasterSpecsSource, Downsampling, DownsamplingMethod, DownsamplingParams,
-    DownsamplingResolution, InitializedRasterReprojection, Interpolation, InterpolationMethod,
-    InterpolationParams, InterpolationResolution, Reprojection, ReprojectionParams,
+    DownsamplingResolution, Interpolation, InterpolationMethod, InterpolationParams,
+    InterpolationResolution, Reprojection, ReprojectionParams,
 };
 use crate::util::Result;
 use crate::util::input::RasterOrVectorOperator;
 use geoengine_datatypes::primitives::{
     Coordinate2D, SpatialResolution, find_next_best_overview_level_resolution,
 };
-use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use snafu::ResultExt;
 
@@ -44,11 +43,11 @@ impl WrapWithProjectionAndResample {
         }
     }
 
-    pub fn wrap_with_projection(
+    pub async fn wrap_with_projection(
         self,
         target_sref: SpatialReference,
         _target_origin_reference: Option<Coordinate2D>, // TODO: add resampling if origin does not match! Could also do that in projection and avoid extra operation?
-        tiling_spec: TilingSpecification,
+        exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
         let result_sref = self
             .result_descriptor
@@ -75,20 +74,16 @@ impl WrapWithProjectionAndResample {
                 sources: SingleRasterOrVectorSource {
                     source: RasterOrVectorOperator::Raster(self.operator),
                 },
-            };
+            }
+            .boxed();
 
-            // create the inititalized operator directly, to avoid re-initializing everything
-            // TODO: update the workflow operator path in all operators of the graph!
-            let irp = InitializedRasterReprojection::try_new_with_input(
-                CanonicOperatorName::from(&reprojected_workflow),
-                WorkflowOperatorPath::initialize_root(), // FIXME: this is not correct since the root is the child operator
-                reprojection_params,
-                self.initialized_operator,
-                tiling_spec,
-            )?;
+            let irp = reprojected_workflow
+                .clone()
+                .initialize(WorkflowOperatorPath::initialize_root(), exe_ctx)
+                .await?;
+
             let rd = irp.result_descriptor().clone();
-
-            Self::new(reprojected_workflow.boxed(), irp.boxed(), rd)
+            Self::new(reprojected_workflow, irp.boxed(), rd)
         };
         Ok(res)
     }
@@ -258,10 +253,10 @@ impl WrapWithProjectionAndResample {
         target_origin_reference: Option<Coordinate2D>,
         target_spatial_resolution: Option<SpatialResolution>,
         target_sref: SpatialReference,
-        tiling_spec: TilingSpecification,
         exe_ctx: &dyn ExecutionContext,
     ) -> Result<Self> {
-        self.wrap_with_projection(target_sref, target_origin_reference, tiling_spec)?
+        self.wrap_with_projection(target_sref, target_origin_reference, exe_ctx)
+            .await?
             .wrap_with_resample(target_origin_reference, target_spatial_resolution, exe_ctx)
             .await
     }
