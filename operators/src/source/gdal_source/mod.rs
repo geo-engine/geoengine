@@ -385,11 +385,15 @@ impl GdalRasterLoader {
                     ds.file_path.display(),
                     ds.rasterband_channel
                 );
-                let gdal_read_advise: Option<GdalReadAdvise> = reader_mode
-                    .tiling_to_dataset_read_advise(
-                        &ds.spatial_grid_definition(),
-                        &tile_spatial_grid,
-                    );
+                let ds_spatial_grid = ds.spatial_grid_definition();
+                tracing::trace!(
+                    "ds_spatial_grid: {:?}, tile_spatial_grid {:?}",
+                    &ds_spatial_grid,
+                    &tile_spatial_grid
+                );
+
+                let gdal_read_advise: Option<GdalReadAdvise> =
+                    reader_mode.tiling_to_dataset_read_advise(&ds_spatial_grid, &tile_spatial_grid);
 
                 let Some(gdal_read_advise) = gdal_read_advise else {
                     debug!(
@@ -648,12 +652,17 @@ where
             None => GdalReaderMode::OriginalResolution(ReaderState {
                 dataset_spatial_grid: grid_produced_by_source,
             }),
-            Some(original_resolution_spatial_grid) => {
-                GdalReaderMode::OverviewLevel(OverviewReaderState {
-                    original_dataset_grid: original_resolution_spatial_grid,
-                })
-            }
+            Some(original_resolution_spatial_grid) => GdalReaderMode::OverviewLevel(
+                OverviewReaderState::new(original_resolution_spatial_grid),
+            ),
         };
+
+        tracing::debug!(
+            "Creating reader mode: {:?}. Original grid: {:?} and target grid: {:?}",
+            reader_mode,
+            self.original_resolution_spatial_grid,
+            produced_tiling_grid
+        );
 
         let loading_info = self.meta_data.loading_info(query.clone()).await?;
 
@@ -2166,9 +2175,7 @@ mod tests {
             GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap()
         );
 
-        let ovr = OverviewReaderState {
-            original_dataset_grid: ge_global_dataset_grid,
-        };
+        let ovr = OverviewReaderState::new(ge_global_dataset_grid);
 
         let tile = SpatialGridDefinition::new(
             ge_global_dataset_grid.geo_transform,

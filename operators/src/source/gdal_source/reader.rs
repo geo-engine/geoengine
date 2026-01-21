@@ -2,6 +2,7 @@ use geoengine_datatypes::raster::{
     GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty2D, GridShape2D,
     GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
 };
+use num::Zero;
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
 /// The Workflow is as follows:
@@ -168,11 +169,25 @@ pub struct OverviewReaderState {
 }
 
 impl OverviewReaderState {
+    pub fn new(original_dataset_grid: SpatialGridDefinition) -> Self {
+        OverviewReaderState {
+            original_dataset_grid,
+        }
+    }
+
+    #[allow(clippy::too_many_lines)]
     pub fn tiling_to_dataset_read_advise(
         &self,
         actual_gdal_dataset_spatial_grid_definition: &SpatialGridDefinition, // This is the spatial grid of an actual gdal file
         tile: &SpatialGridDefinition, // This is a tile inside the grid we use for the global dataset consisting of potentially many gdal files...
     ) -> Option<GdalReadAdvise> {
+        tracing::trace!(
+            "OverviewReader, global grid: {:?}, gdal file grid {:?}, tile {:?}",
+            self.original_dataset_grid,
+            actual_gdal_dataset_spatial_grid_definition,
+            tile
+        );
+
         // Check if the y_axis is fliped.
         let (actual_gdal_dataset_spatial_grid_definition, flip_y) =
             if actual_gdal_dataset_spatial_grid_definition
@@ -203,13 +218,24 @@ impl OverviewReaderState {
             .intersection(&self.original_dataset_grid)?;
 
         // now we map the tile we want to fill to the original grid. First, we set the tile to use the same origin coordinate as the gdal file/dataset
-        let tile_with_overview_resolution_in_actual_space = tile
-            .with_moved_origin_exact_grid(
+        /*
+            let tile_with_overview_resolution_in_actual_space = tile.with_moved_origin_exact_grid(
                 actual_gdal_dataset_spatial_grid_definition
                     .geo_transform()
                     .origin_coordinate(),
-            )
-            .expect("The overview level grid must map to pixel coordinates in the original grid"); // TODO: maybe relax this?
+            );
+        */
+        // TODO: maybe relax this?
+
+        let (tile_with_overview_resolution_in_actual_space, distance) = tile
+            .with_moved_origin_to_nearest_grid_edge_with_distance(
+                actual_gdal_dataset_spatial_grid_definition
+                    .geo_transform()
+                    .origin_coordinate(),
+            );
+
+        let needs_shift = !distance.x.is_zero() || !distance.y.is_zero();
+
         let tile_with_original_resolution_in_actual_space =
             tile_with_overview_resolution_in_actual_space.with_changed_resolution(
                 actual_gdal_dataset_spatial_grid_definition
@@ -221,6 +247,16 @@ impl OverviewReaderState {
         let tile_intersection_original_resolution_actual_space =
             &tile_with_original_resolution_in_actual_space
                 .intersection(&actual_bounds_to_use_original_resolution)?;
+
+        if needs_shift {
+            tracing::trace!(
+                "The overview grid does not match the gdal file. This happens when files cover different areas!, Tile (OVR): {:?}, Tile (ORIG): {:?}, Distance: {:?}, Readable: {:?}",
+                tile_with_overview_resolution_in_actual_space,
+                tile_with_original_resolution_in_actual_space,
+                distance,
+                tile_intersection_original_resolution_actual_space
+            );
+        }
 
         // if we need to unflip the dataset grid now is the time to do this.
         let tile_intersection_for_read_window = if flip_y {
@@ -237,8 +273,29 @@ impl OverviewReaderState {
             *tile_intersection_original_resolution_actual_space
         };
 
+        let tile_intersection_for_read_window = if needs_shift {
+            let shift_x = distance.x
+                / actual_gdal_dataset_spatial_grid_definition
+                    .geo_transform()
+                    .x_pixel_size();
+            let shift_y = distance.y
+                / actual_gdal_dataset_spatial_grid_definition
+                    .geo_transform()
+                    .y_pixel_size();
+
+            let offset = GridIdx2D::new_y_x(-(shift_y as isize), -(shift_x as isize));
+
+            tracing::trace!(
+                "Shifting read bounds to match gdal pixels. ({shift_y}, {shift_x}) -> {offset:?} "
+            );
+
+            tile_intersection_for_read_window.shift_bounds_relative_by_pixel_offset(offset)
+        } else {
+            tile_intersection_for_read_window
+        };
+
         // generate the read window for GDAL --> This is what we can read in any case.
-        let read_window = GdalReadWindow::new(
+        let read_window: GdalReadWindow = GdalReadWindow::new(
             tile_intersection_for_read_window.min_index(),
             tile_intersection_for_read_window.grid_bounds().grid_shape(),
         );
