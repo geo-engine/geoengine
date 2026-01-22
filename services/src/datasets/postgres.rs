@@ -1493,7 +1493,7 @@ async fn update_dataset_extents(
     for tile in tiles {
         // TODO: handle datasets with flipped y axis?
         let tile_grid = SpatialGridDefinition::new(
-            GdalDatasetGeoTransform::from(tile.params.geo_transform).try_into()?,
+            GdalDatasetGeoTransform::from(tile.params.geo_transform.clone()).try_into()?,
             GridBoundingBox2D::new_unchecked(
                 [0, 0],
                 [tile.params.height as isize, tile.params.width as isize],

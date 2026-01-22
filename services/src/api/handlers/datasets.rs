@@ -325,7 +325,9 @@ fn validate_tile(
 
     // TODO: also check that the tiles bbox (from the tile definition, and not the actual gdal dataset of the tile's file) fits into the dataset's spatial grid?
     let tile_geotransform = geoengine_datatypes::raster::GeoTransform::try_from(
-        geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
+        geoengine_operators::source::GdalDatasetGeoTransform::from(
+            tile.params.geo_transform.clone(),
+        ),
     )
     .map_err(|_| AddDatasetTilesError::InvalidTileFileGeoTransform {
         file_path: tile.params.file_path.to_string_lossy().to_string(),
@@ -1590,9 +1592,9 @@ mod tests {
                 TimeInstance,
             },
             operators::{
-                FileNotFoundHandling, GdalDatasetGeoTransform, GdalMultiBand, RasterBandDescriptor,
-                RasterBandDescriptors, RasterResultDescriptor, SpatialGridDescriptor,
-                SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
+                FileNotFoundHandling, GdalMultiBand, RasterBandDescriptor, RasterBandDescriptors,
+                RasterResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState,
+                TimeDescriptor, TimeDimension,
             },
             responses::{IdResponse, datasets::DatasetNameResponse},
             services::{DatasetDefinition, Provenance},
@@ -5087,7 +5089,7 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "fake_path".into(),
                 rasterband_channel: 0,
-                geo_transform: GdalDatasetGeoTransform {
+                geo_transform: GeoTransform {
                     origin_coordinate: Coordinate2D { x: 0., y: 0. },
                     x_pixel_size: 1.,
                     y_pixel_size: -1.,
@@ -5177,7 +5179,7 @@ mod tests {
             params: GdalDatasetParameters {
                 file_path: "fake_path".into(),
                 rasterband_channel: 0,
-                geo_transform: GdalDatasetGeoTransform {
+                geo_transform: GeoTransform {
                     origin_coordinate: Coordinate2D { x: -50., y: 50. },
                     x_pixel_size: 1.,
                     y_pixel_size: -1.,
