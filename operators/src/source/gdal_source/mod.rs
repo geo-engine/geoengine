@@ -63,7 +63,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use tracing::debug;
+use tracing::{debug, warn};
 
 mod db_types;
 mod error;
@@ -666,18 +666,16 @@ where
 
         let loading_info = self.meta_data.loading_info(query.clone()).await?;
 
+        debug!(
+            "GdalSource _query loading info: start_time_of_output_stream: {:?}, end_time_of_output_stream: {:?}",
+            loading_info.start_time_of_output_stream, loading_info.end_time_of_output_stream
+        );
+
         debug_assert!(
             loading_info.start_time_of_output_stream < loading_info.end_time_of_output_stream,
             "Data time validity must not be a TimeInstance. Is ({:?}, {:?}]",
             loading_info.start_time_of_output_stream,
             loading_info.end_time_of_output_stream
-        );
-
-        let time_bounds = TimeInterval::new_unchecked(
-            loading_info
-                .start_time_of_output_stream
-                .expect("must exist"),
-            loading_info.end_time_of_output_stream.expect("must exist"),
         );
 
         let query_time = query.time_interval();
@@ -688,19 +686,35 @@ where
         let filled_loading_info_stream = match self.result_descriptor().time.dimension {
             geoengine_datatypes::primitives::TimeDimension::Regular(regular_time_dimension) => {
                 let times_fill_iter = skipping_loading_info
-                    .try_time_regular_range_fill(regular_time_dimension, time_bounds);
+                    .try_time_regular_range_fill(regular_time_dimension, query_time);
+
                 stream::iter(times_fill_iter).boxed()
             }
             geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                let time_bounds = TimeInterval::new_unchecked(
+                    loading_info
+                        .start_time_of_output_stream
+                        .expect("must exist"),
+                    loading_info.end_time_of_output_stream.expect("must exist"),
+                );
                 let times_fill_iter =
                     skipping_loading_info.try_time_irregular_range_fill(time_bounds);
+
                 stream::iter(times_fill_iter).boxed()
             }
         };
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             filled_loading_info_stream
-                .inspect_ok(|r| debug!("GdalSource _query now producing time slice: {:?}", r.time)),
+                .inspect_ok(move |r| {
+                    debug!("GdalSource _query now producing time slice: {:?}", r.time);
+                    if !r.time.intersects(&query_time) {
+                        warn!(
+                            "GdalSource _query producing time slice that does not intersect query time: {:?} vs {:?}",
+                            r.time, query_time
+                        );
+                    }
+                }),
             query.spatial_bounds(),
             tiling_strategy,
             reader_mode,

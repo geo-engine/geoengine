@@ -225,7 +225,6 @@ impl OverviewReaderState {
                     .origin_coordinate(),
             );
         */
-        // TODO: maybe relax this?
 
         let (tile_with_overview_resolution_in_actual_space, distance) = tile
             .with_moved_origin_to_nearest_grid_edge_with_distance(
