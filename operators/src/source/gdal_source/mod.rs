@@ -63,7 +63,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::time::Instant;
-use tracing::debug;
+use tracing::{debug, warn};
 
 mod db_types;
 mod error;
@@ -385,11 +385,15 @@ impl GdalRasterLoader {
                     ds.file_path.display(),
                     ds.rasterband_channel
                 );
-                let gdal_read_advise: Option<GdalReadAdvise> = reader_mode
-                    .tiling_to_dataset_read_advise(
-                        &ds.spatial_grid_definition(),
-                        &tile_spatial_grid,
-                    );
+                let ds_spatial_grid = ds.spatial_grid_definition();
+                tracing::trace!(
+                    "ds_spatial_grid: {:?}, tile_spatial_grid {:?}",
+                    &ds_spatial_grid,
+                    &tile_spatial_grid
+                );
+
+                let gdal_read_advise: Option<GdalReadAdvise> =
+                    reader_mode.tiling_to_dataset_read_advise(&ds_spatial_grid, &tile_spatial_grid);
 
                 let Some(gdal_read_advise) = gdal_read_advise else {
                     debug!(
@@ -648,27 +652,30 @@ where
             None => GdalReaderMode::OriginalResolution(ReaderState {
                 dataset_spatial_grid: grid_produced_by_source,
             }),
-            Some(original_resolution_spatial_grid) => {
-                GdalReaderMode::OverviewLevel(OverviewReaderState {
-                    original_dataset_grid: original_resolution_spatial_grid,
-                })
-            }
+            Some(original_resolution_spatial_grid) => GdalReaderMode::OverviewLevel(
+                OverviewReaderState::new(original_resolution_spatial_grid),
+            ),
         };
 
+        tracing::debug!(
+            "Creating reader mode: {:?}. Original grid: {:?} and target grid: {:?}",
+            reader_mode,
+            self.original_resolution_spatial_grid,
+            produced_tiling_grid
+        );
+
         let loading_info = self.meta_data.loading_info(query.clone()).await?;
+
+        debug!(
+            "GdalSource _query loading info: start_time_of_output_stream: {:?}, end_time_of_output_stream: {:?}",
+            loading_info.start_time_of_output_stream, loading_info.end_time_of_output_stream
+        );
 
         debug_assert!(
             loading_info.start_time_of_output_stream < loading_info.end_time_of_output_stream,
             "Data time validity must not be a TimeInstance. Is ({:?}, {:?}]",
             loading_info.start_time_of_output_stream,
             loading_info.end_time_of_output_stream
-        );
-
-        let time_bounds = TimeInterval::new_unchecked(
-            loading_info
-                .start_time_of_output_stream
-                .expect("must exist"),
-            loading_info.end_time_of_output_stream.expect("must exist"),
         );
 
         let query_time = query.time_interval();
@@ -679,19 +686,35 @@ where
         let filled_loading_info_stream = match self.result_descriptor().time.dimension {
             geoengine_datatypes::primitives::TimeDimension::Regular(regular_time_dimension) => {
                 let times_fill_iter = skipping_loading_info
-                    .try_time_regular_range_fill(regular_time_dimension, time_bounds);
+                    .try_time_regular_range_fill(regular_time_dimension, query_time);
+
                 stream::iter(times_fill_iter).boxed()
             }
             geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                let time_bounds = TimeInterval::new_unchecked(
+                    loading_info
+                        .start_time_of_output_stream
+                        .expect("must exist"),
+                    loading_info.end_time_of_output_stream.expect("must exist"),
+                );
                 let times_fill_iter =
                     skipping_loading_info.try_time_irregular_range_fill(time_bounds);
+
                 stream::iter(times_fill_iter).boxed()
             }
         };
 
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             filled_loading_info_stream
-                .inspect_ok(|r| debug!("GdalSource _query now producing time slice: {:?}", r.time)),
+                .inspect_ok(move |r| {
+                    debug!("GdalSource _query now producing time slice: {:?}", r.time);
+                    if !r.time.intersects(&query_time) {
+                        warn!(
+                            "GdalSource _query producing time slice that does not intersect query time: {:?} vs {:?}",
+                            r.time, query_time
+                        );
+                    }
+                }),
             query.spatial_bounds(),
             tiling_strategy,
             reader_mode,
@@ -2166,9 +2189,7 @@ mod tests {
             GridBoundingBox2D::new_min_max(0, 1799, 0, 3599).unwrap()
         );
 
-        let ovr = OverviewReaderState {
-            original_dataset_grid: ge_global_dataset_grid,
-        };
+        let ovr = OverviewReaderState::new(ge_global_dataset_grid);
 
         let tile = SpatialGridDefinition::new(
             ge_global_dataset_grid.geo_transform,
