@@ -16,10 +16,8 @@ use geoengine_services::{
     api::{
         handlers::datasets::AddDatasetTile,
         model::{
-            datatypes::{Coordinate2D, SpatialPartition2D},
-            operators::{
-                FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMultiBand,
-            },
+            datatypes::{Coordinate2D, GeoTransform, SpatialPartition2D},
+            operators::{FileNotFoundHandling, GdalDatasetParameters, GdalMultiBand},
             services::{AddDataset, DatasetDefinition, MetaDataDefinition, Provenance},
         },
     },
@@ -251,7 +249,7 @@ async fn add_ndvi_multi_tile_dataset(app_ctx: &PostgresContext<NoTls>) -> Datase
                 ))
                 .into(),
                 rasterband_channel: 1,
-                geo_transform: GdalDatasetGeoTransform {
+                geo_transform: GeoTransform {
                     origin_coordinate: Coordinate2D { x: -180., y: 90. },
                     x_pixel_size: 0.1,
                     y_pixel_size: -0.1,
