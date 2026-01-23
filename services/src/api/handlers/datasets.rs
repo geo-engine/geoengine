@@ -325,9 +325,7 @@ fn validate_tile(
 
     // TODO: also check that the tiles bbox (from the tile definition, and not the actual gdal dataset of the tile's file) fits into the dataset's spatial grid?
     let tile_geotransform = geoengine_datatypes::raster::GeoTransform::try_from(
-        geoengine_operators::source::GdalDatasetGeoTransform::from(
-            tile.params.geo_transform.clone(),
-        ),
+        geoengine_operators::source::GdalDatasetGeoTransform::from(tile.params.geo_transform),
     )
     .map_err(|_| AddDatasetTilesError::InvalidTileFileGeoTransform {
         file_path: tile.params.file_path.to_string_lossy().to_string(),
