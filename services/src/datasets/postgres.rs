@@ -1,6 +1,8 @@
 use std::path::PathBuf;
 
-use crate::api::handlers::datasets::AddDatasetTile;
+use crate::api::handlers::datasets::{
+    AddDatasetTile, DatasetTile, GetDatasetTilesParams, UpdateDatasetTile,
+};
 use crate::api::model::datatypes::SpatialPartition2D;
 use crate::api::model::services::{DataPath, UpdateDataset};
 use crate::contexts::PostgresDb;
@@ -1169,13 +1171,14 @@ where
             .boxed_context(crate::error::PermissionDb)?;
 
         tx.execute(
-            "UPDATE datasets SET name = $2, display_name = $3, description = $4, tags = $5 WHERE id = $1;",
+            "UPDATE datasets SET name = $2, display_name = $3, description = $4, tags = $5, data_path = $6 WHERE id = $1;",
             &[
                 &dataset,
                 &update.name,
                 &update.display_name,
                 &update.description,
                 &update.tags,
+                &update.data_path,
             ],
         )
         .await?;
@@ -1301,7 +1304,7 @@ where
         &self,
         dataset: DatasetId,
         tiles: Vec<AddDatasetTile>,
-    ) -> Result<()> {
+    ) -> Result<Vec<DatasetTileId>> {
         let mut conn = self.conn_pool.get().await?;
         let tx = conn.build_transaction().start().await?;
 
@@ -1313,9 +1316,121 @@ where
 
         validate_z_index(&tx, dataset, &tiles).await?;
 
-        batch_insert_tiles(&tx, dataset, &tiles).await?;
+        let tile_ids = batch_insert_tiles(&tx, dataset, &tiles).await?;
 
         update_dataset_extents(&tx, dataset, &tiles).await?;
+
+        tx.commit().await?;
+
+        Ok(tile_ids)
+    }
+
+    async fn get_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        params: &GetDatasetTilesParams,
+    ) -> Result<Vec<DatasetTile>> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        let rows = tx
+            .query(
+                "
+            SELECT
+                id, time, bbox, band, z_index, gdal_params
+            FROM
+                dataset_tiles
+            WHERE
+                dataset_id = $1
+            ORDER BY
+                (time).start, 
+                band, 
+                (bbox).upper_left_coordinate.x, 
+                (bbox).upper_left_coordinate.y, 
+                z_index
+            OFFSET $2
+            LIMIT $3",
+                &[
+                    &dataset,
+                    &i64::from(params.offset),
+                    &i64::from(params.limit),
+                ],
+            )
+            .await?;
+
+        let tiles: Vec<DatasetTile> = rows
+            .into_iter()
+            .map(|row| DatasetTile {
+                id: row.get(0),
+                time: row.get(1),
+                spatial_partition: row.get(2),
+                band: row.get(3),
+                z_index: row.get(4),
+                params: row.get::<_, GdalDatasetParameters>(5).into(),
+            })
+            .collect();
+
+        Ok(tiles)
+    }
+
+    async fn update_dataset_tile(
+        &self,
+        dataset: DatasetId,
+        tile_id: DatasetTileId,
+        tile: UpdateDatasetTile,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Read, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.query(
+            "
+             UPDATE dataset_tiles 
+             SET dataset_id = $2, time = $3, bbox = $4, band = $5, z_index = $6, gdal_params = $7
+             WHERE id = $1;",
+            &[
+                &tile_id,
+                &dataset,
+                &tile.time,
+                &tile.spatial_partition,
+                &tile.band,
+                &tile.z_index,
+                &(GdalDatasetParameters::from(tile.params)),
+            ],
+        )
+        .await?;
+
+        tx.commit().await?;
+
+        Ok(())
+    }
+
+    async fn delete_dataset_tiles(
+        &self,
+        dataset: DatasetId,
+        tile_ids: Vec<DatasetTileId>,
+    ) -> Result<()> {
+        let mut conn = self.conn_pool.get().await?;
+        let tx = conn.build_transaction().start().await?;
+
+        self.ensure_permission_in_tx(dataset.into(), Permission::Owner, &tx)
+            .await
+            .boxed_context(crate::error::PermissionDb)?;
+
+        tx.execute(
+            "
+            DELETE FROM dataset_tiles 
+            WHERE dataset_id = $1 AND id = ANY($2);",
+            &[&dataset, &tile_ids],
+        )
+        .await?;
 
         tx.commit().await?;
 
@@ -1439,7 +1554,7 @@ async fn batch_insert_tiles(
     tx: &Transaction<'_>,
     dataset: DatasetId,
     tiles: &[AddDatasetTile],
-) -> Result<()> {
+) -> Result<Vec<DatasetTileId>> {
     // batch insert using array unnesting
     let tile_entries = tiles
         .iter()
@@ -1454,16 +1569,20 @@ async fn batch_insert_tiles(
         })
         .collect::<Vec<_>>();
 
-    tx.execute(
-        r#"
+    let rows = tx
+        .query(
+            r#"
             INSERT INTO dataset_tiles (id, dataset_id, time, bbox, band, z_index, gdal_params)
-                SELECT * FROM unnest($1::"TileEntry"[]);
+                SELECT * FROM unnest($1::"TileEntry"[])
+            RETURNING id;
             "#,
-        &[&tile_entries],
-    )
-    .await?;
+            &[&tile_entries],
+        )
+        .await?;
 
-    Ok(())
+    let tile_ids = rows.into_iter().map(|row| row.get(0)).collect();
+
+    Ok(tile_ids)
 }
 
 async fn update_dataset_extents(

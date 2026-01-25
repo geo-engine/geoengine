@@ -176,3 +176,51 @@ impl fmt::Debug for AddDatasetTilesError {
         write!(f, "{}", ge_report(self))
     }
 }
+
+#[derive(Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum GetDatasetTilesError {
+    CannotLoadDatasetForGettingTiles { source: error::Error },
+    CannotLoadDatasetTiles { source: error::Error },
+}
+
+impl ResponseError for GetDatasetTilesError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Debug for GetDatasetTilesError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
+    }
+}
+
+#[derive(Snafu, IntoStaticStr)]
+#[snafu(visibility(pub(crate)))]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum UpdateDatasetTileError {
+    CannotLoadDatasetForUpdatingTile { source: error::Error },
+    CannotUpdateDatasetTile { source: error::Error },
+}
+
+impl ResponseError for UpdateDatasetTileError {
+    fn error_response(&self) -> HttpResponse {
+        HttpResponse::build(self.status_code()).json(ErrorResponse::from(self))
+    }
+
+    fn status_code(&self) -> StatusCode {
+        StatusCode::BAD_REQUEST
+    }
+}
+
+impl fmt::Debug for UpdateDatasetTileError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", ge_report(self))
+    }
+}

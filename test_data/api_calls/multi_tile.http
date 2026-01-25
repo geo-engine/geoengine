@@ -1,6 +1,11 @@
 # @name anonymousSession
-POST http://localhost:3030/api/anonymous
+POST http://localhost:3030/api/login
 Content-Type: application/json
+
+{
+  "email": "admin@localhost",
+  "password": "adminadmin"
+}
 
 ###
 # @name dataset
@@ -8,7 +13,7 @@ POST http://localhost:3030/api/dataset
 Content-Type: application/json
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 
-< ../raster/multi_tile/metadata/dataset.json
+< ../raster/multi_tile/metadata/dataset_irregular.json
 
 ###
 
@@ -44,4 +49,32 @@ Authorization: Bearer {{anonymousSession.response.body.$.id}}
 GET http://localhost:3030/api/wms/{{workflow.response.body.$.id}}?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image%2Fpng&STYLES=custom%3A{{colorizer}}&TRANSPARENT=true&layers={{workflow.response.body.$.id}}&time=2025-01-01T00%3A00%3A00.000Z&EXCEPTIONS=application%2Fjson&WIDTH=1800&HEIGHT=900&CRS=EPSG%3A4326&BBOX=-90%2C-180%2C90%2C180
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 
+### Share with users
 
+PUT http://localhost:3030/api/permissions
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+ {
+    "resource": {
+        "type": "dataset",
+        "id": "{{dataset.response.body.$.datasetName}}"
+    },
+    "roleId": "4e8081b6-8aa6-4275-af0c-2fa2da557d28",
+    "permission": "Read"
+}
+
+### Share wit hanonymous
+
+PUT http://localhost:3030/api/permissions
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+ {
+    "resource": {
+        "type": "dataset",
+        "id": "{{dataset.response.body.$.datasetName}}"
+    },
+    "roleId": "fd8e87bf-515c-4f36-8da6-1a53702ff102",
+    "permission": "Read"
+}

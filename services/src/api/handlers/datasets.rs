@@ -15,6 +15,7 @@ use crate::{
     datasets::{
         DatasetName,
         listing::{DatasetListOptions, DatasetListing, DatasetProvider},
+        postgres::DatasetTileId,
         storage::{AutoCreateDataset, DatasetStore, SuggestMetaData},
         upload::{AdjustFilePath, Upload, UploadDb, UploadId, UploadRootPath, VolumeName, Volumes},
     },
@@ -28,7 +29,7 @@ use crate::{
 };
 use actix_web::{
     FromRequest, HttpResponse, HttpResponseBuilder, Responder,
-    web::{self, Json},
+    web::{self, Json, Query},
 };
 use gdal::{
     DatasetOptions,
@@ -63,7 +64,8 @@ use std::{
     convert::{TryFrom, TryInto},
     path::Path,
 };
-use utoipa::{ToResponse, ToSchema};
+use utoipa::{IntoParams, ToResponse, ToSchema};
+use validator::Validate;
 
 pub(crate) fn init_dataset_routes<C>(cfg: &mut web::ServiceConfig)
 where
@@ -95,8 +97,14 @@ where
                     .route(web::put().to(update_dataset_provenance_handler::<C>)),
             )
             .service(
+                web::resource("/{dataset}/tiles/{tile}")
+                    .route(web::put().to(update_dataset_tile_handler::<C>)),
+            )
+            .service(
                 web::resource("/{dataset}/tiles")
-                    .route(web::post().to(add_dataset_tiles_handler::<C>)),
+                    .route(web::post().to(add_dataset_tiles_handler::<C>))
+                    .route(web::get().to(get_dataset_tiles_handler::<C>))
+                    .route(web::delete().to(delete_dataset_tiles_handler::<C>)),
             )
             .service(
                 web::resource("/{dataset}")
@@ -188,14 +196,14 @@ pub async fn list_datasets_handler<C: ApplicationContext>(
     Ok(web::Json(list))
 }
 
-/// Add a tile to a gdal dataset.
+/// Add tiles to a gdal dataset.
 #[utoipa::path(
     tag = "Datasets",
     post,
     path = "/dataset/{dataset}/tiles",
-    request_body = AutoCreateDataset,
+    request_body = [AddDatasetTile],
     responses(
-        (status = 200),
+        (status = 200, description = "OK", body = [DatasetTileId]),
     ),
     params(
         ("dataset" = DatasetName, description = "Dataset Name"),
@@ -246,7 +254,6 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
         &dataset
             .data_path
             .ok_or(AddDatasetTilesError::DatasetIsMissingDataPath)?,
-        &session_context,
     )
     .context(CannotAddTilesToDataset)?;
 
@@ -254,11 +261,12 @@ pub async fn add_dataset_tiles_handler<C: ApplicationContext>(
         validate_tile(tile, &data_path_file_path, &dataset_descriptor)?;
     }
 
-    db.add_dataset_tiles(dataset_id, tiles)
+    let tile_ids = db
+        .add_dataset_tiles(dataset_id, tiles)
         .await
         .context(CannotAddTilesToDataset)?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::Ok().json(tile_ids))
 }
 
 fn validate_tile(
@@ -345,24 +353,17 @@ fn validate_tile(
     Ok(())
 }
 
-fn file_path_from_data_path<T: SessionContext>(
-    data_path: &DataPath,
-    session_context: &T,
-) -> Result<std::path::PathBuf> {
+fn file_path_from_data_path(data_path: &DataPath) -> Result<std::path::PathBuf> {
     Ok(match data_path {
-        DataPath::Volume(volume_name) => session_context
-            .volumes()?
+        DataPath::Volume(volume_name) => Volumes::default()
+            .volumes
             .iter()
-            .find(|v| v.name == volume_name.0)
+            .find(|v| v.name == *volume_name)
             .ok_or(Error::UnknownVolumeName {
                 volume_name: volume_name.0.clone(),
             })?
             .path
-            .clone()
-            .ok_or(Error::CannotAccessVolumePath {
-                volume_name: volume_name.0.clone(),
-            })?
-            .into(),
+            .clone(),
         DataPath::Upload(upload_id) => upload_id.root_path()?,
     })
 }
@@ -445,6 +446,185 @@ pub async fn get_dataset_handler<C: ApplicationContext>(
     Ok(web::Json(dataset))
 }
 
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+pub struct DatasetTile {
+    pub id: DatasetTileId,
+    pub time: crate::api::model::datatypes::TimeInterval,
+    pub spatial_partition: SpatialPartition2D,
+    pub band: u32,
+    pub z_index: u32,
+    pub params: GdalDatasetParameters,
+}
+
+#[derive(Debug, Deserialize, IntoParams, Validate)]
+pub struct GetDatasetTilesParams {
+    pub offset: u32,
+    #[validate(range(min = 1, max = 100))]
+    pub limit: u32,
+    // TODO: filter by time, space, filename, ...
+}
+
+/// Retrieves details about a dataset using the internal name.
+#[utoipa::path(
+    tag = "Datasets",
+    get,
+    path = "/dataset/{dataset}/tiles",
+    responses(
+        (status = 200, description = "OK", body = Vec<DatasetTile>),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+        GetDatasetTilesParams
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn get_dataset_tiles_handler<C: ApplicationContext>(
+    dataset: web::Path<DatasetName>,
+    session: C::Session,
+    params: Query<GetDatasetTilesParams>,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder, GetDatasetTilesError> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await
+        .context(CannotLoadDatasetForGettingTiles)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: real_dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForGettingTiles)?;
+
+    let tiles = session_ctx
+        .get_dataset_tiles(dataset_id, &params.into_inner())
+        .await
+        .context(CannotLoadDatasetTiles)?;
+
+    Ok(web::Json(tiles))
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteDatasetTiles {
+    pub tile_ids: Vec<DatasetTileId>,
+}
+
+/// Retrieves details about a dataset using the internal name.
+#[utoipa::path(
+    tag = "Datasets",
+    delete,
+    path = "/dataset/{dataset}/tiles",
+    request_body = DeleteDatasetTiles,
+    responses(
+        (status = 200, description = "OK"),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn delete_dataset_tiles_handler<C: ApplicationContext>(
+    dataset: web::Path<DatasetName>,
+    session: C::Session,
+    delete: web::Json<DeleteDatasetTiles>,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder, GetDatasetTilesError> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let real_dataset = dataset.into_inner();
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await
+        .context(CannotLoadDatasetForGettingTiles)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: real_dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForGettingTiles)?;
+
+    session_ctx
+        .delete_dataset_tiles(dataset_id, delete.into_inner().tile_ids)
+        .await
+        .context(CannotLoadDatasetTiles)?;
+
+    Ok(HttpResponse::Ok())
+}
+
+#[derive(Clone, Serialize, Deserialize, PartialEq, Debug, ToSchema)]
+pub struct UpdateDatasetTile {
+    pub time: crate::api::model::datatypes::TimeInterval,
+    pub spatial_partition: SpatialPartition2D,
+    pub band: u32,
+    pub z_index: u32,
+    pub params: GdalDatasetParameters,
+}
+
+/// Retrieves details about a dataset using the internal name.
+#[utoipa::path(
+    tag = "Datasets",
+    put,
+    path = "/dataset/{dataset}/tiles/{tile}",
+    request_body = UpdateDatasetTile,
+    responses(
+        (status = 200, description = "OK"),
+        (status = 401, response = crate::api::model::responses::UnauthorizedUserResponse)
+    ),
+    params(
+        ("dataset" = DatasetName, description = "Dataset Name"),
+        ("tile" = DatasetTileId, description = "Tile Id"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn update_dataset_tile_handler<C: ApplicationContext>(
+    dataset: web::Path<(DatasetName, DatasetTileId)>,
+    session: C::Session,
+    tile: web::Json<UpdateDatasetTile>,
+    app_ctx: web::Data<C>,
+) -> Result<impl Responder, UpdateDatasetTileError> {
+    let session_ctx = app_ctx.session_context(session).db();
+
+    let (dataset, tile_id) = dataset.into_inner();
+
+    let real_dataset = dataset;
+
+    let dataset_id = session_ctx
+        .resolve_dataset_name_to_id(&real_dataset)
+        .await
+        .context(CannotLoadDatasetForUpdatingTile)?;
+
+    // handle the case where the dataset name is not known
+    let dataset_id = dataset_id
+        .ok_or(error::Error::UnknownDatasetName {
+            dataset_name: real_dataset.to_string(),
+        })
+        .context(CannotLoadDatasetForUpdatingTile)?;
+
+    // TODO: validate the tile like in add tiles
+
+    session_ctx
+        .update_dataset_tile(dataset_id, tile_id, tile.into_inner())
+        .await
+        .context(CannotUpdateDatasetTile)?;
+
+    Ok(HttpResponse::Ok())
+}
+
 /// Update details about a dataset using the internal name.
 #[utoipa::path(
     tag = "Datasets",
@@ -489,6 +669,11 @@ pub async fn update_dataset_handler<C: ApplicationContext>(
             dataset_name: real_dataset.to_string(),
         })
         .context(CannotLoadDatasetForUpdate)?;
+
+    // TODO: if the data_path is changed, validate that
+    // - it exists
+    // - it is accessible
+    // - all files referenced by the dataset still exist?
 
     session_ctx
         .update_dataset(dataset_id, update.into_inner())
@@ -1627,7 +1812,10 @@ mod tests {
         },
         raster::{GridShape2D, TilingSpecification},
         spatial_reference::SpatialReferenceOption,
-        util::{assert_image_equals, test::assert_eq_two_list_of_tiles},
+        util::{
+            assert_image_equals,
+            test::{TestDefault, assert_eq_two_list_of_tiles},
+        },
     };
     use geoengine_operators::{
         engine::{
@@ -3070,6 +3258,7 @@ mod tests {
             display_name: "new display name".to_string(),
             description: "new description".to_string(),
             tags: vec!["foo".to_string(), "bar".to_string()],
+            data_path: Some(DataPath::test_default()),
         };
 
         let req = actix_web::test::TestRequest::post()
@@ -3088,6 +3277,7 @@ mod tests {
         assert_eq!(dataset.display_name, update.display_name);
         assert_eq!(dataset.description, update.description);
         assert_eq!(dataset.tags, Some(update.tags));
+        assert_eq!(dataset.data_path, update.data_path);
 
         Ok(())
     }
@@ -3542,6 +3732,8 @@ mod tests {
         let res = send_test_request(req, app_ctx.clone()).await;
 
         assert_eq!(res.status(), 200, "response: {res:?}");
+        let tile_ids: Vec<DatasetTileId> = actix_web::test::read_body_json(res).await;
+        assert_eq!(tile_ids.len(), tiles.len());
 
         // create workflow
         let workflow = Workflow {
@@ -5400,6 +5592,165 @@ mod tests {
                 .unwrap(),
             ]
         );
+
+        Ok(())
+    }
+
+    #[ge_context::test]
+    #[allow(clippy::too_many_lines)]
+    async fn it_gets_and_updates_and_deletes_tiles(app_ctx: PostgresContext<NoTls>) -> Result<()> {
+        let volume = VolumeName("test_data".to_string());
+
+        // add data
+        let create = CreateDataset {
+            data_path: DataPath::Volume(volume.clone()),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: None,
+                    display_name: "ndvi (tiled)".to_string(),
+                    description: "ndvi".to_string(),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: Some(vec!["upload".to_owned(), "test".to_owned()]),
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type: Default::default(),
+                    result_descriptor: create_ndvi_result_descriptor(true).into(),
+                }),
+            },
+        };
+
+        let session = admin_login(&app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let db = ctx.db();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri("/dataset")
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&create)?);
+        let res = send_test_request(req, app_ctx.clone()).await;
+
+        let DatasetNameResponse { dataset_name } = actix_web::test::read_body_json(res).await;
+        let dataset_id = db
+            .resolve_dataset_name_to_id(&dataset_name)
+            .await
+            .unwrap()
+            .unwrap();
+
+        assert!(db.load_dataset(&dataset_id).await.is_ok());
+
+        // add tile
+        let tiles = create_ndvi_tiles()[0..1].to_vec();
+
+        let req = actix_web::test::TestRequest::post()
+            .uri(&format!("/dataset/{dataset_name}/tiles"))
+            .append_header((header::CONTENT_LENGTH, 0))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&tiles)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(
+            res.status(),
+            200,
+            "response: {read_body}",
+            read_body = actix_web::test::read_body_json::<ErrorResponse, _>(res).await
+        );
+
+        // get tile
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/tiles?offset=0&limit=10"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(
+            res.status(),
+            200,
+            "response: {read_body}",
+            read_body = actix_web::test::read_body_json::<ErrorResponse, _>(res).await
+        );
+
+        let returned_tiles: Vec<DatasetTile> = actix_web::test::read_body_json(res).await;
+        assert_eq!(returned_tiles.len(), 1);
+        assert_eq!(
+            returned_tiles[0],
+            DatasetTile {
+                id: returned_tiles[0].id,
+                time: tiles[0].time,
+                spatial_partition: tiles[0].spatial_partition,
+                band: tiles[0].band,
+                z_index: tiles[0].z_index,
+                params: tiles[0].params.clone()
+            }
+        );
+
+        let update_tile = UpdateDatasetTile {
+            time: tiles[0].time,
+            spatial_partition: tiles[0].spatial_partition,
+            band: tiles[0].band,
+            z_index: tiles[0].z_index + 1,
+            params: tiles[0].params.clone(),
+        };
+
+        let req = actix_web::test::TestRequest::put()
+            .uri(&format!(
+                "/dataset/{dataset_name}/tiles/{}",
+                returned_tiles[0].id
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&update_tile)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/tiles?offset=0&limit=10"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        let returned_tiles: Vec<DatasetTile> = actix_web::test::read_body_json(res).await;
+        assert_eq!(returned_tiles.len(), 1);
+        assert_eq!(
+            returned_tiles[0],
+            DatasetTile {
+                id: returned_tiles[0].id,
+                time: tiles[0].time,
+                spatial_partition: tiles[0].spatial_partition,
+                band: tiles[0].band,
+                z_index: tiles[0].z_index + 1,
+                params: tiles[0].params.clone()
+            }
+        );
+
+        let update_tile = DeleteDatasetTiles {
+            tile_ids: vec![returned_tiles[0].id],
+        };
+
+        let req = actix_web::test::TestRequest::delete()
+            .uri(&format!("/dataset/{dataset_name}/tiles",))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())))
+            .append_header((header::CONTENT_TYPE, "application/json"))
+            .set_payload(serde_json::to_string(&update_tile)?);
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        let req = actix_web::test::TestRequest::get()
+            .uri(&format!("/dataset/{dataset_name}/tiles?offset=0&limit=10"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session.id().to_string())));
+
+        let res = send_test_request(req, app_ctx.clone()).await;
+        assert_eq!(res.status(), 200, "response: {res:?}");
+
+        let returned_tiles: Vec<DatasetTile> = actix_web::test::read_body_json(res).await;
+        assert_eq!(returned_tiles.len(), 0);
 
         Ok(())
     }

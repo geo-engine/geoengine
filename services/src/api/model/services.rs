@@ -156,7 +156,7 @@ pub struct CreateDataset {
     pub definition: DatasetDefinition,
 }
 
-#[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
+#[derive(Deserialize, Serialize, Debug, Clone, ToSchema, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub enum DataPath {
     Volume(VolumeName),
@@ -170,6 +170,7 @@ impl TestDefault for DataPath {
 }
 
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema, Validate)]
+#[serde(rename_all = "camelCase")]
 pub struct UpdateDataset {
     pub name: DatasetName,
     #[validate(length(min = 1))]
@@ -177,6 +178,7 @@ pub struct UpdateDataset {
     pub description: String,
     #[validate(custom(function = "validate_tags"))]
     pub tags: Vec<String>,
+    pub data_path: Option<DataPath>, // TODO: make mandatory
 }
 
 #[derive(Deserialize, Serialize, PartialEq, Eq, Debug, Clone, ToSchema, Validate)]
