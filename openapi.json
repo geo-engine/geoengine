@@ -6547,27 +6547,6 @@
           }
         }
       },
-      "GdalDatasetGeoTransform": {
-        "type": "object",
-        "required": [
-          "originCoordinate",
-          "xPixelSize",
-          "yPixelSize"
-        ],
-        "properties": {
-          "originCoordinate": {
-            "$ref": "#/components/schemas/Coordinate2D"
-          },
-          "xPixelSize": {
-            "type": "number",
-            "format": "double"
-          },
-          "yPixelSize": {
-            "type": "number",
-            "format": "double"
-          }
-        }
-      },
       "GdalDatasetParameters": {
         "type": "object",
         "description": "Parameters for loading data using Gdal",
@@ -6608,7 +6587,7 @@
             }
           },
           "geoTransform": {
-            "$ref": "#/components/schemas/GdalDatasetGeoTransform"
+            "$ref": "#/components/schemas/GeoTransform"
           },
           "height": {
             "type": "integer",

@@ -773,7 +773,7 @@ impl From<SpatialGridDefinition> for geoengine_datatypes::raster::SpatialGridDef
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,
@@ -798,6 +798,26 @@ impl From<GeoTransform> for geoengine_datatypes::raster::GeoTransform {
             value.x_pixel_size,
             value.y_pixel_size,
         )
+    }
+}
+
+impl From<geoengine_operators::source::GdalDatasetGeoTransform> for GeoTransform {
+    fn from(value: geoengine_operators::source::GdalDatasetGeoTransform) -> Self {
+        Self {
+            origin_coordinate: value.origin_coordinate.into(),
+            x_pixel_size: value.x_pixel_size,
+            y_pixel_size: value.y_pixel_size,
+        }
+    }
+}
+
+impl From<GeoTransform> for geoengine_operators::source::GdalDatasetGeoTransform {
+    fn from(value: GeoTransform) -> Self {
+        Self {
+            origin_coordinate: value.origin_coordinate.into(),
+            x_pixel_size: value.x_pixel_size,
+            y_pixel_size: value.y_pixel_size,
+        }
     }
 }
 

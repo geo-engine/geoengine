@@ -3,9 +3,9 @@ use super::datatypes::{
     SpatialReferenceOption, TimeInterval, VectorDataType,
 };
 use crate::api::model::datatypes::{
-    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, MlTensorShape3D,
-    MultiLineString, MultiPoint, MultiPolygon, NoGeometry, RasterPropertiesEntryType,
-    RasterPropertiesKey, TimeInstance, TimeStep,
+    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, GeoTransform,
+    MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    RasterPropertiesEntryType, RasterPropertiesKey, TimeInstance, TimeStep,
 };
 use crate::error::{
     RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
@@ -1197,7 +1197,7 @@ pub struct GdalDatasetParameters {
     #[schema(value_type = String)]
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
-    pub geo_transform: GdalDatasetGeoTransform, // TODO: discuss if we need this at all
+    pub geo_transform: GeoTransform, // TODO: discuss if we need this at all
     pub width: usize,
     pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
@@ -1280,34 +1280,6 @@ impl From<GdalSourceTimePlaceholder> for geoengine_operators::source::GdalSource
         Self {
             format: value.format.into(),
             reference: value.reference.into(),
-        }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalDatasetGeoTransform {
-    pub origin_coordinate: Coordinate2D,
-    pub x_pixel_size: f64,
-    pub y_pixel_size: f64,
-}
-
-impl From<geoengine_operators::source::GdalDatasetGeoTransform> for GdalDatasetGeoTransform {
-    fn from(value: geoengine_operators::source::GdalDatasetGeoTransform) -> Self {
-        Self {
-            origin_coordinate: value.origin_coordinate.into(),
-            x_pixel_size: value.x_pixel_size,
-            y_pixel_size: value.y_pixel_size,
-        }
-    }
-}
-
-impl From<GdalDatasetGeoTransform> for geoengine_operators::source::GdalDatasetGeoTransform {
-    fn from(value: GdalDatasetGeoTransform) -> Self {
-        Self {
-            origin_coordinate: value.origin_coordinate.into(),
-            x_pixel_size: value.x_pixel_size,
-            y_pixel_size: value.y_pixel_size,
         }
     }
 }
