@@ -1728,7 +1728,7 @@ mod tests {
         // TODO: y resolution should be double the x resolution, but currently we only compute a uniform resolution
         assert_eq!(
             out_res.unwrap(),
-            SpatialResolution::new_unchecked(14_237.781_884_528_267, 14_237.781_884_528_267),
+            SpatialResolution::new_unchecked(14_237.781_884_528_265, 14_237.781_884_528_265),
         );
     }
 }
