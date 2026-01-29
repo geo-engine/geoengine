@@ -1,13 +1,11 @@
-use std::collections::HashMap;
-use std::num::NonZeroUsize;
-
-use geoengine_datatypes::primitives::{Circle, Coordinate2D, TimeInterval};
-
-use crate::error::Error;
-use crate::util::Result;
-
 use super::aggregates::AttributeAggregate;
 use super::circle_radius_model::CircleRadiusModel;
+use crate::error::Error;
+use crate::processing::circle_merging_quadtree::weighted_mean;
+use crate::util::Result;
+use geoengine_datatypes::primitives::{Circle, Coordinate2D, TimeInterval};
+use std::collections::HashMap;
+use std::num::NonZeroUsize;
 
 /// A `Circle` type that is extended by the amount of submerged points.
 #[derive(Clone, Debug, PartialEq)]
@@ -82,14 +80,18 @@ impl CircleOfPoints {
         };
 
         let new_center = {
-            let total_length = total_number_of_points.get() as f64;
-            let new_x = (self.circle.x() * self.number_of_points.get() as f64
-                + other.circle.x() * other.number_of_points.get() as f64)
-                / total_length;
-
-            let new_y = (self.circle.y() * self.number_of_points.get() as f64
-                + other.circle.y() * other.number_of_points.get() as f64)
-                / total_length;
+            let new_x = weighted_mean(
+                self.circle.x(),
+                self.number_of_points.get(),
+                other.circle.x(),
+                other.number_of_points.get(),
+            );
+            let new_y = weighted_mean(
+                self.circle.y(),
+                self.number_of_points.get(),
+                other.circle.y(),
+                other.number_of_points.get(),
+            );
 
             Coordinate2D::new(new_x, new_y)
         };

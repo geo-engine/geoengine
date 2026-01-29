@@ -28,7 +28,7 @@ impl Line {
         let v_x = self.x_axis_length();
         let v_y = self.y_axis_length();
 
-        ((v_x * v_x) + (v_y * v_y)).sqrt()
+        v_x.hypot(v_y)
     }
 
     pub fn interpolate_coord_from_start(&self, factor: f64) -> Coordinate2D {

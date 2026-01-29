@@ -327,7 +327,7 @@ fn euclidian_pixel_distance<B: AxisAlignedRectangle>(
     let x_pixels = (bbox.size_x() / spatial_resolution.x).abs();
     let y_pixels = (bbox.size_y() / spatial_resolution.y).abs();
 
-    let diag_pixels: f64 = (x_pixels * x_pixels + y_pixels * y_pixels).sqrt();
+    let diag_pixels: f64 = x_pixels.hypot(y_pixels);
     Ok(diag_pixels)
 }
 
@@ -349,7 +349,7 @@ fn projected_diag_distance<P: CoordinateProjection>(
 fn diag_distance(ul_coord: Coordinate2D, lr_coord: Coordinate2D) -> f64 {
     // calculate the distance between upper left and lower right coordinate in srs units
     let proj_ul_lr_vector = ul_coord - lr_coord;
-    (proj_ul_lr_vector.x * proj_ul_lr_vector.x + proj_ul_lr_vector.y * proj_ul_lr_vector.y).sqrt()
+    proj_ul_lr_vector.x.hypot(proj_ul_lr_vector.y)
 }
 
 /// This method calculates a suggested pixel size for the translation of a raster into a different projection.
