@@ -320,6 +320,8 @@ impl ConfigElement for Wfs {
 pub struct Wms {
     pub default_time: Option<OgcDefaultTime>,
     pub request_timeout_seconds: Option<u64>,
+    pub max_image_width: u32,
+    pub max_image_height: u32,
 }
 
 impl ConfigElement for Wms {

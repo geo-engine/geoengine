@@ -306,8 +306,6 @@ async fn wms_get_map<C: ApplicationContext>(
         app_ctx: web::Data<C>,
         session: C::Session,
     ) -> Result<(Vec<u8>, CacheHint)> {
-        const MAX_TILE_SIZE: u32 = 4096;
-
         let endpoint = workflow;
         let layer = WorkflowId::from_str(&request.layers)?;
 
@@ -316,22 +314,26 @@ async fn wms_get_map<C: ApplicationContext>(
             error::WMSEndpointLayerMissmatch { endpoint, layer }
         );
 
-        let pixel_range = 0u32..=MAX_TILE_SIZE;
+        let config::Wms {
+            max_image_width,
+            max_image_height,
+            request_timeout_seconds,
+            ..
+        } = config::get_config_element::<config::Wms>()?;
         ensure!(
-            pixel_range.contains(&request.width) && pixel_range.contains(&request.height),
-            error::WMSUnsupportedImageSize {
+            request.width > 0
+                && request.height > 0
+                && request.width <= max_image_width
+                && request.height <= max_image_height,
+            error::WMSInvalidImageSize {
                 width: request.width,
                 height: request.height,
-                max_size: MAX_TILE_SIZE,
+                max_width: max_image_width,
+                max_height: max_image_height,
             }
         );
 
-        let conn_closed = connection_closed(
-            &req,
-            config::get_config_element::<config::Wms>()?
-                .request_timeout_seconds
-                .map(Duration::from_secs),
-        );
+        let conn_closed = connection_closed(&req, request_timeout_seconds.map(Duration::from_secs));
 
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 
