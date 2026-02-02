@@ -111,7 +111,7 @@ where
         (tile_a, tile_b)
     }
 
-    fn number_of_tiles_in_grid_bounds(
+    fn number_of_tiles_in_pixel_grid_bounds(
         tile_info: &TileInformation,
         grid_bounds: GridBoundingBox2D,
     ) -> usize {
@@ -217,7 +217,10 @@ where
         tile_info: &TileInformation,
         grid_bounds: GridBoundingBox2D,
     ) -> usize {
-        RasterTimeAdapter::<T, T, F, F>::number_of_tiles_in_grid_bounds(tile_info, grid_bounds)
+        RasterTimeAdapter::<T, T, F, F>::number_of_tiles_in_pixel_grid_bounds(
+            tile_info,
+            grid_bounds,
+        )
     }
 }
 
@@ -285,7 +288,7 @@ where
                         Some((Ok(tile_a), Ok(tile_b))) => {
                             // TODO: calculate at start when tiling info is available before querying first tile
                             let num_spatial_tiles = *num_spatial_tiles.get_or_insert_with(|| {
-                                Self::number_of_tiles_in_grid_bounds(
+                                Self::number_of_tiles_in_pixel_grid_bounds(
                                     &tile_a.tile_information(),
                                     query_rect.spatial_bounds(), // TODO: this should be calculated from the tile grid bounds and not the spatial bounds.
                                 )
