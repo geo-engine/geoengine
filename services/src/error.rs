@@ -360,6 +360,17 @@ pub enum Error {
         endpoint: WorkflowId,
         type_names: WorkflowId,
     },
+    #[snafu(display(
+        "WMS unsupported image size: {}x{}, max size is {}",
+        width,
+        height,
+        max_size
+    ))]
+    WMSUnsupportedImageSize {
+        width: u32,
+        height: u32,
+        max_size: u32,
+    },
 
     #[snafu(context(false))]
     ArunaProvider {

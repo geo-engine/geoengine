@@ -306,6 +306,8 @@ async fn wms_get_map<C: ApplicationContext>(
         app_ctx: web::Data<C>,
         session: C::Session,
     ) -> Result<(Vec<u8>, CacheHint)> {
+        const MAX_TILE_SIZE: u32 = 4096;
+
         let endpoint = workflow;
         let layer = WorkflowId::from_str(&request.layers)?;
 
@@ -314,7 +316,15 @@ async fn wms_get_map<C: ApplicationContext>(
             error::WMSEndpointLayerMissmatch { endpoint, layer }
         );
 
-        // TODO: validate request further
+        let pixel_range = 0u32..=MAX_TILE_SIZE;
+        ensure!(
+            pixel_range.contains(&request.width) && pixel_range.contains(&request.height),
+            error::WMSUnsupportedImageSize {
+                width: request.width,
+                height: request.height,
+                max_size: MAX_TILE_SIZE,
+            }
+        );
 
         let conn_closed = connection_closed(
             &req,
