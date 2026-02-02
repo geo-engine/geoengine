@@ -33,15 +33,6 @@ pub struct TimeStep {
 }
 
 impl TimeStep {
-    /// Creates a new `TimeStep`.
-    /// # Panics
-    ///  This method panics if `step` is 0.
-    pub fn new_unchecked(granularity: TimeGranularity, step: u32) -> Self {
-        // TODO: try and new_unchecked?
-        assert!(step > 0, "step must be greater than 0");
-        Self { granularity, step }
-    }
-
     pub fn new(granularity: TimeGranularity, step: u32) -> Result<Self> {
         ensure!(step > 0, error::TimeStepStepMustBeGreaterThanZero { step });
 
