@@ -1,7 +1,8 @@
 #![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
 
-use crate::processes::source::{
-    GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+use crate::processes::{
+    processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
+    source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
 };
 use geoengine_operators::{
     engine::{
@@ -41,6 +42,7 @@ pub enum RasterOperator {
 #[schema(discriminator = "type")]
 pub enum VectorOperator {
     MockPointSource(MockPointSource),
+    RasterVectorJoin(RasterVectorJoin),
 }
 
 impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
@@ -58,10 +60,11 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
     type Error = anyhow::Error;
     fn try_from(operator: VectorOperator) -> Result<Self, Self::Error> {
         match operator {
-            VectorOperator::MockPointSource(mock_point_source) => {
-                OperatorsMockPointSource::try_from(mock_point_source)
-                    .map(OperatorsVectorOperator::boxed)
-            }
+            VectorOperator::MockPointSource(mock_point_source) => OperatorsMockPointSource::try_from(mock_point_source)
+                .map(OperatorsVectorOperator::boxed),
+            VectorOperator::RasterVectorJoin(_rvj) => Err(anyhow::anyhow!(
+                "conversion of RasterVectorJoin to runtime operator is not supported here"
+            )),
         }
     }
 }
@@ -78,12 +81,16 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
 
 #[derive(OpenApi)]
 #[openapi(components(schemas(
-    TypedOperator,
-    RasterOperator,
-    VectorOperator,
+    Expression,
+    ExpressionParameters,
     GdalSource,
     GdalSourceParameters,
     MockPointSource,
-    MockPointSourceParameters
+    MockPointSourceParameters,
+    RasterVectorJoin,
+    RasterVectorJoinParameters,
+    RasterOperator,
+    TypedOperator,
+    VectorOperator,
 )))]
 pub struct OperatorsApi;

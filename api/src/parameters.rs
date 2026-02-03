@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
 use utoipa::ToSchema;
 
+/// A 2D coordinate with `x` and `y` values.
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct Coordinate2D {
@@ -27,6 +28,7 @@ impl From<geoengine_datatypes::primitives::Coordinate2D> for Coordinate2D {
     }
 }
 
+/// A raster data type.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum RasterDataType {
@@ -76,6 +78,7 @@ impl From<RasterDataType> for geoengine_datatypes::raster::RasterDataType {
     }
 }
 
+/// Measurement information for a raster band.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
@@ -113,10 +116,13 @@ impl From<Measurement> for geoengine_datatypes::primitives::Measurement {
     }
 }
 
+/// A measurement without a unit.
 #[type_tag(value = "unitless")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema, Default)]
 pub struct UnitlessMeasurement {}
 
+/// A continuous measurement, e.g., "temperature".
+/// It may have an optional unit, e.g., "°C" for degrees Celsius.
 #[type_tag(value = "continuous")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ContinuousMeasurement {
@@ -174,6 +180,8 @@ impl From<ClassificationMeasurement>
     }
 }
 
+/// A classification measurement.
+/// It contains a mapping from class IDs to class names.
 #[type_tag(value = "classification")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ClassificationMeasurement {
@@ -249,6 +257,111 @@ impl From<RasterBandDescriptor> for geoengine_operators::engine::RasterBandDescr
         Self {
             name: value.name,
             measurement: value.measurement.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type", content = "values")]
+pub enum ColumnNames {
+    Default,
+    Suffix(Vec<String>),
+    Names(Vec<String>),
+}
+
+impl From<geoengine_operators::processing::ColumnNames> for ColumnNames {
+    fn from(value: geoengine_operators::processing::ColumnNames) -> Self {
+        match value {
+            geoengine_operators::processing::ColumnNames::Default => ColumnNames::Default,
+            geoengine_operators::processing::ColumnNames::Suffix(v) => ColumnNames::Suffix(v),
+            geoengine_operators::processing::ColumnNames::Names(v) => ColumnNames::Names(v),
+        }
+    }
+}
+
+impl From<ColumnNames> for geoengine_operators::processing::ColumnNames {
+    fn from(value: ColumnNames) -> Self {
+        match value {
+            ColumnNames::Default => geoengine_operators::processing::ColumnNames::Default,
+            ColumnNames::Suffix(v) => geoengine_operators::processing::ColumnNames::Suffix(v),
+            ColumnNames::Names(v) => geoengine_operators::processing::ColumnNames::Names(v),
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum FeatureAggregationMethod {
+    First,
+    Mean,
+}
+
+impl From<geoengine_operators::processing::FeatureAggregationMethod> for FeatureAggregationMethod {
+    fn from(value: geoengine_operators::processing::FeatureAggregationMethod) -> Self {
+        match value {
+            geoengine_operators::processing::FeatureAggregationMethod::First => {
+                FeatureAggregationMethod::First
+            }
+            geoengine_operators::processing::FeatureAggregationMethod::Mean => {
+                FeatureAggregationMethod::Mean
+            }
+        }
+    }
+}
+
+impl From<FeatureAggregationMethod> for geoengine_operators::processing::FeatureAggregationMethod {
+    fn from(value: FeatureAggregationMethod) -> Self {
+        match value {
+            FeatureAggregationMethod::First => {
+                geoengine_operators::processing::FeatureAggregationMethod::First
+            }
+            FeatureAggregationMethod::Mean => {
+                geoengine_operators::processing::FeatureAggregationMethod::Mean
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum TemporalAggregationMethod {
+    None,
+    First,
+    Mean,
+}
+
+impl From<geoengine_operators::processing::TemporalAggregationMethod>
+    for TemporalAggregationMethod
+{
+    fn from(value: geoengine_operators::processing::TemporalAggregationMethod) -> Self {
+        match value {
+            geoengine_operators::processing::TemporalAggregationMethod::None => {
+                TemporalAggregationMethod::None
+            }
+            geoengine_operators::processing::TemporalAggregationMethod::First => {
+                TemporalAggregationMethod::First
+            }
+            geoengine_operators::processing::TemporalAggregationMethod::Mean => {
+                TemporalAggregationMethod::Mean
+            }
+        }
+    }
+}
+
+impl From<TemporalAggregationMethod>
+    for geoengine_operators::processing::TemporalAggregationMethod
+{
+    fn from(value: TemporalAggregationMethod) -> Self {
+        match value {
+            TemporalAggregationMethod::None => {
+                geoengine_operators::processing::TemporalAggregationMethod::None
+            }
+            TemporalAggregationMethod::First => {
+                geoengine_operators::processing::TemporalAggregationMethod::First
+            }
+            TemporalAggregationMethod::Mean => {
+                geoengine_operators::processing::TemporalAggregationMethod::Mean
+            }
         }
     }
 }
