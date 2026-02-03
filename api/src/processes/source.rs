@@ -106,14 +106,10 @@ impl TryFrom<MockPointSource> for OperatorsMockPointSource {
     }
 }
 
-// TODO: OpenAPI and conversions for other operators:
-//  - Expression
-//  - RasterVectorJoin
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::processes::{RasterOperator, TypedOperator};
+    use crate::processes::{RasterOperator, TypedOperator, VectorOperator};
     use geoengine_operators::engine::TypedOperator as OperatorsTypedOperator;
 
     #[test]
@@ -139,6 +135,40 @@ mod tests {
                 data: "example_dataset".to_string(),
             },
         }));
+
+        OperatorsTypedOperator::try_from(typed_operator).expect("it should convert");
+    }
+
+    #[test]
+    fn it_converts_mock_point_source() {
+        let api_operator = MockPointSource {
+            r#type: Default::default(),
+            params: MockPointSourceParameters {
+                points: vec![
+                    Coordinate2D { x: 1.0, y: 2.0 },
+                    Coordinate2D { x: 3.0, y: 4.0 },
+                ],
+            },
+        };
+
+        let operators_operator: OperatorsMockPointSource =
+            api_operator.try_into().expect("it should convert");
+
+        assert_eq!(
+            operators_operator.params.points,
+            vec![
+                geoengine_datatypes::primitives::Coordinate2D { x: 1.0, y: 2.0 },
+                geoengine_datatypes::primitives::Coordinate2D { x: 3.0, y: 4.0 }
+            ]
+        );
+
+        let typed_operator =
+            TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                r#type: Default::default(),
+                params: MockPointSourceParameters {
+                    points: vec![Coordinate2D { x: 1.0, y: 2.0 }],
+                },
+            }));
 
         OperatorsTypedOperator::try_from(typed_operator).expect("it should convert");
     }
