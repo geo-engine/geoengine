@@ -216,7 +216,7 @@ uuid = { version = "1.17", features = [
 ] } # must be compatible with `bb8-postgres`
 validator = { version = "0.20", features = ["derive"] }
 vergen = "9.0"
-vergen-gitcl = "1.0"
+vergen-gitcl = "9.1"
 walkdir = "2.4"
 wkt = "0.14"
 xml = "1.2"
