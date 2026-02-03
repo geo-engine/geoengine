@@ -466,6 +466,9 @@ use utoipa::{Modify, OpenApi};
             MlTensorShape3D,
         ),
     ),
+    nest(
+        (path = "/process", api = geoengine_api::processes::OperatorsApi),
+    ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")
 )]

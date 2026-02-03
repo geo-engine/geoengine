@@ -7066,6 +7066,38 @@
           }
         }
       },
+      "GdalSource": {
+        "type": "object",
+        "description": "# GdalSource\n\nThe [`GdalSource`] is a source operator that reads raster data using GDAL.\nThe counterpart for vector data is the [`OgrSource`].\n\n## Errors\n\nIf the given dataset does not exist or is not readable, an error is thrown.\n\n## Example JSON\n\n```json\n{\n  \"type\": \"GdalSource\",\n  \"params\": {\n    \"data\": \"ndvi\"\n  }\n}\n```",
+        "required": [
+          "type",
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/GdalSourceParameters"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "GdalSource"
+            ]
+          }
+        }
+      },
+      "GdalSourceParameters": {
+        "type": "object",
+        "description": "Parameters for the [`GdalSource`] operator.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Dataset name or identifier to be loaded.\n\n### Example\n`\"ndvi\"`"
+          }
+        }
+      },
       "GdalSourceTimePlaceholder": {
         "type": "object",
         "required": [
@@ -9250,6 +9282,20 @@
           },
           "upload": {
             "$ref": "#/components/schemas/UploadId"
+          }
+        }
+      },
+      "RasterOperator": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/GdalSource"
+          }
+        ],
+        "description": "An operator that produces raster data.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "GdalSource": "#/components/schemas/GdalSource"
           }
         }
       },

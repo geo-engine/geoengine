@@ -1,5 +1,5 @@
 [workspace]
-members = ["datatypes", "expression", "macros", "operators", "services"]
+members = ["api", "datatypes", "expression", "macros", "operators", "services"]
 exclude = [
     "expression/deps-workspace", # Buggy, cf. https://github.com/rust-lang/cargo/issues/6745
     ".scripts",
