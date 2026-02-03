@@ -266,6 +266,19 @@ fn validate_tile(
     data_path_file_path: &Path,
     dataset_descriptor: &RasterResultDescriptor,
 ) -> Result<(), AddDatasetTilesError> {
+    if tile
+        .params
+        .file_path
+        .to_string_lossy()
+        .starts_with("/vsicurl")
+    {
+        // do not validate remote files
+        // TODO: add flag to do this?
+        // TODO: detect remote files based on volume not file path?
+        // TODO: validate based on metadata, without opening the file
+        return Ok(());
+    }
+
     ensure!(
         tile.params.file_path.is_relative(),
         TileFilePathNotRelative {
