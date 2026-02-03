@@ -1,13 +1,20 @@
 #![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
 
-use crate::processes::source::{GdalSource, GdalSourceParameters};
+use crate::processes::source::{
+    GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+};
 use geoengine_operators::{
-    engine::{RasterOperator as OperatorsRasterOperator, TypedOperator as OperatorsTypedOperator},
+    engine::{
+        RasterOperator as OperatorsRasterOperator, TypedOperator as OperatorsTypedOperator,
+        VectorOperator as OperatorsVectorOperator,
+    },
+    mock::MockPointSource as OperatorsMockPointSource,
     source::GdalSource as OperatorsGdalSource,
 };
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
+mod processing;
 mod source;
 
 /// Operator outputs are distinguished by their data type.
@@ -15,7 +22,7 @@ mod source;
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(tag = "type", content = "operator")]
 pub enum TypedOperator {
-    // Vector(Box<dyn VectorOperator>),
+    Vector(VectorOperator),
     Raster(RasterOperator),
     // Plot(Box<dyn PlotOperator>),
 }
@@ -26,6 +33,14 @@ pub enum TypedOperator {
 #[schema(discriminator = "type")]
 pub enum RasterOperator {
     GdalSource(GdalSource),
+}
+
+/// An operator that produces vector data.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
+pub enum VectorOperator {
+    MockPointSource(MockPointSource),
 }
 
 impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
@@ -39,15 +54,36 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
     }
 }
 
+impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
+    type Error = anyhow::Error;
+    fn try_from(operator: VectorOperator) -> Result<Self, Self::Error> {
+        match operator {
+            VectorOperator::MockPointSource(mock_point_source) => {
+                OperatorsMockPointSource::try_from(mock_point_source)
+                    .map(OperatorsVectorOperator::boxed)
+            }
+        }
+    }
+}
+
 impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     type Error = anyhow::Error;
     fn try_from(operator: TypedOperator) -> Result<Self, Self::Error> {
         match operator {
             TypedOperator::Raster(raster_operator) => Ok(Self::Raster(raster_operator.try_into()?)),
+            TypedOperator::Vector(vector_operator) => Ok(Self::Vector(vector_operator.try_into()?)),
         }
     }
 }
 
 #[derive(OpenApi)]
-#[openapi(components(schemas(TypedOperator, RasterOperator, GdalSource, GdalSourceParameters)))]
+#[openapi(components(schemas(
+    TypedOperator,
+    RasterOperator,
+    VectorOperator,
+    GdalSource,
+    GdalSourceParameters,
+    MockPointSource,
+    MockPointSourceParameters
+)))]
 pub struct OperatorsApi;

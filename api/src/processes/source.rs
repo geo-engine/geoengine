@@ -1,10 +1,18 @@
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_macros::type_tag;
-use geoengine_operators::source::{
-    GdalSource as OperatorsGdalSource, GdalSourceParameters as OperatorsGdalSourceParameters,
+use geoengine_operators::{
+    mock::{
+        MockPointSource as OperatorsMockPointSource,
+        MockPointSourceParams as OperatorsMockPointSourceParameters,
+    },
+    source::{
+        GdalSource as OperatorsGdalSource, GdalSourceParameters as OperatorsGdalSourceParameters,
+    },
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+
+use crate::parameters::Coordinate2D;
 
 /// # GdalSource
 ///
@@ -56,8 +64,49 @@ impl TryFrom<GdalSource> for OperatorsGdalSource {
     }
 }
 
+/// # MockPointSource
+///
+/// The [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes.
+///
+/// ## Example JSON
+/// ```json
+/// {
+///   "type": "MockPointSource",
+///   "params": {
+///     "points": [ { "x": 1.0, "y": 2.0 }, { "x": 3.0, "y": 4.0 } ]
+///   }
+/// }
+/// ```
+#[type_tag(value = "MockPointSource")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MockPointSource {
+    pub params: MockPointSourceParameters,
+}
+
+/// Parameters for the [`MockPointSource`] operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct MockPointSourceParameters {
+    /// Points to be output by the mock point source.
+    ///
+    /// ### Example
+    /// `[{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]`
+    pub points: Vec<Coordinate2D>,
+}
+
+impl TryFrom<MockPointSource> for OperatorsMockPointSource {
+    type Error = anyhow::Error;
+    fn try_from(value: MockPointSource) -> Result<Self, Self::Error> {
+        Ok(OperatorsMockPointSource {
+            params: OperatorsMockPointSourceParameters {
+                points: value.params.points.into_iter().map(Into::into).collect(),
+            },
+        })
+    }
+}
+
 // TODO: OpenAPI and conversions for other operators:
-//  - MockPointSource
 //  - Expression
 //  - RasterVectorJoin
 

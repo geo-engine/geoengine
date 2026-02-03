@@ -7901,6 +7901,41 @@
           }
         }
       },
+      "MockPointSource": {
+        "type": "object",
+        "description": "# MockPointSource\n\nThe [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes.\n\n## Example JSON\n```json\n{\n  \"type\": \"MockPointSource\",\n  \"params\": {\n    \"points\": [ { \"x\": 1.0, \"y\": 2.0 }, { \"x\": 3.0, \"y\": 4.0 } ]\n  }\n}\n```",
+        "required": [
+          "type",
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/MockPointSourceParameters"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "MockPointSource"
+            ]
+          }
+        }
+      },
+      "MockPointSourceParameters": {
+        "type": "object",
+        "description": "Parameters for the [`MockPointSource`] operator.",
+        "required": [
+          "points"
+        ],
+        "properties": {
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Coordinate2D"
+            },
+            "description": "Points to be output by the mock point source.\n\n### Example\n`[{\"x\": 1.0, \"y\": 2.0}, {\"x\": 3.0, \"y\": 4.0}]`"
+          }
+        }
+      },
       "MultiBandRasterColorizer": {
         "type": "object",
         "required": [
@@ -10918,6 +10953,20 @@
           "MultiLineString",
           "MultiPolygon"
         ]
+      },
+      "VectorOperator": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/MockPointSource"
+          }
+        ],
+        "description": "An operator that produces vector data.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "MockPointSource": "#/components/schemas/MockPointSource"
+          }
+        }
       },
       "VectorQueryRectangle": {
         "type": "object",
