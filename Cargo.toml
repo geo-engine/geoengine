@@ -82,7 +82,7 @@ arrow-array = "57.1"
 arrow-ord = "57.1"
 arrow-schema = { version = "57.1", features = ["serde"] }
 aruna-rust-api = "2.0.2"
-assert_cmd = "2.0"
+assert_cmd = "2.1"
 async-stream = "0.3"
 async-trait = "0.1"
 base64 = "0.22"
