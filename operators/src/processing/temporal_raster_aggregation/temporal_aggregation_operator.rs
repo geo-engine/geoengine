@@ -12,8 +12,9 @@ use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
 use crate::adapters::stack_individual_aligned_raster_bands;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
-    RasterOperator, SingleRasterSource, WorkflowOperatorPath,
+    RasterOperator, SingleRasterSource, TimeDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::processing::temporal_raster_aggregation::aggregators::PercentileEstimateAggregator;
 use crate::{
     adapters::SubQueryTileAggregator,
@@ -25,10 +26,12 @@ use crate::{
     util::Result,
 };
 use async_trait::async_trait;
+use futures::{Stream, StreamExt};
 use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, SpatialPartition2D, TimeInstance,
+    BandSelection, RasterQueryRectangle, RegularTimeDimension, SpatialResolution, TimeFilledItem,
+    TimeInstance,
 };
-use geoengine_datatypes::raster::{Pixel, RasterDataType, RasterTile2D};
+use geoengine_datatypes::raster::{GridBoundingBox2D, Pixel, RasterDataType, RasterTile2D};
 use geoengine_datatypes::{primitives::TimeStep, raster::TilingSpecification};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -109,6 +112,17 @@ impl RasterOperator for TemporalRasterAggregation {
 
         let mut out_result_descriptor = source.result_descriptor().clone();
 
+        out_result_descriptor.time = TimeDescriptor::new(
+            source.result_descriptor().time.bounds,
+            geoengine_datatypes::primitives::TimeDimension::Regular(RegularTimeDimension {
+                step: self.params.window,
+                origin: self
+                    .params
+                    .window_reference
+                    .unwrap_or(TimeInstance::from_millis_unchecked(0)),
+            }),
+        );
+
         if let Some(output_type) = self.params.output_type {
             out_result_descriptor.data_type = output_type;
         }
@@ -174,8 +188,6 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
             TemporalRasterAggregationProcessor::new(
                 self.result_descriptor.clone(),
                 self.aggregation_type,
-                self.window,
-                self.window_reference,
                 p,
                 self.tiling_specification,
             ).boxed()
@@ -196,6 +208,24 @@ impl InitializedRasterOperator for InitializedTemporalRasterAggregation {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(TemporalRasterAggregation {
+            params: TemporalRasterAggregationParameters {
+                aggregation: self.aggregation_type,
+                window: self.window,
+                window_reference: Some(self.window_reference),
+                output_type: self.output_type,
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 pub struct TemporalRasterAggregationProcessor<Q, P>
@@ -205,8 +235,6 @@ where
 {
     result_descriptor: RasterResultDescriptor,
     aggregation_type: Aggregation,
-    window: TimeStep,
-    window_reference: TimeInstance,
     source: Q,
     tiling_specification: TilingSpecification,
 }
@@ -216,7 +244,7 @@ where
     Q: RasterQueryProcessor<RasterType = P>
         + QueryProcessor<
             Output = RasterTile2D<P>,
-            SpatialBounds = SpatialPartition2D,
+            SpatialBounds = GridBoundingBox2D,
             Selection = BandSelection,
             ResultDescription = RasterResultDescriptor,
         >,
@@ -225,29 +253,22 @@ where
     fn new(
         result_descriptor: RasterResultDescriptor,
         aggregation_type: Aggregation,
-        window: TimeStep,
-        window_reference: TimeInstance,
         source: Q,
         tiling_specification: TilingSpecification,
     ) -> Self {
         Self {
             result_descriptor,
             aggregation_type,
-            window,
-            window_reference,
             source,
             tiling_specification,
         }
     }
 
     fn create_subquery<F: TemporalRasterPixelAggregator<P> + 'static, FoldFn>(
-        &self,
         fold_fn: FoldFn,
     ) -> super::subquery::TemporalRasterAggregationSubQuery<FoldFn, P, F> {
         super::subquery::TemporalRasterAggregationSubQuery {
             fold_fn,
-            step: self.window,
-            step_reference: self.window_reference,
             _phantom_pixel_type: PhantomData,
         }
     }
@@ -256,212 +277,212 @@ where
         F: GlobalStateTemporalRasterPixelAggregator<P> + 'static,
         FoldFn,
     >(
-        &self,
         aggregator: F,
         fold_fn: FoldFn,
     ) -> GlobalStateTemporalRasterAggregationSubQuery<FoldFn, P, F> {
         GlobalStateTemporalRasterAggregationSubQuery {
             aggregator: Arc::new(aggregator),
             fold_fn,
-            step: self.window,
-            step_reference: self.window_reference,
+
             _phantom_pixel_type: PhantomData,
         }
     }
 
-    fn create_subquery_first<F>(
-        &self,
-        fold_fn: F,
-    ) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
+    fn create_subquery_first<F>(fold_fn: F) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
         TemporalRasterAggregationSubQueryNoDataOnly {
             fold_fn,
-            step: self.window,
-            step_reference: self.window_reference,
+
             _phantom_pixel_type: PhantomData,
         }
     }
 
-    fn create_subquery_last<F>(
-        &self,
-        fold_fn: F,
-    ) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
+    fn create_subquery_last<F>(fold_fn: F) -> TemporalRasterAggregationSubQueryNoDataOnly<F, P> {
         TemporalRasterAggregationSubQueryNoDataOnly {
             fold_fn,
-            step: self.window,
-            step_reference: self.window_reference,
+
             _phantom_pixel_type: PhantomData,
         }
     }
 
     #[allow(clippy::too_many_lines)]
-    fn create_subquery_adapter_stream_for_single_band<'a>(
+    async fn create_subquery_adapter_stream_for_single_band<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<RasterTile2D<P>>>> {
         ensure!(
-            query.attributes.count() == 1,
+            query.attributes().count() == 1,
             error::InvalidBandCount {
                 expected: 1u32,
-                found: query.attributes.count()
+                found: query.attributes().count()
             }
         );
+
+        let grid_desc = self.result_descriptor.spatial_grid_descriptor();
+        let tiling_strategy = grid_desc
+            .tiling_grid_definition(self.tiling_specification)
+            .generate_data_tiling_strategy();
+
+        let time_stream: std::pin::Pin<
+            Box<
+                dyn Stream<
+                        Item = std::result::Result<
+                            geoengine_datatypes::primitives::TimeInterval,
+                            error::Error,
+                        >,
+                    > + Send,
+            >,
+        > = self.time_query(query.time_interval(), ctx).await?;
 
         Ok(match self.aggregation_type {
             Aggregation::Min {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        MinPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Min"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregatorIngoringNoData>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Min {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregator>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Min"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MinPixelAggregator>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Max {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        MaxPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Max"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregatorIngoringNoData>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Max {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregator>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Max"),
-
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MaxPixelAggregator>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::First {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
+            } => {
+                Self::create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
                         FirstPixelAggregatorIngoringNoData,
                     >,
                 )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::First"),
+                .into_raster_subquery_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    tiling_strategy,
+                    time_stream,
+                )
+                .box_pin()
+            }
             Aggregation::First {
                 ignore_no_data: false,
-            } => self
-                .create_subquery_first(first_tile_fold_future::<P>)
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::First"),
+            } => Self::create_subquery_first(first_tile_fold_future::<P>)
+                .into_raster_subquery_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    tiling_strategy,
+                    time_stream,
+                )
+                .box_pin(),
             Aggregation::Last {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        LastPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Last"),
-
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, LastPixelAggregatorIngoringNoData>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Last {
                 ignore_no_data: false,
-            } => self
-                .create_subquery_last(last_tile_fold_future::<P>)
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Last"),
-
+            } => Self::create_subquery_last(last_tile_fold_future::<P>)
+                .into_raster_subquery_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    tiling_strategy,
+                    time_stream,
+                )
+                .box_pin(),
             Aggregation::Mean {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<true>>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Mean"),
-
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<true>>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Mean {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<false>>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Mean"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, MeanPixelAggregator<false>>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
 
             Aggregation::Sum {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<
-                        P,
-                        SumPixelAggregatorIngoringNoData,
-                    >,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
-
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregatorIngoringNoData>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::Sum {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregator>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, SumPixelAggregator>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
 
             Aggregation::Count {
                 ignore_no_data: true,
-            } => self
-                .create_subquery(
+            } => {
+                Self::create_subquery(
                     super::subquery::subquery_all_tiles_fold_fn::<
                         P,
                         CountPixelAggregatorIngoringNoData,
                     >,
                 )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
-
+                .into_raster_subquery_adapter(
+                    &self.source,
+                    query,
+                    ctx,
+                    tiling_strategy,
+                    time_stream,
+                )
+                .box_pin()
+            }
             Aggregation::Count {
                 ignore_no_data: false,
-            } => self
-                .create_subquery(
-                    super::subquery::subquery_all_tiles_fold_fn::<P, CountPixelAggregator>,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::Sum"),
+            } => Self::create_subquery(
+                super::subquery::subquery_all_tiles_fold_fn::<P, CountPixelAggregator>,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::PercentileEstimate {
                 ignore_no_data: true,
                 percentile,
-            } => self
-                .create_global_state_subquery(
-                    PercentileEstimateAggregator::<true>::new(percentile),
-                    super::subquery::subquery_all_tiles_global_state_fold_fn,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::PercentileEstimate"),
+            } => Self::create_global_state_subquery(
+                PercentileEstimateAggregator::<true>::new(percentile),
+                super::subquery::subquery_all_tiles_global_state_fold_fn,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
             Aggregation::PercentileEstimate {
                 ignore_no_data: false,
                 percentile,
-            } => self
-                .create_global_state_subquery(
-                    PercentileEstimateAggregator::<false>::new(percentile),
-                    super::subquery::subquery_all_tiles_global_state_fold_fn,
-                )
-                .into_raster_subquery_adapter(&self.source, query, ctx, self.tiling_specification)
-                .expect("no tiles must be skipped in Aggregation::PercentileEstimate"),
+            } => Self::create_global_state_subquery(
+                PercentileEstimateAggregator::<false>::new(percentile),
+                super::subquery::subquery_all_tiles_global_state_fold_fn,
+            )
+            .into_raster_subquery_adapter(&self.source, query, ctx, tiling_strategy, time_stream)
+            .box_pin(),
         })
     }
 }
@@ -469,16 +490,11 @@ where
 #[async_trait]
 impl<Q, P> QueryProcessor for TemporalRasterAggregationProcessor<Q, P>
 where
-    Q: QueryProcessor<
-            Output = RasterTile2D<P>,
-            SpatialBounds = SpatialPartition2D,
-            Selection = BandSelection,
-            ResultDescription = RasterResultDescriptor,
-        >,
+    Q: RasterQueryProcessor<RasterType = P> + Send + Sync,
     P: Pixel,
 {
     type Output = RasterTile2D<P>;
-    type SpatialBounds = SpatialPartition2D;
+    type SpatialBounds = GridBoundingBox2D;
     type Selection = BandSelection;
     type ResultDescription = RasterResultDescriptor;
 
@@ -489,6 +505,7 @@ where
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
         stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async {
             self.create_subquery_adapter_stream_for_single_band(query, ctx)
+                .await
         })
         .await
     }
@@ -498,22 +515,39 @@ where
     }
 }
 
+#[async_trait]
+impl<Q, P> RasterQueryProcessor for TemporalRasterAggregationProcessor<Q, P>
+where
+    Q: RasterQueryProcessor<RasterType = P>,
+    P: Pixel,
+{
+    type RasterType = P;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        let ti_iter = self
+            .result_descriptor
+            .time
+            .dimension
+            .unwrap_regular()
+            .expect("must be regular as this operator only creates regular time dimensions")
+            .intersecting_intervals(query.time())?
+            .map(Ok);
+        Ok(futures::stream::iter(ti_iter).boxed())
+    }
+}
+
 #[cfg(test)]
 mod tests {
-    use futures::stream::StreamExt;
-    use geoengine_datatypes::{
-        primitives::{CacheHint, SpatialResolution, TimeInterval},
-        raster::{
-            EmptyGrid, EmptyGrid2D, Grid2D, GridOrEmpty, MaskedGrid2D, RasterDataType, RenameBands,
-            TileInformation, TilesEqualIgnoringCacheHint,
-        },
-        spatial_reference::SpatialReference,
-        util::test::TestDefault,
-    };
-
+    use super::*;
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
+            SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{
@@ -521,25 +555,43 @@ mod tests {
             raster_stacker::{RasterStacker, RasterStackerParams},
         },
     };
-
-    use super::*;
+    use futures::stream::StreamExt;
+    use geoengine_datatypes::{
+        primitives::{CacheHint, Coordinate2D, TimeInterval},
+        raster::{
+            EmptyGrid, EmptyGrid2D, GeoTransform, Grid2D, GridBoundingBox2D, GridOrEmpty,
+            GridShape2D, MaskedGrid2D, RasterDataType, RenameBands, TileInformation,
+            TilesEqualIgnoringCacheHint,
+        },
+        spatial_reference::SpatialReference,
+        util::test::TestDefault,
+    };
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_min() {
         let raster_tiles = make_raster();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, 0], [-1, 2]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -560,17 +612,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 40),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -652,17 +700,26 @@ mod tests {
     async fn test_max() {
         let raster_tiles = make_raster();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -683,17 +740,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 40),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -775,17 +828,26 @@ mod tests {
     async fn test_max_with_no_data() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -806,17 +868,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 40),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -898,17 +956,26 @@ mod tests {
     async fn test_max_with_no_data_but_ignoring_it() {
         let raster_tiles = make_raster(); // TODO: switch to make_raster_with_no_data?
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -929,17 +996,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 40),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1019,6 +1082,22 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_only_no_data() {
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new_min_max(-3, -1, 0, 2).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: vec![RasterTile2D::new_with_tile_info(
@@ -1032,14 +1111,7 @@ mod tests {
                     GridOrEmpty::from(EmptyGrid2D::<u8>::new([3, 2].into())),
                     CacheHint::default(),
                 )],
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1060,17 +1132,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (2., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 20),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-3, -1, 0, 1).unwrap(),
+            TimeInterval::new_unchecked(0, 20),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1109,17 +1177,26 @@ mod tests {
     async fn test_first_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1140,17 +1217,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1212,21 +1285,29 @@ mod tests {
     async fn test_last_with_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
-
         let agg = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::Last {
@@ -1243,17 +1324,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1315,17 +1392,26 @@ mod tests {
     async fn test_last() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1346,17 +1432,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1418,17 +1500,26 @@ mod tests {
     async fn test_first() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1449,17 +1540,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1521,17 +1608,26 @@ mod tests {
     async fn test_mean_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1552,17 +1648,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1624,17 +1716,26 @@ mod tests {
     async fn test_mean_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1655,17 +1756,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1726,6 +1823,32 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_sum_without_nodata() {
+        let raster_tiles = make_raster();
+
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor,
+            },
+        }
+        .boxed();
+
         let operator = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::Sum {
@@ -1738,36 +1861,17 @@ mod tests {
                 window_reference: Some(TimeInstance::from_millis(0).unwrap()),
                 output_type: None,
             },
-            sources: SingleRasterSource {
-                raster: MockRasterSource {
-                    params: MockRasterSourceParams {
-                        data: make_raster(),
-                        result_descriptor: RasterResultDescriptor {
-                            data_type: RasterDataType::U8,
-                            spatial_reference: SpatialReference::epsg_4326().into(),
-                            time: None,
-                            bbox: None,
-                            resolution: None,
-                            bands: RasterBandDescriptors::new_single_band(),
-                        },
-                    },
-                }
-                .boxed(),
-            },
+            sources: SingleRasterSource { raster: mrs },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1848,17 +1952,26 @@ mod tests {
     async fn test_sum_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1879,17 +1992,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1951,17 +2060,26 @@ mod tests {
     async fn test_sum_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1982,17 +2100,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2053,6 +2167,32 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_sum_with_larger_data_type() {
+        let raster_tiles = make_raster();
+
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor: result_descriptor.clone(),
+            },
+        }
+        .boxed();
+
         let operator = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::Sum {
@@ -2073,39 +2213,20 @@ mod tests {
                         output_band: None,
                         map_no_data: true,
                     },
-                    sources: SingleRasterSource {
-                        raster: MockRasterSource {
-                            params: MockRasterSourceParams {
-                                data: make_raster(),
-                                result_descriptor: RasterResultDescriptor {
-                                    data_type: RasterDataType::U8,
-                                    spatial_reference: SpatialReference::epsg_4326().into(),
-                                    time: None,
-                                    bbox: None,
-                                    resolution: None,
-                                    bands: RasterBandDescriptors::new_single_band(),
-                                },
-                            },
-                        }
-                        .boxed(),
-                    },
+                    sources: SingleRasterSource { raster: mrs },
                 }
                 .boxed(),
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2197,6 +2318,32 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn test_count_without_nodata() {
+        let raster_tiles = make_raster();
+
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
+        let mrs = MockRasterSource {
+            params: MockRasterSourceParams {
+                data: raster_tiles,
+                result_descriptor,
+            },
+        }
+        .boxed();
+
         let operator = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::Count {
@@ -2209,36 +2356,17 @@ mod tests {
                 window_reference: Some(TimeInstance::from_millis(0).unwrap()),
                 output_type: None,
             },
-            sources: SingleRasterSource {
-                raster: MockRasterSource {
-                    params: MockRasterSourceParams {
-                        data: make_raster(),
-                        result_descriptor: RasterResultDescriptor {
-                            data_type: RasterDataType::U8,
-                            spatial_reference: SpatialReference::epsg_4326().into(),
-                            time: None,
-                            bbox: None,
-                            resolution: None,
-                            bands: RasterBandDescriptors::new_single_band(),
-                        },
-                    },
-                }
-                .boxed(),
-            },
+            sources: SingleRasterSource { raster: mrs },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2319,17 +2447,26 @@ mod tests {
     async fn test_count_nodata() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -2350,17 +2487,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2422,17 +2555,26 @@ mod tests {
     async fn test_count_ignore_no_data() {
         let raster_tiles = make_raster_with_no_data();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -2453,17 +2595,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2525,17 +2663,26 @@ mod tests {
     async fn test_query_not_aligned_with_window_reference() {
         let raster_tiles = make_raster();
 
+        let tile_size_in_pixels = GridShape2D::new_2d(3, 2);
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+        let tiling_specification = TilingSpecification::new(tile_size_in_pixels);
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -2556,17 +2703,13 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(5, 5),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx = MockExecutionContext::new_with_tiling_spec(tiling_specification);
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(5, 5),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2804,6 +2947,21 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn it_sums_multiple_bands() {
+        let data = make_raster();
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         let operator = TemporalRasterAggregation {
             params: TemporalRasterAggregationParameters {
                 aggregation: Aggregation::Sum {
@@ -2825,29 +2983,15 @@ mod tests {
                         rasters: vec![
                             MockRasterSource {
                                 params: MockRasterSourceParams {
-                                    data: make_raster(),
-                                    result_descriptor: RasterResultDescriptor {
-                                        data_type: RasterDataType::U8,
-                                        spatial_reference: SpatialReference::epsg_4326().into(),
-                                        time: None,
-                                        bbox: None,
-                                        resolution: None,
-                                        bands: RasterBandDescriptors::new_single_band(),
-                                    },
+                                    data: data.clone(),
+                                    result_descriptor: result_descriptor.clone(),
                                 },
                             }
                             .boxed(),
                             MockRasterSource {
                                 params: MockRasterSourceParams {
-                                    data: make_raster(),
-                                    result_descriptor: RasterResultDescriptor {
-                                        data_type: RasterDataType::U8,
-                                        spatial_reference: SpatialReference::epsg_4326().into(),
-                                        time: None,
-                                        bbox: None,
-                                        resolution: None,
-                                        bands: RasterBandDescriptors::new_single_band(),
-                                    },
+                                    data: data.clone(),
+                                    result_descriptor,
                                 },
                             }
                             .boxed(),
@@ -2859,17 +3003,14 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 30),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1].try_into().unwrap(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 30),
+            [0, 1].try_into().unwrap(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor = operator
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -3002,17 +3143,24 @@ mod tests {
     async fn it_estimates_a_median() {
         let raster_tiles = make_raster();
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 40)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         let mrs = MockRasterSource {
             params: MockRasterSourceParams {
                 data: raster_tiles,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -3034,17 +3182,15 @@ mod tests {
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 40),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-3, -0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 40),
+            BandSelection::first(),
+        );
+
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp = agg
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

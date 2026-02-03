@@ -148,7 +148,7 @@ where
 
 impl<D, T, I> GridBounds for GridOrEmpty<D, T>
 where
-    D: GridBounds<IndexArray = I> + GridSpaceToLinearSpace<IndexArray = I>,
+    D: GridBounds<IndexArray = I>,
     T: Clone,
     I: AsRef<[isize]> + Into<GridIdx<I>>,
 {
@@ -213,27 +213,37 @@ where
     }
 }
 
-impl<D, T, I> ChangeGridBounds<I> for GridOrEmpty<D, T>
+impl<D, T, I, A> ChangeGridBounds<I, A> for GridOrEmpty<D, T>
 where
-    I: AsRef<[isize]> + Clone,
-    D: GridBounds<IndexArray = I> + Clone + GridSpaceToLinearSpace<IndexArray = I>,
-    T: Copy,
-    GridBoundingBox<I>: GridSize,
+    D: GridBounds<IndexArray = I> + GridSize<ShapeArray = A>,
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    A: AsRef<[usize]> + Into<GridShape<A>> + Clone,
+    GridBoundingBox<I>: GridSize<ShapeArray = A>,
+    GridShape<A>: GridSize<ShapeArray = A>,
     GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
+    T: Copy,
 {
-    type Output = GridOrEmpty<GridBoundingBox<I>, T>;
+    type BoundedOutput = GridOrEmpty<GridBoundingBox<I>, T>;
+    type UnboundedOutput = GridOrEmpty<GridShape<A>, T>;
 
-    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::BoundedOutput {
         match self {
             GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.shift_by_offset(offset)),
             GridOrEmpty::Empty(n) => GridOrEmpty::Empty(n.shift_by_offset(offset)),
         }
     }
 
-    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
+    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::BoundedOutput> {
         match self {
             GridOrEmpty::Grid(g) => g.set_grid_bounds(bounds).map(Into::into),
             GridOrEmpty::Empty(n) => n.set_grid_bounds(bounds).map(Into::into),
+        }
+    }
+
+    fn unbounded(self) -> Self::UnboundedOutput {
+        match self {
+            GridOrEmpty::Grid(g) => GridOrEmpty::Grid(g.unbounded()),
+            GridOrEmpty::Empty(n) => GridOrEmpty::Empty(n.unbounded()),
         }
     }
 }
@@ -247,7 +257,7 @@ mod tests {
     #[test]
     fn grid_bounds_2d_empty_grid() {
         let dim: GridShape2D = [3, 2].into();
-        let raster2d: GridOrEmpty2D<u8> = EmptyGrid::new(dim).into(); // FIXME: find out why type is needed
+        let raster2d: GridOrEmpty2D<u8> = EmptyGrid::new(dim).into();
 
         assert_eq!(raster2d.min_index(), GridIdx([0, 0]));
         assert_eq!(raster2d.max_index(), GridIdx([2, 1]));

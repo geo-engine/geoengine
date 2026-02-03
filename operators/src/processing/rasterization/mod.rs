@@ -3,58 +3,39 @@ use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
     InitializedVectorOperator, Operator, OperatorName, QueryContext, QueryProcessor,
     RasterBandDescriptors, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    SingleVectorSource, TypedRasterQueryProcessor, TypedVectorQueryProcessor, WorkflowOperatorPath,
+    ResultDescriptor, SingleVectorSource, SpatialGridDescriptor, TypedRasterQueryProcessor,
+    TypedVectorQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error;
-use crate::processing::rasterization::GridOrDensity::Grid;
-use crate::util;
-use arrow::datatypes::ArrowNativeTypeOp;
+use crate::optimization::{OptimizableOperator, OptimizationError};
+use crate::util::{self, spawn_blocking, spawn_blocking_with_thread_pool};
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, stream};
 use geoengine_datatypes::collections::GeometryCollection;
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialPartition2D,
-    SpatialPartitioned, SpatialResolution, VectorQueryRectangle,
+    AxisAlignedRectangle, BandSelection, BoundingBox2D, Coordinate2D, RasterQueryRectangle,
+    SpatialPartition2D, SpatialPartitioned, SpatialResolution, TimeFilledItem,
+    VectorQueryRectangle, find_next_best_overview_level_resolution,
 };
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
 use geoengine_datatypes::raster::{
-    GeoTransform, Grid2D, GridOrEmpty, GridSize, GridSpaceToLinearSpace, RasterDataType,
-    RasterTile2D, TilingSpecification,
+    ChangeGridBounds, GeoTransform, Grid as GridWithFlexibleBoundType, Grid2D, GridBoundingBox2D,
+    GridIdx, GridOrEmpty, GridSize, RasterDataType, RasterTile2D, TilingSpecification,
+    TilingStrategy, UpdateIndexedElementsParallel,
 };
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use num_traits::FloatConst;
-use rayon::prelude::*;
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-
-use crate::util::{spawn_blocking, spawn_blocking_with_thread_pool};
+use tracing::warn;
 
 /// An operator that rasterizes vector data
-pub type Rasterization = Operator<GridOrDensity, SingleVectorSource>;
+pub type Rasterization = Operator<RasterizationParams, SingleVectorSource>;
 
 impl OperatorName for Rasterization {
     const TYPE_NAME: &'static str = "Rasterization";
 }
-
-#[derive(Debug, Copy, Clone, Eq, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub enum GridSizeMode {
-    /// The spatial resolution is interpreted as a fixed size in coordinate units
-    Fixed,
-    /// The spatial resolution is interpreted as a multiplier for the query pixel size
-    Relative,
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-#[serde(tag = "type")]
-pub enum GridOrDensity {
-    /// A grid which summarizes points in cells (2D histogram)
-    Grid(GridParams),
-    /// A heatmap calculated from a gaussian density function
-    Density(DensityParams),
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 pub struct DensityParams {
     /// Defines the cutoff (as percentage of maximum density) down to which a point is taken
@@ -66,13 +47,13 @@ pub struct DensityParams {
 
 #[derive(Debug, Copy, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
-pub struct GridParams {
+pub struct RasterizationParams {
     /// The size of grid cells, interpreted depending on the chosen grid size mode
-    spatial_resolution: SpatialResolution,
+    pub spatial_resolution: SpatialResolution,
     /// The origin coordinate which aligns the grid bounds
-    origin_coordinate: Coordinate2D,
-    /// Determines how to interpret the grid resolution
-    grid_size_mode: GridSizeMode,
+    pub origin_coordinate: Coordinate2D,
+    // Heatmap calculated from a gaussian density function
+    pub density_params: Option<DensityParams>,
 }
 
 #[typetag::serde]
@@ -94,38 +75,56 @@ impl RasterOperator for Rasterization {
 
         let tiling_specification = context.tiling_specification();
 
+        let resolution = self.params.spatial_resolution;
+        let origin = self.params.origin_coordinate;
+
+        let geo_transform = GeoTransform::new(origin, resolution.x, -resolution.y);
+
+        let spatial_bounds = in_desc
+            .bbox
+            .ok_or_else(|| {
+                in_desc
+                    .spatial_reference()
+                    .as_option()
+                    .map(SpatialReference::area_of_use_projected::<BoundingBox2D>)
+            })
+            .map_err(|_| error::Error::NoSpatialBoundsAvailable)?;
+
+        let pixel_bounds =
+            geo_transform.spatial_to_grid_bounds(&SpatialPartition2D::new_unchecked(
+                spatial_bounds.upper_left(),
+                spatial_bounds.lower_right(),
+            ));
+
         let out_desc = RasterResultDescriptor {
             spatial_reference: in_desc.spatial_reference,
             data_type: RasterDataType::F64,
-            bbox: None,
-            time: in_desc.time,
-            resolution: None,
+            time: crate::engine::TimeDescriptor::new_irregular(in_desc.time), // FIXME: the operator really should use a regular time axis
+            spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, pixel_bounds),
             bands: RasterBandDescriptors::new_single_band(),
         };
 
-        match self.params {
-            Grid(params) => Ok(InitializedGridRasterization {
-                name,
-                path,
-                source: vector_source,
-                result_descriptor: out_desc,
-                spatial_resolution: params.spatial_resolution,
-                grid_size_mode: params.grid_size_mode,
-                tiling_specification,
-                origin_coordinate: params.origin_coordinate,
-            }
-            .boxed()),
-            GridOrDensity::Density(params) => InitializedDensityRasterization::new(
+        if let Some(density_params) = self.params.density_params {
+            return InitializedDensityRasterization::new(
                 name,
                 path,
                 vector_source,
                 out_desc,
                 tiling_specification,
-                params.cutoff,
-                params.stddev,
+                density_params.cutoff,
+                density_params.stddev,
             )
-            .map(InitializedRasterOperator::boxed),
+            .map(InitializedRasterOperator::boxed);
         }
+
+        Ok(InitializedGridRasterization {
+            name,
+            path,
+            source: vector_source,
+            result_descriptor: out_desc,
+            tiling_specification,
+        }
+        .boxed())
     }
 
     span_fn!(Rasterization);
@@ -136,10 +135,7 @@ pub struct InitializedGridRasterization {
     path: WorkflowOperatorPath,
     source: Box<dyn InitializedVectorOperator>,
     result_descriptor: RasterResultDescriptor,
-    spatial_resolution: SpatialResolution,
-    grid_size_mode: GridSizeMode,
     tiling_specification: TilingSpecification,
-    origin_coordinate: Coordinate2D,
 }
 
 impl InitializedRasterOperator for InitializedGridRasterization {
@@ -152,10 +148,7 @@ impl InitializedRasterOperator for InitializedGridRasterization {
             GridRasterizationQueryProcessor {
                 input: self.source.query_processor()?,
                 result_descriptor: self.result_descriptor.clone(),
-                spatial_resolution: self.spatial_resolution,
-                grid_size_mode: self.grid_size_mode,
                 tiling_specification: self.tiling_specification,
-                origin_coordinate: self.origin_coordinate,
             }
             .boxed(),
         ))
@@ -172,6 +165,40 @@ impl InitializedRasterOperator for InitializedGridRasterization {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let rasterization_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+
+        let spatial_resolution = if target_resolution <= rasterization_resolution {
+            // target resolution is finer than the rasterization resolution, no need to change the resolution
+            rasterization_resolution
+        } else {
+            self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+            // TODO: use `target_resolution` here? Due to the `ensure_resolution_is_compatible_for_optimization` call we know that the target resolution is a multiple of the rasterization resolution
+            find_next_best_overview_level_resolution(rasterization_resolution, target_resolution)
+        };
+
+        Ok(Rasterization {
+            params: RasterizationParams {
+                spatial_resolution,
+                origin_coordinate: self
+                    .result_descriptor
+                    .spatial_grid
+                    .geo_transform()
+                    .origin_coordinate,
+                density_params: None,
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?, // TODO: use `rasterization_resolution` here instead?
+            },
+        }
+        .boxed())
+    }
 }
 
 pub struct InitializedDensityRasterization {
@@ -181,6 +208,7 @@ pub struct InitializedDensityRasterization {
     result_descriptor: RasterResultDescriptor,
     tiling_specification: TilingSpecification,
     radius: f64,
+    cutoff: f64,
     stddev: f64,
 }
 
@@ -218,6 +246,7 @@ impl InitializedDensityRasterization {
             result_descriptor,
             tiling_specification,
             radius,
+            cutoff,
             stddev,
         })
     }
@@ -252,20 +281,57 @@ impl InitializedRasterOperator for InitializedDensityRasterization {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+
+        let rasterization_resolution = self.result_descriptor.spatial_grid.spatial_resolution();
+
+        let spatial_resolution = if target_resolution <= rasterization_resolution {
+            // target resolution is finer than the rasterization resolution, no need to change the resolution
+            rasterization_resolution
+        } else {
+            self.ensure_resolution_is_compatible_for_optimization(target_resolution)?;
+            // TODO: use `target_resolution` here? Due to the `ensure_resolution_is_compatible_for_optimization` call we know that the target resolution is a multiple of the rasterization resolution
+            find_next_best_overview_level_resolution(rasterization_resolution, target_resolution)
+        };
+
+        Ok(Rasterization {
+            params: RasterizationParams {
+                spatial_resolution,
+                origin_coordinate: self
+                    .result_descriptor
+                    .spatial_grid
+                    .geo_transform()
+                    .origin_coordinate,
+                density_params: Some(DensityParams {
+                    cutoff: self.cutoff,
+                    stddev: self.stddev,
+                }),
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?, // TODO: use `rasterization_resolution` here instead?
+            },
+        }
+        .boxed())
+    }
 }
 
 pub struct GridRasterizationQueryProcessor {
     input: TypedVectorQueryProcessor,
     result_descriptor: RasterResultDescriptor,
-    spatial_resolution: SpatialResolution,
-    grid_size_mode: GridSizeMode,
     tiling_specification: TilingSpecification,
-    origin_coordinate: Coordinate2D,
 }
 
 #[async_trait]
-impl RasterQueryProcessor for GridRasterizationQueryProcessor {
-    type RasterType = f64;
+impl QueryProcessor for GridRasterizationQueryProcessor {
+    type Output = RasterTile2D<f64>;
+    type SpatialBounds = GridBoundingBox2D;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
 
     /// Performs a grid rasterization by first determining the grid resolution to use.
     /// The grid resolution is limited to the query resolution, because a finer granularity
@@ -274,65 +340,45 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
     /// All points within the spatial bounds of the grid are queried and counted in the
     /// grid cells.
     /// Finally, the grid resolution is upsampled (if necessary) to the tile resolution.
-    async fn raster_query<'a>(
+    #[allow(clippy::too_many_lines)]
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
-        if let MultiPoint(points_processor) = &self.input {
-            let grid_resolution = match self.grid_size_mode {
-                GridSizeMode::Fixed => SpatialResolution {
-                    x: f64::max(self.spatial_resolution.x, query.spatial_resolution.x),
-                    y: f64::max(self.spatial_resolution.y, query.spatial_resolution.y),
-                },
-                GridSizeMode::Relative => SpatialResolution {
-                    x: f64::max(
-                        self.spatial_resolution.x * query.spatial_resolution.x,
-                        query.spatial_resolution.x,
-                    ),
-                    y: f64::max(
-                        self.spatial_resolution.y * query.spatial_resolution.y,
-                        query.spatial_resolution.y,
-                    ),
-                },
-            };
+    ) -> util::Result<BoxStream<'a, util::Result<Self::Output>>> {
+        let spatial_grid_desc = self
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification());
 
-            let tiling_strategy = self
-                .tiling_specification
-                .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
-            let tile_shape = tiling_strategy.tile_size_in_pixels;
+        let tiling_strategy = spatial_grid_desc.generate_data_tiling_strategy();
+        let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
+        let query_time = query.time_interval();
+
+        if let MultiPoint(points_processor) = &self.input {
+            let query_grid_bounds = query.spatial_bounds();
+            let query_spatial_partition =
+                tiling_geo_transform.grid_to_spatial_bounds(&query_grid_bounds);
 
             let tiles = stream::iter(
-                tiling_strategy.tile_information_iterator(query.spatial_bounds),
+                tiling_strategy.tile_information_iterator_from_pixel_bounds(query.spatial_bounds()),
             )
             .then(move |tile_info| async move {
-                let grid_spatial_bounds = tile_info
-                    .spatial_partition()
-                    .snap_to_grid(self.origin_coordinate, grid_resolution);
+                let tile_spatial_bounds = tile_info.spatial_partition();
 
-                let grid_size_x =
-                    f64::ceil(grid_spatial_bounds.size_x() / grid_resolution.x) as usize;
-                let grid_size_y =
-                    f64::ceil(grid_spatial_bounds.size_y() / grid_resolution.y) as usize;
+                let grid_size_x = tile_info.tile_size_in_pixels().axis_size_x();
 
-                let vector_query = VectorQueryRectangle {
-                    spatial_bounds: grid_spatial_bounds.as_bbox(),
-                    time_interval: query.time_interval,
-                    spatial_resolution: grid_resolution,
-                    attributes: ColumnSelection::all(),
-                };
-
-                let grid_geo_transform = GeoTransform::new(
-                    grid_spatial_bounds.upper_left(),
-                    grid_resolution.x,
-                    -grid_resolution.y,
+                let vector_query = VectorQueryRectangle::new(
+                    tile_spatial_bounds.as_bbox(),
+                    query_time,
+                    ColumnSelection::all(), // FIXME: should be configurable
                 );
 
                 let mut chunks = points_processor.query(vector_query, ctx).await?;
 
                 let mut cache_hint = CacheHint::max_duration();
 
-                let mut grid_data = vec![0.; grid_size_x * grid_size_y];
+                let mut grid_data =
+                    GridWithFlexibleBoundType::new_filled(tile_info.global_pixel_bounds(), 0.);
                 while let Some(chunk) = chunks.next().await {
                     let chunk = chunk?;
 
@@ -340,11 +386,16 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
 
                     grid_data = spawn_blocking(move || {
                         for &coord in chunk.coordinates() {
-                            if !grid_spatial_bounds.contains_coordinate(&coord) {
+                            if !tile_spatial_bounds.contains_coordinate(&coord)
+                                || !query_spatial_partition.contains_coordinate(&coord)
+                            // TODO: old code checks if the pixel center is in the query bounds.
+                            {
                                 continue;
                             }
-                            let [y, x] = grid_geo_transform.coordinate_to_grid_idx_2d(coord).0;
-                            grid_data[x as usize + y as usize * grid_size_x] += 1.;
+                            let GridIdx([y, x]) = tiling_geo_transform
+                                .coordinate_to_grid_idx_2d(coord)
+                                - tile_info.global_upper_left_pixel_idx();
+                            grid_data.data[x as usize + y as usize * grid_size_x] += 1.;
                         }
                         grid_data
                     })
@@ -352,34 +403,10 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
                     .expect("Should only forward panics from spawned task");
                 }
 
-                let tile_data = spawn_blocking(move || {
-                    let mut tile_data = Vec::with_capacity(tile_shape.number_of_elements());
-                    for tile_y in 0..tile_shape.axis_size_y() as isize {
-                        for tile_x in 0..tile_shape.axis_size_x() as isize {
-                            let pixel_coordinate = tile_info
-                                .tile_geo_transform()
-                                .grid_idx_to_pixel_center_coordinate_2d([tile_y, tile_x].into());
-                            if query.spatial_bounds.contains_coordinate(&pixel_coordinate) {
-                                let [grid_y, grid_x] = grid_geo_transform
-                                    .coordinate_to_grid_idx_2d(pixel_coordinate)
-                                    .0;
-                                tile_data.push(
-                                    grid_data[grid_x as usize + grid_y as usize * grid_size_x],
-                                );
-                            } else {
-                                tile_data.push(0.);
-                            }
-                        }
-                    }
-                    tile_data
-                })
-                .await
-                .expect("Should only forward panics from spawned task");
-                let tile_grid = Grid2D::new(tile_shape, tile_data)
-                    .expect("Data vector length should match the number of pixels in the tile");
+                let tile_grid = grid_data.unbounded();
 
                 Ok(RasterTile2D::new_with_tile_info(
-                    query.time_interval,
+                    query_time,
                     tile_info,
                     0,
                     GridOrEmpty::Grid(tile_grid.into()),
@@ -388,12 +415,37 @@ impl RasterQueryProcessor for GridRasterizationQueryProcessor {
             });
             Ok(tiles.boxed())
         } else {
-            Ok(generate_zeroed_tiles(self.tiling_specification, &query))
+            Ok(generate_zeroed_tiles(
+                tiling_geo_transform,
+                self.tiling_specification,
+                &query,
+            ))
         }
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl RasterQueryProcessor for GridRasterizationQueryProcessor {
+    type RasterType = f64;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> crate::util::Result<
+        futures::stream::BoxStream<
+            'a,
+            crate::util::Result<geoengine_datatypes::primitives::TimeInterval>,
+        >,
+    > {
+        warn!(
+            "Time query called on Rasterization operator. This operator does not comply with the time semantics and needs to be fixed."
+        );
+        Ok(stream::iter(vec![Ok(query.time())]).boxed())
     }
 }
 
@@ -406,8 +458,11 @@ pub struct DensityRasterizationQueryProcessor {
 }
 
 #[async_trait]
-impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
-    type RasterType = f64;
+impl QueryProcessor for DensityRasterizationQueryProcessor {
+    type Output = RasterTile2D<f64>;
+    type SpatialBounds = GridBoundingBox2D;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
 
     /// Performs a gaussian density rasterization.
     /// For each tile, the spatial bounds are extended by `radius` in x and y direction.
@@ -415,47 +470,48 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
     /// its surrounding tile pixels (up to `radius` distance) is measured and input into the
     /// gaussian density function with the configured standard deviation. The density values
     /// for each pixel are then summed to result in the tile pixel grid.
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
-    ) -> util::Result<BoxStream<'a, util::Result<RasterTile2D<Self::RasterType>>>> {
+    ) -> util::Result<BoxStream<'a, util::Result<Self::Output>>> {
+        let spatial_grid_desc = self
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification());
+
+        let tiling_strategy = spatial_grid_desc.generate_data_tiling_strategy();
+        let tiling_geo_transform = spatial_grid_desc.tiling_geo_transform();
+        let query_time = query.time_interval();
+
         if let MultiPoint(points_processor) = &self.input {
-            let tiling_strategy = self
-                .tiling_specification
-                .strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
-
-            let tile_size_x = tiling_strategy.tile_size_in_pixels.axis_size_x();
-            let tile_size_y = tiling_strategy.tile_size_in_pixels.axis_size_y();
-
             // Use rounding factor calculated from query resolution to extend in full pixel units
             let rounding_factor = f64::max(
-                1. / query.spatial_resolution.x,
-                1. / query.spatial_resolution.y,
+                1. / tiling_geo_transform.x_pixel_size(),
+                1. / tiling_geo_transform.y_pixel_size(),
             );
             let radius = (self.radius * rounding_factor).ceil() / rounding_factor;
 
+            let query_grid_bounds = query.spatial_bounds();
+            let query_spatial_partition =
+                tiling_geo_transform.grid_to_spatial_bounds(&query_grid_bounds);
+
             let tiles = stream::iter(
-                tiling_strategy.tile_information_iterator(query.spatial_bounds),
+                tiling_strategy.tile_information_iterator_from_pixel_bounds(query.spatial_bounds()),
             )
             .then(move |tile_info| async move {
-                let tile_bounds = tile_info.spatial_partition();
+                let tile_spatial_bounds = tile_info.spatial_partition();
 
-                let vector_query = VectorQueryRectangle {
-                    spatial_bounds: extended_bounding_box_from_spatial_partition(
-                        tile_bounds,
-                        radius,
-                    ),
-                    time_interval: query.time_interval,
-                    spatial_resolution: query.spatial_resolution,
-                    attributes: ColumnSelection::all(),
-                };
+                let vector_query = VectorQueryRectangle::new(
+                    extended_bounding_box_from_spatial_partition(tile_spatial_bounds, radius),
+                    query_time,
+                    ColumnSelection::all(), // FIXME: should be configurable
+                );
 
                 let tile_geo_transform = tile_info.tile_geo_transform();
 
                 let mut chunks = points_processor.query(vector_query, ctx).await?;
 
-                let mut tile_data = vec![0.; tile_size_x * tile_size_y];
+                let mut tile_data = Grid2D::new_filled(tiling_strategy.tile_size_in_pixels, 0.0);
 
                 let mut cache_hint = CacheHint::max_duration();
 
@@ -467,24 +523,27 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                     let stddev = self.stddev;
                     tile_data =
                         spawn_blocking_with_thread_pool(ctx.thread_pool().clone(), move || {
-                            tile_data.par_iter_mut().enumerate().for_each(
-                                |(linear_index, pixel)| {
-                                    let pixel_coordinate = tile_geo_transform
-                                        .grid_idx_to_pixel_center_coordinate_2d(
-                                            tile_geo_transform
-                                                .spatial_to_grid_bounds(&tile_bounds)
-                                                .grid_idx_unchecked(linear_index),
-                                        );
+                            tile_data.update_indexed_elements_parallel(|pixel_idx, pixel| {
+                                let pixel_coordinate = tile_geo_transform
+                                    .grid_idx_to_pixel_center_coordinate_2d(pixel_idx);
 
-                                    for coord in chunk.coordinates() {
-                                        let distance = coord.euclidean_distance(&pixel_coordinate);
+                                if !query_spatial_partition.contains_coordinate(&pixel_coordinate) {
+                                    // TODO: this is propably wrong to do since it produces different tiles depending on the query bounds
+                                    return pixel;
+                                }
 
-                                        if distance <= radius {
-                                            *pixel += gaussian(distance, stddev);
-                                        }
+                                let mut pixel_tmp = pixel;
+
+                                for coord in chunk.coordinates() {
+                                    let distance = coord.euclidean_distance(&pixel_coordinate);
+
+                                    if distance <= radius {
+                                        pixel_tmp += gaussian(distance, stddev);
                                     }
-                                },
-                            );
+                                }
+
+                                pixel_tmp
+                            });
 
                             tile_data
                         })
@@ -492,43 +551,63 @@ impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
                 }
 
                 Ok(RasterTile2D::new_with_tile_info(
-                    query.time_interval,
+                    query_time, // FIXME this breaks the semantics we usually require
                     tile_info,
                     0,
-                    GridOrEmpty::Grid(
-                        Grid2D::new(tiling_strategy.tile_size_in_pixels, tile_data)
-                            .expect(
-                                "Data vector length should match the number of pixels in the tile",
-                            )
-                            .into(),
-                    ),
+                    tile_data.into(),
                     cache_hint,
                 ))
             });
 
             Ok(tiles.boxed())
         } else {
-            Ok(generate_zeroed_tiles(self.tiling_specification, &query))
+            Ok(generate_zeroed_tiles(
+                tiling_geo_transform,
+                self.tiling_specification,
+                &query,
+            ))
         }
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &RasterResultDescriptor {
         &self.result_descriptor
     }
 }
 
+#[async_trait]
+impl RasterQueryProcessor for DensityRasterizationQueryProcessor {
+    type RasterType = f64;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        _ctx: &'a dyn crate::engine::QueryContext,
+    ) -> crate::util::Result<
+        futures::stream::BoxStream<
+            'a,
+            crate::util::Result<geoengine_datatypes::primitives::TimeInterval>,
+        >,
+    > {
+        warn!(
+            "Time query called on Rasterization operator. This operator does not comply with the time semantics and needs to be fixed."
+        );
+        Ok(stream::iter(vec![Ok(query.time())]).boxed())
+    }
+}
+
 fn generate_zeroed_tiles<'a>(
+    tiling_geo_transform: GeoTransform,
     tiling_specification: TilingSpecification,
     query: &RasterQueryRectangle,
 ) -> BoxStream<'a, util::Result<RasterTile2D<f64>>> {
-    let tiling_strategy =
-        tiling_specification.strategy(query.spatial_resolution.x, -query.spatial_resolution.y);
-    let tile_shape = tiling_strategy.tile_size_in_pixels;
-    let time_interval = query.time_interval;
+    let tile_shape = tiling_specification.tile_size_in_pixels;
+    let time_interval = query.time_interval();
+
+    let tiling_strategy = TilingStrategy::new(tile_shape, tiling_geo_transform);
 
     stream::iter(
         tiling_strategy
-            .tile_information_iterator(query.spatial_bounds)
+            .tile_information_iterator_from_pixel_bounds(query.spatial_bounds())
             .map(move |tile_info| {
                 let tile_data = vec![0.; tile_shape.number_of_elements()];
                 let tile_grid = Grid2D::new(tile_shape, tile_data)
@@ -552,28 +631,12 @@ fn extended_bounding_box_from_spatial_partition(
 ) -> BoundingBox2D {
     BoundingBox2D::new_unchecked(
         Coordinate2D::new(
-            spatial_partition
-                .lower_left()
-                .x
-                .sub_checked(extent)
-                .unwrap_or(f64::MIN),
-            spatial_partition
-                .lower_left()
-                .y
-                .sub_checked(extent)
-                .unwrap_or(f64::MIN),
+            spatial_partition.lower_left().x - extent,
+            spatial_partition.lower_left().y - extent,
         ),
         Coordinate2D::new(
-            spatial_partition
-                .upper_right()
-                .x
-                .add_checked(extent)
-                .unwrap_or(f64::MAX),
-            spatial_partition
-                .upper_right()
-                .y
-                .add_checked(extent)
-                .unwrap_or(f64::MAX),
+            spatial_partition.upper_right().x + extent,
+            spatial_partition.upper_right().y + extent,
         ),
     )
 }
@@ -598,27 +661,27 @@ mod tests {
         RasterOperator, SingleVectorSource, VectorOperator, WorkflowOperatorPath,
     };
     use crate::mock::{MockPointSource, MockPointSourceParams};
-    use crate::processing::rasterization::GridSizeMode::{Fixed, Relative};
     use crate::processing::rasterization::{
-        DensityParams, GridOrDensity, GridParams, Rasterization, gaussian,
+        DensityParams, Rasterization, RasterizationParams, gaussian,
     };
     use futures::StreamExt;
     use geoengine_datatypes::primitives::{
-        BandSelection, Coordinate2D, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        BandSelection, BoundingBox2D, Coordinate2D, RasterQueryRectangle, SpatialResolution,
     };
-    use geoengine_datatypes::raster::TilingSpecification;
+    use geoengine_datatypes::raster::{GridBoundingBox2D, TilingSpecification};
     use geoengine_datatypes::util::test::TestDefault;
 
     async fn get_results(
         rasterization: Box<dyn InitializedRasterOperator>,
         query: RasterQueryRectangle,
+        query_ctx: &MockQueryContext,
     ) -> Vec<Vec<f64>> {
         rasterization
             .query_processor()
             .unwrap()
             .get_f64()
             .unwrap()
-            .query(query, &MockQueryContext::test_default())
+            .query(query, query_ctx)
             .await
             .unwrap()
             .map(|res| {
@@ -634,25 +697,31 @@ mod tests {
 
     #[tokio::test]
     async fn fixed_grid_basic() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new([0., 0.].into(), [2, 2].into()),
-        );
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
         let rasterization = Rasterization {
-            params: GridOrDensity::Grid(GridParams {
+            params: RasterizationParams {
                 spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
                 origin_coordinate: [0., 0.].into(),
-                grid_size_mode: Fixed,
-            }),
+                density_params: None,
+            },
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![
                             (-1., 1.).into(),
                             (1., 1.).into(),
                             (-1., -1.).into(),
                             (1., -1.).into(),
                         ],
-                    },
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., -2.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
                 }
                 .boxed(),
             },
@@ -662,14 +731,18 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, -2], [1, 1]).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
 
-        let res = get_results(rasterization, query).await;
+        let res = get_results(
+            rasterization,
+            query,
+            &execution_context.mock_query_context(TestDefault::test_default()),
+        )
+        .await;
 
         assert_eq!(
             res,
@@ -684,25 +757,31 @@ mod tests {
 
     #[tokio::test]
     async fn fixed_grid_with_shift() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new([0., 0.].into(), [2, 2].into()),
-        );
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
         let rasterization = Rasterization {
-            params: GridOrDensity::Grid(GridParams {
+            params: RasterizationParams {
                 spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                origin_coordinate: [0.5, -0.5].into(),
-                grid_size_mode: Fixed,
-            }),
+                origin_coordinate: [0.0, 0.0].into(),
+                density_params: None,
+            },
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![
                             (-1., 1.).into(),
                             (1., 1.).into(),
                             (-1., -1.).into(),
                             (1., -1.).into(),
                         ],
-                    },
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., -2.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
                 }
                 .boxed(),
             },
@@ -712,243 +791,55 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., -2.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, 1, -2, 1).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
 
-        let res = get_results(rasterization, query).await;
+        let res = get_results(
+            rasterization,
+            query,
+            &execution_context.mock_query_context(TestDefault::test_default()),
+        )
+        .await;
 
         assert_eq!(
             res,
             vec![
-                vec![1., 0., 0., 0.],
-                vec![1., 0., 0., 0.],
-                vec![1., 0., 0., 0.],
-                vec![1., 0., 0., 0.],
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn fixed_grid_with_upsampling() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new([0., 0.].into(), [3, 3].into()),
-        );
-        let rasterization = Rasterization {
-            params: GridOrDensity::Grid(GridParams {
-                spatial_resolution: SpatialResolution { x: 2.0, y: 2.0 },
-                origin_coordinate: [0., 0.].into(),
-                grid_size_mode: Fixed,
-            }),
-            sources: SingleVectorSource {
-                vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![
-                            (-1., 1.).into(),
-                            (1., 1.).into(),
-                            (-1., -1.).into(),
-                            (1., -1.).into(),
-                        ],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-        .await
-        .unwrap();
-
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-3., 3.].into(), [3., -3.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-            attributes: BandSelection::first(),
-        };
-
-        let res = get_results(rasterization, query).await;
-
-        assert_eq!(
-            res,
-            vec![
-                vec![0., 0., 0., 0., 1., 1., 0., 1., 1.],
-                vec![0., 0., 0., 1., 1., 0., 1., 1., 0.],
-                vec![0., 1., 1., 0., 1., 1., 0., 0., 0.],
-                vec![1., 1., 0., 1., 1., 0., 0., 0., 0.],
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn relative_grid_basic() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new([0., 0.].into(), [3, 3].into()),
-        );
-        let rasterization = Rasterization {
-            params: GridOrDensity::Grid(GridParams {
-                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                origin_coordinate: [0., 0.].into(),
-                grid_size_mode: Relative,
-            }),
-            sources: SingleVectorSource {
-                vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![
-                            (-1., 1.).into(),
-                            (1., 1.).into(),
-                            (-1., -1.).into(),
-                            (1., -1.).into(),
-                        ],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-        .await
-        .unwrap();
-
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-1.5, 1.5].into(), [1.5, -1.5].into())
-                .unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
-            attributes: BandSelection::first(),
-        };
-
-        let res = get_results(rasterization, query).await;
-
-        assert_eq!(
-            res,
-            vec![
-                vec![0., 0., 0., 0., 1., 0., 0., 0., 0.],
-                vec![0., 0., 0., 0., 0., 1., 0., 0., 0.],
-                vec![0., 0., 0., 0., 0., 0., 0., 1., 0.],
-                vec![0., 0., 0., 0., 0., 0., 0., 0., 1.],
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn relative_grid_with_shift() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new([0., 0.].into(), [3, 3].into()),
-        );
-        let rasterization = Rasterization {
-            params: GridOrDensity::Grid(GridParams {
-                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-                origin_coordinate: [0.25, -0.25].into(),
-                grid_size_mode: Relative,
-            }),
-            sources: SingleVectorSource {
-                vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![
-                            (-1., 1.).into(),
-                            (1., 1.).into(),
-                            (-1., -1.).into(),
-                            (1., -1.).into(),
-                        ],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-        .await
-        .unwrap();
-
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-1.5, 1.5].into(), [1.5, -1.5].into())
-                .unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
-            attributes: BandSelection::first(),
-        };
-
-        let res = get_results(rasterization, query).await;
-
-        assert_eq!(
-            res,
-            vec![
-                vec![1., 0., 0., 0., 0., 0., 0., 0., 0.],
-                vec![0., 1., 0., 0., 0., 0., 0., 0., 0.],
-                vec![0., 0., 0., 1., 0., 0., 0., 0., 0.],
-                vec![0., 0., 0., 0., 1., 0., 0., 0., 0.],
-            ]
-        );
-    }
-
-    #[tokio::test]
-    async fn relative_grid_with_upsampling() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new([0., 0.].into(), [2, 2].into()),
-        );
-        let rasterization = Rasterization {
-            params: GridOrDensity::Grid(GridParams {
-                spatial_resolution: SpatialResolution { x: 2.0, y: 2.0 },
-                origin_coordinate: [0., 0.].into(),
-                grid_size_mode: Relative,
-            }),
-            sources: SingleVectorSource {
-                vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![
-                            (-1., 1.).into(),
-                            (1., 1.).into(),
-                            (-1., -1.).into(),
-                            (1., -1.).into(),
-                        ],
-                    },
-                }
-                .boxed(),
-            },
-        }
-        .boxed()
-        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
-        .await
-        .unwrap();
-
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-1., 1.].into(), [1., -1.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 0.5, y: 0.5 },
-            attributes: BandSelection::first(),
-        };
-
-        let res = get_results(rasterization, query).await;
-
-        assert_eq!(
-            res,
-            vec![
-                vec![1., 1., 1., 1.],
-                vec![0., 0., 0., 0.],
-                vec![0., 0., 0., 0.],
-                vec![0., 0., 0., 0.]
+                vec![0., 0., 0., 1.],
+                vec![0., 0., 0., 1.],
+                vec![0., 0., 0., 1.],
+                vec![0., 0., 0., 1.],
             ]
         );
     }
 
     #[tokio::test]
     async fn density_basic() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new([0., 0.].into(), [2, 2].into()),
-        );
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
         let rasterization = Rasterization {
-            params: GridOrDensity::Density(DensityParams {
-                cutoff: gaussian(0.99, 1.0) / gaussian(0., 1.0),
-                stddev: 1.0,
-            }),
+            params: RasterizationParams {
+                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+                origin_coordinate: [0.0, 0.0].into(),
+                density_params: Some(DensityParams {
+                    cutoff: gaussian(0.99, 1.0) / gaussian(0., 1.0),
+                    stddev: 1.0,
+                }),
+            },
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![(-1., 1.).into(), (1., 1.).into()],
-                    },
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![(-1., 1.).into(), (1., 1.).into()],
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., -2.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
                 }
                 .boxed(),
             },
@@ -958,14 +849,18 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, -1, -2, 1).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
 
-        let res = get_results(rasterization, query).await;
+        let res = get_results(
+            rasterization,
+            query,
+            &execution_context.mock_query_context_test_default(),
+        )
+        .await;
 
         assert_eq!(
             res,
@@ -1016,19 +911,29 @@ mod tests {
 
     #[tokio::test]
     async fn density_radius_overlap() {
-        let execution_context = MockExecutionContext::new_with_tiling_spec(
-            TilingSpecification::new([0., 0.].into(), [2, 2].into()),
-        );
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([2, 2].into()));
         let rasterization = Rasterization {
-            params: GridOrDensity::Density(DensityParams {
-                cutoff: gaussian(1.99, 1.0) / gaussian(0., 1.0),
-                stddev: 1.0,
-            }),
+            params: RasterizationParams {
+                spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
+                origin_coordinate: [0.0, 0.0].into(),
+                density_params: Some(DensityParams {
+                    cutoff: gaussian(1.99, 1.0) / gaussian(0., 1.0),
+                    stddev: 1.0,
+                }),
+            },
             sources: SingleVectorSource {
                 vector: MockPointSource {
-                    params: MockPointSourceParams {
-                        points: vec![(-1., 1.).into(), (1., 1.).into()],
-                    },
+                    params: MockPointSourceParams::new_with_bounds(
+                        vec![(-1., 1.).into(), (1., 1.).into()],
+                        crate::mock::SpatialBoundsDerive::Bounds(
+                            BoundingBox2D::new(
+                                Coordinate2D::new(-2., -2.),
+                                Coordinate2D::new(2., 2.),
+                            )
+                            .unwrap(),
+                        ),
+                    ),
                 }
                 .boxed(),
             },
@@ -1038,14 +943,18 @@ mod tests {
         .await
         .unwrap();
 
-        let query = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new([-2., 2.].into(), [2., 0.].into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution { x: 1.0, y: 1.0 },
-            attributes: BandSelection::first(),
-        };
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, -1, -2, 1).unwrap(),
+            Default::default(),
+            BandSelection::first(),
+        );
 
-        let res = get_results(rasterization, query).await;
+        let res = get_results(
+            rasterization,
+            query,
+            &execution_context.mock_query_context_test_default(),
+        )
+        .await;
 
         assert_eq!(
             res,

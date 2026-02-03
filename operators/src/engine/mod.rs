@@ -7,6 +7,11 @@ pub use execution_context::{
     ExecutionContext, MetaData, MetaDataProvider, MockExecutionContext, StaticMetaData,
     StatisticsWrappingMockExecutionContext,
 };
+pub use initialized_sources::{
+    InitializedMultiRasterOrVectorOperator, InitializedMultiRasterOrVectorSource,
+    InitializedSingleRasterOrVectorOperator, InitializedSingleRasterOrVectorSource,
+    InitializedSingleRasterSource, InitializedSingleVectorSource, InitializedSources,
+};
 pub use operator::{
     CanonicOperatorName, InitializedPlotOperator, InitializedRasterOperator,
     InitializedVectorOperator, OperatorData, OperatorName, PlotOperator, RasterOperator,
@@ -27,18 +32,11 @@ pub use query_processor::{
 };
 pub use result_descriptor::{
     PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors, RasterResultDescriptor,
-    ResultDescriptor, TypedResultDescriptor, VectorColumnInfo, VectorResultDescriptor,
+    ResultDescriptor, SpatialGridDescriptor, SpatialGridDescriptorState, TimeDescriptor,
+    TypedResultDescriptor, VectorColumnInfo, VectorResultDescriptor,
 };
 use tracing::Span;
-
 pub use workflow_path::WorkflowOperatorPath;
-
-pub use initialized_sources::{
-    InitializedMultiRasterOrVectorOperator, InitializedMultiRasterOrVectorSource,
-    InitializedSingleRasterOrVectorOperator, InitializedSingleRasterOrVectorSource,
-    InitializedSingleRasterSource, InitializedSingleVectorSource, InitializedSources,
-};
-
 mod clonable_operator;
 mod execution_context;
 mod initialized_sources;

@@ -1,9 +1,9 @@
 use crate::{
     engine::{
-        CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-        Operator, OperatorName, QueryContext, RasterBandDescriptor, RasterOperator,
-        RasterQueryProcessor, RasterResultDescriptor, SingleRasterSource,
-        TypedRasterQueryProcessor, WorkflowOperatorPath,
+        BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+        InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor,
+        RasterBandDescriptor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
+        SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
     },
     error,
     machine_learning::{
@@ -13,18 +13,21 @@ use crate::{
             check_model_input_features, check_model_shape, load_onnx_model_from_loading_info,
         },
     },
+    optimization::OptimizationError,
     util::Result,
 };
 use async_trait::async_trait;
 use float_cmp::approx_eq;
 use futures::StreamExt;
 use futures::stream::BoxStream;
-use geoengine_datatypes::machine_learning::MlModelName;
-use geoengine_datatypes::primitives::{Measurement, RasterQueryRectangle};
+use geoengine_datatypes::primitives::{
+    BandSelection, Measurement, RasterQueryRectangle, SpatialResolution, TimeInterval,
+};
 use geoengine_datatypes::raster::{
     EmptyGrid2D, Grid2D, GridIdx2D, GridIndexAccess, GridShape2D, GridShapeAccess, GridSize,
     MaskedGrid, Pixel, RasterTile2D, UpdateIndexedElements,
 };
+use geoengine_datatypes::{machine_learning::MlModelName, raster::GridBoundingBox2D};
 use ndarray::{Array2, Array4};
 use ort::{
     tensor::{IntoTensorElementType, PrimitiveTensorElementType},
@@ -99,8 +102,7 @@ impl RasterOperator for Onnx {
             data_type: model_loading_info.metadata.output_type,
             spatial_reference: in_descriptor.spatial_reference,
             time: in_descriptor.time,
-            bbox: in_descriptor.bbox,
-            resolution: in_descriptor.resolution,
+            spatial_grid: in_descriptor.spatial_grid,
             bands: vec![RasterBandDescriptor::new(
                 "prediction".to_string(), // TODO: parameter of the operator?
                 Measurement::Unitless,    // TODO: get output measurement from model metadata
@@ -111,6 +113,7 @@ impl RasterOperator for Onnx {
         Ok(Box::new(InitializedOnnx {
             name,
             path,
+            model_name: self.params.model,
             result_descriptor: out_descriptor,
             source,
             model_loading_info,
@@ -124,6 +127,7 @@ impl RasterOperator for Onnx {
 pub struct InitializedOnnx {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    model_name: MlModelName,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
     model_loading_info: MlModelLoadingInfo,
@@ -165,10 +169,25 @@ impl InitializedRasterOperator for InitializedOnnx {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(Onnx {
+            params: OnnxParams {
+                model: self.model_name.clone(),
+            },
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 pub(crate) struct OnnxProcessor<TIn, TOut> {
-    source: Box<dyn RasterQueryProcessor<RasterType = TIn>>, // as most ml algorithms work on f32 we use this as input type
+    source: BoxRasterQueryProcessor<TIn>, // as most ml algorithms work on f32 we use this as input type
     result_descriptor: RasterResultDescriptor,
     model_loading_info: MlModelLoadingInfo,
     phantom: std::marker::PhantomData<TOut>,
@@ -177,7 +196,7 @@ pub(crate) struct OnnxProcessor<TIn, TOut> {
 
 impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
     pub fn new(
-        source: Box<dyn RasterQueryProcessor<RasterType = TIn>>,
+        source: BoxRasterQueryProcessor<TIn>,
         result_descriptor: RasterResultDescriptor,
         model_loading_info: MlModelLoadingInfo,
         tile_shape: GridShape2D,
@@ -193,15 +212,18 @@ impl<TIn, TOut> OnnxProcessor<TIn, TOut> {
 }
 
 #[async_trait]
-impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
+impl<TIn, TOut> QueryProcessor for OnnxProcessor<TIn, TOut>
 where
     TIn: Pixel + NoDataValueIn + IntoTensorElementType + PrimitiveTensorElementType,
     TOut: Pixel + NoDataValueOut + IntoTensorElementType + PrimitiveTensorElementType,
 {
-    type RasterType = TOut;
+    type Output = RasterTile2D<TOut>;
+    type SpatialBounds = GridBoundingBox2D;
+    type Selection = BandSelection;
+    type ResultDescription = RasterResultDescriptor;
 
     #[allow(clippy::too_many_lines)]
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -223,8 +245,8 @@ where
             .map(|v| TOut::from_(v))
             .or(TOut::NO_DATA_OUT_FALLBACK); // Int types return Some or None while float types fallback to Some(NaN)
 
-        let mut source_query = query.clone();
-        source_query.attributes = (0..num_bands as u32).collect::<Vec<u32>>().try_into()?;
+        let source_query =
+            query.select_attributes((0..num_bands as u32).collect::<Vec<u32>>().try_into()?);
 
         // TODO: re-use session accross queries?
         // TODO: use another method: https://github.com/pykeio/ort/issues/402#issuecomment-2949993914
@@ -397,8 +419,25 @@ where
         Ok(stream.boxed())
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl<TIn, TOut> RasterQueryProcessor for OnnxProcessor<TIn, TOut>
+where
+    TIn: Pixel + NoDataValueIn + IntoTensorElementType + PrimitiveTensorElementType,
+    TOut: Pixel + NoDataValueOut + IntoTensorElementType + PrimitiveTensorElementType,
+{
+    type RasterType = TOut;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
+        self.source.time_query(query, ctx).await
     }
 }
 
@@ -473,27 +512,40 @@ impl_no_data_value_none!(i8, u8, i16, u16, i32, u32, i64, u64);
 
 #[cfg(test)]
 mod tests {
-    use super::*;
+    use crate::engine::TimeDescriptor;
+    use crate::machine_learning::MlModelInputNoDataHandling;
+    use crate::machine_learning::MlModelLoadingInfo;
+    use crate::machine_learning::MlModelMetadata;
+    use crate::machine_learning::MlModelOutputNoDataHandling;
+    use crate::machine_learning::onnx::Onnx;
+    use crate::machine_learning::onnx::OnnxParams;
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors, RasterOperator,
+            RasterResultDescriptor, SingleRasterSource, SpatialGridDescriptor,
+            WorkflowOperatorPath,
         },
-        machine_learning::{MlModelMetadata, MlModelOutputNoDataHandling},
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
+        util::Result,
     };
     use approx::assert_abs_diff_eq;
+    use futures::StreamExt;
+    use geoengine_datatypes::primitives::TimeStep;
+    use geoengine_datatypes::raster::GridBoundingBox2D;
+    use geoengine_datatypes::raster::RasterTile2D;
+    use geoengine_datatypes::raster::SpatialGridDefinition;
+    use geoengine_datatypes::raster::TilesEqualIgnoringCacheHint;
     use geoengine_datatypes::{
-        machine_learning::MlTensorShape3D,
-        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{
-            Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint,
-        },
+        machine_learning::{MlModelName, MlTensorShape3D},
+        primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
+        raster::{Grid, GridOrEmpty, GridShape, RasterDataType, RenameBands},
         spatial_reference::SpatialReference,
         test_data,
         util::test::TestDefault,
     };
     use ndarray::{Array1, Array2, arr2, array};
+    use ort::value::TensorRef;
 
     #[test]
     fn ort() {
@@ -654,9 +706,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -669,9 +726,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -718,14 +780,13 @@ mod tests {
         };
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 5),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0].try_into().unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            [0].try_into().unwrap(),
+        );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -854,9 +915,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -869,9 +935,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -884,9 +955,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::F32,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        TestDefault::test_default(),
+                        GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -933,14 +1009,13 @@ mod tests {
         };
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 5),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0].try_into().unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            [0].try_into().unwrap(),
+        );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1027,17 +1102,21 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::F32,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                TestDefault::test_default(),
+                GridBoundingBox2D::new_min_max(-512, -1, 0, 1023).unwrap(),
+            )),
+            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::F32,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
@@ -1045,14 +1124,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data2.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::F32,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -1097,17 +1169,13 @@ mod tests {
         };
         exe_ctx.ml_models.insert(model_name, ml_model_loading_info);
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (0., 511.).into(),
-                (1023., 0.).into(),
-            ),
-            time_interval: TimeInterval::new_unchecked(0, 5),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0].try_into().unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-512, -1, 0, 1023).unwrap(),
+            TimeInterval::new_unchecked(0, 5),
+            [0].try_into().unwrap(),
+        );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = onnx
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

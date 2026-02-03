@@ -272,28 +272,38 @@ where
     }
 }
 
-impl<D, T, I> ChangeGridBounds<I> for MaskedGrid<D, T>
+impl<D, T, I, A> ChangeGridBounds<I, A> for MaskedGrid<D, T>
 where
-    I: AsRef<[isize]> + Clone,
-    D: GridBounds<IndexArray = I> + Clone,
-    T: Clone,
-    GridBoundingBox<I>: GridSize,
-    GridIdx<I>: Add<Output = GridIdx<I>> + From<I> + Clone,
+    D: GridBounds<IndexArray = I> + GridSize<ShapeArray = A>,
+    I: AsRef<[isize]> + Into<GridIdx<I>> + Clone,
+    A: AsRef<[usize]> + Into<GridShape<A>> + Clone,
+    GridBoundingBox<I>: GridSize<ShapeArray = A>,
+    GridShape<A>: GridSize<ShapeArray = A>,
+    GridIdx<I>: Add<Output = GridIdx<I>> + From<I>,
+    T: Copy,
 {
-    type Output = MaskedGrid<GridBoundingBox<I>, T>;
+    type BoundedOutput = MaskedGrid<GridBoundingBox<I>, T>;
+    type UnboundedOutput = MaskedGrid<GridShape<A>, T>;
 
-    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::Output {
+    fn shift_by_offset(self, offset: GridIdx<I>) -> Self::BoundedOutput {
         MaskedGrid {
             inner_grid: self.inner_grid.shift_by_offset(offset.clone()),
             validity_mask: self.validity_mask.shift_by_offset(offset),
         }
     }
 
-    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::Output> {
+    fn set_grid_bounds(self, bounds: GridBoundingBox<I>) -> Result<Self::BoundedOutput> {
         Ok(MaskedGrid {
             inner_grid: self.inner_grid.set_grid_bounds(bounds.clone())?,
             validity_mask: self.validity_mask.set_grid_bounds(bounds)?,
         })
+    }
+
+    fn unbounded(self) -> Self::UnboundedOutput {
+        MaskedGrid {
+            inner_grid: self.inner_grid.unbounded(),
+            validity_mask: self.validity_mask.unbounded(),
+        }
     }
 }
 

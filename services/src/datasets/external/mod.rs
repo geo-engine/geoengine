@@ -11,8 +11,7 @@ mod wildlive;
 
 pub use copernicus_dataspace::CopernicusDataspaceDataProviderDefinition;
 pub use sentinel_s2_l2a_cogs::{
-    GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacBand, StacQueryBuffer,
-    StacZone,
+    GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacQueryBuffer,
 };
 pub use wildlive::{
     WildliveDataConnectorAuth, WildliveDataConnectorDefinition, WildliveDbCache, WildliveError,

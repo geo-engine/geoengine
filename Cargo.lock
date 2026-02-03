@@ -2549,7 +2549,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-datatypes"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -2560,6 +2560,7 @@ dependencies = [
  "criterion",
  "fallible-iterator",
  "float-cmp",
+ "futures",
  "gdal",
  "geo 0.32.0",
  "geojson",
@@ -2584,7 +2585,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-expression"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "geo 0.32.0",
  "geoengine-expression-deps",
@@ -2613,7 +2614,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-macros"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "pretty_assertions",
  "prettyplease",
@@ -2624,7 +2625,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-operators"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "approx",
  "arrow",
@@ -2676,7 +2677,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-services"
-version = "0.8.0"
+version = "0.9.0"
 dependencies = [
  "actix",
  "actix-files",
@@ -2734,6 +2735,7 @@ dependencies = [
  "pwhash",
  "rand 0.9.2",
  "rayon",
+ "regex",
  "reqwest",
  "serde",
  "serde_json",

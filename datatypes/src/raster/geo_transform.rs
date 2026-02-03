@@ -1,10 +1,13 @@
+use super::{GeoTransformAccess, GridBoundingBox2D, GridBounds, GridIdx, GridIdx2D};
 use crate::{
-    primitives::{AxisAlignedRectangle, Coordinate2D, SpatialPartition2D, SpatialResolution},
+    primitives::{
+        AxisAlignedRectangle, BoundingBox2D, Coordinate2D, SpatialPartition2D, SpatialResolution,
+    },
     util::test::TestDefault,
 };
+use float_cmp::{ApproxEq, F64Margin, approx_eq};
+use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Deserializer, Serialize, de};
-
-use super::{GridBoundingBox2D, GridIdx, GridIdx2D};
 
 /// This is a typedef for the `GDAL GeoTransform`. It represents an affine transformation matrix.
 pub type GdalGeoTransform = [f64; 6];
@@ -13,7 +16,7 @@ pub type GdalGeoTransform = [f64; 6];
 /// In Geo Engine x pixel size is always postive and y pixel size is always negative. For raster tiles
 /// the origin is always the upper left corner. In the global grid for the `TilingStrategy` the origin
 /// is always located at (0, 0).
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize)]
+#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSql, FromSql)]
 #[serde(rename_all = "camelCase")]
 pub struct GeoTransform {
     pub origin_coordinate: Coordinate2D,
@@ -34,9 +37,8 @@ impl GeoTransform {
     ///
     #[inline]
     pub fn new(origin_coordinate: Coordinate2D, x_pixel_size: f64, y_pixel_size: f64) -> Self {
-        debug_assert!(x_pixel_size > 0.0);
-        debug_assert!(y_pixel_size < 0.0);
-
+        debug_assert!(x_pixel_size != 0.0);
+        debug_assert!(y_pixel_size != 0.0);
         Self {
             origin_coordinate,
             x_pixel_size,
@@ -60,9 +62,8 @@ impl GeoTransform {
         origin_coordinate_y: f64,
         y_pixel_size: f64,
     ) -> Self {
-        debug_assert!(x_pixel_size > 0.0);
-        debug_assert!(y_pixel_size < 0.0);
-
+        debug_assert!(x_pixel_size != 0.0);
+        debug_assert!(y_pixel_size != 0.0);
         Self {
             origin_coordinate: (origin_coordinate_x, origin_coordinate_y).into(),
             x_pixel_size,
@@ -76,6 +77,10 @@ impl GeoTransform {
 
     pub fn y_pixel_size(&self) -> f64 {
         self.y_pixel_size
+    }
+
+    pub fn y_axis_is_neg(&self) -> bool {
+        self.y_pixel_size < 0.0
     }
 
     /// Transforms a grid coordinate (row, column) ~ (y, x) into a SRS coordinate (x,y)
@@ -114,6 +119,7 @@ impl GeoTransform {
     }
 
     /// Transforms an SRS coordinate (x,y) into a grid coordinate (row, column) ~ (y, x)
+    /// This method selects the grid index with the center nearest to the coordinate.
     ///
     /// # Examples
     ///
@@ -148,6 +154,7 @@ impl GeoTransform {
     }
 
     pub fn spatial_resolution(&self) -> SpatialResolution {
+        // TODO: should honor negative y size
         SpatialResolution {
             x: self.x_pixel_size.abs(),
             y: self.y_pixel_size.abs(),
@@ -156,13 +163,7 @@ impl GeoTransform {
 
     /// compute the index of the upper left pixel that is contained in the `partition`
     pub fn upper_left_pixel_idx(&self, partition: &SpatialPartition2D) -> GridIdx2D {
-        // choose the epsilon relative to the pixel size
-        const EPSILON: f64 = 0.000_001;
-        let epsilon: Coordinate2D =
-            (self.x_pixel_size() * EPSILON, self.y_pixel_size() * EPSILON).into();
-
-        let upper_left_coordinate = partition.upper_left() + epsilon;
-
+        let upper_left_coordinate = partition.upper_left();
         self.coordinate_to_grid_idx_2d(upper_left_coordinate)
     }
 
@@ -190,13 +191,25 @@ impl GeoTransform {
         self.coordinate_to_grid_idx_2d(lower_right)
     }
 
+    /// Transform a `BoundingBox2D` into a `GridBoundingBox2D`.
+    #[inline]
+    pub fn bounding_box_2d_to_intersecting_grid_bounds(
+        &self,
+        bounding_box: &BoundingBox2D,
+    ) -> GridBoundingBox2D {
+        let upper_left = self.coordinate_to_grid_idx_2d(bounding_box.upper_left());
+        let lower_right = self.coordinate_to_grid_idx_2d(bounding_box.lower_right());
+
+        GridBoundingBox2D::new_unchecked(upper_left, lower_right)
+    }
+
     /// Transform a `SpatialPartition2D` into a `GridBoundingBox`
     #[inline]
     pub fn spatial_to_grid_bounds(
         &self,
         spatial_partition: &SpatialPartition2D,
     ) -> GridBoundingBox2D {
-        let GridIdx([ul_y, ul_x]) = self.upper_left_pixel_idx(spatial_partition);
+        let GridIdx([ul_y, ul_x]) = self.coordinate_to_grid_idx_2d(spatial_partition.upper_left());
         let GridIdx([lr_y, lr_x]) = self.lower_right_pixel_idx(spatial_partition); // this is the pixel inside the spatial partition
 
         debug_assert!(ul_x <= lr_x);
@@ -221,6 +234,66 @@ impl GeoTransform {
         }
 
         Ok(unchecked)
+    }
+
+    pub fn grid_to_spatial_bounds<S: GridBounds<IndexArray = [isize; 2]>>(
+        &self,
+        grid_bounds: &S,
+    ) -> SpatialPartition2D {
+        let ul = self.grid_idx_to_pixel_upper_left_coordinate_2d(grid_bounds.min_index());
+        let lr = self.grid_idx_to_pixel_upper_left_coordinate_2d(grid_bounds.max_index() + 1);
+
+        SpatialPartition2D::new_unchecked(ul, lr)
+    }
+
+    pub fn origin_coordinate(&self) -> Coordinate2D {
+        self.origin_coordinate
+    }
+
+    #[must_use]
+    pub fn shift_by_pixel_offset(&self, offset: GridIdx2D) -> Self {
+        GeoTransform {
+            origin_coordinate: self.grid_idx_to_pixel_upper_left_coordinate_2d(offset),
+            x_pixel_size: self.x_pixel_size,
+            y_pixel_size: self.y_pixel_size,
+        }
+    }
+
+    pub fn nearest_pixel_edge(&self, coordinate: Coordinate2D) -> GridIdx2D {
+        self.coordinate_to_grid_idx_2d(
+            coordinate + Coordinate2D::new(self.x_pixel_size * 0.5, self.y_pixel_size * 0.5), // by adding a half pixel, we can find flips between edges
+        )
+    }
+
+    pub fn nearest_pixel_edge_coordinate(&self, coordinate: Coordinate2D) -> Coordinate2D {
+        self.grid_idx_to_pixel_upper_left_coordinate_2d(self.nearest_pixel_edge(coordinate))
+    }
+
+    pub fn distance_to_nearest_pixel_edge(&self, coordinate: Coordinate2D) -> Coordinate2D {
+        let pixel_edge = self.nearest_pixel_edge_coordinate(coordinate);
+        let dist = coordinate - pixel_edge;
+        debug_assert!(dist.x.abs() <= self.x_pixel_size.abs() * 0.5);
+        debug_assert!(dist.y.abs() <= self.y_pixel_size.abs() * 0.5);
+        dist
+    }
+
+    /// `coordinate` is a valid pixel edge if it is approximately equal to the nearest pixel edge, within floating point precision
+    pub fn is_valid_pixel_edge(&self, coordinate: Coordinate2D) -> bool {
+        let edge = self.nearest_pixel_edge(coordinate);
+        let edge_coord = self.grid_idx_to_pixel_upper_left_coordinate_2d(edge);
+        // compare x and y separately to account for difference in magnitude
+
+        approx_eq!(f64, coordinate.x, edge_coord.x) && approx_eq!(f64, coordinate.y, edge_coord.y)
+    }
+
+    pub fn is_compatible_grid(&self, other: GeoTransform) -> bool {
+        self.is_valid_pixel_edge(other.origin_coordinate)
+            && approx_eq!(f64, self.x_pixel_size(), other.x_pixel_size())
+            && approx_eq!(f64, self.y_pixel_size(), other.y_pixel_size())
+    }
+
+    pub fn is_compatible_grid_generic<G: GeoTransformAccess>(&self, g: &G) -> bool {
+        self.is_compatible_grid(g.geo_transform())
     }
 }
 
@@ -253,6 +326,18 @@ impl From<GeoTransform> for GdalGeoTransform {
             0.0, // self.y_rotation,
             geo_transform.y_pixel_size,
         ]
+    }
+}
+
+impl ApproxEq for GeoTransform {
+    type Margin = F64Margin;
+
+    fn approx_eq<M: Into<Self::Margin>>(self, other: Self, margin: M) -> bool {
+        let m: F64Margin = margin.into();
+
+        self.origin_coordinate.approx_eq(other.origin_coordinate, m)
+            && self.x_pixel_size.approx_eq(other.x_pixel_size, m)
+            && self.y_pixel_size.approx_eq(other.y_pixel_size, m)
     }
 }
 
@@ -517,5 +602,61 @@ mod tests {
         let test = GeoTransform::deserialize_with_check(&mut de);
 
         assert!(test.is_err());
+    }
+
+    #[test]
+    fn shift_by_pixel_offset() {
+        let geo_transform = GeoTransform::new_with_coordinate_x_y(0.0, 1.0, 0.0, -1.0);
+        let shifted = geo_transform.shift_by_pixel_offset([1, 1].into());
+        assert_eq!(shifted.origin_coordinate, (1.0, -1.0).into());
+    }
+
+    #[test]
+    fn coordinate_to_nearest_grid_center_idx_2d() {
+        let geo_transform = GeoTransform::new(Coordinate2D::new(0., 0.), 1., -1.);
+
+        let coord = Coordinate2D::new(0.1, -0.1);
+        let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
+        assert_eq!(center_coord_idx, [0, 0].into());
+
+        let coord = Coordinate2D::new(0.5, -0.5);
+        let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
+        assert_eq!(center_coord_idx, [0, 0].into());
+
+        let coord = Coordinate2D::new(0.9, -0.9);
+        let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
+        assert_eq!(center_coord_idx, [0, 0].into());
+
+        let coord = Coordinate2D::new(1.0, -1.0);
+        let center_coord_idx = geo_transform.coordinate_to_grid_idx_2d(coord);
+        assert_eq!(center_coord_idx, [1, 1].into());
+    }
+
+    #[test]
+    fn it_detects_valid_pixel_edge_robustly() {
+        let geo_transform = GeoTransform::new((-180.0, 90.).into(), 0.2, -0.2);
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.4)));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.399_999_999_999_99)));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.4_f64.next_up())));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.4_f64.next_down())));
+        assert!(!geo_transform.is_valid_pixel_edge(Coordinate2D::new(-45.0, 22.41)));
+
+        let geo_transform = GeoTransform::new(
+            (10_000_000_000_000_000_f64, -10_000_000_000_000_000_f64).into(),
+            10_000_000_000_000_000_f64,
+            -10_000_000_000_000_000_f64,
+        );
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(
+            10_000_000_000_000_000_f64,
+            -10_000_000_000_000_000_f64
+        )));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(
+            10_000_000_000_000_001_f64,
+            -10_000_000_000_000_000_f64
+        )));
+        assert!(geo_transform.is_valid_pixel_edge(Coordinate2D::new(
+            10_000_000_000_000_000_f64.next_up(),
+            -10_000_000_000_000_000_f64.next_up()
+        )));
     }
 }

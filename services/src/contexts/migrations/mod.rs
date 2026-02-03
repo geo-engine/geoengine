@@ -1,15 +1,16 @@
+use crate::contexts::migrations::migration_0026_gdal_tiles::Migration0026GdalTiles;
 pub use crate::contexts::migrations::{
     current_schema::CurrentSchemaMigration,
     migration_0016_merge_providers::Migration0016MergeProviders,
     migration_0017_ml_model_tensor_shape::Migration0017MlModelTensorShape,
     migration_0018_wildlive_connector::Migration0018WildliveConnector,
+    migration_0019_ml_model_no_data::Migration0019MlModelNoData,
     migration_0020_provider_permissions::Migration0020ProviderPermissions,
     migration_0021_default_permissions_for_existing_providers::Migration0021DefaultPermissionsForExistingProviders,
     migration_0022_permission_queries::Migration0022PermissionQueries,
-};
-use crate::contexts::migrations::{
-    migration_0019_ml_model_no_data::Migration0019MlModelNoData,
     migration_0023_wildlive_oidc::Migration0023WildliveOidc,
+    migration_0024_raster_result_desc::Migration0024RasterResultDesc,
+    migration_0025_time_descriptor::Migration0025TimeDescriptor,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -25,6 +26,9 @@ mod migration_0020_provider_permissions;
 mod migration_0021_default_permissions_for_existing_providers;
 mod migration_0022_permission_queries;
 mod migration_0023_wildlive_oidc;
+mod migration_0024_raster_result_desc;
+mod migration_0025_time_descriptor;
+mod migration_0026_gdal_tiles;
 
 #[cfg(test)]
 mod schema_info;
@@ -54,6 +58,9 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0021DefaultPermissionsForExistingProviders),
         Box::new(Migration0022PermissionQueries),
         Box::new(Migration0023WildliveOidc),
+        Box::new(Migration0024RasterResultDesc),
+        Box::new(Migration0025TimeDescriptor),
+        Box::new(Migration0026GdalTiles),
     ]
 }
 

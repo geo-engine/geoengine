@@ -46,16 +46,29 @@
       "dataType": "U8",
       "spatialReference": "EPSG:4326",
       "time": {
-        "start": "-262143-01-01T00:00:00+00:00",
-        "end": "+262142-12-31T23:59:59.999+00:00"
+        "bounds": {
+          "start": "-262143-01-01T00:00:00+00:00",
+          "end": "+262142-12-31T23:59:59.999+00:00"
+        },
+        "dimension": "irregular"
+
       },
-      "bbox": {
-        "upperLeftCoordinate": [-180, 90.0],
-        "lowerRightCoordinate": [180.0, -90.0]
-      },
-      "resolution": {
-        "x": 0.09999999999999,
-        "y": 0.09999999999999
+      "spatialGrid": {
+        "state": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": -180.0,
+              "y": 90.0
+            },
+            "xPixelSize":0.1,
+            "yPixelSize":-0.1
+          },
+          "gridBounds": {
+            "min": [0, 0],
+            "max": [1799, 3599]
+          }
+        }
       },
       "bands": [
         {

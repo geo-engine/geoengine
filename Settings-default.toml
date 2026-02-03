@@ -34,8 +34,6 @@ password = "geoengine"
 clear_database_on_start = false
 
 [raster.tiling_specification]
-origin_coordinate_x = 0.0
-origin_coordinate_y = 0.0
 tile_shape_pixels_x = 512
 tile_shape_pixels_y = 512
 
@@ -84,6 +82,8 @@ tile_limit = 4
 
 [wms]
 # request_timeout_seconds = 3600
+max_image_width = 4096
+max_image_height = 4096
 
 [wfs]
 # request_timeout_seconds = 3600

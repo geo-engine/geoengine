@@ -33,6 +33,40 @@ pub struct TimeStep {
 }
 
 impl TimeStep {
+    pub fn new(granularity: TimeGranularity, step: u32) -> Result<Self> {
+        ensure!(step > 0, error::TimeStepStepMustBeGreaterThanZero { step });
+
+        Ok(Self { granularity, step })
+    }
+
+    pub fn years(step: u32) -> Result<Self> {
+        Self::new(TimeGranularity::Years, step)
+    }
+
+    pub fn months(step: u32) -> Result<Self> {
+        Self::new(TimeGranularity::Months, step)
+    }
+
+    pub fn days(step: u32) -> Result<Self> {
+        Self::new(TimeGranularity::Days, step)
+    }
+
+    pub fn hours(step: u32) -> Result<Self> {
+        Self::new(TimeGranularity::Hours, step)
+    }
+
+    pub fn minutes(step: u32) -> Result<Self> {
+        Self::new(TimeGranularity::Minutes, step)
+    }
+
+    pub fn seconds(step: u32) -> Result<Self> {
+        Self::new(TimeGranularity::Seconds, step)
+    }
+
+    pub fn millis(step: u32) -> Result<Self> {
+        Self::new(TimeGranularity::Millis, step)
+    }
+
     /// Resolves how many `TimeStep`-sized intervals fit into a given `TimeInterval`.
     /// Remember that `TimeInterval` is not inclusive.
     ///
@@ -416,6 +450,26 @@ impl Mul<u32> for TimeStep {
     }
 }
 
+impl TryFrom<Duration> for TimeStep {
+    type Error = Error;
+
+    fn try_from(value: Duration) -> Result<Self> {
+        match [
+            value.num_days(),
+            value.num_hours(),
+            value.num_minutes(),
+            value.num_seconds(),
+            value.num_milliseconds(),
+        ] {
+            [d, 0, 0, 0, 0] => TimeStep::days(d as u32),
+            [_, h, 0, 0, 0] => TimeStep::hours(h as u32),
+            [_, _, m, 0, 0] => TimeStep::minutes(m as u32),
+            [_, _, _, s, 0] => TimeStep::seconds(s as u32),
+            [_, _, _, _, ms] => TimeStep::millis(ms as u32),
+        }
+    }
+}
+
 /// An `Iterator` to iterate over time in steps
 #[derive(Debug, Clone)]
 pub struct TimeStepIter {
@@ -497,6 +551,10 @@ impl Iterator for TimeStepIter {
         self.curr += 1;
 
         Some(next)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        (self.steps as usize, Some(self.steps as usize))
     }
 }
 

@@ -3,10 +3,11 @@ use crate::util::Result;
 use crate::util::stream_zip::StreamArrayZip;
 use futures::future::{self, BoxFuture, Join, JoinAll};
 use futures::stream::{BoxStream, FusedStream, Zip};
-use futures::{Future, Stream};
-use futures::{StreamExt, ready};
-use geoengine_datatypes::primitives::{RasterQueryRectangle, SpatialPartition2D, TimeInterval};
-use geoengine_datatypes::raster::{GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy};
+use futures::{Future, Stream, StreamExt, ready};
+use geoengine_datatypes::primitives::{RasterQueryRectangle, TimeInterval};
+use geoengine_datatypes::raster::{
+    GridBoundingBox2D, GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy,
+};
 use pin_project::pin_project;
 use std::cmp::min;
 use std::pin::Pin;
@@ -110,17 +111,17 @@ where
         (tile_a, tile_b)
     }
 
-    fn number_of_tiles_in_partition(
+    fn number_of_tiles_in_pixel_grid_bounds(
         tile_info: &TileInformation,
-        partition: SpatialPartition2D,
+        grid_bounds: GridBoundingBox2D,
     ) -> usize {
-        // TODO: get tiling strategy from stream or execution context instead of creating it here
         let strat = TilingStrategy {
             tile_size_in_pixels: tile_info.tile_size_in_pixels,
             geo_transform: tile_info.global_geo_transform,
         };
-
-        strat.tile_grid_box(partition).number_of_elements()
+        strat
+            .global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds)
+            .number_of_elements()
     }
 }
 
@@ -212,11 +213,14 @@ where
         tiles
     }
 
-    fn number_of_tiles_in_partition(
+    fn number_of_tiles_in_grid_bounds(
         tile_info: &TileInformation,
-        partition: SpatialPartition2D,
+        grid_bounds: GridBoundingBox2D,
     ) -> usize {
-        RasterTimeAdapter::<T, T, F, F>::number_of_tiles_in_partition(tile_info, partition)
+        RasterTimeAdapter::<T, T, F, F>::number_of_tiles_in_pixel_grid_bounds(
+            tile_info,
+            grid_bounds,
+        )
     }
 }
 
@@ -284,9 +288,9 @@ where
                         Some((Ok(tile_a), Ok(tile_b))) => {
                             // TODO: calculate at start when tiling info is available before querying first tile
                             let num_spatial_tiles = *num_spatial_tiles.get_or_insert_with(|| {
-                                Self::number_of_tiles_in_partition(
+                                Self::number_of_tiles_in_pixel_grid_bounds(
                                     &tile_a.tile_information(),
-                                    query_rect.spatial_bounds,
+                                    query_rect.spatial_bounds(), // TODO: this should be calculated from the tile grid bounds and not the spatial bounds.
                                 )
                             });
 
@@ -304,21 +308,22 @@ where
                                     // advance current query rectangle
                                     let mut new_start = min(tile_a.time.end(), tile_b.time.end());
 
-                                    if new_start == query_rect.time_interval.start() {
+                                    if new_start == query_rect.time_interval().start() {
                                         // in the case that the time interval has no length, i.e. start=end,
                                         // we have to advance `new_start` to prevent infinite loops.
                                         // Otherwise, the new query rectangle would be equal to the previous one.
                                         new_start += 1;
                                     }
 
-                                    if new_start >= query_rect.time_interval.end() {
+                                    if new_start >= query_rect.time_interval().end() {
                                         // the query window is exhausted, end the stream
                                         state.set(State::Finished);
                                     } else {
-                                        query_rect.time_interval = TimeInterval::new_unchecked(
-                                            new_start,
-                                            query_rect.time_interval.end(),
-                                        );
+                                        *query_rect.time_interval_mut() =
+                                            TimeInterval::new_unchecked(
+                                                new_start,
+                                                query_rect.time_interval().end(),
+                                            );
 
                                         state.set(State::Initial);
                                     }
@@ -437,9 +442,9 @@ where
 
                     // TODO: calculate at start when tiling info is available before querying first tile
                     let num_spatial_tiles = *num_spatial_tiles.get_or_insert_with(|| {
-                        Self::number_of_tiles_in_partition(
+                        Self::number_of_tiles_in_grid_bounds(
                             &tiles[0].tile_information(),
-                            query_rect.spatial_bounds,
+                            query_rect.spatial_bounds(),
                         )
                     });
 
@@ -466,20 +471,20 @@ where
                                 .min()
                                 .expect("N > 0");
 
-                            if new_start == query_rect.time_interval.start() {
+                            if new_start == query_rect.time_interval().start() {
                                 // in the case that the time interval has no length, i.e. start=end,
                                 // we have to advance `new_start` to prevent infinite loops.
                                 // Otherwise, the new query rectangle would be equal to the previous one.
                                 new_start += 1;
                             }
 
-                            if new_start >= query_rect.time_interval.end() {
+                            if new_start >= query_rect.time_interval().end() {
                                 // the query window is exhausted, end the stream
                                 state.set(ArrayState::Finished);
                             } else {
-                                query_rect.time_interval = TimeInterval::new_unchecked(
+                                *query_rect.time_interval_mut() = TimeInterval::new_unchecked(
                                     new_start,
-                                    query_rect.time_interval.end(),
+                                    query_rect.time_interval().end(),
                                 );
 
                                 state.set(ArrayState::Initial);
@@ -569,16 +574,18 @@ where
 mod tests {
     use super::*;
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, RasterBandDescriptors, RasterOperator,
-        RasterResultDescriptor, WorkflowOperatorPath,
+        MockExecutionContext, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+        SpatialGridDescriptor, TimeDescriptor, WorkflowOperatorPath,
     };
     use crate::mock::{MockRasterSource, MockRasterSourceParams};
     use futures::StreamExt;
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-    use geoengine_datatypes::raster::{EmptyGrid, Grid, RasterDataType, RasterProperties};
+    use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeStep};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, EmptyGrid, GeoTransform, Grid, GridShape2D, RasterDataType, RasterProperties,
+        SpatialGridDefinition, TilingSpecification,
+    };
     use geoengine_datatypes::spatial_reference::SpatialReference;
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::{primitives::SpatialResolution, raster::TilingSpecification};
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -634,9 +641,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    )),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -716,26 +728,25 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::new_source(SpatialGridDefinition::new(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    )),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -866,9 +877,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -948,26 +964,25 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1098,9 +1113,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -1158,26 +1178,28 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1292,9 +1314,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -1352,26 +1379,28 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(5).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1464,9 +1493,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -1520,26 +1554,25 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(2, 4),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(2, 4),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1627,9 +1660,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -1687,26 +1725,25 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(2, 4),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(2, 4),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1811,9 +1848,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -1867,26 +1909,25 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(2, 8),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(2, 8),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1996,9 +2037,14 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -2056,27 +2102,25 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(2, 8),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(2, 8),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let qp1 = mrs1
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -2134,6 +2178,7 @@ mod tests {
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
     async fn array_tiles_without_lengths() {
+        // FIXME: this shuld be illegal, because the tiles have no length
         let raster_source_a = MockRasterSource {
             params: MockRasterSourceParams::<u8> {
                 data: vec![
@@ -2185,9 +2230,11 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
@@ -2223,26 +2270,28 @@ mod tests {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
+                    time: TimeDescriptor::new_regular_with_epoch(
+                        None,
+                        TimeStep::millis(10).unwrap(),
+                    ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
             },
         }
         .boxed();
 
-        let exe_ctx = MockExecutionContext::new_with_tiling_spec(TilingSpecification::new(
-            (0., 0.).into(),
-            [3, 2].into(),
-        ));
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 3.).into(), (4., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(1, 3),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: BandSelection::first(),
-        };
-        let query_ctx = MockQueryContext::test_default();
+        let exe_ctx =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(1, 3),
+            BandSelection::first(),
+        );
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let query_processor_a = raster_source_a
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

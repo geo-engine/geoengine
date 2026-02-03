@@ -16,7 +16,7 @@ use crate::{
 use geoengine_datatypes::{
     dataset::{DataProviderId, LayerId, NamedData},
     operations::image::{Colorizer, RasterColorizer},
-    primitives::{CacheTtlSeconds, TimeInstance},
+    primitives::{CacheTtlSeconds, Duration, TimeInstance, TimeInterval},
 };
 use geoengine_operators::{
     engine::{RasterOperator, RasterResultDescriptor, TypedOperator},
@@ -148,7 +148,7 @@ pub fn create_layer(
         workflow: Workflow {
             operator: TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters { data: data_id },
+                    params: GdalSourceParameters::new(data_id),
                 }
                 .boxed(),
             ),
@@ -217,7 +217,9 @@ fn create_loading_info_part(
             params.file_path =
                 file_path.with_file_name(time_instance.as_datetime_string_with_millis() + ".tiff");
 
-            time_instance.into()
+            // Note: was a TimeInstance before which is not valid so we add 1 millisecond just to get an interval.
+            TimeInterval::new(time_instance, time_instance + Duration::milliseconds(1))
+                .expect("increasing one millisecond must work")
         }
         ParamModification::Channel {
             channel,
@@ -225,7 +227,8 @@ fn create_loading_info_part(
         } => {
             params.rasterband_channel = channel;
 
-            time_instance.into()
+            TimeInterval::new(time_instance, time_instance + Duration::milliseconds(1))
+                .expect("increasing one millisecond must work")
         }
     };
 

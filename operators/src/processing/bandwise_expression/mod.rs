@@ -1,18 +1,20 @@
 use std::sync::Arc;
 
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
-    OperatorName, QueryContext, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
-    ResultDescriptor, SingleRasterSource, TypedRasterQueryProcessor, WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, Operator, OperatorName, QueryContext, QueryProcessor, RasterOperator,
+    RasterQueryProcessor, RasterResultDescriptor, ResultDescriptor, SingleRasterSource,
+    TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{StreamExt, TryStreamExt};
-use geoengine_datatypes::primitives::RasterQueryRectangle;
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
-    GridOrEmpty2D, MapElementsParallel, Pixel, RasterDataType, RasterTile2D,
+    GridBoundingBox2D, GridOrEmpty2D, MapElementsParallel, Pixel, RasterDataType, RasterTile2D,
 };
 use geoengine_expression::{
     DataType, ExpressionAst, ExpressionParser, LinkedExpression, Parameter,
@@ -73,6 +75,7 @@ impl RasterOperator for BandwiseExpression {
         Ok(Box::new(InitializedBandwiseExpression {
             name,
             path,
+            params: self.params.clone(),
             result_descriptor,
             source,
             expression,
@@ -85,6 +88,7 @@ impl RasterOperator for BandwiseExpression {
 
 pub struct InitializedBandwiseExpression {
     name: CanonicOperatorName,
+    params: BandwiseExpressionParams,
     path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
     source: Box<dyn InitializedRasterOperator>,
@@ -136,10 +140,23 @@ impl InitializedRasterOperator for InitializedBandwiseExpression {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(BandwiseExpression {
+            params: self.params.clone(),
+            sources: SingleRasterSource {
+                raster: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 pub(crate) struct BandwiseExpressionProcessor<TO> {
-    source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
+    source: BoxRasterQueryProcessor<f64>,
     result_descriptor: RasterResultDescriptor,
     expression: Arc<LinkedExpression>,
     map_no_data: bool,
@@ -151,7 +168,7 @@ where
     TO: Pixel,
 {
     pub fn new(
-        source: Box<dyn RasterQueryProcessor<RasterType = f64>>,
+        source: BoxRasterQueryProcessor<f64>,
         result_descriptor: RasterResultDescriptor,
         expression: LinkedExpression,
         map_no_data: bool,
@@ -196,13 +213,16 @@ where
 }
 
 #[async_trait]
-impl<TO> RasterQueryProcessor for BandwiseExpressionProcessor<TO>
+impl<TO> QueryProcessor for BandwiseExpressionProcessor<TO>
 where
     TO: Pixel,
 {
-    type RasterType = TO;
+    type Output = RasterTile2D<TO>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
 
-    async fn raster_query<'a>(
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -240,23 +260,43 @@ where
         Ok(stream.boxed())
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl<TO> RasterQueryProcessor for BandwiseExpressionProcessor<TO>
+where
+    TO: Pixel,
+{
+    type RasterType = TO;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn QueryContext,
+    ) -> Result<BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
+        self.source.time_query(query, ctx).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use geoengine_datatypes::{
-        primitives::{CacheHint, SpatialPartition2D, SpatialResolution, TimeInterval},
-        raster::{Grid, GridShape, MapElements, RenameBands, TilesEqualIgnoringCacheHint},
+        primitives::{CacheHint, TimeInterval, TimeStep},
+        raster::{
+            Grid, GridBoundingBox2D, GridShape, MapElements, RenameBands,
+            TilesEqualIgnoringCacheHint,
+        },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterBandDescriptors,
+            MockExecutionContext, MultipleRasterSources, RasterBandDescriptors,
+            SpatialGridDescriptor, TimeDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
@@ -355,17 +395,30 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: TimeDescriptor::new_regular_with_epoch(
+                Some(
+                    TimeInterval::new(
+                        data.first().unwrap().time.start(),
+                        data.last().unwrap().time.end(),
+                    )
+                    .unwrap(),
+                ),
+                TimeStep::millis(5).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                TestDefault::test_default(),
+                GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
@@ -373,14 +426,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data2.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -410,14 +456,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1].try_into().unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new_min_max(-2, -1, 0, 3).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            [0, 1].try_into().unwrap(),
+        );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = expression
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

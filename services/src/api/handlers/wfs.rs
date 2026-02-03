@@ -1,24 +1,21 @@
 use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
+use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
 use crate::api::ogc::wfs::request::{GetCapabilities, GetFeature};
 use crate::config;
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error;
 use crate::error::Result;
-use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
+use crate::util::server::{CacheControlHeader, connection_closed};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::{Workflow, WorkflowId};
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use futures::future::BoxFuture;
 use futures_util::TryStreamExt;
 use geoengine_datatypes::collections::ToGeoJson;
+use geoengine_datatypes::collections::{FeatureCollection, MultiPointCollection};
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
-use geoengine_datatypes::{
-    collections::{FeatureCollection, MultiPointCollection},
-    primitives::SpatialResolution,
-};
 use geoengine_datatypes::{
     primitives::{FeatureData, Geometry, MultiPoint},
     spatial_reference::SpatialReference,
@@ -28,7 +25,9 @@ use geoengine_operators::engine::{
     VectorOperator, VectorQueryProcessor,
 };
 use geoengine_operators::engine::{QueryProcessor, WorkflowOperatorPath};
-use geoengine_operators::processing::{Reprojection, ReprojectionParams};
+use geoengine_operators::processing::{
+    DeriveOutRasterSpecsSource, Reprojection, ReprojectionParams,
+};
 use geoengine_operators::util::abortable_query_execution;
 use geoengine_operators::util::input::RasterOrVectorOperator;
 use reqwest::Url;
@@ -37,7 +36,8 @@ use serde_json::json;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
-use utoipa::ToSchema;
+use utoipa::openapi::{Ref, Required};
+use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 pub(crate) fn init_wfs_routes<C>(cfg: &mut web::ServiceConfig)
@@ -45,27 +45,59 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(
-        web::resource("/wfs/{workflow}")
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetCapabilities"))
-                    .to(wfs_capabilities_handler::<C>),
-            )
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetFeature"))
-                    .to(wfs_feature_handler::<C>),
-            )
-            .route(web::get().to(not_implemented_handler)),
-    );
+    cfg.service(web::resource("/wfs/{workflow}").route(web::get().to(wfs_handler::<C>)));
 }
 
-/// Get WFS Capabilities
+#[derive(Debug, Deserialize)]
+#[serde(tag = "request", rename_all = "PascalCase")]
+#[allow(clippy::large_enum_variant)] // variants may have many fields
+pub enum WfsQueryParams {
+    GetCapabilities(GetCapabilities),
+    GetFeature(GetFeature),
+}
+
+/// manual implementation because derive macro does not support enums
+/// Note, that WFS is not really OpenAPI compatible, so this is just an approximation to enable client generation
+impl IntoParams for WfsQueryParams {
+    fn into_params(
+        _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+    ) -> Vec<utoipa::openapi::path::Parameter> {
+        let pip = || Some(utoipa::openapi::path::ParameterIn::Query);
+
+        let mut params = Vec::new();
+
+        params.push(
+            utoipa::openapi::path::ParameterBuilder::new()
+                .name("request")
+                .required(utoipa::openapi::Required::True)
+                .parameter_in(pip().unwrap_or_default())
+                .description(Some("type of WFS request"))
+                .schema(Some(Ref::from_schema_name("WfsRequest")))
+                .build(),
+        );
+
+        for mut p in GetCapabilities::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in GetFeature::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+
+        // remove duplicate parameters
+        params.sort_by(|a, b| a.name.cmp(&b.name));
+        params.dedup_by(|a, b| a.name == b.name);
+
+        params
+    }
+}
+
+/// OGC WFS endpoint
 #[utoipa::path(
     tag = "OGC WFS",
     get,
-    path = "/wfs/{workflow}?request=GetCapabilities",
+    path = "/wfs/{workflow}",
     responses(
         (status = 200, description = "OK", content_type = "text/xml", body = String,
             // TODO: add example when utoipa supports more than just json examples
@@ -156,28 +188,148 @@ where
             //   </FeatureType>
             // </FeatureTypeList>
             // </wfs:WFS_Capabilities>"#
-        )
+        ),
+        (status = 200, description = "OK", body = GeoJson,
+        example = json!(
+        {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                    0.0,
+                    0.1
+                    ]
+                },
+                "properties": {
+                    "foo": 0
+                },
+                "when": {
+                    "start": "1970-01-01T00:00:00+00:00",
+                    "end": "1970-01-01T00:00:00.001+00:00",
+                    "type": "Interval"
+                }
+                },
+                {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                    1.0,
+                    1.1
+                    ]
+                },
+                "properties": {
+                    "foo": null
+                },
+                "when": {
+                    "start": "1970-01-01T00:00:00+00:00",
+                    "end": "1970-01-01T00:00:00.001+00:00",
+                    "type": "Interval"
+                }
+                },
+                {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                    2.0,
+                    3.1
+                    ]
+                },
+                "properties": {
+                    "foo": 2
+                },
+                "when": {
+                    "start": "1970-01-01T00:00:00+00:00",
+                    "end": "1970-01-01T00:00:00.001+00:00",
+                    "type": "Interval"
+                }
+                },
+                {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                    3.0,
+                    3.1
+                    ]
+                },
+                "properties": {
+                    "foo": 3
+                },
+                "when": {
+                    "start": "1970-01-01T00:00:00+00:00",
+                    "end": "1970-01-01T00:00:00.001+00:00",
+                    "type": "Interval"
+                }
+                },
+                {
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [
+                    4.0,
+                    4.1
+                    ]
+                },
+                "properties": {
+                    "foo": 4
+                },
+                "when": {
+                    "start": "1970-01-01T00:00:00+00:00",
+                    "end": "1970-01-01T00:00:00.001+00:00",
+                    "type": "Interval"
+                }
+                }
+            ]
+        }
+        )),
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
-        GetCapabilities
+        WfsQueryParams
     ),
     security(
         ("session_token" = [])
     )
 )]
-#[allow(clippy::too_many_lines)] // long xml body
-async fn wfs_capabilities_handler<C>(
+
+async fn wfs_handler<C>(
+    req: HttpRequest,
     workflow_id: web::Path<WorkflowId>,
-    // TODO: react on capabilities
-    // _request: web::Query<GetCapabilities>,
+    request: OgcQueryExtractor<WfsQueryParams>, // case insensitive query params
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse>
 where
     C: ApplicationContext,
 {
-    let workflow_id = workflow_id.into_inner();
+    let request = request.into_inner();
+
+    match request {
+        WfsQueryParams::GetCapabilities(r) => {
+            wfs_get_capabilities(workflow_id.into_inner(), r, app_ctx, session).await
+        }
+        WfsQueryParams::GetFeature(r) => {
+            wfs_get_feature(req, workflow_id.into_inner(), r, app_ctx, session).await
+        }
+    }
+}
+
+#[allow(clippy::too_many_lines)] // long xml body
+async fn wfs_get_capabilities<C>(
+    workflow_id: WorkflowId,
+    // TODO: react on capabilities
+    _request: GetCapabilities,
+    app_ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<HttpResponse>
+where
+    C: ApplicationContext,
+{
     let wfs_url = wfs_url(workflow_id)?;
 
     let ctx = app_ctx.session_context(session);
@@ -303,129 +455,13 @@ fn wfs_url(workflow: WorkflowId) -> Result<Url> {
     ogc_endpoint_url(&base, OgcProtocol::Wfs, workflow)
 }
 
-/// Get WCS Features
-#[utoipa::path(
-    tag = "OGC WFS",
-    get,
-    path = "/wfs/{workflow}?request=GetFeature",
-    responses(
-        (status = 200, description = "OK", body = GeoJson,
-        example = json!(
-        {
-            "type": "FeatureCollection",
-            "features": [
-                {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                    0.0,
-                    0.1
-                    ]
-                },
-                "properties": {
-                    "foo": 0
-                },
-                "when": {
-                    "start": "1970-01-01T00:00:00+00:00",
-                    "end": "1970-01-01T00:00:00.001+00:00",
-                    "type": "Interval"
-                }
-                },
-                {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                    1.0,
-                    1.1
-                    ]
-                },
-                "properties": {
-                    "foo": null
-                },
-                "when": {
-                    "start": "1970-01-01T00:00:00+00:00",
-                    "end": "1970-01-01T00:00:00.001+00:00",
-                    "type": "Interval"
-                }
-                },
-                {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                    2.0,
-                    3.1
-                    ]
-                },
-                "properties": {
-                    "foo": 2
-                },
-                "when": {
-                    "start": "1970-01-01T00:00:00+00:00",
-                    "end": "1970-01-01T00:00:00.001+00:00",
-                    "type": "Interval"
-                }
-                },
-                {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                    3.0,
-                    3.1
-                    ]
-                },
-                "properties": {
-                    "foo": 3
-                },
-                "when": {
-                    "start": "1970-01-01T00:00:00+00:00",
-                    "end": "1970-01-01T00:00:00.001+00:00",
-                    "type": "Interval"
-                }
-                },
-                {
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [
-                    4.0,
-                    4.1
-                    ]
-                },
-                "properties": {
-                    "foo": 4
-                },
-                "when": {
-                    "start": "1970-01-01T00:00:00+00:00",
-                    "end": "1970-01-01T00:00:00.001+00:00",
-                    "type": "Interval"
-                }
-                }
-            ]
-        }
-        )),
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        GetFeature
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
-async fn wfs_feature_handler<C: ApplicationContext>(
+async fn wfs_get_feature<C: ApplicationContext>(
     req: HttpRequest,
-    endpoint: web::Path<WorkflowId>,
-    request: web::Query<GetFeature>,
+    endpoint: WorkflowId,
+    request: GetFeature,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let endpoint = endpoint.into_inner();
-    let request = request.into_inner();
-
     let type_names = match request.type_names.namespace.as_deref() {
         None => WorkflowId::from_str(&request.type_names.feature_type)?,
         Some(_) => {
@@ -488,6 +524,7 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 
         let reprojection_params = ReprojectionParams {
             target_spatial_reference: request_spatial_ref,
+            derive_out_spec: DeriveOutRasterSpecsSource::ProjectionBounds,
         };
 
         // create the reprojection operator in order to get the canonic operator name
@@ -519,15 +556,11 @@ async fn wfs_feature_handler<C: ApplicationContext>(
 
     let processor = initialized.query_processor()?;
 
-    let query_rect = VectorQueryRectangle {
-        spatial_bounds: request.bbox.bounds_naive()?,
-        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
-        // TODO: find reasonable default
-        spatial_resolution: request
-            .query_resolution
-            .map_or_else(SpatialResolution::zero_point_one, |r| r.0),
-        attributes: ColumnSelection::all(),
-    };
+    let query_rect = VectorQueryRectangle::new(
+        request.bbox.bounds_naive()?,
+        request.time.unwrap_or_else(default_time_from_config).into(),
+        ColumnSelection::all(),
+    );
     let query_ctx = ctx.query_context(type_names.0, Uuid::new_v4())?;
 
     let (json, cache_hint) = match processor {
@@ -1126,7 +1159,6 @@ x;y
     /// override the pixel size since this test was designed for 600 x 600 pixel tiles
     fn raster_vector_join_tiling_spec() -> TilingSpecification {
         TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
             tile_size_in_pixels: GridShape2D::new([600, 600]),
         }
     }
@@ -1179,7 +1211,10 @@ x;y
                     "rasters": [{
                         "type": "GdalSource",
                         "params": {
+
                             "data": ndvi_name,
+                            "overviewLevel:": null
+
                         }
                     }],
                 }

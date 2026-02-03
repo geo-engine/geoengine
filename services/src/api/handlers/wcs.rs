@@ -1,34 +1,35 @@
-use crate::api::handlers::spatial_references::{AxisOrder, spatial_reference_specification};
-use crate::api::model::datatypes::TimeInterval;
-use crate::api::ogc::util::{OgcProtocol, OgcRequestGuard, ogc_endpoint_url};
+use crate::api::handlers::spatial_references::spatial_reference_specification;
+use crate::api::ogc::util::{OgcProtocol, OgcQueryExtractor, ogc_endpoint_url};
 use crate::api::ogc::wcs::request::{DescribeCoverage, GetCapabilities, GetCoverage, WcsVersion};
 use crate::config;
 use crate::config::get_config_element;
 use crate::contexts::{ApplicationContext, SessionContext};
 use crate::error::Result;
 use crate::error::{self, Error};
-use crate::util::server::{CacheControlHeader, connection_closed, not_implemented_handler};
+use crate::util::server::{CacheControlHeader, connection_closed};
 use crate::workflows::registry::WorkflowRegistry;
 use crate::workflows::workflow::WorkflowId;
 use actix_web::{FromRequest, HttpRequest, HttpResponse, web};
 use geoengine_datatypes::primitives::{
-    AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialPartition2D,
+    AxisAlignedRectangle, BandSelection, RasterQueryRectangle, SpatialResolution, TimeInterval,
 };
-use geoengine_datatypes::raster::GeoTransform;
-use geoengine_datatypes::{primitives::SpatialResolution, spatial_reference::SpatialReference};
+use geoengine_datatypes::raster::GridShape2D;
+use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::call_on_generic_raster_processor_gdal_types;
-use geoengine_operators::engine::{ExecutionContext, RasterOperator, WorkflowOperatorPath};
-use geoengine_operators::engine::{ResultDescriptor, SingleRasterOrVectorSource};
-use geoengine_operators::processing::{Reprojection, ReprojectionParams};
-use geoengine_operators::util::input::RasterOrVectorOperator;
+use geoengine_operators::engine::{
+    ExecutionContext, InitializedRasterOperator, WorkflowOperatorPath,
+};
 use geoengine_operators::util::raster_stream_to_geotiff::{
     GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, raster_stream_to_multiband_geotiff_bytes,
 };
+use serde::Deserialize;
 use snafu::ensure;
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::info;
 use url::Url;
+use utoipa::IntoParams;
+use utoipa::openapi::{Ref, Required};
 use uuid::Uuid;
 
 pub(crate) fn init_wcs_routes<C>(cfg: &mut web::ServiceConfig)
@@ -36,25 +37,56 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(
-        web::resource("/wcs/{workflow}")
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetCapabilities"))
-                    .to(wcs_capabilities_handler::<C>),
-            )
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("DescribeCoverage"))
-                    .to(wcs_describe_coverage_handler::<C>),
-            )
-            .route(
-                web::get()
-                    .guard(OgcRequestGuard::new("GetCoverage"))
-                    .to(wcs_get_coverage_handler::<C>),
-            )
-            .route(web::get().to(not_implemented_handler)),
-    );
+    cfg.service(web::resource("/wcs/{workflow}").route(web::get().to(wcs_handler::<C>)));
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "request", rename_all = "PascalCase")]
+pub enum WcsQueryParams {
+    GetCapabilities(GetCapabilities),
+    DescribeCoverage(DescribeCoverage),
+    GetCoverage(GetCoverage),
+}
+
+/// manual implementation because derive macro does not support enums
+/// Note, that WCS is not really OpenAPI compatible, so this is just an approximation to enable client generation
+impl IntoParams for WcsQueryParams {
+    fn into_params(
+        _parameter_in_provider: impl Fn() -> Option<utoipa::openapi::path::ParameterIn>,
+    ) -> Vec<utoipa::openapi::path::Parameter> {
+        let pip = || Some(utoipa::openapi::path::ParameterIn::Query);
+
+        let mut params = Vec::new();
+
+        params.push(
+            utoipa::openapi::path::ParameterBuilder::new()
+                .name("request")
+                .required(utoipa::openapi::Required::True)
+                .parameter_in(pip().unwrap_or_default())
+                .description(Some("type of WCS request"))
+                .schema(Some(Ref::from_schema_name("WcsRequest")))
+                .build(),
+        );
+
+        for mut p in GetCapabilities::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in DescribeCoverage::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+        for mut p in GetCoverage::into_params(pip) {
+            p.required = Required::False;
+            params.push(p);
+        }
+
+        // remove duplicate parameters
+        params.sort_by(|a, b| a.name.cmp(&b.name));
+        params.dedup_by(|a, b| a.name == b.name);
+
+        params
+    }
 }
 
 fn wcs_url(workflow: WorkflowId) -> Result<Url> {
@@ -64,11 +96,11 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
     ogc_endpoint_url(&base, OgcProtocol::Wcs, workflow)
 }
 
-/// Get WCS Capabilities
+/// OGC WCS endpoint
 #[utoipa::path(
     tag = "OGC WCS",
     get,
-    path = "/wcs/{workflow}?request=GetCapabilities",
+    path = "/wcs/{workflow}",
     responses(
         (status = 200, description = "OK", content_type = "text/xml", body = String,
             // TODO: add example when utoipa supports more than just json examples
@@ -76,28 +108,47 @@ fn wcs_url(workflow: WorkflowId) -> Result<Url> {
     ),
     params(
         ("workflow" = WorkflowId, description = "Workflow id"),
-        GetCapabilities
+        WcsQueryParams
     ),
     security(
         ("session_token" = [])
     )
 )]
+
+async fn wcs_handler<C: ApplicationContext>(
+    req: HttpRequest,
+    workflow: web::Path<WorkflowId>,
+    request: OgcQueryExtractor<WcsQueryParams>,
+    app_ctx: web::Data<C>,
+    session: C::Session,
+) -> Result<HttpResponse> {
+    match request.into_inner() {
+        WcsQueryParams::GetCapabilities(r) => wcs_get_capabilities::<C>(workflow, r, session).await,
+        WcsQueryParams::DescribeCoverage(r) => {
+            wcs_describe_coverage::<C>(workflow.into_inner(), r, app_ctx, session).await
+        }
+        WcsQueryParams::GetCoverage(r) => {
+            wcs_get_coverage::<C>(req, workflow.into_inner(), r, app_ctx, session).await
+        }
+    }
+}
+
 #[allow(
     clippy::unused_async, // the function signature of request handlers requires it
     clippy::no_effect_underscore_binding // need `_session` to quire authentication
 )]
-async fn wcs_capabilities_handler<C: ApplicationContext>(
+async fn wcs_get_capabilities<C: ApplicationContext>(
     workflow: web::Path<WorkflowId>,
-    request: web::Query<GetCapabilities>,
+    request: GetCapabilities,
     _session: C::Session,
 ) -> Result<HttpResponse> {
-    let workflow = workflow.into_inner();
-
     info!("{request:?}");
 
     // TODO: workflow bounding box
     // TODO: host schema file(?)
     // TODO: load ServiceIdentification and ServiceProvider from config
+
+    let workflow = workflow.into_inner();
 
     let wcs_url = wcs_url(workflow)?;
     let mock = format!(
@@ -158,32 +209,14 @@ async fn wcs_capabilities_handler<C: ApplicationContext>(
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
-/// Get WCS Coverage Description
-#[utoipa::path(
-    tag = "OGC WCS",
-    get,
-    path = "/wcs/{workflow}?request=DescribeCoverage",
-    responses(
-        (status = 200, description = "OK", content_type = "text/xml", body = String,
-            // TODO: add example when utoipa supports more than just json examples
-        )
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        DescribeCoverage
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
 #[allow(clippy::too_many_lines)]
-async fn wcs_describe_coverage_handler<C: ApplicationContext>(
-    workflow: web::Path<WorkflowId>,
-    request: web::Query<DescribeCoverage>,
+async fn wcs_describe_coverage<C: ApplicationContext>(
+    workflow: WorkflowId,
+    request: DescribeCoverage,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let endpoint = workflow.into_inner();
+    let endpoint = workflow;
 
     info!("{request:?}");
 
@@ -217,46 +250,34 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
 
     let result_descriptor = operator.result_descriptor();
 
+    let spatial_grid_descriptor = result_descriptor.spatial_grid_descriptor();
+
     let spatial_reference: Option<SpatialReference> = result_descriptor.spatial_reference.into();
     let spatial_reference = spatial_reference.ok_or(error::Error::MissingSpatialReference)?;
+    let spatial_reference_spec = spatial_reference_specification(spatial_reference.into())?;
+    let spatial_ref_axis_order =
+        spatial_reference_spec
+            .axis_order
+            .ok_or(Error::AxisOrderingNotKnownForSrs {
+                srs_string: spatial_reference.srs_string(),
+            })?;
+    let bounds = spatial_grid_descriptor.spatial_partition();
 
-    let resolution = result_descriptor
-        .resolution
-        .unwrap_or(SpatialResolution::zero_point_one());
+    let [bbox_ll_0, bbox_ll_1] =
+        spatial_ref_axis_order.xy_to_native_order([bounds.lower_left().x, bounds.lower_left().y]);
+    let [bbox_ur_0, bbox_ur_1] =
+        spatial_ref_axis_order.xy_to_native_order([bounds.upper_right().x, bounds.upper_right().y]);
 
-    let pixel_size_x = resolution.x;
-    let pixel_size_y = -resolution.y;
+    let GridShape2D { shape_array } = spatial_grid_descriptor.grid_shape();
 
-    let bbox = if let Some(bbox) = result_descriptor.bbox {
-        bbox
-    } else {
-        spatial_reference.area_of_use_projected()?
-    };
+    let [raster_size_0, raster_size_1] = spatial_ref_axis_order.xy_to_native_order(shape_array);
 
-    let axis_order = spatial_reference_specification(&spatial_reference.proj_string()?)?
-        .axis_order
-        .ok_or(Error::AxisOrderingNotKnownForSrs {
-            srs_string: spatial_reference.srs_string(),
-        })?;
-    let (bbox_ll_0, bbox_ll_1, bbox_ur_0, bbox_ur_1) = match axis_order {
-        AxisOrder::EastNorth => (
-            bbox.lower_left().x,
-            bbox.lower_left().y,
-            bbox.upper_right().x,
-            bbox.upper_right().y,
-        ),
-        AxisOrder::NorthEast => (
-            bbox.lower_left().y,
-            bbox.lower_left().x,
-            bbox.upper_right().y,
-            bbox.upper_right().x,
-        ),
-    };
+    let SpatialResolution {
+        x: pixel_size_x,
+        y: pixel_size_y,
+    } = spatial_grid_descriptor.spatial_resolution();
 
-    let geo_transform = GeoTransform::new(bbox.upper_left(), pixel_size_x, pixel_size_y);
-
-    let [raster_size_x, raster_size_y] =
-        *(geo_transform.lower_right_pixel_idx(&bbox) + [1, 1]).inner();
+    let band_0 = &result_descriptor.bands[0];
 
     let mock = format!(
         r#"<?xml version="1.0" encoding="UTF-8"?>
@@ -277,7 +298,7 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
                     </ows:BoundingBox>
                     <ows:BoundingBox crs="urn:ogc:def:crs:OGC:1.3:CRS:imageCRS" dimensions="2">
                         <ows:LowerCorner>0 0</ows:LowerCorner>
-                        <ows:UpperCorner>{raster_size_y} {raster_size_x}</ows:UpperCorner>
+                        <ows:UpperCorner>{raster_size_0} {raster_size_1}</ows:UpperCorner>
                     </ows:BoundingBox>
                     <wcs:GridCRS>
                         <wcs:GridBaseCRS>urn:ogc:def:crs:{srs_authority}::{srs_code}</wcs:GridBaseCRS>
@@ -306,39 +327,29 @@ async fn wcs_describe_coverage_handler<C: ApplicationContext>(
         workflow_id = identifiers,
         srs_authority = spatial_reference.authority(),
         srs_code = spatial_reference.code(),
-        origin_x = bbox.upper_left().x,
-        origin_y = bbox.upper_left().y,
-        band_name = result_descriptor.bands[0].name,
+        origin_x = bounds.upper_left().x,
+        origin_y = bounds.upper_left().y,
+        bbox_ll_0 = bbox_ll_0,
+        bbox_ll_1 = bbox_ll_1,
+        bbox_ur_0 = bbox_ur_0,
+        bbox_ur_1 = bbox_ur_1,
+        band_name = band_0.name,
+        pixel_size_y = -pixel_size_y, // TODO: use the "real" sign in the resolution?
+        pixel_size_x = pixel_size_x
     );
 
     Ok(HttpResponse::Ok().content_type(mime::TEXT_XML).body(mock))
 }
 
-/// Get WCS Coverage
-#[utoipa::path(
-    tag = "OGC WCS",
-    get,
-    path = "/wcs/{workflow}?request=GetCoverage",
-    responses(
-        (status = 200, response = crate::api::model::responses::PngResponse),
-    ),
-    params(
-        ("workflow" = WorkflowId, description = "Workflow id"),
-        GetCoverage
-    ),
-    security(
-        ("session_token" = [])
-    )
-)]
 #[allow(clippy::too_many_lines)]
-async fn wcs_get_coverage_handler<C: ApplicationContext>(
+async fn wcs_get_coverage<C: ApplicationContext>(
     req: HttpRequest,
-    workflow: web::Path<WorkflowId>,
-    request: web::Query<GetCoverage>,
+    workflow: WorkflowId,
+    request: GetCoverage,
     app_ctx: web::Data<C>,
     session: C::Session,
 ) -> Result<HttpResponse> {
-    let endpoint = workflow.into_inner();
+    let endpoint = workflow;
 
     info!("{request:?}");
 
@@ -364,21 +375,13 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
             .map(Duration::from_secs),
     );
 
+    let request_spatial_ref: SpatialReference = request.spatial_ref().map(Into::into)?;
+    let request_resolution = request.spatial_resolution().transpose()?;
     let request_partition = request.spatial_partition()?;
-
-    if let Some(gridorigin) = request.gridorigin {
-        ensure!(
-            gridorigin.coordinate(request.gridbasecrs)? == request_partition.upper_left(),
-            error::WcsGridOriginMustEqualBoundingboxUpperLeft
-        );
-    }
-
-    if let Some(bbox_spatial_reference) = request.boundingbox.spatial_reference {
-        ensure!(
-            request.gridbasecrs == bbox_spatial_reference,
-            error::WcsBoundingboxCrsMustEqualGridBaseCrs
-        );
-    }
+    let request_time: TimeInterval = request
+        .time
+        .map_or_else(default_time_from_config, Into::into);
+    let request_no_data_value = request.nodatavalue;
 
     let ctx = app_ctx.session_context(session);
 
@@ -395,84 +398,35 @@ async fn wcs_get_coverage_handler<C: ApplicationContext>(
         .initialize(workflow_operator_path_root, &execution_context)
         .await?;
 
-    // handle request and workflow crs matching
-    let workflow_spatial_ref: Option<SpatialReference> =
-        initialized.result_descriptor().spatial_reference().into();
-    let workflow_spatial_ref = workflow_spatial_ref.ok_or(error::Error::InvalidSpatialReference)?;
+    let tiling_spec = execution_context.tiling_specification();
 
-    let request_spatial_ref: SpatialReference = request.gridbasecrs.into();
-    let request_no_data_value = request.nodatavalue;
+    let wrapped =
+        geoengine_operators::util::WrapWithProjectionAndResample::new_create_result_descriptor(
+            operator,
+            initialized,
+        )
+        .wrap_with_projection_and_resample(
+            Some(request_partition.upper_left()), // TODO: set none if not changed? But how to handle mapping to grid?
+            request_resolution,
+            request_spatial_ref,
+            &execution_context,
+        )
+        .await?;
 
-    // perform reprojection if necessary
-    let initialized = if request_spatial_ref == workflow_spatial_ref {
-        initialized
-    } else {
-        tracing::debug!(
-            "WCS query srs: {request_spatial_ref}, workflow srs: {workflow_spatial_ref} --> injecting reprojection"
-        );
+    let query_tiling_pixel_grid = wrapped
+        .result_descriptor
+        .spatial_grid_descriptor()
+        .tiling_grid_definition(tiling_spec)
+        .tiling_spatial_grid_definition()
+        .spatial_bounds_to_compatible_spatial_grid(request_partition);
 
-        let reprojection_params = ReprojectionParams {
-            target_spatial_reference: request_spatial_ref,
-        };
-
-        // create the reprojection operator in order to get the canonic operator name
-        let reprojected_workflow = Reprojection {
-            params: reprojection_params,
-            sources: SingleRasterOrVectorSource {
-                source: RasterOrVectorOperator::Raster(operator),
-            },
-        }
-        .boxed();
-
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
-
-        // TODO: avoid re-initialization and re-use unprojected workflow. However, this requires updating all operator paths
-
-        // In order to check whether we need to inject a reprojection, we first need to initialize the
-        // original workflow. Then we can check the result projection. Previously, we then just wrapped
-        // the initialized workflow with an initialized reprojection. IMHO this is wrong because
-        // initialization propagates the workflow path down the children and appends a new segment for
-        // each level. So we can't re-use an already initialized workflow, because all the workflow path/
-        // operator names will be wrong. That's why I now build a new workflow with a reprojection and
-        // perform a full initialization. I only added the TODO because we did some optimization here
-        // which broke at some point when the workflow operator paths were introduced but no one noticed.
-
-        let irp = reprojected_workflow
-            .initialize(workflow_operator_path_root, &execution_context)
-            .await?;
-
-        Box::new(irp)
-    };
-
-    let processor = initialized.query_processor()?;
-
-    let spatial_resolution: SpatialResolution =
-        if let Some(spatial_resolution) = request.spatial_resolution() {
-            spatial_resolution?
-        } else {
-            // TODO: proper default resolution
-            SpatialResolution {
-                x: request_partition.size_x() / 256.,
-                y: request_partition.size_y() / 256.,
-            }
-        };
-
-    // snap bbox to grid
-    let geo_transform = GeoTransform::new(
-        request_partition.upper_left(),
-        spatial_resolution.x,
-        -spatial_resolution.y,
+    let query_rect = RasterQueryRectangle::new(
+        query_tiling_pixel_grid.grid_bounds(),
+        request_time,
+        BandSelection::first(), // TODO: support multi bands in API and set the selection here
     );
-    let idx = geo_transform.lower_right_pixel_idx(&request_partition) + [1, 1];
-    let lower_right = geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(idx);
-    let snapped_partition = SpatialPartition2D::new(request_partition.upper_left(), lower_right)?;
 
-    let query_rect = RasterQueryRectangle {
-        spatial_bounds: snapped_partition,
-        time_interval: request.time.unwrap_or_else(default_time_from_config).into(),
-        spatial_resolution,
-        attributes: BandSelection::first(), // TODO: support multi bands in API and set the selection here
-    };
+    let processor = wrapped.initialized_operator.query_processor()?;
 
     let query_ctx = ctx.query_context(identifier.0, Uuid::new_v4())?;
 
@@ -514,7 +468,7 @@ fn default_time_from_config() -> TimeInterval {
                     .and_then(|ogc| ogc.default_time)
                     .map_or_else(
                         || {
-                            geoengine_datatypes::primitives::TimeInterval::new_instant(
+                            TimeInterval::new_instant(
                                 geoengine_datatypes::primitives::TimeInstance::now(),
                             )
                             .expect("is a valid time interval")
@@ -524,7 +478,6 @@ fn default_time_from_config() -> TimeInterval {
             },
             |time| time.time_interval(),
         )
-        .into()
 }
 
 #[cfg(test)]
@@ -538,11 +491,16 @@ mod tests {
     use actix_web::http::header;
     use actix_web::test;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use geoengine_datatypes::raster::{GridShape2D, TilingSpecification};
+    use geoengine_datatypes::raster::GridShape2D;
+    use geoengine_datatypes::raster::TilingSpecification;
     use geoengine_datatypes::test_data;
     use geoengine_datatypes::util::ImageFormat;
     use geoengine_datatypes::util::assert_image_equals_with_format;
     use tokio_postgres::NoTls;
+
+    fn tiling_spec() -> TilingSpecification {
+        TilingSpecification::new(GridShape2D::new([600, 600]))
+    }
 
     #[ge_context::test]
     async fn get_capabilities(app_ctx: PostgresContext<NoTls>) {
@@ -662,7 +620,7 @@ mod tests {
         xmlns:ogc="http://www.opengis.net/ogc"
         xmlns:ows="http://www.opengis.net/ows/1.1"
         xmlns:gml="http://www.opengis.net/gml"
-        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/1625f9b9-7408-58ab-9482-4d5fb0e3c6e4/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.opengis.net/wcs/1.1.1 http://127.0.0.1:3030/api/wcs/{workflow_id}/schemas/wcs/1.1.1/wcsDescribeCoverage.xsd">
         <wcs:CoverageDescription>
             <ows:Title>Workflow {workflow_id}</ows:Title>
             <wcs:Identifier>{workflow_id}</wcs:Identifier>
@@ -705,13 +663,6 @@ mod tests {
     }
 
     // TODO: add get_coverage with masked band
-
-    fn tiling_spec() -> TilingSpecification {
-        TilingSpecification {
-            origin_coordinate: (0., 0.).into(),
-            tile_size_in_pixels: GridShape2D::new([600, 600]),
-        }
-    }
 
     #[ge_context::test(tiling_spec = "tiling_spec")]
     async fn get_coverage_with_nodatavalue(app_ctx: PostgresContext<NoTls>) {

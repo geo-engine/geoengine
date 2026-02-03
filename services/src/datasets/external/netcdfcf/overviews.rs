@@ -664,7 +664,6 @@ impl CogRasterCreationOptionss {
         fn inner(this: &CogRasterCreationOptionss) -> Result<RasterCreationOptions, GdalError> {
             let mut options = RasterCreationOptions::new();
             options.add_name_value("COMPRESS", &this.compression_format)?;
-            options.add_name_value("TILED", "YES")?;
             options.add_name_value("LEVEL", &this.compression_level)?;
             options.add_name_value("NUM_THREADS", &this.num_threads)?;
             options.add_name_value("BLOCKSIZE", COG_BLOCK_SIZE)?;
@@ -769,12 +768,13 @@ mod tests {
     use crate::{contexts::SessionContext, ge_context, tasks::util::NopTaskContext};
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::{
-        primitives::{DateTime, SpatialResolution, TimeInterval},
-        raster::RasterDataType,
+        primitives::{DateTime, TimeInterval},
+        raster::{GeoTransform, GridBoundingBox2D, RasterDataType},
         spatial_reference::SpatialReference,
         test_data,
         util::gdal::hide_gdal_errors,
     };
+    use geoengine_operators::engine::{SpatialGridDescriptor, TimeDescriptor};
     use geoengine_operators::{
         engine::{RasterBandDescriptors, RasterResultDescriptor},
         source::{
@@ -819,24 +819,24 @@ mod tests {
         )
         .unwrap();
 
+        let expected_time_1: TimeInstance = DateTime::new_utc(2020, 1, 1, 0, 0, 0).into();
+        let expected_time_2: TimeInstance = DateTime::new_utc(2020, 2, 1, 0, 0, 0).into();
         assert_eq!(
             loading_info,
             GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((50., 55.).into(), 1., -1.),
+                        GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2020, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2020, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_1, expected_time_1 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: Path::new("foo/2020-01-01T00:00:00.000Z.tiff").into(),
                             rasterband_channel: 1,
@@ -858,11 +858,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2020, 2, 1, 0, 0, 0),
-                            DateTime::new_utc(2020, 2, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: Path::new("foo/2020-02-01T00:00:00.000Z.tiff").into(),
                             rasterband_channel: 1,
@@ -994,24 +990,27 @@ mod tests {
             .await
             .unwrap()
             .unwrap();
+
+        let expected_time_1: TimeInstance = DateTime::new_utc(1900, 1, 1, 0, 0, 0).into();
+        let expected_time_2: TimeInstance = DateTime::new_utc(2015, 1, 1, 0, 0, 0).into();
+        let expected_time_3: TimeInstance = DateTime::new_utc(2055, 1, 1, 0, 0, 0).into();
+
         pretty_assertions::assert_eq!(
             sample_loading_info,
             GdalMetaDataList {
                 result_descriptor: RasterResultDescriptor {
                     data_type: RasterDataType::I16,
                     spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: Some(SpatialResolution::new_unchecked(1.0, 1.0)),
+                    time: TimeDescriptor::new_irregular(None),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((50., 55.).into(), 1., -1.),
+                        GridBoundingBox2D::new_min_max(0, 4, 0, 4).unwrap(),
+                    ),
                     bands: RasterBandDescriptors::new_single_band(),
                 },
                 params: vec![
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(1900, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(1900, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_1, expected_time_1 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/1900-01-01T00:00:00.000Z.tiff"),
@@ -1034,11 +1033,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2015, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2015, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_2, expected_time_2 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/2015-01-01T00:00:00.000Z.tiff"),
@@ -1061,11 +1056,7 @@ mod tests {
                         cache_ttl: CacheTtlSeconds::default(),
                     },
                     GdalLoadingInfoTemporalSlice {
-                        time: TimeInterval::new(
-                            DateTime::new_utc(2055, 1, 1, 0, 0, 0),
-                            DateTime::new_utc(2055, 1, 1, 0, 0, 0)
-                        )
-                        .unwrap(),
+                        time: TimeInterval::new(expected_time_3, expected_time_3 + 1).unwrap(),
                         params: Some(GdalDatasetParameters {
                             file_path: dataset_folder
                                 .join("metric_2/0/2055-01-01T00:00:00.000Z.tiff"),

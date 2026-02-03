@@ -1,13 +1,10 @@
 use crate::util::Result;
 use futures::{Stream, ready};
 use geoengine_datatypes::{
-    primitives::{
-        CacheExpiration, CacheHint, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
-        TimeInterval,
-    },
+    primitives::{CacheExpiration, CacheHint, TimeInstance, TimeInterval},
     raster::{
         EmptyGrid2D, GeoTransform, GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridStep,
-        Pixel, RasterTile2D, TilingSpecification,
+        Pixel, RasterTile2D,
     },
 };
 use pin_project::pin_project;
@@ -307,6 +304,11 @@ impl<T: Pixel> StateContainer<T> {
     }
 
     fn update_current_time(&mut self, new_time: TimeInterval) {
+        debug_assert!(
+            !new_time.is_instant(),
+            "Tile time is the data validity and must not be an instant!"
+        );
+
         if let Some(old_time) = self.current_time {
             if old_time == new_time {
                 return;
@@ -358,6 +360,21 @@ impl<T: Pixel> StateContainer<T> {
         }
 
         true
+    }
+
+    fn store_tile(&mut self, tile: RasterTile2D<T>) {
+        debug_assert!(self.next_tile.is_none());
+        let current_time = self
+            .current_time
+            .expect("Time must be set when the first tile arrives");
+        debug_assert!(current_time.start() <= tile.time.start());
+        debug_assert!(
+            current_time.start() < tile.time.start()
+                || (self.current_idx.y() < tile.tile_position.y()
+                    || (self.current_idx.y() == tile.tile_position.y()
+                        && self.current_idx.x() < tile.tile_position.x()))
+        );
+        self.next_tile = Some(tile);
     }
 }
 
@@ -413,33 +430,6 @@ where
         }
     }
 
-    pub fn new_like_subquery(
-        stream: S,
-        query_rect_to_answer: &RasterQueryRectangle,
-        tiling_spec: TilingSpecification,
-        cache_expiration: FillerTileCacheExpirationStrategy,
-        time_bounds: FillerTimeBounds,
-    ) -> Self {
-        debug_assert!(query_rect_to_answer.spatial_resolution.y > 0.);
-
-        let tiling_strat = tiling_spec.strategy(
-            query_rect_to_answer.spatial_resolution.x,
-            -query_rect_to_answer.spatial_resolution.y,
-        );
-
-        let grid_bounds = tiling_strat.tile_grid_box(query_rect_to_answer.spatial_partition());
-        Self::new(
-            stream,
-            grid_bounds,
-            query_rect_to_answer.attributes.count(),
-            tiling_strat.geo_transform,
-            tiling_spec.tile_size_in_pixels,
-            cache_expiration,
-            query_rect_to_answer.time_interval,
-            time_bounds,
-        )
-    }
-
     // TODO: return Result with SparseTilesFillAdapterError and map it to Error in the poll_next method if possible
     #[allow(clippy::too_many_lines, clippy::missing_panics_doc)]
     pub fn next_step(
@@ -479,7 +469,7 @@ where
                             this.sc.state = State::PollingForNextTile; // return the received tile and set state to polling for the next tile
                             tile
                         } else {
-                            this.sc.next_tile = Some(tile);
+                            this.sc.store_tile(tile);
                             this.sc.state = State::FillAndProduceNextTile; // save the tile and go to fill mode
                             this.sc.current_no_data_tile()
                         }
@@ -585,7 +575,7 @@ where
                                 tile
                             } else {
                                 // the tile is not the next to produce. Save it and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
@@ -606,13 +596,13 @@ where
                                 } else {
                                     // save the tile and go to fill mode.
                                     this.sc.update_current_time(tile.time);
-                                    this.sc.next_tile = Some(tile);
+                                    this.sc.store_tile(tile);
                                     this.sc.state = State::FillAndProduceNextTile;
                                     this.sc.current_no_data_tile()
                                 }
                             } else {
                                 // the received tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
@@ -629,12 +619,12 @@ where
                                         .end(),
                                     tile.time.start(),
                                 )?);
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             } else {
                                 // the received tile is in a new TimeInterval but we still need to finish the current one. Store tile and go to fill mode.
-                                this.sc.next_tile = Some(tile);
+                                this.sc.store_tile(tile);
                                 this.sc.state = State::FillAndProduceNextTile;
                                 this.sc.current_no_data_tile()
                             }
@@ -786,6 +776,7 @@ where
 /// It can either be a fixed value for all produced tiles, or it can be derived from the surrounding tiles that are not produced by the adapter.
 /// In the latter case it will use the cache expiration of the preceeding tile if it is available, otherwise it will use the cache expiration of the following tile.
 #[derive(Debug, Clone, PartialEq)]
+#[allow(dead_code)]
 pub enum FillerTileCacheExpirationStrategy {
     NoCache,
     FixedValue(CacheExpiration),

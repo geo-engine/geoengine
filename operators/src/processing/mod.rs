@@ -2,6 +2,7 @@ mod band_neighborhood_aggregate;
 mod bandwise_expression;
 mod circle_merging_quadtree;
 mod column_range_filter;
+mod downsample;
 mod expression;
 mod interpolation;
 mod line_simplification;
@@ -26,11 +27,19 @@ pub use band_neighborhood_aggregate::{
 pub use circle_merging_quadtree::{
     InitializedVisualPointClustering, VisualPointClustering, VisualPointClusteringParams,
 };
+pub use column_range_filter::{ColumnRangeFilter, ColumnRangeFilterParams};
+pub use downsample::{
+    Downsampling, DownsamplingError, DownsamplingMethod, DownsamplingParams,
+    DownsamplingResolution, InitializedDownsampling,
+};
 pub use expression::{
     Expression, ExpressionParams, RasterExpressionError, VectorExpression, VectorExpressionError,
     VectorExpressionParams, initialize_expression_dependencies,
 };
-pub use interpolation::{Interpolation, InterpolationError, InterpolationParams};
+pub use interpolation::{
+    InitializedInterpolation, Interpolation, InterpolationError, InterpolationMethod,
+    InterpolationParams, InterpolationResolution,
+};
 pub use line_simplification::{
     LineSimplification, LineSimplificationError, LineSimplificationParams,
 };
@@ -50,8 +59,10 @@ pub use raster_vector_join::{
     ColumnNames, FeatureAggregationMethod, RasterVectorJoin, RasterVectorJoinParams,
     TemporalAggregationMethod,
 };
+pub use rasterization::{Rasterization, RasterizationParams};
 pub use reprojection::{
-    InitializedRasterReprojection, InitializedVectorReprojection, Reprojection, ReprojectionParams,
+    DeriveOutRasterSpecsSource, InitializedRasterReprojection, InitializedVectorReprojection,
+    Reprojection, ReprojectionParams,
 };
 pub use temporal_raster_aggregation::{
     Aggregation, TemporalRasterAggregation, TemporalRasterAggregationParameters,
