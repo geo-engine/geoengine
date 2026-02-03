@@ -60,8 +60,10 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
     type Error = anyhow::Error;
     fn try_from(operator: VectorOperator) -> Result<Self, Self::Error> {
         match operator {
-            VectorOperator::MockPointSource(mock_point_source) => OperatorsMockPointSource::try_from(mock_point_source)
-                .map(OperatorsVectorOperator::boxed),
+            VectorOperator::MockPointSource(mock_point_source) => {
+                OperatorsMockPointSource::try_from(mock_point_source)
+                    .map(OperatorsVectorOperator::boxed)
+            }
             VectorOperator::RasterVectorJoin(_rvj) => Err(anyhow::anyhow!(
                 "conversion of RasterVectorJoin to runtime operator is not supported here"
             )),
