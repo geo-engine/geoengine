@@ -9218,6 +9218,9 @@
       "RasterOperator": {
         "oneOf": [
           {
+            "$ref": "#/components/schemas/Expression"
+          },
+          {
             "$ref": "#/components/schemas/GdalSource"
           }
         ],
@@ -9225,6 +9228,7 @@
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "Expression": "#/components/schemas/Expression",
             "GdalSource": "#/components/schemas/GdalSource"
           }
         }

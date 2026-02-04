@@ -94,7 +94,7 @@ use utoipa::ToSchema;
 #[serde(rename_all = "camelCase")]
 pub struct Expression {
     pub params: ExpressionParameters,
-    pub sources: SingleRasterSource,
+    pub sources: Box<SingleRasterSource>,
 }
 
 /// ## Types
@@ -126,7 +126,7 @@ impl TryFrom<Expression> for OperatorsExpression {
                 output_band: value.params.output_band.map(Into::into),
                 map_no_data: value.params.map_no_data,
             },
-            sources: value.sources.try_into()?,
+            sources: (*value.sources).try_into()?,
         })
     }
 }
@@ -270,7 +270,7 @@ mod tests {
                 output_band: None,
                 map_no_data: true,
             },
-            sources: SingleRasterSource {
+            sources: Box::new(SingleRasterSource {
                 raster: RasterOperator::GdalSource(GdalSource {
                     r#type: Default::default(),
                     params: GdalSourceParameters {
@@ -278,7 +278,7 @@ mod tests {
                         overview_level: None,
                     },
                 }),
-            },
+            }),
         };
 
         let ops = OperatorsExpression::try_from(api).expect("conversion failed");

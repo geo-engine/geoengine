@@ -10,6 +10,9 @@ use geoengine_operators::{
         VectorOperator as OperatorsVectorOperator,
     },
     mock::MockPointSource as OperatorsMockPointSource,
+    processing::{
+        Expression as OperatorsExpression, RasterVectorJoin as OperatorsRasterVectorJoin,
+    },
     source::GdalSource as OperatorsGdalSource,
 };
 use serde::{Deserialize, Serialize};
@@ -33,6 +36,7 @@ pub enum TypedOperator {
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
 pub enum RasterOperator {
+    Expression(Expression),
     GdalSource(GdalSource),
 }
 
@@ -57,6 +61,9 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
     type Error = anyhow::Error;
     fn try_from(operator: RasterOperator) -> Result<Self, Self::Error> {
         match operator {
+            RasterOperator::Expression(expression) => {
+                OperatorsExpression::try_from(expression).map(OperatorsRasterOperator::boxed)
+            }
             RasterOperator::GdalSource(gdal_source) => {
                 OperatorsGdalSource::try_from(gdal_source).map(OperatorsRasterOperator::boxed)
             }
@@ -72,9 +79,9 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
                 OperatorsMockPointSource::try_from(mock_point_source)
                     .map(OperatorsVectorOperator::boxed)
             }
-            VectorOperator::RasterVectorJoin(_rvj) => Err(anyhow::anyhow!(
-                "conversion of RasterVectorJoin to runtime operator is not supported here"
-            )),
+            VectorOperator::RasterVectorJoin(rvj) => {
+                OperatorsRasterVectorJoin::try_from(rvj).map(OperatorsVectorOperator::boxed)
+            }
         }
     }
 }
