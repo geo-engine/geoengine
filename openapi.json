@@ -8881,6 +8881,11 @@
           }
         }
       },
+      "PlotOperator": {
+        "type": "null",
+        "description": "An operator that produces plot data.",
+        "default": null
+      },
       "PlotOutputFormat": {
         "type": "string",
         "enum": [

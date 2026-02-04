@@ -25,7 +25,7 @@ mod source;
 pub enum TypedOperator {
     Vector(VectorOperator),
     Raster(RasterOperator),
-    // Plot(Box<dyn PlotOperator>),
+    Plot(PlotOperator),
 }
 
 /// An operator that produces raster data.
@@ -43,6 +43,14 @@ pub enum RasterOperator {
 pub enum VectorOperator {
     MockPointSource(MockPointSource),
     RasterVectorJoin(RasterVectorJoin),
+}
+
+/// An operator that produces plot data.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", untagged)]
+// #[schema(discriminator = "type")]
+pub enum PlotOperator {
+    // Currently no plot operators are defined
 }
 
 impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
@@ -89,10 +97,11 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     GdalSourceParameters,
     MockPointSource,
     MockPointSourceParameters,
+    RasterOperator,
     RasterVectorJoin,
     RasterVectorJoinParameters,
-    RasterOperator,
     TypedOperator,
     VectorOperator,
+    PlotOperator,
 )))]
 pub struct OperatorsApi;
