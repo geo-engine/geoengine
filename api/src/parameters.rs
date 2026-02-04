@@ -1,3 +1,4 @@
+use anyhow::Context;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
@@ -169,13 +170,9 @@ impl From<ClassificationMeasurement>
     for geoengine_datatypes::primitives::ClassificationMeasurement
 {
     fn from(value: ClassificationMeasurement) -> Self {
-        let mut classes = std::collections::HashMap::new();
-        for (k, v) in value.classes {
-            classes.insert(k, v);
-        }
         geoengine_datatypes::primitives::ClassificationMeasurement {
             measurement: value.measurement,
-            classes,
+            classes: value.classes,
         }
     }
 }
@@ -366,9 +363,55 @@ impl From<TemporalAggregationMethod>
     }
 }
 
+/// Spatial bounds derivation options for the [`MockPointSource`].
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type")]
+#[derive(Default)]
+pub enum SpatialBoundsDerive {
+    Derive,
+    Bounds(BoundingBox2D),
+    #[default]
+    None,
+}
+
+impl TryFrom<SpatialBoundsDerive> for geoengine_operators::mock::SpatialBoundsDerive {
+    type Error = anyhow::Error;
+    fn try_from(value: SpatialBoundsDerive) -> Result<Self, Self::Error> {
+        Ok(match value {
+            SpatialBoundsDerive::Derive => geoengine_operators::mock::SpatialBoundsDerive::Derive,
+            SpatialBoundsDerive::Bounds(bbox) => {
+                geoengine_operators::mock::SpatialBoundsDerive::Bounds(bbox.try_into()?)
+            }
+            SpatialBoundsDerive::None => geoengine_operators::mock::SpatialBoundsDerive::None,
+        })
+    }
+}
+
+/// A bounding box that includes all border points.
+/// Note: may degenerate to a point!
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct BoundingBox2D {
+    lower_left_coordinate: Coordinate2D,
+    upper_right_coordinate: Coordinate2D,
+}
+
+impl TryFrom<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
+    type Error = anyhow::Error;
+    fn try_from(value: BoundingBox2D) -> Result<Self, Self::Error> {
+        geoengine_datatypes::primitives::BoundingBox2D::new(
+            value.lower_left_coordinate.into(),
+            value.upper_right_coordinate.into(),
+        )
+        .context("invalid bounding box")
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::float_cmp)] // ok for tests
+
+    use geoengine_datatypes::primitives::AxisAlignedRectangle;
 
     use super::*;
 
@@ -412,5 +455,25 @@ mod tests {
 
         let back: geoengine_operators::engine::RasterBandDescriptor = api.into();
         assert_eq!(back, ops);
+    }
+
+    #[test]
+    fn it_converts_bounding_boxes() {
+        let api_bbox = BoundingBox2D {
+            lower_left_coordinate: Coordinate2D { x: 1.0, y: 2.0 },
+            upper_right_coordinate: Coordinate2D { x: 3.0, y: 4.0 },
+        };
+
+        let dt_bbox: geoengine_datatypes::primitives::BoundingBox2D =
+            api_bbox.try_into().expect("it should convert");
+
+        assert_eq!(
+            dt_bbox.upper_left(),
+            geoengine_datatypes::primitives::Coordinate2D { x: 1.0, y: 4.0 }
+        );
+        assert_eq!(
+            dt_bbox.lower_right(),
+            geoengine_datatypes::primitives::Coordinate2D { x: 3.0, y: 2.0 }
+        );
     }
 }

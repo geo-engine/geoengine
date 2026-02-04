@@ -3,6 +3,7 @@ use crate::engine::{
     OperatorName, QueryContext, ResultDescriptor, SourceOperator, TypedVectorQueryProcessor,
     VectorOperator, VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::StreamExt;
@@ -10,7 +11,7 @@ use futures::stream;
 use futures::stream::BoxStream;
 use geoengine_datatypes::collections::{MultiPointCollection, VectorDataType};
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::CacheHint;
+use geoengine_datatypes::primitives::{CacheHint, SpatialResolution};
 use geoengine_datatypes::primitives::{Coordinate2D, TimeInterval, VectorQueryRectangle};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use postgres_types::{FromSql, ToSql};
@@ -129,6 +130,7 @@ impl VectorOperator for MockDatasetDataSource {
         Ok(InitializedMockDatasetDataSource {
             name: CanonicOperatorName::from(&self),
             path,
+            data: self.params.data.clone(),
             result_descriptor: loading_info.result_descriptor().await?,
             loading_info,
         }
@@ -147,6 +149,7 @@ impl OperatorData for MockDatasetDataSource {
 struct InitializedMockDatasetDataSource<R: ResultDescriptor, Q> {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    data: NamedData,
     result_descriptor: R,
     loading_info: Box<dyn MetaData<MockDatasetDataSourceLoadingInfo, R, Q>>,
 }
@@ -179,17 +182,29 @@ impl InitializedVectorOperator
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        _target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(MockDatasetDataSource {
+            params: MockDatasetDataSourceParams {
+                data: self.data.clone(),
+            },
+        }
+        .boxed())
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::engine::MockExecutionContext;
     use crate::engine::QueryProcessor;
-    use crate::engine::{MockExecutionContext, MockQueryContext};
     use futures::executor::block_on_stream;
     use geoengine_datatypes::collections::FeatureCollectionInfos;
     use geoengine_datatypes::dataset::{DataId, DatasetId, NamedData};
-    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection, SpatialResolution};
+    use geoengine_datatypes::primitives::{BoundingBox2D, ColumnSelection};
     use geoengine_datatypes::util::Identifier;
     use geoengine_datatypes::util::test::TestDefault;
 
@@ -222,13 +237,13 @@ mod tests {
             panic!()
         };
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new((2 * std::mem::size_of::<Coordinate2D>()).into());
+        let query_rectangle = VectorQueryRectangle::new(
+            BoundingBox2D::new((0., 0.).into(), (4., 4.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ctx =
+            execution_context.mock_query_context((2 * std::mem::size_of::<Coordinate2D>()).into());
 
         let stream = point_processor.query(query_rectangle, &ctx).await.unwrap();
 

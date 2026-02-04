@@ -104,6 +104,11 @@ pub enum Error {
         i2: TimeInterval,
     },
 
+    #[snafu(display("Time step must be greater than zero, got: {}", step))]
+    TimeStepStepMustBeGreaterThanZero {
+        step: u32,
+    },
+
     #[snafu(display(
         "{} must be larger than {} and {} must be smaller than {}",
         start.inner(),
@@ -294,7 +299,7 @@ pub enum Error {
     WrongMetadataType,
 
     #[snafu(display(
-        "The conditions ul.x < lr.x && ul.y < lr.y are not met by ul:{} lr:{}",
+        "The conditions ul.x < lr.x && ul.y > lr.y are not met by ul:{} lr:{}",
         upper_left_coordinate,
         lower_right_coordinate
     ))]
@@ -345,6 +350,8 @@ pub enum Error {
     DuplicateBandInQueryBandSelection,
     QueryBandSelectionMustNotBeEmpty,
 
+    TilingGeoTransformOriginCoordinateMismatch,
+    TilingGeoTransformResolutionMissmatch,
     #[snafu(display("Invalid number of suffixes, expected {} found {}", expected, found))]
     InvalidNumberOfSuffixes {
         expected: usize,
@@ -362,6 +369,11 @@ pub enum Error {
     InvalidNumberOfNewNames {
         expected: usize,
         found: usize,
+    },
+    NoIntersectionWithTargetProjection {
+        srs_in: SpatialReference,
+        srs_out: SpatialReference,
+        bounds: BoundingBox2D,
     },
 }
 

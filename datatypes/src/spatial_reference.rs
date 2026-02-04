@@ -260,6 +260,10 @@ impl SpatialReferenceOption {
     pub fn is_unreferenced(self) -> bool {
         !self.is_spatial_ref()
     }
+
+    pub fn as_option(self) -> Option<SpatialReference> {
+        self.into()
+    }
 }
 
 impl ToSql for SpatialReferenceOption {

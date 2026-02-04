@@ -1,8 +1,31 @@
+use gdal::{Dataset, DatasetOptions};
 use serde::{Deserialize, Serialize};
-use std::fmt::Display;
+use snafu::ResultExt;
+use std::{fmt::Display, path::Path};
+
+use crate::error;
+use crate::util::Result;
 
 pub fn hide_gdal_errors() {
     gdal::config::set_error_handler(|_, _, _| {});
+}
+
+/// Opens a Gdal Dataset with the given `path`.
+/// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
+pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
+    gdal_open_dataset_ex(path, DatasetOptions::default())
+}
+
+/// Opens a Gdal Dataset with the given `path` and `dataset_options`.
+/// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
+pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
+    let dataset_options = {
+        let mut dataset_options = dataset_options;
+        dataset_options.open_flags |= gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR;
+        dataset_options
+    };
+
+    Dataset::open_ex(path, dataset_options).context(error::Gdal)
 }
 
 // TODO: push to `rust-gdal`

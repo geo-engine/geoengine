@@ -4,6 +4,7 @@ use geoengine_datatypes::operations::image::RgbParams;
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, MultiLineStringAccess, MultiPointAccess, MultiPolygonAccess,
 };
+use geoengine_datatypes::raster::GridBounds;
 use geoengine_macros::type_tag;
 use ordered_float::NotNan;
 use postgres_types::{FromSql, ToSql};
@@ -11,12 +12,13 @@ use serde::de::Error as SerdeError;
 use serde::ser::SerializeMap;
 use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
 use snafu::ResultExt;
+use std::borrow::Cow;
 use std::{
     collections::{BTreeMap, HashMap},
     fmt::{Debug, Formatter},
     str::FromStr,
 };
-use utoipa::{PartialSchema, ToSchema};
+use utoipa::{PartialSchema, ToSchema, openapi};
 
 identifier!(DataProviderId);
 
@@ -746,6 +748,129 @@ impl From<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpatialGridDefinition {
+    pub geo_transform: GeoTransform,
+    pub grid_bounds: GridBoundingBox2D,
+}
+
+impl From<geoengine_datatypes::raster::SpatialGridDefinition> for SpatialGridDefinition {
+    fn from(value: geoengine_datatypes::raster::SpatialGridDefinition) -> Self {
+        Self {
+            geo_transform: value.geo_transform().into(),
+            grid_bounds: value.grid_bounds().into(),
+        }
+    }
+}
+
+impl From<SpatialGridDefinition> for geoengine_datatypes::raster::SpatialGridDefinition {
+    fn from(value: SpatialGridDefinition) -> Self {
+        geoengine_datatypes::raster::SpatialGridDefinition::new(
+            value.geo_transform.into(),
+            value.grid_bounds.into(),
+        )
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GeoTransform {
+    pub origin_coordinate: Coordinate2D,
+    pub x_pixel_size: f64,
+    pub y_pixel_size: f64,
+}
+
+impl From<geoengine_datatypes::raster::GeoTransform> for GeoTransform {
+    fn from(value: geoengine_datatypes::raster::GeoTransform) -> Self {
+        GeoTransform {
+            origin_coordinate: value.origin_coordinate().into(),
+            x_pixel_size: value.x_pixel_size(),
+            y_pixel_size: value.y_pixel_size(),
+        }
+    }
+}
+
+impl From<GeoTransform> for geoengine_datatypes::raster::GeoTransform {
+    fn from(value: GeoTransform) -> Self {
+        geoengine_datatypes::raster::GeoTransform::new(
+            value.origin_coordinate.into(),
+            value.x_pixel_size,
+            value.y_pixel_size,
+        )
+    }
+}
+
+impl From<geoengine_operators::source::GdalDatasetGeoTransform> for GeoTransform {
+    fn from(value: geoengine_operators::source::GdalDatasetGeoTransform) -> Self {
+        Self {
+            origin_coordinate: value.origin_coordinate.into(),
+            x_pixel_size: value.x_pixel_size,
+            y_pixel_size: value.y_pixel_size,
+        }
+    }
+}
+
+impl From<GeoTransform> for geoengine_operators::source::GdalDatasetGeoTransform {
+    fn from(value: GeoTransform) -> Self {
+        Self {
+            origin_coordinate: value.origin_coordinate.into(),
+            x_pixel_size: value.x_pixel_size,
+            y_pixel_size: value.y_pixel_size,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GridIdx2D {
+    pub y_idx: isize,
+    pub x_idx: isize,
+}
+
+impl From<geoengine_datatypes::raster::GridIdx2D> for GridIdx2D {
+    fn from(value: geoengine_datatypes::raster::GridIdx2D) -> Self {
+        Self {
+            y_idx: value.y(),
+            x_idx: value.x(),
+        }
+    }
+}
+
+impl From<GridIdx2D> for geoengine_datatypes::raster::GridIdx2D {
+    fn from(value: GridIdx2D) -> Self {
+        geoengine_datatypes::raster::GridIdx::new_y_x(value.y_idx, value.x_idx)
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GridBoundingBox2D {
+    pub top_left_idx: GridIdx2D,
+    pub bottom_right_idx: GridIdx2D,
+}
+
+impl From<geoengine_datatypes::raster::GridBoundingBox2D> for GridBoundingBox2D {
+    fn from(value: geoengine_datatypes::raster::GridBoundingBox2D) -> Self {
+        Self {
+            top_left_idx: value.min_index().into(),
+            bottom_right_idx: value.max_index().into(),
+        }
+    }
+}
+
+impl From<GridBoundingBox2D> for geoengine_datatypes::raster::GridBoundingBox2D {
+    fn from(value: GridBoundingBox2D) -> Self {
+        geoengine_datatypes::raster::GridBoundingBox2D::new_min_max(
+            value.top_left_idx.y_idx,
+            value.bottom_right_idx.y_idx,
+            value.top_left_idx.x_idx,
+            value.bottom_right_idx.x_idx,
+        )
+        .expect("Bounds were correct before") // TODO: maybe try from?
+    }
+}
+
 /// An object that composes the date and a timestamp with time zone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct DateTimeString {
@@ -898,6 +1023,48 @@ impl From<ContinuousMeasurement> for geoengine_datatypes::primitives::Continuous
     }
 }
 
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SerializableClasses(BTreeMap<u8, String>);
+
+impl PartialSchema for SerializableClasses {
+    fn schema() -> openapi::RefOr<openapi::schema::Schema> {
+        BTreeMap::<String, String>::schema()
+    }
+}
+
+impl ToSchema for SerializableClasses {
+    fn name() -> Cow<'static, str> {
+        <BTreeMap<String, String> as ToSchema>::name() // TODO: is this needed?
+    }
+}
+
+impl Serialize for SerializableClasses {
+    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let classes: BTreeMap<String, &String> =
+            self.0.iter().map(|(k, v)| (k.to_string(), v)).collect();
+        classes.serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for SerializableClasses {
+    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        let tree: BTreeMap<String, String> = Deserialize::deserialize(deserializer)?;
+        let classes: Result<BTreeMap<u8, String>, _> = tree
+            .into_iter()
+            .map(|(k, v)| k.parse::<u8>().map(|x| (x, v)))
+            .collect();
+        Ok(SerializableClasses(
+            classes.map_err(serde::de::Error::custom)?,
+        ))
+    }
+}
+
 #[type_tag(value = "classification")]
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
 pub struct ClassificationMeasurement {
@@ -939,15 +1106,10 @@ impl From<geoengine_datatypes::primitives::ClassificationMeasurement>
     for ClassificationMeasurement
 {
     fn from(value: geoengine_datatypes::primitives::ClassificationMeasurement) -> Self {
-        let mut classes = BTreeMap::new();
-        for (k, v) in value.classes {
-            classes.insert(k, v);
-        }
-
         Self {
             r#type: Default::default(),
             measurement: value.measurement,
-            classes,
+            classes: value.classes,
         }
     }
 }
@@ -956,14 +1118,9 @@ impl From<ClassificationMeasurement>
     for geoengine_datatypes::primitives::ClassificationMeasurement
 {
     fn from(measurement: ClassificationMeasurement) -> Self {
-        let mut classes = HashMap::with_capacity(measurement.classes.len());
-        for (k, v) in measurement.classes {
-            classes.insert(k, v);
-        }
-
         Self {
             measurement: measurement.measurement,
-            classes,
+            classes: measurement.classes,
         }
     }
 }
@@ -997,10 +1154,9 @@ impl From<SpatialPartition2D> for geoengine_datatypes::primitives::SpatialPartit
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct RasterQueryRectangle {
+pub struct RasterToDatasetQueryRectangle {
     pub spatial_bounds: SpatialPartition2D,
     pub time_interval: TimeInterval,
-    pub spatial_resolution: SpatialResolution,
 }
 
 /// A spatio-temporal rectangle with a specified resolution
@@ -1011,6 +1167,7 @@ pub struct VectorQueryRectangle {
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
 }
+
 /// A spatio-temporal rectangle with a specified resolution
 #[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1018,39 +1175,6 @@ pub struct PlotQueryRectangle {
     pub spatial_bounds: BoundingBox2D,
     pub time_interval: TimeInterval,
     pub spatial_resolution: SpatialResolution,
-}
-
-impl
-    From<
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::SpatialPartition2D,
-            geoengine_datatypes::primitives::BandSelection,
-        >,
-    > for RasterQueryRectangle
-{
-    fn from(
-        value: geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::SpatialPartition2D,
-            geoengine_datatypes::primitives::BandSelection,
-        >,
-    ) -> Self {
-        Self {
-            spatial_bounds: value.spatial_bounds.into(),
-            time_interval: value.time_interval.into(),
-            spatial_resolution: value.spatial_resolution.into(),
-        }
-    }
-}
-
-impl From<RasterQueryRectangle> for geoengine_datatypes::primitives::RasterQueryRectangle {
-    fn from(value: RasterQueryRectangle) -> Self {
-        Self {
-            spatial_bounds: value.spatial_bounds.into(),
-            time_interval: value.time_interval.into(),
-            spatial_resolution: value.spatial_resolution.into(),
-            attributes: geoengine_datatypes::primitives::BandSelection::first(), // TODO: adjust once API supports attribute selection
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Deserialize, Serialize, ToSchema)]
@@ -1257,8 +1381,8 @@ impl From<TimeStep> for geoengine_datatypes::primitives::TimeStep {
 /// Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq, ToSql, FromSql, ToSchema)]
 pub struct TimeInterval {
-    start: TimeInstance,
-    end: TimeInstance,
+    pub start: TimeInstance,
+    pub end: TimeInstance,
 }
 
 impl From<TimeInterval> for geoengine_datatypes::primitives::TimeInterval {

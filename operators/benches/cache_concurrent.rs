@@ -1,9 +1,9 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
 
 use futures::future::join_all;
+use geoengine_datatypes::primitives::DateTime;
 use geoengine_datatypes::primitives::{BandSelection, CacheHint};
-use geoengine_datatypes::primitives::{DateTime, SpatialPartition2D, SpatialResolution};
-use geoengine_datatypes::raster::RasterProperties;
+use geoengine_datatypes::raster::{GridBoundingBox2D, RasterProperties};
 use geoengine_datatypes::{
     primitives::{RasterQueryRectangle, TimeInterval},
     raster::{Grid, RasterTile2D},
@@ -118,12 +118,11 @@ async fn read_cache(tile_cache: &SharedCache, op_no: usize) -> ReadMeasurement {
 }
 
 fn query_rect() -> RasterQueryRectangle {
-    RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into()),
-        time_interval: TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
-        spatial_resolution: SpatialResolution::one(),
-        attributes: BandSelection::first(),
-    }
+    RasterQueryRectangle::new(
+        GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+        TimeInterval::new_instant(DateTime::new_utc(2014, 3, 1, 0, 0, 0)).unwrap(),
+        BandSelection::first(),
+    )
 }
 
 fn op(idx: usize) -> CanonicOperatorName {

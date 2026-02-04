@@ -1,15 +1,15 @@
 use super::abortable_query_execution;
-use crate::engine::{QueryAbortTrigger, QueryContext, QueryProcessor, RasterQueryProcessor};
+use crate::engine::{BoxRasterQueryProcessor, QueryAbortTrigger, QueryContext, QueryProcessor};
 use crate::util::Result;
 use futures::TryStreamExt;
 use futures::{StreamExt, future::BoxFuture};
 use geoengine_datatypes::error::{BoxedResultExt, ErrorSource};
-use geoengine_datatypes::operations::image::{ColorMapper, RgbParams};
-use geoengine_datatypes::raster::{FromIndexFn, GridIndexAccess, GridShapeAccess};
+use geoengine_datatypes::operations::image::{ColorMapper, RasterColorizer, RgbParams};
+use geoengine_datatypes::raster::{FromIndexFn, GridIndexAccess, GridShapeAccess, RasterTile2D};
 use geoengine_datatypes::{
-    operations::image::{Colorizer, RasterColorizer, RgbaColor, ToPng},
-    primitives::{AxisAlignedRectangle, CacheHint, RasterQueryRectangle, TimeInterval},
-    raster::{Blit, ConvertDataType, EmptyGrid2D, GeoTransform, GridOrEmpty, Pixel, RasterTile2D},
+    operations::image::{Colorizer, RgbaColor, ToPng},
+    primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
+    raster::{ChangeGridBounds, GridBlit, GridBoundingBox2D, GridOrEmpty, Pixel},
 };
 use num_traits::AsPrimitive;
 use snafu::Snafu;
@@ -20,19 +20,19 @@ use tracing::{Level, span};
 /// Panics if not three bands were queried.
 #[allow(clippy::too_many_arguments)]
 pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     mut query_ctx: C,
     width: u32,
     height: u32,
-    time: Option<TimeInterval>,
+    _time: Option<TimeInterval>,
     raster_colorizer: Option<RasterColorizer>,
     conn_closed: BoxFuture<'_, ()>,
 ) -> Result<(Vec<u8>, CacheHint)> {
     debug_assert!(
-        query_rect.attributes.count() <= 3
+        query_rect.attributes().count() <= 3
             || query_rect
-                .attributes
+                .attributes()
                 .as_slice()
                 .windows(2)
                 .all(|w| w[0] < w[1]), // TODO: replace with `is_sorted` once it is stable
@@ -64,7 +64,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         .iter()
         .filter_map(|band| {
             query_rect
-                .attributes
+                .attributes()
                 .as_slice()
                 .iter()
                 .position(|b| b == band)
@@ -73,30 +73,12 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
     if band_positions.len() != required_bands.len() {
         return Err(PngCreationError::ColorizerBandsMustBePresentInQuery {
-            bands_present: query_rect.attributes.as_vec(),
+            bands_present: query_rect.attributes().as_vec(),
             required_bands,
         })?;
     }
 
     let query_abort_trigger = query_ctx.abort_trigger()?;
-
-    let x_query_resolution = query_rect.spatial_bounds.size_x() / f64::from(width);
-    let y_query_resolution = query_rect.spatial_bounds.size_y() / f64::from(height);
-
-    // build png
-    let dim = [height as usize, width as usize];
-    let query_geo_transform = GeoTransform::new(
-        query_rect.spatial_bounds.upper_left(),
-        x_query_resolution,
-        -y_query_resolution, // TODO: negative, s.t. geo transform fits...
-    );
-
-    let tile_template: RasterTile2D<T> = RasterTile2D::new_without_offset(
-        time.unwrap_or_default(),
-        query_geo_transform,
-        GridOrEmpty::from(EmptyGrid2D::new(dim.into())),
-        CacheHint::max_duration(),
-    );
 
     match raster_colorizer {
         RasterColorizer::SingleBand { band_colorizer, .. } => {
@@ -104,7 +86,6 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
                 processor,
                 query_rect,
                 query_ctx,
-                tile_template,
                 width,
                 height,
                 band_colorizer,
@@ -121,7 +102,6 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
                 processor,
                 query_rect,
                 query_ctx,
-                tile_template,
                 width,
                 height,
                 rgba_params,
@@ -136,39 +116,47 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
 #[allow(clippy::too_many_arguments)]
 async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
-    tile_template: RasterTile2D<T>,
     width: u32,
     height: u32,
     colorizer: Colorizer,
     conn_closed: BoxFuture<'_, ()>,
     query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
-    debug_assert_eq!(query_rect.attributes.count(), 1);
+    debug_assert_eq!(query_rect.attributes().count(), 1);
 
+    // the tile stream will allways produce tiles aligned to the tiling origin
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+    let output_cache_hint = CacheHint::max_duration();
 
-    let output_tile = Box::pin(
-        tile_stream.fold(Ok(tile_template), |raster, tile| async move {
-            blit_tile(raster, tile)
-        }),
-    );
+    let output_grid =
+        GridOrEmpty::<GridBoundingBox2D, T>::new_empty_shape(query_rect.spatial_bounds());
 
-    let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-    Ok((
-        result.grid_array.to_png(width, height, &colorizer)?,
-        result.cache_hint,
-    ))
+    let accu = Ok((output_grid, output_cache_hint));
+
+    let output_tile: BoxFuture<Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)>> =
+        Box::pin(tile_stream.fold(accu, |accu, tile| {
+            let result: Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)> =
+                blit_tile(accu, tile);
+
+            match result {
+                Ok(updated_raster2d) => futures::future::ok(updated_raster2d),
+                Err(error) => futures::future::err(error),
+            }
+        }));
+
+    let (result, ch) =
+        abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+    Ok((result.unbounded().to_png(width, height, &colorizer)?, ch))
 }
 
 #[allow(clippy::too_many_arguments)]
 async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
-    processor: Box<dyn RasterQueryProcessor<RasterType = T>>,
+    processor: BoxRasterQueryProcessor<T>,
     query_rect: RasterQueryRectangle,
     query_ctx: C,
-    tile_template: RasterTile2D<T>,
     width: u32,
     height: u32,
     rgb_params: RgbParams,
@@ -176,17 +164,20 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     conn_closed: BoxFuture<'_, ()>,
     query_abort_trigger: QueryAbortTrigger,
 ) -> Result<(Vec<u8>, CacheHint)> {
-    let rgb_channel_count = query_rect.attributes.count() as usize;
+    let rgb_channel_count = query_rect.attributes().count() as usize;
     let no_data_color = rgb_params.no_data_color;
-    let tile_template: RasterTile2D<u32> = tile_template.convert_data_type();
+    let tile_template: GridOrEmpty<GridBoundingBox2D, u32> =
+        GridOrEmpty::new_empty_shape(query_rect.spatial_bounds());
+    let output_cache_hint = CacheHint::max_duration();
     let red_band_index = band_positions[0];
     let green_band_index = band_positions[1];
     let blue_band_index = band_positions[2];
 
     let tile_stream = processor.query(query_rect.clone(), &query_ctx).await?;
+    let accu = Ok((tile_template, output_cache_hint));
 
     let output_tile = Box::pin(tile_stream.try_chunks(rgb_channel_count).fold(
-        Ok(tile_template),
+        accu,
         |raster2d, chunk| async move {
             let chunk = chunk.boxed_context(error::QueryDidNotProduceNextChunk)?;
 
@@ -212,31 +203,30 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         },
     ));
 
-    let result = abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
+    let (result, ch) =
+        abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
     Ok((
         result
-            .grid_array
+            .unbounded()
             .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)?,
-        result.cache_hint,
+        ch,
     ))
 }
 
 fn blit_tile<T>(
-    raster2d: Result<RasterTile2D<T>>,
+    accu: Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)>,
     tile: Result<RasterTile2D<T>>,
-) -> Result<RasterTile2D<T>>
+) -> Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)>
 where
     T: Pixel,
 {
-    let result: Result<RasterTile2D<T>> = match (raster2d, tile) {
-        (Ok(mut raster2d), Ok(tile)) if tile.is_empty() => {
-            raster2d.cache_hint.merge_with(&tile.cache_hint);
-            Ok(raster2d)
+    let result: Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)> = match (accu, tile) {
+        (Ok((empty_grid, ch)), Ok(tile)) if tile.is_empty() => Ok((empty_grid, ch)),
+        (Ok((mut grid, mut ch)), Ok(tile)) => {
+            ch.merge_with(&tile.cache_hint);
+            grid.grid_blit_from(&tile.into_inner_positioned_grid());
+            Ok((grid, ch))
         }
-        (Ok(mut raster2d), Ok(tile)) => match raster2d.blit(tile) {
-            Ok(()) => Ok(raster2d),
-            Err(error) => Err(error.into()),
-        },
         (Err(error), _) | (_, Err(error)) => Err(error),
     };
 
@@ -351,17 +341,14 @@ pub enum PngCreationError {
 mod tests {
     use std::marker::PhantomData;
 
+    use crate::engine::{MockExecutionContext, RasterQueryProcessor};
+    use crate::{source::GdalSourceProcessor, util::gdal::create_ndvi_meta_data};
+    use geoengine_datatypes::primitives::{DateTime, TimeInstance};
     use geoengine_datatypes::{
-        primitives::{BandSelection, Coordinate2D, SpatialPartition2D, SpatialResolution},
-        raster::{RasterDataType, TilingSpecification},
+        primitives::BandSelection,
+        raster::TilingSpecification,
         test_data,
         util::{assert_image_equals, test::TestDefault},
-    };
-
-    use crate::{
-        engine::{MockQueryContext, RasterResultDescriptor},
-        source::GdalSourceProcessor,
-        util::gdal::create_ndvi_meta_data,
     };
 
     use super::*;
@@ -383,32 +370,30 @@ mod tests {
 
     #[tokio::test]
     async fn png_from_stream() {
-        let ctx = MockQueryContext::test_default();
-        let tiling_specification =
-            TilingSpecification::new(Coordinate2D::default(), [600, 600].into());
+        let exe_ctx = MockExecutionContext::test_default();
+        let ctx = exe_ctx.mock_query_context_test_default();
+        let tiling_specification = TilingSpecification::new([600, 600].into());
+
+        let meta_data = create_ndvi_meta_data();
 
         let gdal_source = GdalSourceProcessor::<u8> {
-            result_descriptor: RasterResultDescriptor::with_datatype_and_num_bands(
-                RasterDataType::U8,
-                1,
-            ),
+            produced_result_descriptor: meta_data.result_descriptor.clone(),
             tiling_specification,
-            meta_data: Box::new(create_ndvi_meta_data()),
+            overview_level: 0,
+            meta_data: Box::new(meta_data),
+            original_resolution_spatial_grid: None,
             _phantom_data: PhantomData,
         };
 
-        let query_partition =
-            SpatialPartition2D::new((-10., 80.).into(), (50., 20.).into()).unwrap();
+        let query = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-800, -100], [-199, 499]).unwrap(),
+            TimeInstance::from(DateTime::new_utc(2014, 1, 1, 0, 0, 0)).into(),
+            BandSelection::first(),
+        );
 
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),
-            RasterQueryRectangle {
-                spatial_bounds: query_partition,
-                time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000)
-                    .unwrap(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: BandSelection::first(),
-            },
+            query,
             ctx,
             600,
             600,

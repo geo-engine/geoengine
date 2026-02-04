@@ -1,13 +1,14 @@
-use snafu::ensure;
-
-use crate::{error, util::Result};
-
 use super::{
     BoundedGrid, GridBounds, GridContains, GridIdx, GridIntersection, GridShape, GridShapeAccess,
     GridSize, GridSpaceToLinearSpace,
 };
+use crate::{error, raster::GridIdx2D, util::Result};
+use serde::{Deserialize, Serialize};
+use snafu::ensure;
+use std::ops::Add;
 
-#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone)]
+#[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
+/// A bounding box for a grid where the min and max values are inclusive
 pub struct GridBoundingBox<A>
 where
     A: AsRef<[isize]>,
@@ -46,6 +47,70 @@ where
             min: idx_min,
             max: idx_max,
         }
+    }
+}
+
+impl GridBoundingBox1D {
+    #[inline]
+    pub fn x_min(&self) -> isize {
+        let [x_min] = self.min;
+        x_min
+    }
+
+    #[inline]
+    pub fn x_max(&self) -> isize {
+        let [x_max] = self.max;
+        x_max
+    }
+
+    #[inline]
+    pub fn x_bounds(&self) -> [isize; 2] {
+        [self.x_min(), self.x_max()]
+    }
+
+    #[inline]
+    pub fn new_min_max(x_min: isize, x_max: isize) -> Result<Self> {
+        Self::new([x_min], [x_max])
+    }
+}
+
+impl GridBoundingBox2D {
+    #[inline]
+    pub fn x_min(&self) -> isize {
+        let [_y_min, x_min] = self.min;
+        x_min
+    }
+
+    #[inline]
+    pub fn x_max(&self) -> isize {
+        let [_y_max, x_max] = self.max;
+        x_max
+    }
+
+    #[inline]
+    pub fn x_bounds(&self) -> [isize; 2] {
+        [self.x_min(), self.x_max()]
+    }
+
+    #[inline]
+    pub fn y_min(&self) -> isize {
+        let [y_min, _x_min] = self.min;
+        y_min
+    }
+
+    #[inline]
+    pub fn y_max(&self) -> isize {
+        let [y_max, _x_max] = self.max;
+        y_max
+    }
+
+    #[inline]
+    pub fn y_bounds(&self) -> [isize; 2] {
+        [self.y_min(), self.y_max()]
+    }
+
+    pub fn new_min_max(y_min: isize, y_max: isize, x_min: isize, x_max: isize) -> Result<Self> {
+        Self::new([y_min, x_min], [y_max, x_max])
     }
 }
 
@@ -326,6 +391,167 @@ where
     }
 }
 
+impl GridContains<GridBoundingBox2D> for GridBoundingBox2D {
+    fn contains(&self, other: &GridBoundingBox2D) -> bool {
+        let [self_y_min, self_x_min] = self.min;
+        let [other_y_min, other_x_min] = other.min;
+
+        let [self_y_max, self_x_max] = self.max;
+        let [other_y_max, other_x_max] = other.max;
+
+        self_y_min <= other_y_min
+            && self_x_min <= other_x_min
+            && self_y_max >= other_y_max
+            && self_x_max >= other_x_max
+    }
+}
+
+pub trait GridBoundingBoxExt: GridBounds {
+    fn extend(&mut self, other: &Self);
+
+    #[must_use]
+    fn extended(&self, other: &Self) -> Self
+    where
+        Self: Sized + Clone,
+    {
+        let mut extended = self.clone();
+        extended.extend(other);
+        extended
+    }
+
+    fn shift_by_offset(
+        &self,
+        offset: GridIdx<Self::IndexArray>,
+    ) -> GridBoundingBox<Self::IndexArray>
+    where
+        GridIdx<Self::IndexArray>: Add<Output = GridIdx<Self::IndexArray>> + Clone,
+    {
+        GridBoundingBox::new_unchecked(self.min_index() + offset.clone(), self.max_index() + offset)
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox1D {
+    fn extend(&mut self, other: &Self) {
+        let [self_x_min] = self.min;
+        let [other_x_min] = other.min;
+
+        let [self_x_max] = self.max;
+        let [other_x_max] = other.max;
+
+        self.min = [self_x_min.min(other_x_min)];
+        self.max = [self_x_max.max(other_x_max)];
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox2D {
+    fn extend(&mut self, other: &Self) {
+        let [self_y_min, self_x_min] = self.min;
+        let [other_y_min, other_x_min] = other.min;
+
+        let [self_y_max, self_x_max] = self.max;
+        let [other_y_max, other_x_max] = other.max;
+
+        self.min = [self_y_min.min(other_y_min), self_x_min.min(other_x_min)];
+        self.max = [self_y_max.max(other_y_max), self_x_max.max(other_x_max)];
+    }
+}
+
+impl GridBoundingBoxExt for GridBoundingBox3D {
+    fn extend(&mut self, other: &Self) {
+        let [self_z_min, self_y_min, self_x_min] = self.min;
+        let [other_z_min, other_y_min, other_x_min] = other.min;
+
+        let [self_z_max, self_y_max, self_x_max] = self.max;
+        let [other_z_max, other_y_max, other_x_max] = other.max;
+
+        self.min = [
+            self_z_min.min(other_z_min),
+            self_y_min.min(other_y_min),
+            self_x_min.min(other_x_min),
+        ];
+        self.max = [
+            self_z_max.max(other_z_max),
+            self_y_max.max(other_y_max),
+            self_x_max.max(other_x_max),
+        ];
+    }
+}
+
+impl core::fmt::Display for GridBoundingBox2D {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "GridBoundingBox2D: upper_left [y: {}, x:{}], lower_right [y: {}, x: {}]",
+            self.y_max(),
+            self.x_min(),
+            self.y_min(),
+            self.x_max()
+        )
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct GridIdx2DIter {
+    pub grid_bounds: GridBoundingBox2D,
+    pub x_pos: isize,
+    pub y_pos: isize,
+}
+
+impl GridIdx2DIter {
+    pub fn new<B>(grid_bounds: &B) -> Self
+    where
+        B: GridBounds<IndexArray = [isize; 2]>,
+    {
+        let grid_bounds =
+            GridBoundingBox2D::new_unchecked(grid_bounds.min_index(), grid_bounds.max_index());
+
+        Self {
+            grid_bounds,
+            x_pos: grid_bounds.x_min(),
+            y_pos: grid_bounds.y_min(),
+        }
+    }
+
+    pub fn reset(&mut self) {
+        self.x_pos = self.grid_bounds.x_min();
+        self.y_pos = self.grid_bounds.y_min();
+    }
+}
+
+impl Iterator for GridIdx2DIter {
+    type Item = GridIdx2D;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if self.x_pos > self.grid_bounds.x_max() {
+            self.x_pos = self.grid_bounds.x_min();
+            self.y_pos += 1;
+        }
+
+        if self.y_pos > self.grid_bounds.y_max() {
+            return None;
+        }
+
+        let current = GridIdx2D::new_y_x(self.y_pos, self.x_pos);
+
+        self.x_pos += 1;
+
+        Some(current)
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        let size = self.grid_bounds.number_of_elements();
+        (size, Some(size))
+    }
+}
+
+/// Method to generate an `Iterator` over all `GridIdx2D` in `GridBounds`
+pub fn grid_idx_iter_2d<B>(bounds: &B) -> GridIdx2DIter
+where
+    B: GridBounds<IndexArray = [isize; 2]>,
+{
+    GridIdx2DIter::new(bounds)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -460,5 +686,66 @@ mod tests {
         let l2 = a.linear_space_index_unchecked([2, 2, 2]);
         assert_eq!(l2, 1 * 42 * 42 + 1 * 42 + 1);
         assert_eq!(a.grid_idx_unchecked(l2), [2, 2, 2].into());
+    }
+
+    #[test]
+    fn grid_bounding_box_2d_contains() {
+        let a = GridBoundingBox::new([1, 1], [42, 42]).unwrap();
+        let b = GridBoundingBox::new([2, 2], [41, 41]).unwrap();
+        assert!(a.contains(&b));
+        assert!(!b.contains(&a));
+    }
+
+    #[test]
+    fn extend_1d() {
+        let mut a = GridBoundingBox::new([1], [42]).unwrap();
+        let b = GridBoundingBox::new([2], [69]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1], [69]).unwrap());
+    }
+
+    #[test]
+    fn extend_2d() {
+        let mut a = GridBoundingBox::new([1, 2], [42, 69]).unwrap();
+        let b = GridBoundingBox::new([2, 1], [69, 42]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1, 1], [69, 69]).unwrap());
+    }
+
+    #[test]
+    fn extend_3d() {
+        let mut a = GridBoundingBox::new([1, 3, 2], [42, 69, 666]).unwrap();
+        let b = GridBoundingBox::new([3, 2, 1], [69, 666, 42]).unwrap();
+        a.extend(&b);
+        assert_eq!(a, GridBoundingBox::new([1, 2, 1], [69, 666, 666]).unwrap());
+    }
+
+    #[test]
+    fn grid_idx_iter_2d() {
+        let grid_bounds_2d = GridBoundingBox2D::new_unchecked([-1, 1], [2, 4]);
+        let grid_idx_iter = GridIdx2DIter::new(&grid_bounds_2d);
+        let res: Vec<_> = grid_idx_iter.collect();
+
+        assert_eq!(
+            res,
+            vec![
+                GridIdx2D::new_y_x(-1, 1),
+                GridIdx2D::new_y_x(-1, 2),
+                GridIdx2D::new_y_x(-1, 3),
+                GridIdx2D::new_y_x(-1, 4),
+                GridIdx2D::new_y_x(0, 1),
+                GridIdx2D::new_y_x(0, 2),
+                GridIdx2D::new_y_x(0, 3),
+                GridIdx2D::new_y_x(0, 4),
+                GridIdx2D::new_y_x(1, 1),
+                GridIdx2D::new_y_x(1, 2),
+                GridIdx2D::new_y_x(1, 3),
+                GridIdx2D::new_y_x(1, 4),
+                GridIdx2D::new_y_x(2, 1),
+                GridIdx2D::new_y_x(2, 2),
+                GridIdx2D::new_y_x(2, 3),
+                GridIdx2D::new_y_x(2, 4)
+            ]
+        );
     }
 }

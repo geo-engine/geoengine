@@ -1,14 +1,15 @@
+use super::datatypes::{
+    BoundingBox2D, FeatureDataType, Measurement, RasterDataType, SpatialGridDefinition,
+    SpatialReferenceOption, TimeInterval, VectorDataType,
+};
 use crate::api::model::datatypes::{
-    BoundingBox2D, CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, FeatureDataType,
-    GdalConfigOption, Measurement, MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon,
-    NoGeometry, RasterDataType, RasterPropertiesEntryType, RasterPropertiesKey, SpatialPartition2D,
-    SpatialReferenceOption, SpatialResolution, TimeInstance, TimeInterval, TimeStep,
-    VectorDataType,
+    CacheTtlSeconds, Coordinate2D, DateTimeParseFormat, GdalConfigOption, GeoTransform,
+    MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon, NoGeometry,
+    RasterPropertiesEntryType, RasterPropertiesKey, TimeInstance, TimeStep,
 };
 use crate::error::{
     RasterBandNameMustNotBeEmpty, RasterBandNameTooLong, RasterBandNamesMustBeUnique, Result,
 };
-use geoengine_datatypes::primitives::ColumnSelection;
 use geoengine_datatypes::util::ByteSize;
 use geoengine_macros::type_tag;
 use geoengine_operators::util::input::float_option_with_nan;
@@ -26,10 +27,125 @@ pub struct RasterResultDescriptor {
     pub data_type: RasterDataType,
     #[schema(value_type = String)]
     pub spatial_reference: SpatialReferenceOption,
-    pub time: Option<TimeInterval>,
-    pub bbox: Option<SpatialPartition2D>,
-    pub resolution: Option<SpatialResolution>,
+    pub time: TimeDescriptor,
+    pub spatial_grid: SpatialGridDescriptor,
     pub bands: RasterBandDescriptors,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub enum SpatialGridDescriptorState {
+    Source,
+    Derived,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct SpatialGridDescriptor {
+    pub spatial_grid: SpatialGridDefinition,
+    pub descriptor: SpatialGridDescriptorState,
+}
+
+impl From<SpatialGridDescriptor> for geoengine_operators::engine::SpatialGridDescriptor {
+    fn from(value: SpatialGridDescriptor) -> Self {
+        let sp = geoengine_operators::engine::SpatialGridDescriptor::new_source(
+            value.spatial_grid.into(),
+        );
+        match value.descriptor {
+            SpatialGridDescriptorState::Source => sp,
+            SpatialGridDescriptorState::Derived => sp.as_derived(),
+        }
+    }
+}
+
+impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDescriptor {
+    fn from(value: geoengine_operators::engine::SpatialGridDescriptor) -> Self {
+        if value.is_source() {
+            let sp = value.source_spatial_grid_definition().expect("is source");
+            return SpatialGridDescriptor {
+                spatial_grid: sp.into(),
+                descriptor: SpatialGridDescriptorState::Source,
+            };
+        }
+        let sp = value
+            .derived_spatial_grid_definition()
+            .expect("if not source it must be derived");
+        SpatialGridDescriptor {
+            spatial_grid: sp.into(),
+            descriptor: SpatialGridDescriptorState::Derived,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum TimeDimension {
+    Regular(RegularTimeDimension),
+    Irregular,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct RegularTimeDimension {
+    pub origin: TimeInstance,
+    pub step: TimeStep,
+}
+
+impl From<RegularTimeDimension> for geoengine_datatypes::primitives::RegularTimeDimension {
+    fn from(value: RegularTimeDimension) -> Self {
+        geoengine_datatypes::primitives::RegularTimeDimension {
+            origin: value.origin.into(),
+            step: value.step.into(),
+        }
+    }
+}
+
+impl From<geoengine_datatypes::primitives::RegularTimeDimension> for RegularTimeDimension {
+    fn from(value: geoengine_datatypes::primitives::RegularTimeDimension) -> Self {
+        Self {
+            origin: value.origin.into(),
+            step: value.step.into(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct TimeDescriptor {
+    pub bounds: Option<TimeInterval>,
+    pub dimension: TimeDimension,
+}
+
+impl From<TimeDescriptor> for geoengine_operators::engine::TimeDescriptor {
+    fn from(value: TimeDescriptor) -> Self {
+        geoengine_operators::engine::TimeDescriptor::new(
+            value.bounds.map(Into::into),
+            match value.dimension {
+                TimeDimension::Regular(d) => {
+                    geoengine_datatypes::primitives::TimeDimension::Regular(d.into())
+                }
+                TimeDimension::Irregular => {
+                    geoengine_datatypes::primitives::TimeDimension::Irregular
+                }
+            },
+        )
+    }
+}
+
+impl From<geoengine_operators::engine::TimeDescriptor> for TimeDescriptor {
+    fn from(value: geoengine_operators::engine::TimeDescriptor) -> Self {
+        Self {
+            bounds: value.bounds.map(Into::into),
+            dimension: match value.dimension {
+                geoengine_datatypes::primitives::TimeDimension::Regular(d) => {
+                    TimeDimension::Regular(d.into())
+                }
+                geoengine_datatypes::primitives::TimeDimension::Irregular => {
+                    TimeDimension::Irregular
+                }
+            },
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, ToSchema)]
@@ -107,9 +223,8 @@ impl From<geoengine_operators::engine::RasterResultDescriptor> for RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            time: value.time.map(Into::into),
-            bbox: value.bbox.map(Into::into),
-            resolution: value.resolution.map(Into::into),
+            time: value.time.into(),
+            spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into(),
         }
     }
@@ -120,9 +235,8 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
         Self {
             data_type: value.data_type.into(),
             spatial_reference: value.spatial_reference.into(),
-            time: value.time.map(Into::into),
-            bbox: value.bbox.map(Into::into),
-            resolution: value.resolution.map(Into::into),
+            time: value.time.into(),
+            spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into(),
         }
     }
@@ -332,6 +446,26 @@ impl From<geoengine_operators::engine::TypedResultDescriptor> for TypedResultDes
     }
 }
 
+impl From<TypedResultDescriptor> for geoengine_operators::engine::TypedResultDescriptor {
+    fn from(value: TypedResultDescriptor) -> Self {
+        match value {
+            TypedResultDescriptor::Plot(p) => {
+                geoengine_operators::engine::TypedResultDescriptor::Plot(p.result_descriptor.into())
+            }
+            TypedResultDescriptor::Raster(r) => {
+                geoengine_operators::engine::TypedResultDescriptor::Raster(
+                    r.result_descriptor.into(),
+                )
+            }
+            TypedResultDescriptor::Vector(v) => {
+                geoengine_operators::engine::TypedResultDescriptor::Vector(
+                    v.result_descriptor.into(),
+                )
+            }
+        }
+    }
+}
+
 impl From<geoengine_operators::engine::PlotResultDescriptor> for TypedResultDescriptor {
     fn from(value: geoengine_operators::engine::PlotResultDescriptor) -> Self {
         Self::Plot(TypedPlotResultDescriptor {
@@ -431,10 +565,7 @@ impl
         geoengine_operators::engine::StaticMetaData<
             geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     > for MockMetaData
 {
@@ -442,10 +573,7 @@ impl
         value: geoengine_operators::engine::StaticMetaData<
             geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     ) -> Self {
         Self {
@@ -461,10 +589,7 @@ impl
         geoengine_operators::engine::StaticMetaData<
             geoengine_operators::source::OgrSourceDataset,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     > for OgrMetaData
 {
@@ -472,10 +597,7 @@ impl
         value: geoengine_operators::engine::StaticMetaData<
             geoengine_operators::source::OgrSourceDataset,
             geoengine_operators::engine::VectorResultDescriptor,
-            geoengine_datatypes::primitives::QueryRectangle<
-                geoengine_datatypes::primitives::BoundingBox2D,
-                ColumnSelection,
-            >,
+            geoengine_datatypes::primitives::VectorQueryRectangle,
         >,
     ) -> Self {
         Self {
@@ -490,10 +612,7 @@ impl From<MockMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::mock::MockDatasetDataSourceLoadingInfo,
         geoengine_operators::engine::VectorResultDescriptor,
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::BoundingBox2D,
-            ColumnSelection,
-        >,
+        geoengine_datatypes::primitives::VectorQueryRectangle,
     >
 {
     fn from(value: MockMetaData) -> Self {
@@ -509,10 +628,7 @@ impl From<OgrMetaData>
     for geoengine_operators::engine::StaticMetaData<
         geoengine_operators::source::OgrSourceDataset,
         geoengine_operators::engine::VectorResultDescriptor,
-        geoengine_datatypes::primitives::QueryRectangle<
-            geoengine_datatypes::primitives::BoundingBox2D,
-            ColumnSelection,
-        >,
+        geoengine_datatypes::primitives::VectorQueryRectangle,
     >
 {
     fn from(value: OgrMetaData) -> Self {
@@ -1081,7 +1197,7 @@ pub struct GdalDatasetParameters {
     #[schema(value_type = String)]
     pub file_path: PathBuf,
     pub rasterband_channel: usize,
-    pub geo_transform: GdalDatasetGeoTransform, // TODO: discuss if we need this at all
+    pub geo_transform: GeoTransform, // TODO: discuss if we need this at all
     pub width: usize,
     pub height: usize,
     pub file_not_found_handling: FileNotFoundHandling,
@@ -1164,34 +1280,6 @@ impl From<GdalSourceTimePlaceholder> for geoengine_operators::source::GdalSource
         Self {
             format: value.format.into(),
             reference: value.reference.into(),
-        }
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Debug, Serialize, Deserialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct GdalDatasetGeoTransform {
-    pub origin_coordinate: Coordinate2D,
-    pub x_pixel_size: f64,
-    pub y_pixel_size: f64,
-}
-
-impl From<geoengine_operators::source::GdalDatasetGeoTransform> for GdalDatasetGeoTransform {
-    fn from(value: geoengine_operators::source::GdalDatasetGeoTransform) -> Self {
-        Self {
-            origin_coordinate: value.origin_coordinate.into(),
-            x_pixel_size: value.x_pixel_size,
-            y_pixel_size: value.y_pixel_size,
-        }
-    }
-}
-
-impl From<GdalDatasetGeoTransform> for geoengine_operators::source::GdalDatasetGeoTransform {
-    fn from(value: GdalDatasetGeoTransform) -> Self {
-        Self {
-            origin_coordinate: value.origin_coordinate.into(),
-            x_pixel_size: value.x_pixel_size,
-            y_pixel_size: value.y_pixel_size,
         }
     }
 }
@@ -1378,6 +1466,30 @@ impl From<GdalLoadingInfoTemporalSlice>
             time: value.time.into(),
             params: value.params.map(Into::into),
             cache_ttl: value.cache_ttl.into(),
+        }
+    }
+}
+
+#[type_tag(value = "GdalMultiBand")]
+#[derive(PartialEq, Serialize, Deserialize, Debug, Clone, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct GdalMultiBand {
+    pub result_descriptor: RasterResultDescriptor,
+}
+
+impl From<geoengine_operators::source::GdalMultiBand> for GdalMultiBand {
+    fn from(value: geoengine_operators::source::GdalMultiBand) -> Self {
+        Self {
+            r#type: Default::default(),
+            result_descriptor: value.result_descriptor.into(),
+        }
+    }
+}
+
+impl From<GdalMultiBand> for geoengine_operators::source::GdalMultiBand {
+    fn from(value: GdalMultiBand) -> Self {
+        Self {
+            result_descriptor: value.result_descriptor.into(),
         }
     }
 }

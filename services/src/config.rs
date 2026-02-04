@@ -169,8 +169,6 @@ impl ConfigElement for ProjectService {
 
 #[derive(Debug, Deserialize)]
 pub struct TilingSpecification {
-    pub origin_coordinate_x: f64,
-    pub origin_coordinate_y: f64,
     pub tile_shape_pixels_x: usize,
     pub tile_shape_pixels_y: usize,
 }
@@ -178,10 +176,6 @@ pub struct TilingSpecification {
 impl From<TilingSpecification> for geoengine_datatypes::raster::TilingSpecification {
     fn from(ts: TilingSpecification) -> geoengine_datatypes::raster::TilingSpecification {
         geoengine_datatypes::raster::TilingSpecification {
-            origin_coordinate: geoengine_datatypes::primitives::Coordinate2D::new(
-                ts.origin_coordinate_x,
-                ts.origin_coordinate_y,
-            ),
             tile_size_in_pixels: geoengine_datatypes::raster::GridShape2D::from([
                 ts.tile_shape_pixels_y,
                 ts.tile_shape_pixels_x,
@@ -326,6 +320,8 @@ impl ConfigElement for Wfs {
 pub struct Wms {
     pub default_time: Option<OgcDefaultTime>,
     pub request_timeout_seconds: Option<u64>,
+    pub max_image_width: u32,
+    pub max_image_height: u32,
 }
 
 impl ConfigElement for Wms {

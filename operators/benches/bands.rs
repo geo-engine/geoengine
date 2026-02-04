@@ -2,17 +2,14 @@
 
 use futures::{Future, StreamExt};
 use geoengine_datatypes::{
-    primitives::{
-        BandSelection, RasterQueryRectangle, SpatialPartition2D, SpatialResolution, TimeInterval,
-        TimeStep,
-    },
-    raster::{RasterDataType, RasterTile2D, RenameBands},
+    primitives::{BandSelection, RasterQueryRectangle, TimeInterval, TimeStep},
+    raster::{GridBoundingBox2D, RasterDataType, RasterTile2D, RenameBands},
     util::test::TestDefault,
 };
 use geoengine_operators::{
     engine::{
-        MockExecutionContext, MockQueryContext, MultipleRasterSources, RasterOperator,
-        SingleRasterSource, WorkflowOperatorPath,
+        MockExecutionContext, MultipleRasterSources, RasterOperator, SingleRasterSource,
+        WorkflowOperatorPath,
     },
     processing::{
         Aggregation, RasterStacker, RasterStackerParams, TemporalRasterAggregation,
@@ -51,15 +48,15 @@ fn ndvi_source(execution_context: &mut MockExecutionContext) -> Box<dyn RasterOp
     let ndvi_id = add_ndvi_dataset(execution_context);
 
     let gdal_operator = GdalSource {
-        params: GdalSourceParameters { data: ndvi_id },
+        params: GdalSourceParameters::new(ndvi_id),
     };
 
     gdal_operator.boxed()
 }
 
-async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResolution) {
+async fn one_band_at_a_time(runs: usize, bands: u32) {
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let ndvi_source = ndvi_source(&mut execution_context);
 
@@ -74,12 +71,11 @@ async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResoluti
         .get_u64()
         .unwrap();
 
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: resolution,
-        attributes: BandSelection::first(),
-    };
+    let qrect = RasterQueryRectangle::new(
+        GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        BandSelection::first(),
+    );
 
     let mut times = NumberStatistics::default();
 
@@ -115,9 +111,9 @@ async fn one_band_at_a_time(runs: usize, bands: u32, resolution: SpatialResoluti
     .unwrap();
 }
 
-async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolution) {
+async fn all_bands_at_once(runs: usize, bands: u32) {
     let mut execution_context = MockExecutionContext::test_default();
-    let query_context = MockQueryContext::test_default();
+    let query_context = execution_context.mock_query_context_test_default();
 
     let stacker = RasterStacker {
         params: RasterStackerParams {
@@ -142,12 +138,11 @@ async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolutio
         .get_u64()
         .unwrap();
 
-    let qrect = RasterQueryRectangle {
-        spatial_bounds: SpatialPartition2D::new((-180., 90.).into(), (180., -90.).into()).unwrap(),
-        time_interval: TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
-        spatial_resolution: resolution,
-        attributes: (0..bands).collect::<Vec<_>>().try_into().unwrap(),
-    };
+    let qrect = RasterQueryRectangle::new(
+        GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+        TimeInterval::new(1_388_534_400_000, 1_388_534_400_000 + 1000).unwrap(),
+        (0..bands).collect::<Vec<_>>().try_into().unwrap(),
+    );
 
     let mut times = NumberStatistics::default();
 
@@ -183,25 +178,14 @@ async fn all_bands_at_once(runs: usize, bands: u32, resolution: SpatialResolutio
 async fn main() {
     const RUNS: usize = 5;
     const BANDS: u32 = 8;
-    const RESOLUTION: f64 = 0.1;
 
     println!("one band at a time");
 
-    one_band_at_a_time(
-        RUNS,
-        BANDS,
-        SpatialResolution::new(RESOLUTION, RESOLUTION).unwrap(),
-    )
-    .await;
+    one_band_at_a_time(RUNS, BANDS).await;
 
     println!("all bands at once");
 
-    all_bands_at_once(
-        RUNS,
-        BANDS,
-        SpatialResolution::new(RESOLUTION, RESOLUTION).unwrap(),
-    )
-    .await;
+    all_bands_at_once(RUNS, BANDS).await;
 }
 
 async fn time_it<F, Fut>(f: F) -> (f64, Vec<RasterTile2D<u64>>)

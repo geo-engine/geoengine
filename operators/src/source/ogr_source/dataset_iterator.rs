@@ -137,11 +137,12 @@ impl OgrDatasetIterator {
         let time_filter = if dataset_information.force_ogr_time_filter {
             debug!(
                 "using time filter {:?} for layer {:?}",
-                query_rectangle.time_interval, &dataset_information.layer_name
+                query_rectangle.time_interval(),
+                &dataset_information.layer_name
             );
             FeaturesProvider::create_time_filter_string(
                 dataset_information.time.clone(),
-                query_rectangle.time_interval,
+                query_rectangle.time_interval(),
                 &dataset.driver().short_name(),
             )
         } else {
@@ -199,10 +200,11 @@ impl OgrDatasetIterator {
         if use_ogr_spatial_filter {
             debug!(
                 "using spatial filter {:?} for layer {:?}",
-                query_rectangle.spatial_bounds, &dataset_information.layer_name
+                query_rectangle.spatial_bounds(),
+                &dataset_information.layer_name
             );
             // NOTE: the OGR-filter may be inaccurately allowing more features that should be returned in a "strict" fashion.
-            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds);
+            features_provider.set_spatial_filter(&query_rectangle.spatial_bounds());
         }
 
         Ok((features_provider, time_filter.is_some()))

@@ -1,5 +1,5 @@
 use crate::api::model::datatypes::{
-    DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance,
+    DatasetId, SpatialReference, SpatialReferenceOption, TimeInstance, TimeInterval,
 };
 use crate::api::model::responses::ErrorResponse;
 use crate::datasets::external::aruna::error::ArunaProviderError;
@@ -9,6 +9,7 @@ use actix_web::HttpResponse;
 use actix_web::http::StatusCode;
 use geoengine_datatypes::dataset::{DataProviderId, LayerId};
 use geoengine_datatypes::error::ErrorSource;
+use geoengine_datatypes::primitives::RegularTimeDimension;
 use geoengine_datatypes::util::helpers::ge_report;
 use ordered_float::FloatIsNan;
 use snafu::prelude::*;
@@ -74,6 +75,11 @@ pub enum Error {
     #[snafu(display("Unable to parse query string: {}", source))]
     UnableToParseQueryString {
         source: serde_urlencoded::de::Error,
+    },
+
+    #[snafu(display("Unable to serialize query string: {}", source))]
+    UnableToSerializeQueryString {
+        source: serde_urlencoded::ser::Error,
     },
 
     ServerStartup,
@@ -354,6 +360,19 @@ pub enum Error {
         endpoint: WorkflowId,
         type_names: WorkflowId,
     },
+    #[snafu(display(
+        "WMS unsupported image size: {}x{}, max is {}x{}",
+        width,
+        height,
+        max_width,
+        max_height
+    ))]
+    WMSInvalidImageSize {
+        width: u32,
+        height: u32,
+        max_width: u32,
+        max_height: u32,
+    },
 
     #[snafu(context(false))]
     ArunaProvider {
@@ -550,6 +569,26 @@ pub enum Error {
     Wildlive {
         source: crate::datasets::external::WildliveError,
     },
+    #[snafu(display(
+        "Dataset tile time `{times:?}` conflict with existing times `{existing_times:?}`"
+    ))]
+    DatasetTileTimeConflict {
+        times: Vec<TimeInterval>,
+        existing_times: Vec<TimeInterval>,
+    },
+    #[snafu(display(
+        "Dataset tile times `{times:?}` conflict with dataset regularity {time_dim:?}"
+    ))]
+    DatasetTileRegularTimeConflict {
+        times: Vec<TimeInterval>,
+        time_dim: RegularTimeDimension,
+    },
+    #[snafu(display(
+        "Dataset tile z-index of files `{files:?}` conflict with existing tiles with the same z-indexes"
+    ))]
+    DatasetTileZIndexConflict {
+        files: Vec<String>,
+    },
 }
 
 impl actix_web::error::ResponseError for Error {
@@ -592,6 +631,18 @@ impl From<bb8_postgres::tokio_postgres::error::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Self::SerdeJson { source: e }
+    }
+}
+
+impl From<serde_urlencoded::de::Error> for Error {
+    fn from(e: serde_urlencoded::de::Error) -> Self {
+        Self::UnableToParseQueryString { source: e }
+    }
+}
+
+impl From<serde_urlencoded::ser::Error> for Error {
+    fn from(e: serde_urlencoded::ser::Error) -> Self {
+        Self::UnableToSerializeQueryString { source: e }
     }
 }
 

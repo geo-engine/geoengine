@@ -5,6 +5,7 @@ use crate::engine::{
     OperatorName, QueryContext, SingleVectorSource, TypedVectorQueryProcessor, VectorOperator,
     VectorQueryProcessor, VectorResultDescriptor, WorkflowOperatorPath,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
@@ -12,7 +13,7 @@ use futures::{StreamExt, TryStreamExt};
 use geoengine_datatypes::collections::{
     FeatureCollection, FeatureCollectionInfos, FeatureCollectionModifications,
 };
-use geoengine_datatypes::primitives::{ColumnSelection, Geometry, TimeInterval};
+use geoengine_datatypes::primitives::{ColumnSelection, Geometry, SpatialResolution, TimeInterval};
 use geoengine_datatypes::primitives::{TimeInstance, TimeStep, VectorQueryRectangle};
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use rayon::ThreadPool;
@@ -153,6 +154,22 @@ impl InitializedVectorOperator for InitializedVectorTimeProjection {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(TimeProjection {
+            params: TimeProjectionParams {
+                step: self.step,
+                step_reference: Some(self.step_reference),
+            },
+            sources: SingleVectorSource {
+                vector: self.source.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 pub struct VectorTimeProjectionProcessor<G>
@@ -254,12 +271,11 @@ fn expand_query_rectangle(
     step_reference: TimeInstance,
     query: &VectorQueryRectangle,
 ) -> Result<VectorQueryRectangle, TimeProjectionError> {
-    Ok(VectorQueryRectangle {
-        spatial_bounds: query.spatial_bounds,
-        time_interval: expand_time_interval(step, step_reference, query.time_interval)?,
-        spatial_resolution: query.spatial_resolution,
-        attributes: ColumnSelection::all(),
-    })
+    Ok(VectorQueryRectangle::new(
+        query.spatial_bounds(),
+        expand_time_interval(step, step_reference, query.time_interval())?,
+        ColumnSelection::all(),
+    ))
 }
 
 fn expand_time_interval(
@@ -286,15 +302,11 @@ fn expand_time_interval(
 mod tests {
     use super::*;
 
-    use crate::{
-        engine::{MockExecutionContext, MockQueryContext},
-        mock::MockFeatureCollectionSource,
-    };
+    use crate::{engine::MockExecutionContext, mock::MockFeatureCollectionSource};
     use geoengine_datatypes::{
         collections::{ChunksEqualIgnoringCacheHint, MultiPointCollection, VectorDataType},
         primitives::{
-            BoundingBox2D, CacheHint, DateTime, MultiPoint, SpatialResolution, TimeGranularity,
-            TimeInterval,
+            BoundingBox2D, CacheHint, DateTime, MultiPoint, TimeGranularity, TimeInterval,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -425,7 +437,7 @@ mod tests {
     #[tokio::test]
     async fn single_year() {
         let execution_context = MockExecutionContext::test_default();
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -478,16 +490,15 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
                         DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: ColumnSelection::all(),
-                },
+                    ColumnSelection::all(),
+                ),
                 &query_context,
             )
             .await
@@ -530,7 +541,7 @@ mod tests {
     #[tokio::test]
     async fn over_a_year() {
         let execution_context = MockExecutionContext::test_default();
-        let query_context = MockQueryContext::test_default();
+        let query_context = execution_context.mock_query_context_test_default();
 
         let source = MockFeatureCollectionSource::single(
             MultiPointCollection::from_data(
@@ -583,16 +594,15 @@ mod tests {
 
         let mut stream = query_processor
             .vector_query(
-                VectorQueryRectangle {
-                    spatial_bounds: BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
-                    time_interval: TimeInterval::new(
+                VectorQueryRectangle::new(
+                    BoundingBox2D::new((0., 0.).into(), (2., 2.).into()).unwrap(),
+                    TimeInterval::new(
                         DateTime::new_utc(2010, 4, 3, 0, 0, 0),
                         DateTime::new_utc(2010, 5, 14, 0, 0, 0),
                     )
                     .unwrap(),
-                    spatial_resolution: SpatialResolution::one(),
-                    attributes: ColumnSelection::all(),
-                },
+                    ColumnSelection::all(),
+                ),
                 &query_context,
             )
             .await

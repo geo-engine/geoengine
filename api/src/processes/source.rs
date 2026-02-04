@@ -1,3 +1,4 @@
+use crate::parameters::{Coordinate2D, SpatialBoundsDerive};
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_macros::type_tag;
 use geoengine_operators::{
@@ -11,8 +12,6 @@ use geoengine_operators::{
 };
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
-
-use crate::parameters::Coordinate2D;
 
 /// # GdalSource
 ///
@@ -49,6 +48,11 @@ pub struct GdalSourceParameters {
     /// ### Example
     /// `"ndvi"`
     pub data: String,
+
+    /// *Optional*: overview level to use.
+    ///
+    /// If not provided, the data source will determine the resolution, i.e., uses its native resolution.
+    pub overview_level: Option<u32>,
 }
 
 impl TryFrom<GdalSource> for OperatorsGdalSource {
@@ -59,6 +63,7 @@ impl TryFrom<GdalSource> for OperatorsGdalSource {
                 data: serde_json::from_str::<NamedData>(&serde_json::to_string(
                     &value.params.data,
                 )?)?,
+                overview_level: value.params.overview_level,
             },
         })
     }
@@ -93,6 +98,11 @@ pub struct MockPointSourceParameters {
     /// ### Example
     /// `[{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]`
     pub points: Vec<Coordinate2D>,
+
+    /// Defines how the spatial bounds of the source are derived.
+    ///
+    /// Defaults to `None`.
+    pub spatial_bounds: SpatialBoundsDerive,
 }
 
 impl TryFrom<MockPointSource> for OperatorsMockPointSource {
@@ -101,6 +111,7 @@ impl TryFrom<MockPointSource> for OperatorsMockPointSource {
         Ok(OperatorsMockPointSource {
             params: OperatorsMockPointSourceParameters {
                 points: value.params.points.into_iter().map(Into::into).collect(),
+                spatial_bounds: value.params.spatial_bounds.try_into()?,
             },
         })
     }
@@ -118,6 +129,7 @@ mod tests {
             r#type: Default::default(),
             params: GdalSourceParameters {
                 data: "example_dataset".to_string(),
+                overview_level: None,
             },
         };
 
@@ -133,6 +145,7 @@ mod tests {
             r#type: Default::default(),
             params: GdalSourceParameters {
                 data: "example_dataset".to_string(),
+                overview_level: None,
             },
         }));
 
@@ -148,6 +161,7 @@ mod tests {
                     Coordinate2D { x: 1.0, y: 2.0 },
                     Coordinate2D { x: 3.0, y: 4.0 },
                 ],
+                spatial_bounds: SpatialBoundsDerive::Derive,
             },
         };
 
@@ -167,6 +181,7 @@ mod tests {
                 r#type: Default::default(),
                 params: MockPointSourceParameters {
                     points: vec![Coordinate2D { x: 1.0, y: 2.0 }],
+                    spatial_bounds: SpatialBoundsDerive::Derive,
                 },
             }));
 

@@ -1,3 +1,5 @@
+use crate::engine::SpatialGridDescriptor;
+use crate::optimization::OptimizationError;
 use crate::processing::BandNeighborhoodAggregateError;
 use crate::util::statistics::StatisticsError;
 use bb8_postgres::bb8;
@@ -359,6 +361,10 @@ pub enum Error {
     InterpolationOperator {
         source: crate::processing::InterpolationError,
     },
+    #[snafu(context(false))]
+    DownsampleOperator {
+        source: crate::processing::DownsamplingError,
+    },
     #[snafu(display("TimeShift error: {source}"), context(false))]
     TimeShift {
         source: crate::processing::TimeShiftError,
@@ -376,6 +382,11 @@ pub enum Error {
     #[snafu(display("GdalSource error: {source}"), context(false))]
     GdalSource {
         source: crate::source::GdalSourceError,
+    },
+
+    #[snafu(display("MultiBandGdalSource error: {source}"), context(false))]
+    MultiBandGdalSource {
+        source: crate::source::MultiBandGdalSourceError,
     },
 
     QueryCanceled,
@@ -427,6 +438,12 @@ pub enum Error {
     #[snafu(display("Cache can't produce the promissed result error: {source}"))]
     CacheCantProduceResult {
         source: Box<dyn std::error::Error + Send + Sync>,
+    },
+
+    #[snafu(display("RasterResults are incompatible error: {a:?} vs {b:?}"))]
+    CantMergeSpatialGridDescriptor {
+        a: SpatialGridDescriptor,
+        b: SpatialGridDescriptor,
     },
 
     #[snafu(display(
@@ -498,6 +515,8 @@ pub enum Error {
         message: String,
     },
 
+    ReprojectionFailed,
+
     #[snafu(display("PostgresError: {}", source))]
     Postgres {
         source: tokio_postgres::Error,
@@ -510,6 +529,10 @@ pub enum Error {
     #[snafu(context(false), display("BandNeighborhoodAggregate: {source}"))]
     BandNeighborhoodAggregate {
         source: BandNeighborhoodAggregateError,
+    },
+    #[snafu(display("Error during workflow optimization: {source}"))]
+    Optimization {
+        source: OptimizationError,
     },
 }
 

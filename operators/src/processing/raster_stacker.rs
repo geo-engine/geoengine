@@ -1,20 +1,21 @@
 use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
-    CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources,
-    MultipleRasterSources, Operator, OperatorName, QueryContext, RasterBandDescriptor,
-    RasterOperator, RasterQueryProcessor, RasterResultDescriptor, TypedRasterQueryProcessor,
-    WorkflowOperatorPath,
+    BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
+    InitializedSources, MultipleRasterSources, Operator, OperatorName, QueryContext,
+    QueryProcessor, RasterBandDescriptor, RasterOperator, RasterQueryProcessor,
+    RasterResultDescriptor, TypedRasterQueryProcessor, WorkflowOperatorPath,
 };
 use crate::error::{
     InvalidNumberOfRasterStackerInputs, RasterInputsMustHaveSameSpatialReferenceAndDatatype,
 };
+use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
-use geoengine_datatypes::primitives::{
-    BandSelection, RasterQueryRectangle, SpatialResolution, partitions_extent, time_interval_extent,
+use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
+use geoengine_datatypes::raster::{
+    DynamicRasterDataType, GridBoundingBox2D, Pixel, RasterTile2D, RenameBands,
 };
-use geoengine_datatypes::raster::{DynamicRasterDataType, Pixel, RasterTile2D, RenameBands};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 
@@ -77,19 +78,23 @@ impl RasterOperator for RasterStacker {
             }
         );
 
-        let time = time_interval_extent(in_descriptors.iter().map(|d| d.time));
-        let bbox = partitions_extent(in_descriptors.iter().map(|d| d.bbox));
-
-        let resolution = in_descriptors
+        let first_spatial_grid = in_descriptors[0].spatial_grid;
+        let result_spatial_grid = in_descriptors
             .iter()
-            .map(|d| d.resolution)
-            .reduce(|a, b| match (a, b) {
-                (Some(a), Some(b)) => {
-                    Some(SpatialResolution::new_unchecked(a.x.min(b.x), a.y.min(b.y)))
-                }
-                _ => None,
-            })
-            .flatten();
+            .skip(1)
+            .map(|x| x.spatial_grid_descriptor())
+            .try_fold(first_spatial_grid, |a, &b| {
+                a.merge(&b)
+                    .ok_or(crate::error::Error::CantMergeSpatialGridDescriptor { a, b })
+            })?;
+
+        let time = in_descriptors.iter().skip(1).map(|rd| rd.time).fold(
+            in_descriptors
+                .first()
+                .expect("There must be at least one input")
+                .time,
+            |a, b| a.merge(b),
+        );
 
         let data_type = in_descriptors[0].data_type;
         let spatial_reference = in_descriptors[0].spatial_reference;
@@ -118,8 +123,7 @@ impl RasterOperator for RasterStacker {
             data_type,
             spatial_reference,
             time,
-            bbox,
-            resolution,
+            spatial_grid: result_spatial_grid,
             bands: output_band_descriptors,
         };
 
@@ -127,6 +131,7 @@ impl RasterOperator for RasterStacker {
             name,
             path,
             result_descriptor,
+            rename_bands: self.params.rename_bands.clone(),
             raster_sources,
             bands_per_source,
         }))
@@ -139,6 +144,7 @@ pub struct InitializedRasterStacker {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
     result_descriptor: RasterResultDescriptor,
+    rename_bands: RenameBands,
     raster_sources: Vec<Box<dyn InitializedRasterOperator>>,
     bands_per_source: Vec<u32>,
 }
@@ -266,17 +272,36 @@ impl InitializedRasterOperator for InitializedRasterStacker {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        resolution: SpatialResolution,
+    ) -> Result<Box<dyn RasterOperator>, OptimizationError> {
+        Ok(RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: self.rename_bands.clone(),
+            },
+            sources: MultipleRasterSources {
+                rasters: self
+                    .raster_sources
+                    .iter()
+                    .map(|s| s.optimize(resolution))
+                    .collect::<Result<Vec<_>, _>>()?,
+            },
+        }
+        .boxed())
+    }
 }
 
 pub(crate) struct RasterStackerProcessor<T> {
-    sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
+    sources: Vec<BoxRasterQueryProcessor<T>>,
     result_descriptor: RasterResultDescriptor,
     bands_per_source: Vec<u32>,
 }
 
 impl<T> RasterStackerProcessor<T> {
     pub fn new(
-        sources: Vec<Box<dyn RasterQueryProcessor<RasterType = T>>>,
+        sources: Vec<BoxRasterQueryProcessor<T>>,
         result_descriptor: RasterResultDescriptor,
         bands_per_source: Vec<u32>,
     ) -> Self {
@@ -313,12 +338,16 @@ fn map_query_bands_to_source_bands(
 }
 
 #[async_trait]
-impl<T> RasterQueryProcessor for RasterStackerProcessor<T>
+impl<T> QueryProcessor for RasterStackerProcessor<T>
 where
     T: Pixel,
 {
-    type RasterType = T;
-    async fn raster_query<'a>(
+    type Output = RasterTile2D<T>;
+    type ResultDescription = RasterResultDescriptor;
+    type Selection = BandSelection;
+    type SpatialBounds = GridBoundingBox2D;
+
+    async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
@@ -327,13 +356,11 @@ where
 
         for (idx, source) in self.sources.iter().enumerate() {
             let Some(bands) =
-                map_query_bands_to_source_bands(&query.attributes, &self.bands_per_source, idx)
+                map_query_bands_to_source_bands(query.attributes(), &self.bands_per_source, idx)
             else {
                 continue;
             };
 
-            let mut source_query = query.clone();
-            source_query.attributes = bands.clone();
             sources.push(RasterStackerSource {
                 queryable: QueryWrapper { p: source, ctx },
                 band_idxs: bands.as_vec(),
@@ -345,8 +372,31 @@ where
         Ok(Box::pin(output))
     }
 
-    fn raster_result_descriptor(&self) -> &RasterResultDescriptor {
+    fn result_descriptor(&self) -> &Self::ResultDescription {
         &self.result_descriptor
+    }
+}
+
+#[async_trait]
+impl<T> RasterQueryProcessor for RasterStackerProcessor<T>
+where
+    T: Pixel,
+{
+    type RasterType = T;
+
+    async fn _time_query<'a>(
+        &'a self,
+        query: geoengine_datatypes::primitives::TimeInterval,
+        ctx: &'a dyn crate::engine::QueryContext,
+    ) -> Result<futures::stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>>
+    {
+        let mut time_sources = Vec::with_capacity(self.sources.len());
+        for source in &self.sources {
+            let s = source.time_query(query, ctx).await?;
+            time_sources.push(s);
+        }
+        let output = crate::adapters::TimeIntervalStreamMerge::new(time_sources);
+        Ok(Box::pin(output))
     }
 }
 
@@ -356,16 +406,19 @@ mod tests {
 
     use futures::StreamExt;
     use geoengine_datatypes::{
-        primitives::{CacheHint, SpatialPartition2D, TimeInstance, TimeInterval},
-        raster::{Grid, GridShape, RasterDataType, TilesEqualIgnoringCacheHint},
+        primitives::{CacheHint, TimeInstance, TimeInterval, TimeStep},
+        raster::{
+            GeoTransform, Grid, GridBoundingBox2D, GridShape, RasterDataType,
+            TilesEqualIgnoringCacheHint,
+        },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
     };
 
     use crate::{
         engine::{
-            MockExecutionContext, MockQueryContext, RasterBandDescriptor, RasterBandDescriptors,
-            SingleRasterSource,
+            MockExecutionContext, RasterBandDescriptor, RasterBandDescriptors, SingleRasterSource,
+            SpatialGridDescriptor,
         },
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{Expression, ExpressionParams},
@@ -488,17 +541,24 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 5)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
@@ -506,14 +566,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data2.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -533,14 +586,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1].try_into().unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            [0, 1].try_into().unwrap(),
+        );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -742,21 +794,28 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new(vec![
+                RasterBandDescriptor::new_unitless("band_0".into()),
+                RasterBandDescriptor::new_unitless("band_1".into()),
+            ])
+            .unwrap(),
+        };
+
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new(vec![
-                        RasterBandDescriptor::new_unitless("band_0".into()),
-                        RasterBandDescriptor::new_unitless("band_1".into()),
-                    ])
-                    .unwrap(),
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
@@ -764,18 +823,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data2.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new(vec![
-                        RasterBandDescriptor::new_unitless("band_0".into()),
-                        RasterBandDescriptor::new_unitless("band_1".into()),
-                    ])
-                    .unwrap(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -795,14 +843,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1, 2, 3].try_into().unwrap(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            [0, 1, 2, 3].try_into().unwrap(),
+        );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -929,17 +976,24 @@ mod tests {
             },
         ];
 
+        let result_descriptor = RasterResultDescriptor {
+            data_type: RasterDataType::U8,
+            spatial_reference: SpatialReference::epsg_4326().into(),
+            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
+                Some(TimeInterval::new_unchecked(0, 10)),
+                TimeStep::millis(10).unwrap(),
+            ),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(
+                GeoTransform::test_default(),
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            ),
+            bands: RasterBandDescriptors::new_single_band(),
+        };
+
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor: result_descriptor.clone(),
             },
         }
         .boxed();
@@ -947,14 +1001,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data2.clone(),
-                result_descriptor: RasterResultDescriptor {
-                    data_type: RasterDataType::U8,
-                    spatial_reference: SpatialReference::epsg_4326().into(),
-                    time: None,
-                    bbox: None,
-                    resolution: None,
-                    bands: RasterBandDescriptors::new_single_band(),
-                },
+                result_descriptor,
             },
         }
         .boxed();
@@ -974,14 +1021,13 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked((0., 1.).into(), (3., 0.).into()),
-            time_interval: TimeInterval::new_unchecked(0, 10),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: 1.into(),
-        };
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-1, 0], [-1, 2]).unwrap(),
+            TimeInterval::new_unchecked(0, 10),
+            1.into(),
+        );
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         let op = stacker
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
@@ -1019,6 +1065,7 @@ mod tests {
                 raster: GdalSource {
                     params: GdalSourceParameters {
                         data: ndvi_id.clone(),
+                        overview_level: None,
                     },
                 }
                 .boxed(),
@@ -1033,7 +1080,7 @@ mod tests {
             sources: MultipleRasterSources {
                 rasters: vec![
                     GdalSource {
-                        params: GdalSourceParameters { data: ndvi_id },
+                        params: GdalSourceParameters::new(ndvi_id),
                     }
                     .boxed(),
                     expression,
@@ -1054,21 +1101,17 @@ mod tests {
             shape_array: [2, 2],
         };
 
-        let query_ctx = MockQueryContext::test_default();
+        let query_ctx = exe_ctx.mock_query_context_test_default();
 
         // query both bands
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            ),
-            time_interval: TimeInterval::new_unchecked(
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+            TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
             ),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0, 1].try_into().unwrap(),
-        };
+            [0, 1].try_into().unwrap(),
+        );
 
         let result = processor
             .raster_query(query_rect, &query_ctx)
@@ -1081,18 +1124,14 @@ mod tests {
         assert!(!result.is_empty());
 
         // query only first band
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            ),
-            time_interval: TimeInterval::new_unchecked(
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+            TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
             ),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [0].try_into().unwrap(),
-        };
+            [0].try_into().unwrap(),
+        );
 
         let result = processor
             .raster_query(query_rect, &query_ctx)
@@ -1105,18 +1144,14 @@ mod tests {
         assert!(!result.is_empty());
 
         // query only second band
-        let query_rect = RasterQueryRectangle {
-            spatial_bounds: SpatialPartition2D::new_unchecked(
-                (-180., 90.).into(),
-                (180., -90.).into(),
-            ),
-            time_interval: TimeInterval::new_unchecked(
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-900, -1800], [899, 1799]).unwrap(),
+            TimeInterval::new_unchecked(
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
                 TimeInstance::from_str("2014-01-01T00:00:00.000Z").unwrap(),
             ),
-            spatial_resolution: SpatialResolution::one(),
-            attributes: [1].try_into().unwrap(),
-        };
+            [1].try_into().unwrap(),
+        );
 
         let result = processor
             .raster_query(query_rect, &query_ctx)

@@ -51,7 +51,8 @@ use geoengine_datatypes::operations::image::RasterColorizer;
 use geoengine_datatypes::operations::image::RgbaColor;
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::Coordinate2D;
-use geoengine_datatypes::primitives::SpatialResolution;
+use geoengine_datatypes::raster::GeoTransform;
+use geoengine_datatypes::raster::GridBoundingBox2D;
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::raster::RenameBands;
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -59,12 +60,13 @@ use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_datatypes::test_data;
 use geoengine_datatypes::util::test::TestDefault;
 use geoengine_datatypes::{primitives::DateTime, raster::TilingSpecification};
-use geoengine_operators::engine::QueryContext;
 use geoengine_operators::engine::RasterBandDescriptor;
 use geoengine_operators::engine::RasterBandDescriptors;
 use geoengine_operators::engine::RasterResultDescriptor;
+use geoengine_operators::engine::SpatialGridDescriptor;
 use geoengine_operators::engine::WorkflowOperatorPath;
 use geoengine_operators::engine::{ChunkByteSize, MultipleRasterSources};
+use geoengine_operators::engine::{QueryContext, TimeDescriptor};
 use geoengine_operators::engine::{RasterOperator, TypedOperator};
 use geoengine_operators::meta::quota::QuotaTracking;
 use geoengine_operators::processing::RasterStacker;
@@ -149,7 +151,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
     let workflow = Workflow {
         operator: TypedOperator::Raster(
             GdalSource {
-                params: GdalSourceParameters { data: dataset },
+                params: GdalSourceParameters::new(dataset),
             }
             .boxed(),
         ),
@@ -208,7 +210,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl(
     let ctx = app_ctx.session_context(session);
     let dataset_id = ctx
         .db()
-        .add_dataset(ndvi.properties, ndvi.meta_data)
+        .add_dataset(ndvi.properties, ndvi.meta_data, None)
         .await
         .expect("dataset db access")
         .id;
@@ -240,7 +242,7 @@ pub async fn add_ndvi_to_datasets_with_cache_ttl(
 pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
     let ndvi = DatasetDefinition {
         properties: AddDataset {
-            name: None,
+            name: Some(DatasetName::new(None, "land_cover_raster_test".to_string())),
             display_name: "Land Cover".to_string(),
             description: "Land Cover derived from MODIS/Terra+Aqua Land Cover".to_string(),
             source_operator: "GdalSource".to_string(),
@@ -305,12 +307,11 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
             result_descriptor: RasterResultDescriptor {
                 data_type: RasterDataType::U8,
                 spatial_reference: SpatialReferenceOption::SpatialReference(SpatialReference::epsg_4326()),
-                time: Some(geoengine_datatypes::primitives::TimeInterval::default()),
-                bbox: Some(geoengine_datatypes::primitives::SpatialPartition2D::new((-180., 90.).into(),
-                     (180., -90.).into()).unwrap()),
-                resolution: Some(SpatialResolution {
-                    x: 0.1, y: 0.1,
-                }),
+                time: TimeDescriptor::new_irregular(Some(geoengine_datatypes::primitives::TimeInterval::default())),
+                spatial_grid: SpatialGridDescriptor::source_from_parts(
+                 GeoTransform::new(Coordinate2D::new(-180.,  90.), 0.1, -0.1),
+                 GridBoundingBox2D::new_min_max(0,1799, 0, 1599).unwrap(),
+                ),
                 bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new("band".into(), geoengine_datatypes::primitives::Measurement::classification("Land Cover".to_string(), 
                 [
                     (0_u8, "Water Bodies".to_string()),
@@ -336,7 +337,7 @@ pub async fn add_land_cover_to_datasets<D: GeoEngineDb>(db: &D) -> DatasetName {
         }),
     };
 
-    db.add_dataset(ndvi.properties, ndvi.meta_data)
+    db.add_dataset(ndvi.properties, ndvi.meta_data, None)
         .await
         .expect("dataset db access")
         .name
@@ -380,18 +381,21 @@ pub async fn register_ne2_multiband_workflow(
                         GdalSource {
                             params: GdalSourceParameters {
                                 data: blue.name.into(),
+                                overview_level: None,
                             },
                         }
                         .boxed(),
                         GdalSource {
                             params: GdalSourceParameters {
                                 data: green.name.into(),
+                                overview_level: None,
                             },
                         }
                         .boxed(),
                         GdalSource {
                             params: GdalSourceParameters {
                                 data: red.name.into(),
+                                overview_level: None,
                             },
                         }
                         .boxed(),
@@ -471,7 +475,7 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
     };
 
     let dataset = db
-        .add_dataset(def.properties.clone(), def.meta_data.clone())
+        .add_dataset(def.properties.clone(), def.meta_data.clone(), None)
         .await
         .unwrap();
 
@@ -876,7 +880,7 @@ pub async fn add_ndvi_to_datasets2<C: ApplicationContext<Session = UserSession>>
     let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
-        .add_dataset(ndvi.properties, ndvi.meta_data)
+        .add_dataset(ndvi.properties, ndvi.meta_data, None)
         .await
         .expect("dataset db access")
         .id;
@@ -933,7 +937,7 @@ pub async fn add_ports_to_datasets<C: ApplicationContext<Session = UserSession>>
     let db = app_ctx.session_context(system_session).db();
 
     let dataset_id = db
-        .add_dataset(ndvi.properties, ndvi.meta_data)
+        .add_dataset(ndvi.properties, ndvi.meta_data, None)
         .await
         .expect("dataset db access")
         .id;

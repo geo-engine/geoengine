@@ -10,8 +10,8 @@ use geoengine_datatypes::{
 use geoengine_operators::{
     call_on_generic_raster_processor, call_on_generic_vector_processor,
     engine::{
-        QueryAbortTrigger, QueryContext, QueryProcessorExt, RasterOperator, VectorOperator,
-        WorkflowOperatorPath,
+        InitializedRasterOperator, QueryAbortTrigger, QueryContext, QueryProcessorExt,
+        RasterOperator, VectorOperator, WorkflowOperatorPath,
     },
 };
 use tokio::{
@@ -30,18 +30,11 @@ pub struct WebsocketStreamTask {
 }
 
 impl WebsocketStreamTask {
-    pub async fn new_raster<C: SessionContext>(
-        raster_operator: Box<dyn RasterOperator>,
+    pub async fn new_raster_initialized<C: QueryContext + 'static>(
+        initialized_operator: Box<dyn InitializedRasterOperator>,
         query_rectangle: RasterQueryRectangle,
-        execution_ctx: C::ExecutionContext,
-        mut query_ctx: C::QueryContext,
+        mut query_ctx: C,
     ) -> Result<Self> {
-        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
-
-        let initialized_operator = raster_operator
-            .initialize(workflow_operator_path_root, &execution_ctx)
-            .await?;
-
         let spatial_reference = initialized_operator.result_descriptor().spatial_reference;
 
         let query_processor = initialized_operator.query_processor()?;
@@ -66,6 +59,21 @@ impl WebsocketStreamTask {
             byte_stream.map_err(Into::into).boxed(),
             abort_handle,
         ))
+    }
+
+    pub async fn new_raster<C: SessionContext>(
+        raster_operator: Box<dyn RasterOperator>,
+        query_rectangle: RasterQueryRectangle,
+        execution_ctx: C::ExecutionContext,
+        query_ctx: C::QueryContext,
+    ) -> Result<Self> {
+        let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
+
+        let initialized_operator = raster_operator
+            .initialize(workflow_operator_path_root, &execution_ctx)
+            .await?;
+
+        Self::new_raster_initialized(initialized_operator, query_rectangle, query_ctx).await
     }
 
     pub async fn new_vector<C: SessionContext>(

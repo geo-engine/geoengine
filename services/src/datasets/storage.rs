@@ -1,6 +1,7 @@
 use super::listing::Provenance;
 use super::postgres::DatasetMetaData;
 use super::{DatasetIdAndName, DatasetName};
+use crate::api::handlers::datasets::AddDatasetTile;
 use crate::api::model::services::{DataPath, UpdateDataset};
 use crate::datasets::listing::{DatasetListing, DatasetProvider};
 use crate::datasets::upload::UploadDb;
@@ -11,7 +12,7 @@ use async_trait::async_trait;
 use geoengine_datatypes::dataset::DatasetId;
 use geoengine_datatypes::primitives::VectorQueryRectangle;
 use geoengine_operators::engine::{MetaData, TypedResultDescriptor};
-use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf};
+use geoengine_operators::source::{GdalMetaDataList, GdalMetadataNetCdfCf, GdalMultiBand};
 use geoengine_operators::{engine::StaticMetaData, source::OgrSourceDataset};
 use geoengine_operators::{engine::VectorResultDescriptor, source::GdalMetaDataRegular};
 use geoengine_operators::{mock::MockDatasetDataSourceLoadingInfo, source::GdalMetaDataStatic};
@@ -24,20 +25,19 @@ use validator::{Validate, ValidationError};
 pub const DATASET_DB_ROOT_COLLECTION_ID: Uuid =
     Uuid::from_u128(0x5460_73b6_d535_4205_b601_9967_5c9f_6dd7);
 
-#[derive(Debug, Serialize, Deserialize, Clone, ToSchema, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Validate)]
 #[serde(rename_all = "camelCase")]
 pub struct Dataset {
-    #[schema(value_type = crate::api::model::datatypes::DatasetId)]
     pub id: DatasetId,
     pub name: DatasetName,
     pub display_name: String,
     pub description: String,
-    #[schema(value_type = crate::api::model::operators::TypedResultDescriptor)]
     pub result_descriptor: TypedResultDescriptor,
     pub source_operator: String,
     pub symbology: Option<Symbology>,
     pub provenance: Option<Vec<Provenance>>,
     pub tags: Option<Vec<String>>,
+    pub data_path: Option<DataPath>,
 }
 
 impl Dataset {
@@ -49,7 +49,8 @@ impl Dataset {
             description: self.description.clone(),
             tags: self.tags.clone().unwrap_or_default(), // TODO: figure out if we want to use Option<Vec<String>> everywhere or if Vec<String> is fine
             source_operator: self.source_operator.clone(),
-            result_descriptor: self.result_descriptor.clone(),
+            // convert the TypedResultDescriptor to the API one
+            result_descriptor: self.result_descriptor.clone().into(),
             symbology: self.symbology.clone(),
         }
     }
@@ -146,6 +147,7 @@ pub enum MetaDataDefinition {
 
     GdalMetadataNetCdfCf(GdalMetadataNetCdfCf),
     GdalMetaDataList(GdalMetaDataList),
+    GdalMultiBand(GdalMultiBand),
 }
 
 impl From<StaticMetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>
@@ -182,6 +184,12 @@ impl From<GdalMetaDataList> for MetaDataDefinition {
     }
 }
 
+impl From<GdalMultiBand> for MetaDataDefinition {
+    fn from(meta_data: GdalMultiBand) -> Self {
+        MetaDataDefinition::GdalMultiBand(meta_data)
+    }
+}
+
 impl MetaDataDefinition {
     pub fn source_operator_type(&self) -> &str {
         match self {
@@ -191,6 +199,7 @@ impl MetaDataDefinition {
             | MetaDataDefinition::GdalStatic(_)
             | MetaDataDefinition::GdalMetadataNetCdfCf(_)
             | MetaDataDefinition::GdalMetaDataList(_) => "GdalSource",
+            MetaDataDefinition::GdalMultiBand(_) => "MultiBandGdalSource",
         }
     }
 
@@ -202,6 +211,7 @@ impl MetaDataDefinition {
             MetaDataDefinition::GdalStatic(_) => "GdalStatic",
             MetaDataDefinition::GdalMetadataNetCdfCf(_) => "GdalMetadataNetCdfCf",
             MetaDataDefinition::GdalMetaDataList(_) => "GdalMetaDataList",
+            MetaDataDefinition::GdalMultiBand(_) => "GdalMultiBand",
         }
     }
 
@@ -237,6 +247,7 @@ impl MetaDataDefinition {
                 .await
                 .map(Into::into)
                 .map_err(Into::into),
+            MetaDataDefinition::GdalMultiBand(m) => Ok(m.result_descriptor.clone().into()),
         }
     }
 
@@ -266,6 +277,10 @@ impl MetaDataDefinition {
                 meta_data: self,
                 result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
             },
+            MetaDataDefinition::GdalMultiBand(d) => DatasetMetaData {
+                meta_data: self,
+                result_descriptor: TypedResultDescriptor::from(d.result_descriptor.clone()),
+            },
         }
     }
 }
@@ -281,6 +296,7 @@ pub trait DatasetStore {
         &self,
         dataset: AddDataset,
         meta_data: MetaDataDefinition,
+        data_path: Option<DataPath>, // TODO: make mandatory when implementing Volumes RFC
     ) -> Result<DatasetIdAndName>;
 
     async fn update_dataset(&self, dataset: DatasetId, update: UpdateDataset) -> Result<()>;
@@ -304,4 +320,7 @@ pub trait DatasetStore {
     ) -> Result<()>;
 
     async fn delete_dataset(&self, dataset: DatasetId) -> Result<()>;
+
+    async fn add_dataset_tiles(&self, dataset: DatasetId, tiles: Vec<AddDatasetTile>)
+    -> Result<()>;
 }

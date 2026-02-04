@@ -4,14 +4,14 @@ pub fn value_in_range<T>(value: T, min: T, max: T) -> bool
 where
     T: PartialOrd + Copy,
 {
-    (value >= min) && (value < max)
+    (min..max).contains(&value)
 }
 
 pub fn value_in_range_inclusive<T>(value: T, min: T, max: T) -> bool
 where
     T: PartialOrd + Copy,
 {
-    (value >= min) && (value <= max)
+    (min..=max).contains(&value)
 }
 
 pub fn value_in_range_inv<T>(value: T, min: T, max: T) -> bool

@@ -11,6 +11,14 @@ use serde::de::Error;
 use serde::{Deserialize, Serialize};
 use utoipa::{IntoParams, ToSchema};
 
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+#[serde(rename_all = "PascalCase")]
+pub enum WcsRequest {
+    GetCapabilities,
+    DescribeCoverage,
+    GetCoverage,
+}
+
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
 pub enum WcsService {
     #[serde(rename = "WCS")]
@@ -32,14 +40,8 @@ pub struct GetCapabilities {
     pub version: Option<WcsVersion>,
     #[serde(alias = "SERVICE")]
     pub service: WcsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetCapabilitiesRequest,
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetCapabilitiesRequest {
-    GetCapabilities,
-}
 // sample: SERVICE=WCS&request=DescribeCoverage&VERSION=1.1.1&IDENTIFIERS=nurc:Arc_Sample
 #[derive(PartialEq, Eq, Debug, Deserialize, Serialize, IntoParams)]
 pub struct DescribeCoverage {
@@ -47,16 +49,9 @@ pub struct DescribeCoverage {
     pub version: WcsVersion,
     #[serde(alias = "SERVICE")]
     pub service: WcsService,
-    #[serde(alias = "REQUEST")]
-    pub request: DescribeCoverageRequest,
     #[serde(alias = "IDENTIFIERS")]
     #[param(example = "<Workflow Id>")]
     pub identifiers: String,
-}
-
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum DescribeCoverageRequest {
-    DescribeCoverage,
 }
 
 // sample: SERVICE=WCS&VERSION=1.1.1&request=GetCoverage&FORMAT=image/tiff&IDENTIFIER=nurc:Arc_Sample&BOUNDINGBOX=-81,-162,81,162,urn:ogc:def:crs:EPSG::4326&GRIDBASECRS=urn:ogc:def:crs:EPSG::4326&GRIDCS=urn:ogc:def:cs:OGC:0.0:Grid2dSquareCS&GRIDTYPE=urn:ogc:def:method:WCS:1.1:2dSimpleGrid&GRIDORIGIN=81,-162&GRIDOFFSETS=-18,36
@@ -66,8 +61,6 @@ pub struct GetCoverage {
     pub version: WcsVersion,
     #[serde(alias = "SERVICE")]
     pub service: WcsService,
-    #[serde(alias = "REQUEST")]
-    pub request: GetCoverageRequest,
     #[serde(alias = "FORMAT")]
     pub format: GetCoverageFormat,
     #[serde(alias = "IDENTIFIER")]
@@ -121,11 +114,6 @@ pub struct GetCoverage {
     pub nodatavalue: Option<f64>,
 }
 
-#[derive(PartialEq, Eq, Debug, Deserialize, Serialize, ToSchema)]
-pub enum GetCoverageRequest {
-    GetCoverage,
-}
-
 impl GetCoverage {
     pub fn spatial_resolution(&self) -> Option<Result<SpatialResolution>> {
         if let Some(grid_offsets) = self.gridoffsets {
@@ -149,6 +137,16 @@ impl GetCoverage {
             .unwrap_or(self.gridbasecrs);
 
         rectangle_from_ogc_params(self.boundingbox.bbox, spatial_reference)
+    }
+
+    pub fn spatial_ref(&self) -> Result<SpatialReference> {
+        let spatial_ref = self.gridbasecrs; // TODO: maybe this is something different. Lets investigate that later...
+        if let Some(bbx_sref) = self.boundingbox.spatial_reference
+            && bbx_sref != spatial_ref
+        {
+            return Err(error::Error::WcsBoundingboxCrsMustEqualGridBaseCrs);
+        }
+        Ok(spatial_ref)
     }
 }
 
@@ -266,7 +264,6 @@ mod tests {
             GetCoverage {
                 version: WcsVersion::V1_1_1,
                 service: WcsService::Wcs,
-                request: GetCoverageRequest::GetCoverage,
                 format: GetCoverageFormat::ImageTiff,
                 identifier: "nurc:Arc_Sample".to_owned(),
                 boundingbox: WcsBoundingbox {

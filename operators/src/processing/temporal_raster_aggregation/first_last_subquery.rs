@@ -5,10 +5,7 @@ use crate::{
 use async_trait::async_trait;
 use futures::{Future, FutureExt, TryFuture, TryFutureExt, future::BoxFuture};
 use geoengine_datatypes::{
-    primitives::{
-        CacheHint, QueryRectangle, RasterQueryRectangle, SpatialPartitioned, TimeInstance,
-        TimeInterval, TimeStep,
-    },
+    primitives::{CacheHint, RasterQueryRectangle, TimeInterval},
     raster::{EmptyGrid2D, Pixel, RasterTile2D, TileInformation},
 };
 use rayon::ThreadPool;
@@ -106,16 +103,18 @@ impl<T: Pixel> FoldTileAccu for TemporalRasterAggregationTileAccu<T> {
 }
 
 impl<T: Pixel> FoldTileAccuMut for TemporalRasterAggregationTileAccu<T> {
-    fn tile_mut(&mut self) -> &mut RasterTile2D<Self::RasterType> {
-        &mut self.accu_tile
+    fn set_time(&mut self, time: TimeInterval) {
+        self.accu_tile.time = time;
+    }
+
+    fn set_cache_hint(&mut self, new_cache_hint: CacheHint) {
+        self.accu_tile.cache_hint = new_cache_hint;
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct TemporalRasterAggregationSubQueryNoDataOnly<F, T: Pixel> {
     pub fold_fn: F,
-    pub step: TimeStep,
-    pub step_reference: TimeInstance,
     pub _phantom_pixel_type: PhantomData<T>,
 }
 
@@ -148,17 +147,15 @@ where
     fn tile_query_rectangle(
         &self,
         tile_info: TileInformation,
-        query_rect: RasterQueryRectangle,
-        start_time: TimeInstance,
+        _query_rect: RasterQueryRectangle,
+        time: TimeInterval,
         band_idx: u32,
     ) -> Result<Option<RasterQueryRectangle>> {
-        let snapped_start = self.step.snap_relative(self.step_reference, start_time)?;
-        Ok(Some(QueryRectangle {
-            spatial_bounds: tile_info.spatial_partition(),
-            spatial_resolution: query_rect.spatial_resolution,
-            time_interval: TimeInterval::new(snapped_start, (snapped_start + self.step)?)?,
-            attributes: band_idx.into(),
-        }))
+        Ok(Some(RasterQueryRectangle::new(
+            tile_info.global_pixel_bounds(),
+            time, // The time is already snapped by the operator where the time stream is created.
+            band_idx.into(),
+        )))
     }
 
     fn fold_method(&self) -> Self::FoldMethod {
@@ -171,7 +168,7 @@ fn build_temporal_no_data_accu<T: Pixel>(
     tile_info: TileInformation,
     pool: Arc<ThreadPool>,
 ) -> impl Future<Output = Result<TemporalRasterAggregationTileAccu<T>>> + use<T> {
-    let time_interval = query_rect.time_interval;
+    let time_interval = query_rect.time_interval();
     crate::util::spawn_blocking(move || {
         let output_raster = EmptyGrid2D::new(tile_info.tile_size_in_pixels).into();
 

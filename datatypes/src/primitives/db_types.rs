@@ -9,7 +9,7 @@ use crate::{
     util::NotNanF64,
 };
 use postgres_types::{FromSql, ToSql};
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 #[derive(Debug, ToSql, FromSql)]
 #[postgres(name = "Measurement")]
@@ -77,7 +77,7 @@ impl TryFrom<MeasurementDbType> for Measurement {
                 continuous: None,
                 classification: Some(classification),
             } => {
-                let mut classes = HashMap::with_capacity(classification.classes.len());
+                let mut classes = BTreeMap::new();
                 for SmallintTextKeyValue { key, value } in classification.classes {
                     classes.insert(
                         u8::try_from(key).map_err(|_| Error::UnexpectedInvalidDbTypeConversion)?,

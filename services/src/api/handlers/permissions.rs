@@ -1,14 +1,16 @@
-use crate::api::model::datatypes::{DataProviderId, LayerId};
-use crate::contexts::{ApplicationContext, GeoEngineDb, SessionContext};
-use crate::datasets::DatasetName;
-use crate::datasets::storage::DatasetDb;
-use crate::error::{self, Error, Result};
-use crate::layers::listing::LayerCollectionId;
-use crate::machine_learning::MlModelDb;
-use crate::permissions::{
-    Permission, PermissionDb, PermissionListing as DbPermissionListing, ResourceId, Role, RoleId,
+use crate::{
+    api::model::datatypes::{DataProviderId, LayerId},
+    contexts::{ApplicationContext, GeoEngineDb, SessionContext},
+    datasets::{DatasetName, storage::DatasetDb},
+    error::{self, Error, Result},
+    layers::listing::LayerCollectionId,
+    machine_learning::MlModelDb,
+    permissions::{
+        Permission, PermissionDb, PermissionListing as DbPermissionListing, ResourceId, Role,
+        RoleId,
+    },
+    projects::ProjectId,
 };
-use crate::projects::ProjectId;
 use actix_web::{FromRequest, HttpResponse, web};
 use geoengine_datatypes::error::BoxedResultExt;
 use geoengine_datatypes::machine_learning::MlModelName;
@@ -39,12 +41,12 @@ where
 }
 
 /// Request for adding a new permission to the given role on the given resource
-#[derive(Debug, PartialEq, Eq, Deserialize, Clone, ToSchema)]
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct PermissionRequest {
-    resource: Resource,
-    role_id: RoleId,
-    permission: Permission,
+    pub resource: Resource,
+    pub role_id: RoleId,
+    pub permission: Permission,
 }
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, ToSchema)]
@@ -400,6 +402,7 @@ mod tests {
         let gdal = GdalSource {
             params: GdalSourceParameters {
                 data: gdal_dataset_name,
+                overview_level: None,
             },
         }
         .boxed();
@@ -673,6 +676,7 @@ mod tests {
                     MockPointSource {
                         params: MockPointSourceParams {
                             points: vec![Coordinate2D::new(1., 2.); 3],
+                            spatial_bounds: geoengine_operators::mock::SpatialBoundsDerive::Derive,
                         },
                     }
                     .boxed(),

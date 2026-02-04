@@ -35,13 +35,14 @@ use geoengine_datatypes::collections::VectorDataType;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId};
 use geoengine_datatypes::primitives::CacheTtlSeconds;
 use geoengine_datatypes::primitives::{
-    FeatureDataType, Measurement, RasterQueryRectangle, SpatialResolution, VectorQueryRectangle,
+    FeatureDataType, Measurement, RasterQueryRectangle, VectorQueryRectangle,
 };
+use geoengine_datatypes::raster::{BoundedGrid, GeoTransform, GridShape2D};
 use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
 use geoengine_operators::engine::{
     MetaData, MetaDataProvider, RasterBandDescriptor, RasterBandDescriptors, RasterOperator,
-    RasterResultDescriptor, ResultDescriptor, TypedOperator, VectorColumnInfo, VectorOperator,
-    VectorResultDescriptor,
+    RasterResultDescriptor, ResultDescriptor, SpatialGridDescriptor, TimeDescriptor, TypedOperator,
+    VectorColumnInfo, VectorOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
@@ -63,6 +64,7 @@ pub use self::error::ArunaProviderError;
 
 pub mod error;
 pub mod metadata;
+
 #[cfg(test)]
 #[macro_use]
 mod mock_grpc_server;
@@ -526,19 +528,14 @@ impl ArunaDataProvider {
         crs: SpatialReferenceOption,
         info: &RasterInfo,
     ) -> geoengine_operators::util::Result<RasterResultDescriptor> {
+        let shape = GridShape2D::new_2d(info.width, info.height).bounding_box();
+        let geo_transform = GeoTransform::try_from(info.geo_transform)?;
+
         Ok(RasterResultDescriptor {
             data_type: info.data_type,
             spatial_reference: crs,
-
-            time: Some(info.time_interval),
-            bbox: Some(
-                info.geo_transform
-                    .spatial_partition(info.width, info.height),
-            ),
-            resolution: Some(SpatialResolution::try_from((
-                info.geo_transform.x_pixel_size,
-                info.geo_transform.y_pixel_size,
-            ))?),
+            time: TimeDescriptor::new_irregular(Some(info.time_interval)),
+            spatial_grid: SpatialGridDescriptor::source_from_parts(geo_transform, shape),
             bands: RasterBandDescriptors::new(vec![RasterBandDescriptor::new(
                 "band".into(),
                 info.measurement
@@ -903,12 +900,12 @@ impl LayerCollectionProvider for ArunaDataProvider {
             ),
             DataType::SingleRasterFile(_) => TypedOperator::Raster(
                 GdalSource {
-                    params: GdalSourceParameters {
-                        data: geoengine_datatypes::dataset::NamedData::with_system_provider(
+                    params: GdalSourceParameters::new(
+                        geoengine_datatypes::dataset::NamedData::with_system_provider(
                             self.id.to_string(),
                             id.to_string(),
                         ),
-                    },
+                    ),
                 }
                 .boxed(),
             ),
@@ -1102,12 +1099,11 @@ mod tests {
     use geoengine_datatypes::collections::{FeatureCollectionInfos, MultiPointCollection};
     use geoengine_datatypes::dataset::{DataId, DataProviderId, ExternalDataId, LayerId};
     use geoengine_datatypes::primitives::{
-        BoundingBox2D, CacheTtlSeconds, ColumnSelection, SpatialResolution, TimeInterval,
-        VectorQueryRectangle,
+        BoundingBox2D, CacheTtlSeconds, ColumnSelection, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::util::test::TestDefault;
     use geoengine_operators::engine::{
-        MetaData, MetaDataProvider, MockExecutionContext, MockQueryContext, QueryProcessor,
+        MetaData, MetaDataProvider, MockExecutionContext, QueryProcessor,
         TypedVectorQueryProcessor, VectorOperator, VectorResultDescriptor, WorkflowOperatorPath,
     };
     use geoengine_operators::source::{OgrSource, OgrSourceDataset, OgrSourceParameters};
@@ -2040,7 +2036,8 @@ mod tests {
                 "operator": {
                     "type": "GdalSource",
                     "params": {
-                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:DATASET_ID"
+                        "data": "_:86a7f7ce-1bab-4ce9-a32b-172c0f958ee0:DATASET_ID",
+                        "overviewLevel": null
                     }
                 }
             }),
@@ -2450,14 +2447,13 @@ mod tests {
             panic!("Expected MultiPoint QueryProcessor");
         };
 
-        let ctx = MockQueryContext::test_default();
+        let ctx = context.mock_query_context_test_default();
 
-        let qr = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
+        let qr = VectorQueryRectangle::new(
+            BoundingBox2D::new((-180., -90.).into(), (180., 90.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
 
         let result: Vec<MultiPointCollection> = proc
             .query(qr, &ctx)

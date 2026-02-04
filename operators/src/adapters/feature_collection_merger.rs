@@ -140,22 +140,19 @@ mod tests {
     use super::*;
 
     use crate::engine::{
-        MockExecutionContext, MockQueryContext, QueryProcessor, TypedVectorQueryProcessor,
-        VectorOperator, WorkflowOperatorPath,
+        MockExecutionContext, QueryProcessor, TypedVectorQueryProcessor, VectorOperator,
+        WorkflowOperatorPath,
     };
     use crate::error::Error;
     use crate::mock::{MockFeatureCollectionSource, MockPointSource, MockPointSourceParams};
     use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::collections::ChunksEqualIgnoringCacheHint;
+    use geoengine_datatypes::collections::{DataCollection, MultiPointCollection};
     use geoengine_datatypes::primitives::{
         BoundingBox2D, Coordinate2D, MultiPoint, TimeInterval, VectorQueryRectangle,
     };
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_datatypes::util::test::TestDefault;
-    use geoengine_datatypes::{
-        collections::{DataCollection, MultiPointCollection},
-        primitives::SpatialResolution,
-    };
 
     #[tokio::test]
     async fn simple() {
@@ -165,9 +162,7 @@ mod tests {
             .collect();
 
         let source = MockPointSource {
-            params: MockPointSourceParams {
-                points: coordinates.clone(),
-            },
+            params: MockPointSourceParams::new(coordinates.clone()),
         };
 
         let source = source
@@ -184,13 +179,13 @@ mod tests {
             unreachable!();
         };
 
-        let qrect = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let cx = MockQueryContext::new((std::mem::size_of::<Coordinate2D>() * 2).into());
+        let qrect = VectorQueryRectangle::new(
+            BoundingBox2D::new((0.0, 0.0).into(), (10.0, 10.0).into()).unwrap(),
+            Default::default(),
+            ColumnSelection::all(),
+        );
+        let ecx = MockExecutionContext::test_default();
+        let cx = ecx.mock_query_context((std::mem::size_of::<Coordinate2D>() * 2).into());
 
         let number_of_source_chunks = processor
             .query(qrect.clone(), &cx)
@@ -262,13 +257,13 @@ mod tests {
             unreachable!();
         };
 
-        let qrect = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
-            time_interval: Default::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let cx = MockQueryContext::new((0).into());
+        let qrect = VectorQueryRectangle::new(
+            BoundingBox2D::new((0.0, 0.0).into(), (0.0, 0.0).into()).unwrap(),
+            Default::default(),
+            ColumnSelection::all(),
+        );
+        let ecx = MockExecutionContext::test_default();
+        let cx = ecx.mock_query_context((0).into());
 
         let collections =
             FeatureCollectionChunkMerger::new(processor.query(qrect, &cx).await.unwrap().fuse(), 0)

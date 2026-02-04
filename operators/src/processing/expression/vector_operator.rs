@@ -9,6 +9,7 @@ use crate::{
         VectorColumnInfo, VectorOperator, VectorQueryProcessor, VectorResultDescriptor,
         WorkflowOperatorPath,
     },
+    optimization::OptimizationError,
     util::Result,
 };
 use async_trait::async_trait;
@@ -16,7 +17,7 @@ use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{
     FeatureData, FeatureDataRef, FeatureDataType, FloatOptionsParIter, Geometry, Measurement,
-    MultiLineString, MultiPoint, MultiPolygon, VectorQueryRectangle,
+    MultiLineString, MultiPoint, MultiPolygon, SpatialResolution, VectorQueryRectangle,
 };
 use geoengine_datatypes::util::arrow::ArrowTyped;
 use geoengine_datatypes::{
@@ -107,6 +108,7 @@ impl From<GeoVectorDataType> for OutputColumn {
 struct InitializedVectorExpression {
     name: CanonicOperatorName,
     path: WorkflowOperatorPath,
+    params: VectorExpressionParams,
     result_descriptor: VectorResultDescriptor,
     features: Box<dyn InitializedVectorOperator>,
     expression: Arc<LinkedExpression>,
@@ -157,7 +159,7 @@ impl VectorOperator for VectorExpression {
                 insert_new_column(
                     &mut result_descriptor.columns,
                     output_column_name.clone(),
-                    self.params.output_measurement,
+                    self.params.output_measurement.clone(),
                 )?;
                 DataType::Number
             }
@@ -197,6 +199,7 @@ impl VectorOperator for VectorExpression {
         let initialized_operator = InitializedVectorExpression {
             name,
             path,
+            params: self.params.clone(),
             result_descriptor,
             features: initialized_source.vector,
             expression,
@@ -460,6 +463,19 @@ impl InitializedVectorOperator for InitializedVectorExpression {
     fn path(&self) -> WorkflowOperatorPath {
         self.path.clone()
     }
+
+    fn optimize(
+        &self,
+        target_resolution: SpatialResolution,
+    ) -> Result<Box<dyn VectorOperator>, OptimizationError> {
+        Ok(VectorExpression {
+            params: self.params.clone(),
+            sources: SingleVectorSource {
+                vector: self.features.optimize(target_resolution)?,
+            },
+        }
+        .boxed())
+    }
 }
 
 /// A processor that evaluates an expression on the columns of a `FeatureCollection`.
@@ -711,7 +727,7 @@ where
 mod tests {
     use super::*;
     use crate::{
-        engine::{ChunkByteSize, MockExecutionContext, MockQueryContext, QueryProcessor},
+        engine::{ChunkByteSize, MockExecutionContext, QueryProcessor},
         mock::MockFeatureCollectionSource,
     };
     use geoengine_datatypes::{
@@ -719,10 +735,7 @@ mod tests {
             ChunksEqualIgnoringCacheHint, IntoGeometryIterator, MultiPointCollection,
             MultiPolygonCollection,
         },
-        primitives::{
-            BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, SpatialResolution,
-            TimeInterval,
-        },
+        primitives::{BoundingBox2D, ColumnSelection, MultiPoint, MultiPolygon, TimeInterval},
         util::test::TestDefault,
     };
 
@@ -786,6 +799,8 @@ mod tests {
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
 
+        let exe_ctx = MockExecutionContext::test_default();
+
         let operator = VectorExpression {
             params: VectorExpressionParams {
                 input_columns: vec!["foo".into()],
@@ -797,22 +812,18 @@ mod tests {
             sources: point_source.into(),
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let query_rectangle = VectorQueryRectangle::new(
+            BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -876,6 +887,7 @@ mod tests {
         .unwrap();
 
         let point_source = MockFeatureCollectionSource::single(points.clone()).boxed();
+        let exe_ctx = MockExecutionContext::test_default();
 
         let operator = VectorExpression {
             params: VectorExpressionParams {
@@ -888,22 +900,18 @@ mod tests {
             sources: point_source.into(),
         }
         .boxed()
-        .initialize(
-            WorkflowOperatorPath::initialize_root(),
-            &MockExecutionContext::test_default(),
-        )
+        .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
         .await
         .unwrap();
 
         let query_processor = operator.query_processor().unwrap().multi_point().unwrap();
 
-        let query_rectangle = VectorQueryRectangle {
-            spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-            time_interval: TimeInterval::default(),
-            spatial_resolution: SpatialResolution::zero_point_one(),
-            attributes: ColumnSelection::all(),
-        };
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let query_rectangle = VectorQueryRectangle::new(
+            BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+            TimeInterval::default(),
+            ColumnSelection::all(),
+        );
+        let ctx = exe_ctx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
@@ -988,12 +996,11 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            },
+            VectorQueryRectangle::new(
+                BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            ),
         )
         .await;
 
@@ -1071,12 +1078,11 @@ mod tests {
                 },
                 sources: polygons.into(),
             },
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            },
+            VectorQueryRectangle::new(
+                BoundingBox2D::new((0., 0.).into(), (10., 10.).into()).unwrap(),
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            ),
         )
         .await;
 
@@ -1168,16 +1174,15 @@ mod tests {
                     .boxed()
                     .into(),
             },
-            VectorQueryRectangle {
-                spatial_bounds: BoundingBox2D::new(
+            VectorQueryRectangle::new(
+                BoundingBox2D::new(
                     (0., 0.).into(),
                     (NUMBER_OF_ROWS as f64, NUMBER_OF_ROWS as f64).into(),
                 )
                 .unwrap(),
-                time_interval: TimeInterval::default(),
-                spatial_resolution: SpatialResolution::zero_point_one(),
-                attributes: ColumnSelection::all(),
-            },
+                TimeInterval::default(),
+                ColumnSelection::all(),
+            ),
         )
         .await;
 
@@ -1215,7 +1220,8 @@ mod tests {
         let query_processor: Box<dyn VectorQueryProcessor<VectorType = C>> =
             operator.query_processor().unwrap().try_into().unwrap();
 
-        let ctx = MockQueryContext::new(ChunkByteSize::MAX);
+        let ecx = MockExecutionContext::test_default();
+        let ctx = ecx.mock_query_context(ChunkByteSize::MAX);
 
         let query = query_processor.query(query_rectangle, &ctx).await.unwrap();
 
