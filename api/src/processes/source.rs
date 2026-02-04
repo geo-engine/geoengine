@@ -161,7 +161,7 @@ mod tests {
                     Coordinate2D { x: 1.0, y: 2.0 },
                     Coordinate2D { x: 3.0, y: 4.0 },
                 ],
-                spatial_bounds: SpatialBoundsDerive::Derive,
+                spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
             },
         };
 
@@ -181,7 +181,7 @@ mod tests {
                 r#type: Default::default(),
                 params: MockPointSourceParameters {
                     points: vec![Coordinate2D { x: 1.0, y: 2.0 }],
-                    spatial_bounds: SpatialBoundsDerive::Derive,
+                    spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
                 },
             }));
 

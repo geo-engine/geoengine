@@ -6501,11 +6501,15 @@
         "description": "# Raster Expression\n\nThe `Expression` operator performs a pixel-wise mathematical expression on one or more bands of a raster source.\nThe expression is specified as a user-defined script in a very simple language.\nThe output is a raster time series with the result of the expression and with time intervals that are the same as for the inputs.\nUsers can specify an output data type.\nInternally, the expression is evaluated using floating-point numbers.\n\nAn example usage scenario is to calculate NDVI for a red and a near-infrared raster channel.\nThe expression uses a raster source with two bands, referred to as A and B, and calculates the formula `(A - B) / (A + B)`.\nWhen the temporal resolution is months, our output NDVI will also be a monthly time series.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Expression\n\nExpressions are simple scripts to perform pixel-wise computations.\nOne can refer to the raster inputs as `A` for the first raster band, `B` for the second, and so on.\nFurthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for NO DATA values.\nThis is important if `mapNoData` is set to true.\nOtherwise, NO DATA values are mapped automatically to the output NO DATA value.\nFinally, the value `NODATA` can be used to output NO DATA.\n\nUsers can think of this implicit function signature for, e.g., two inputs:\n\n```Rust\nfn (A: f64, B: f64) -> f64\n```\n\nAs a start, expressions contain algebraic operations and mathematical functions.\n\n```Rust\n(A + B) / 2\n```\n\nIn addition, branches can be used to check for conditions.\n\n```Rust\nif A IS NODATA {\n    B\n} else {\n    A\n}\n```\n\nFunction calls can be used to access utility functions.\n\n```Rust\nmax(A, 0)\n```\n\nCurrently, the following functions are available:\n\n- `abs(a)`: absolute value\n- `min(a, b)`, `min(a, b, c)`: minimum value\n- `max(a, b)`, `max(a, b, c)`: maximum value\n- `sqrt(a)`: square root\n- `ln(a)`: natural logarithm\n- `log10(a)`: base 10 logarithm\n- `cos(a)`, `sin(a)`, `tan(a)`, `acos(a)`, `asin(a)`, `atan(a)`: trigonometric functions\n- `pi()`, `e()`: mathematical constants\n- `round(a)`, `ceil(a)`, `floor(a)`: rounding functions\n- `mod(a, b)`: division remainder\n- `to_degrees(a)`, `to_radians(a)`: conversion to degrees or radians\n\nTo generate more complex expressions, it is possible to have variable assignments.\n\n```Rust\nlet mean = (A + B) / 2;\nlet coefficient = 0.357;\nmean * coefficient\n```\n\nNote, that all assignments are separated by semicolons.\nHowever, the last expression must be without a semicolon.",
         "required": [
           "type",
-          "params"
+          "params",
+          "sources"
         ],
         "properties": {
           "params": {
             "$ref": "#/components/schemas/ExpressionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
           },
           "type": {
             "type": "string",
@@ -9328,11 +9332,15 @@
         "description": "# RasterVectorJoin\n\nThe `RasterVectorJoin` operator allows combining a single vector input and multiple raster inputs.\nFor each raster input, a new column is added to the collection from the vector input.\nThe new column contains the value of the raster at the location of the vector feature.\nFor features covering multiple pixels like `MultiPoints` or `MultiPolygons`, the value is calculated using an aggregation function selected by the user.\nThe same is true if the temporal extent of a vector feature covers multiple raster time steps.\nMore details are described below.\n\n**Example**:\nYou have a collection of agricultural fields (`Polygons`) and a collection of raster images containing each pixel's monthly NDVI value.\nFor your application, you want to know the NDVI value of each field.\nThe `RasterVectorJoin` operator allows you to combine the vector and raster data and offers multiple spatial and temporal aggregation strategies.\nFor example, you can use the `first` aggregation function to get the NDVI value of the first pixel that intersects with each field.\nThis is useful for exploratory analysis since the computation is very fast.\nTo calculate the mean NDVI value of all pixels that intersect with the field you should use the `mean` aggregation function.\nSince the NDVI data is a monthly time series, you have to specify the temporal aggregation function as well.\nThe default is `none` which will create a new feature for each month.\nOther options are `first` and `mean` which will calculate the first or mean NDVI value for each field over time.\n\n## Inputs\n\nThe `RasterVectorJoin` operator expects one _vector_ input and one or more _raster_ inputs.\n\n| Parameter | Type                                |\n| --------- | ----------------------------------- |\n| `sources` | `SingleVectorMultipleRasterSources` |\n\n## Errors\n\nIf the length of `names` is not equal to the number of raster inputs, an error is thrown.\n\n## Example JSON\n\n```json\n{\n  \"type\": \"RasterVectorJoin\",\n  \"params\": {\n    \"names\": [\"NDVI\"],\n    \"featureAggregation\": \"first\",\n    \"temporalAggregation\": \"mean\",\n    \"temporalAggregationIgnoreNoData\": true\n  },\n  \"sources\": {\n    \"vector\": {\n      \"type\": \"OgrSource\",\n      \"params\": {\n        \"data\": \"places\"\n      }\n    },\n    \"rasters\": [\n      {\n        \"type\": \"GdalSource\",\n        \"params\": {\n          \"data\": \"ndvi\"\n        }\n      }\n    ]\n  }\n}\n```",
         "required": [
           "type",
-          "params"
+          "params",
+          "sources"
         ],
         "properties": {
           "params": {
             "$ref": "#/components/schemas/RasterVectorJoinParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorMultipleRasterSources"
           },
           "type": {
             "type": "string",
@@ -9633,42 +9641,61 @@
           }
         }
       },
+      "SingleRasterSource": {
+        "type": "object",
+        "required": [
+          "raster"
+        ],
+        "properties": {
+          "raster": {
+            "$ref": "#/components/schemas/RasterOperator"
+          }
+        }
+      },
+      "SingleVectorMultipleRasterSources": {
+        "type": "object",
+        "required": [
+          "vector",
+          "rasters"
+        ],
+        "properties": {
+          "rasters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RasterOperator"
+            }
+          },
+          "vector": {
+            "$ref": "#/components/schemas/VectorOperator"
+          }
+        }
+      },
       "SpatialBoundsDerive": {
         "oneOf": [
           {
-            "type": "object",
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "derive"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/SpatialBoundsDeriveDerive"
           },
           {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/BoundingBox2D"
-              },
-              {
-                "type": "object",
-                "required": [
-                  "type"
-                ],
-                "properties": {
-                  "type": {
-                    "type": "string",
-                    "enum": [
-                      "bounds"
-                    ]
-                  }
-                }
-              }
-            ]
+            "$ref": "#/components/schemas/SpatialBoundsDeriveBounds"
+          },
+          {
+            "$ref": "#/components/schemas/SpatialBoundsDeriveNone"
+          }
+        ],
+        "description": "Spatial bounds derivation options for the [`MockPointSource`].",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "bounds": "#/components/schemas/SpatialBoundsDeriveBounds",
+            "derive": "#/components/schemas/SpatialBoundsDeriveDerive",
+            "none": "#/components/schemas/SpatialBoundsDeriveNone"
+          }
+        }
+      },
+      "SpatialBoundsDeriveBounds": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BoundingBox2D"
           },
           {
             "type": "object",
@@ -9679,13 +9706,40 @@
               "type": {
                 "type": "string",
                 "enum": [
-                  "none"
+                  "bounds"
                 ]
               }
             }
           }
+        ]
+      },
+      "SpatialBoundsDeriveDerive": {
+        "type": "object",
+        "required": [
+          "type"
         ],
-        "description": "Spatial bounds derivation options for the [`MockPointSource`]."
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "derive"
+            ]
+          }
+        }
+      },
+      "SpatialBoundsDeriveNone": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "none"
+            ]
+          }
+        }
       },
       "SpatialGridDefinition": {
         "type": "object",

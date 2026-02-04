@@ -1,7 +1,14 @@
-use crate::parameters::{ColumnNames, FeatureAggregationMethod, TemporalAggregationMethod};
+use crate::parameters::{
+    ColumnNames, FeatureAggregationMethod, SingleRasterSource, SingleVectorMultipleRasterSources,
+    TemporalAggregationMethod,
+};
 use crate::parameters::{RasterBandDescriptor, RasterDataType};
 use geoengine_macros::type_tag;
-use geoengine_operators::processing::ExpressionParams as OperatorsExpressionParamsStruct;
+use geoengine_operators::processing::{
+    Expression as OperatorsExpression, ExpressionParams as OperatorsExpressionParameters,
+    RasterVectorJoin as OperatorsRasterVectorJoin,
+    RasterVectorJoinParams as OperatorsRasterVectorJoinParameters,
+};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -87,6 +94,7 @@ use utoipa::ToSchema;
 #[serde(rename_all = "camelCase")]
 pub struct Expression {
     pub params: ExpressionParameters,
+    pub sources: SingleRasterSource,
 }
 
 /// ## Types
@@ -107,15 +115,18 @@ pub struct ExpressionParameters {
     pub map_no_data: bool,
 }
 
-impl TryFrom<Expression> for OperatorsExpressionParamsStruct {
+impl TryFrom<Expression> for OperatorsExpression {
     type Error = anyhow::Error;
 
     fn try_from(value: Expression) -> Result<Self, Self::Error> {
-        Ok(OperatorsExpressionParamsStruct {
-            expression: value.params.expression,
-            output_type: value.params.output_type.into(),
-            output_band: value.params.output_band.map(Into::into),
-            map_no_data: value.params.map_no_data,
+        Ok(OperatorsExpression {
+            params: OperatorsExpressionParameters {
+                expression: value.params.expression,
+                output_type: value.params.output_type.into(),
+                output_band: value.params.output_band.map(Into::into),
+                map_no_data: value.params.map_no_data,
+            },
+            sources: value.sources.try_into()?,
         })
     }
 }
@@ -187,6 +198,7 @@ impl TryFrom<Expression> for OperatorsExpressionParamsStruct {
 #[serde(rename_all = "camelCase")]
 pub struct RasterVectorJoin {
     pub params: RasterVectorJoinParameters,
+    pub sources: Box<SingleVectorMultipleRasterSources>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
@@ -215,25 +227,38 @@ pub struct RasterVectorJoinParameters {
     pub temporal_aggregation_ignore_no_data: bool,
 }
 
-use geoengine_operators::processing::RasterVectorJoinParams as OperatorsRasterVectorJoinParams;
-
-impl TryFrom<RasterVectorJoin> for OperatorsRasterVectorJoinParams {
+impl TryFrom<RasterVectorJoin> for OperatorsRasterVectorJoin {
     type Error = anyhow::Error;
 
     fn try_from(value: RasterVectorJoin) -> Result<Self, Self::Error> {
-        Ok(OperatorsRasterVectorJoinParams {
-            names: value.params.names.into(),
-            feature_aggregation: value.params.feature_aggregation.into(),
-            feature_aggregation_ignore_no_data: value.params.feature_aggregation_ignore_no_data,
-            temporal_aggregation: value.params.temporal_aggregation.into(),
-            temporal_aggregation_ignore_no_data: value.params.temporal_aggregation_ignore_no_data,
+        Ok(OperatorsRasterVectorJoin {
+            params: OperatorsRasterVectorJoinParameters {
+                names: value.params.names.into(),
+                feature_aggregation: value.params.feature_aggregation.into(),
+                feature_aggregation_ignore_no_data: value.params.feature_aggregation_ignore_no_data,
+                temporal_aggregation: value.params.temporal_aggregation.into(),
+                temporal_aggregation_ignore_no_data: value
+                    .params
+                    .temporal_aggregation_ignore_no_data,
+            },
+            sources: (*value.sources).try_into()?,
         })
     }
 }
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+    use crate::{
+        parameters::{Coordinate2D, SpatialBoundsDerive},
+        processes::{
+            RasterOperator, VectorOperator,
+            source::{
+                GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+            },
+        },
+    };
 
     #[test]
     fn it_converts_expressions() {
@@ -245,17 +270,26 @@ mod tests {
                 output_band: None,
                 map_no_data: true,
             },
+            sources: SingleRasterSource {
+                raster: RasterOperator::GdalSource(GdalSource {
+                    r#type: Default::default(),
+                    params: GdalSourceParameters {
+                        data: "example_data".to_string(),
+                        overview_level: None,
+                    },
+                }),
+            },
         };
 
-        let ops = OperatorsExpressionParamsStruct::try_from(api).expect("conversion failed");
+        let ops = OperatorsExpression::try_from(api).expect("conversion failed");
 
-        assert_eq!(ops.expression, "2 * A + B");
+        assert_eq!(ops.params.expression, "2 * A + B");
         assert_eq!(
-            ops.output_type,
+            ops.params.output_type,
             geoengine_datatypes::raster::RasterDataType::F32
         );
-        assert!(ops.output_band.is_none());
-        assert!(ops.map_no_data);
+        assert!(ops.params.output_band.is_none());
+        assert!(ops.params.map_no_data);
     }
 
     #[test]
@@ -269,23 +303,39 @@ mod tests {
                 temporal_aggregation: TemporalAggregationMethod::Mean,
                 temporal_aggregation_ignore_no_data: false,
             },
+            sources: Box::new(SingleVectorMultipleRasterSources {
+                vector: VectorOperator::MockPointSource(MockPointSource {
+                    r#type: Default::default(),
+                    params: MockPointSourceParameters {
+                        points: vec![Coordinate2D { x: 0.0, y: 0.0 }],
+                        spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
+                    },
+                }),
+                rasters: vec![RasterOperator::GdalSource(GdalSource {
+                    r#type: Default::default(),
+                    params: GdalSourceParameters {
+                        data: "example_data".to_string(),
+                        overview_level: None,
+                    },
+                })],
+            }),
         };
 
-        let ops_params = OperatorsRasterVectorJoinParams::try_from(api).expect("conversion failed");
+        let ops_params = OperatorsRasterVectorJoin::try_from(api).expect("conversion failed");
 
         assert!(matches!(
-            ops_params.names,
+            ops_params.params.names,
             geoengine_operators::processing::ColumnNames::Names(_)
         ));
         assert_eq!(
-            ops_params.feature_aggregation,
+            ops_params.params.feature_aggregation,
             geoengine_operators::processing::FeatureAggregationMethod::First
         );
-        assert!(ops_params.feature_aggregation_ignore_no_data);
+        assert!(ops_params.params.feature_aggregation_ignore_no_data);
         assert_eq!(
-            ops_params.temporal_aggregation,
+            ops_params.params.temporal_aggregation,
             geoengine_operators::processing::TemporalAggregationMethod::Mean
         );
-        assert!(!ops_params.temporal_aggregation_ignore_no_data);
+        assert!(!ops_params.params.temporal_aggregation_ignore_no_data);
     }
 }
