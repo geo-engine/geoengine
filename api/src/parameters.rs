@@ -260,19 +260,26 @@ impl From<RasterBandDescriptor> for geoengine_operators::engine::RasterBandDescr
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type", content = "values")]
+#[serde(rename_all = "camelCase", tag = "type")]
 pub enum ColumnNames {
+    #[schema(title = "Default")]
     Default,
-    Suffix(Vec<String>),
-    Names(Vec<String>),
+    #[schema(title = "Suffix")]
+    Suffix { values: Vec<String> },
+    #[schema(title = "Names")]
+    Names { values: Vec<String> },
 }
 
 impl From<geoengine_operators::processing::ColumnNames> for ColumnNames {
     fn from(value: geoengine_operators::processing::ColumnNames) -> Self {
         match value {
             geoengine_operators::processing::ColumnNames::Default => ColumnNames::Default,
-            geoengine_operators::processing::ColumnNames::Suffix(v) => ColumnNames::Suffix(v),
-            geoengine_operators::processing::ColumnNames::Names(v) => ColumnNames::Names(v),
+            geoengine_operators::processing::ColumnNames::Suffix(v) => {
+                ColumnNames::Suffix { values: v }
+            }
+            geoengine_operators::processing::ColumnNames::Names(v) => {
+                ColumnNames::Names { values: v }
+            }
         }
     }
 }
@@ -281,8 +288,12 @@ impl From<ColumnNames> for geoengine_operators::processing::ColumnNames {
     fn from(value: ColumnNames) -> Self {
         match value {
             ColumnNames::Default => geoengine_operators::processing::ColumnNames::Default,
-            ColumnNames::Suffix(v) => geoengine_operators::processing::ColumnNames::Suffix(v),
-            ColumnNames::Names(v) => geoengine_operators::processing::ColumnNames::Names(v),
+            ColumnNames::Suffix { values } => {
+                geoengine_operators::processing::ColumnNames::Suffix(values)
+            }
+            ColumnNames::Names { values } => {
+                geoengine_operators::processing::ColumnNames::Names(values)
+            }
         }
     }
 }

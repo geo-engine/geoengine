@@ -5645,6 +5645,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "Default",
             "required": [
               "type"
             ],
@@ -5659,6 +5660,7 @@
           },
           {
             "type": "object",
+            "title": "Suffix",
             "required": [
               "values",
               "type"
@@ -5680,6 +5682,7 @@
           },
           {
             "type": "object",
+            "title": "Names",
             "required": [
               "values",
               "type"

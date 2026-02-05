@@ -297,7 +297,9 @@ mod tests {
         let api = RasterVectorJoin {
             r#type: Default::default(),
             params: RasterVectorJoinParameters {
-                names: ColumnNames::Names(vec!["a".to_string(), "b".to_string()]),
+                names: ColumnNames::Names {
+                    values: vec!["a".to_string(), "b".to_string()],
+                },
                 feature_aggregation: FeatureAggregationMethod::First,
                 feature_aggregation_ignore_no_data: true,
                 temporal_aggregation: TemporalAggregationMethod::Mean,
