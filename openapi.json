@@ -6540,15 +6540,8 @@
             "description": "Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA."
           },
           "outputBand": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/RasterBandDescriptor",
-                "description": "Description about the output"
-              }
-            ]
+            "$ref": "#/components/schemas/RasterBandDescriptor",
+            "description": "Description about the output"
           },
           "outputType": {
             "$ref": "#/components/schemas/RasterDataType",

@@ -110,6 +110,7 @@ pub struct ExpressionParameters {
     /// A raster data type for the output
     pub output_type: RasterDataType,
     /// Description about the output
+    #[schema(nullable = false /* cannot be null, but left out, avoids `Option<Option<_>>` in openapi client  */)]
     pub output_band: Option<RasterBandDescriptor>,
     /// Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
     pub map_no_data: bool,
