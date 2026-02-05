@@ -12,8 +12,6 @@ use geoengine_operators::processing::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-/// # Raster Expression
-///
 /// The `Expression` operator performs a pixel-wise mathematical expression on one or more bands of a raster source.
 /// The expression is specified as a user-defined script in a very simple language.
 /// The output is a raster time series with the result of the expression and with time intervals that are the same as for the inputs.
@@ -92,6 +90,29 @@ use utoipa::ToSchema;
 #[type_tag(value = "Expression")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(
+    title = "Raster Expression",
+    examples(json!({
+        "type": "Expression",
+        "params": {
+            "expression": "(A - B) / (A + B)",
+            "outputType": "F32",
+            "outputBand": {
+                "name": "NDVI",
+                "measurement": { "type": "unitless" },
+            },
+            "mapNoData": true
+        },
+        "sources": {
+            "raster": {
+                "type": "GdalSource",
+                "params": {
+                    "data": "ndvi"
+                }
+            }
+        }
+    })),
+)]
 pub struct Expression {
     pub params: ExpressionParameters,
     pub sources: Box<SingleRasterSource>,
@@ -106,13 +127,22 @@ pub struct ExpressionParameters {
     /// Expression script
     ///
     /// Example: `"(A - B) / (A + B)"`
+    #[schema(examples("(A - B) / (A + B)"))]
     pub expression: String,
     /// A raster data type for the output
+    #[schema(examples("F32"))]
     pub output_type: RasterDataType,
     /// Description about the output
-    #[schema(nullable = false /* cannot be null, but left out, avoids `Option<Option<_>>` in openapi client  */)]
+    #[schema(
+        nullable = false /* cannot be null, but left out, avoids `Option<Option<_>>` in openapi client  */,
+        examples(json!({
+            "name": "NDVI",
+            "measurement": { "type": "unitless" },
+        }))
+    )]
     pub output_band: Option<RasterBandDescriptor>,
     /// Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
+    #[schema(examples(true))]
     pub map_no_data: bool,
 }
 
@@ -132,8 +162,6 @@ impl TryFrom<Expression> for OperatorsExpression {
     }
 }
 
-/// # RasterVectorJoin
-///
 /// The `RasterVectorJoin` operator allows combining a single vector input and multiple raster inputs.
 /// For each raster input, a new column is added to the collection from the vector input.
 /// The new column contains the value of the raster at the location of the vector feature.
@@ -164,39 +192,37 @@ impl TryFrom<Expression> for OperatorsExpression {
 ///
 /// If the length of `names` is not equal to the number of raster inputs, an error is thrown.
 ///
-/// ## Example JSON
-///
-/// ```json
-/// {
-///   "type": "RasterVectorJoin",
-///   "params": {
-///     "names": ["NDVI"],
-///     "featureAggregation": "first",
-///     "temporalAggregation": "mean",
-///     "temporalAggregationIgnoreNoData": true
-///   },
-///   "sources": {
-///     "vector": {
-///       "type": "OgrSource",
-///       "params": {
-///         "data": "places"
-///       }
-///     },
-///     "rasters": [
-///       {
-///         "type": "GdalSource",
-///         "params": {
-///           "data": "ndvi"
-///         }
-///       }
-///     ]
-///   }
-/// }
-/// ```
-
 #[type_tag(value = "RasterVectorJoin")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(
+    title = "Raster Vector Join",
+    examples(json!({
+        "type": "RasterVectorJoin",
+        "params": {
+            "names": ["NDVI"],
+            "featureAggregation": "first",
+            "temporalAggregation": "mean",
+            "temporalAggregationIgnoreNoData": true
+        },
+        "sources": {
+            "vector": {
+            "type": "OgrSource",
+            "params": {
+                "data": "places"
+            }
+            },
+            "rasters": [
+            {
+                "type": "GdalSource",
+                "params": {
+                "data": "ndvi"
+                }
+            }
+            ]
+        }
+    }))
+)]
 pub struct RasterVectorJoin {
     pub params: RasterVectorJoinParameters,
     pub sources: Box<SingleVectorMultipleRasterSources>,
@@ -209,22 +235,29 @@ pub struct RasterVectorJoinParameters {
     ///
     /// The `ColumnNames` type is used to specify how the new column names are derived from the raster band names.
     ///
-    /// | Value                                    | Description                                                                  |
-    /// | ---------------------------------------- | ---------------------------------------------------------------------------- |
-    /// | `{"type": "default"}`                    | Appends " (n)" to the band name with the smallest `n` that avoids a conflict |
-    /// | `{"type": "suffix", "values": [string]}` | Specifies a suffix for each input, to be appended to the band names          |
-    /// | `{"type": "rename", "values": [string]}` | A list of names for each new column                                          |
+    /// - **default**: Appends " (n)" to the band name with the smallest `n` that avoids a conflict.
+    /// - **suffix**: Specifies a suffix for each input, to be appended to the band names.
+    /// - **rename**: A list of names for each new column.
     ///
+    #[schema(examples(
+        json!({"type": "default"}),
+        json!({"type": "suffix", "values": ["_sentinel2"]}),
+        json!({"type": "rename", "values": ["red", "green", "blue"]}),
+    ))]
     pub names: ColumnNames,
     /// The aggregation function to use for features covering multiple pixels.
+    #[schema(examples("first"))]
     pub feature_aggregation: FeatureAggregationMethod,
     /// Whether to ignore no data values in the aggregation. Defaults to `false`.
     #[serde(default)]
+    #[schema(examples(true))]
     pub feature_aggregation_ignore_no_data: bool,
     /// The aggregation function to use for features covering multiple (raster) time steps.
+    #[schema(examples("mean"))]
     pub temporal_aggregation: TemporalAggregationMethod,
     /// Whether to ignore no data values in the aggregation. Defaults to `false`.
     #[serde(default)]
+    #[schema(examples(true))]
     pub temporal_aggregation_ignore_no_data: bool,
 }
 

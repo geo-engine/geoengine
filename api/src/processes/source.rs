@@ -13,8 +13,6 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
-/// # GdalSource
-///
 /// The [`GdalSource`] is a source operator that reads raster data using GDAL.
 /// The counterpart for vector data is the [`OgrSource`].
 ///
@@ -22,19 +20,19 @@ use utoipa::ToSchema;
 ///
 /// If the given dataset does not exist or is not readable, an error is thrown.
 ///
-/// ## Example JSON
-///
-/// ```json
-/// {
-///   "type": "GdalSource",
-///   "params": {
-///     "data": "ndvi"
-///   }
-/// }
-/// ```
 #[type_tag(value = "GdalSource")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(
+    title = "GDAL Source",
+    examples(json!({
+        "type": "GdalSource",
+        "params": {
+            "data": "ndvi",
+            "overviewLevel": null
+        }
+    }))
+)]
 pub struct GdalSource {
     pub params: GdalSourceParameters,
 }
@@ -44,14 +42,13 @@ pub struct GdalSource {
 #[serde(rename_all = "camelCase")]
 pub struct GdalSourceParameters {
     /// Dataset name or identifier to be loaded.
-    ///
-    /// ### Example
-    /// `"ndvi"`
+    #[schema(examples("ndvi"))]
     pub data: String,
 
     /// *Optional*: overview level to use.
     ///
     /// If not provided, the data source will determine the resolution, i.e., uses its native resolution.
+    #[schema(examples(3))]
     pub overview_level: Option<u32>,
 }
 
@@ -69,22 +66,21 @@ impl TryFrom<GdalSource> for OperatorsGdalSource {
     }
 }
 
-/// # MockPointSource
-///
 /// The [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes.
 ///
-/// ## Example JSON
-/// ```json
-/// {
-///   "type": "MockPointSource",
-///   "params": {
-///     "points": [ { "x": 1.0, "y": 2.0 }, { "x": 3.0, "y": 4.0 } ]
-///   }
-/// }
-/// ```
 #[type_tag(value = "MockPointSource")]
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
+#[schema(
+    title = "Mock Point Source",
+    examples(json!({
+        "type": "MockPointSource",
+        "params": {
+            "points": [ { "x": 1.0, "y": 2.0 }, { "x": 3.0, "y": 4.0 } ],
+            "spatialBounds": { "type": "derive" }
+        }
+    }))
+)]
 pub struct MockPointSource {
     pub params: MockPointSourceParameters,
 }
@@ -95,13 +91,16 @@ pub struct MockPointSource {
 pub struct MockPointSourceParameters {
     /// Points to be output by the mock point source.
     ///
-    /// ### Example
-    /// `[{"x": 1.0, "y": 2.0}, {"x": 3.0, "y": 4.0}]`
+    #[schema(examples(json!([
+        { "x": 1.0, "y": 2.0 },
+        { "x": 3.0, "y": 4.0 }
+    ])))]
     pub points: Vec<Coordinate2D>,
 
     /// Defines how the spatial bounds of the source are derived.
     ///
     /// Defaults to `None`.
+    #[schema(examples(json!({ "type": "derive" })))]
     pub spatial_bounds: SpatialBoundsDerive,
 }
 
