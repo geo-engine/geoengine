@@ -39,6 +39,7 @@ futures = { workspace = true }
 futures-util = { workspace = true }
 gdal = { workspace = true }
 geo = { workspace = true }
+geoengine-api = { path = "../api" }               # TODO: should be the other way around?
 geoengine-datatypes = { path = "../datatypes" }
 geoengine-expression = { path = "../expression" }
 geoengine-macros = { path = "../macros" }
