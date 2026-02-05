@@ -314,14 +314,26 @@ async fn wms_get_map<C: ApplicationContext>(
             error::WMSEndpointLayerMissmatch { endpoint, layer }
         );
 
-        // TODO: validate request further
-
-        let conn_closed = connection_closed(
-            &req,
-            config::get_config_element::<config::Wms>()?
-                .request_timeout_seconds
-                .map(Duration::from_secs),
+        let config::Wms {
+            max_image_width,
+            max_image_height,
+            request_timeout_seconds,
+            ..
+        } = config::get_config_element::<config::Wms>()?;
+        ensure!(
+            request.width > 0
+                && request.height > 0
+                && request.width <= max_image_width
+                && request.height <= max_image_height,
+            error::WMSInvalidImageSize {
+                width: request.width,
+                height: request.height,
+                max_width: max_image_width,
+                max_height: max_image_height,
+            }
         );
+
+        let conn_closed = connection_closed(&req, request_timeout_seconds.map(Duration::from_secs));
 
         let raster_colorizer = raster_colorizer_from_style(&request.styles)?;
 

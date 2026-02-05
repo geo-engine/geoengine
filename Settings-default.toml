@@ -87,6 +87,8 @@ tile_limit = 4
 
 [wms]
 # request_timeout_seconds = 3600
+max_image_width = 4096
+max_image_height = 4096
 
 [wfs]
 # request_timeout_seconds = 3600

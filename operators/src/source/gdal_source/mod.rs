@@ -1750,38 +1750,21 @@ mod tests {
                 true, true, true,
             ]
         );
+
+        assert_eq!(x.validity_mask.data.len(), 64);
+        // pixel mask is pixel == 255 from the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
+        assert_eq!(
+            x.validity_mask.data,
+            &[
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, true, false, false, false, false,
+                false, false, true, true, false, false, false, false, true, true, true, true,
+                false, false, false, true, true, true, true, true, false, false, false, true, true,
+                true, true, true,
+            ]
+        );
     }
-
-    /* This test no longer works since we now employ a clipping strategy and this makes us read a lot more data?
-    #[test]
-    fn test_load_tile_data_is_inside_single_pixel() {
-        let output_shape: GridShape2D = [8, 8].into();
-        // shift world bbox one pixel up and to the left
-        let (x_size, y_size) = (0.001, 0.001);
-        let output_bounds = SpatialPartition2D::new(
-            (-116.22222, 66.66666).into(),
-            (-116.22222 + x_size, 66.66666 - y_size).into(),
-        )
-        .unwrap();
-
-        let RasterTile2D {
-            global_geo_transform: _,
-            grid_array: grid,
-            tile_position: _,
-            band: _,
-            time: _,
-            properties: _,
-            cache_hint: _,
-        } = load_ndvi_jan_2014(output_shape, output_bounds).unwrap();
-
-        assert!(!grid.is_empty());
-
-        let x = grid.into_materialized_masked_grid();
-
-        assert_eq!(x.inner_grid.data.len(), 64);
-        assert_eq!(x.inner_grid.data, &[1; 64]);
-    }
-    */
 
     #[tokio::test]
     async fn test_query_single_time_slice() {
