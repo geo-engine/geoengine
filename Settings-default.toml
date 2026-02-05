@@ -56,6 +56,11 @@ log_spec = "info"
 # Log files are rotated once per day. The last 7 files will be kept.
 log_to_file = false
 
+# Whether to record a flamegraph of the application.
+# The flamegraph will be written to a file named <filename_prefix>.folded in the log directory.
+# WARNING: This should only be used for debugging purposes.
+log_to_flame = false
+
 # Changes the first part of the log filename.
 filename_prefix = "geo_engine"
 

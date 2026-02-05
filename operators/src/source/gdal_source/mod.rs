@@ -1750,6 +1750,20 @@ mod tests {
                 true, true, true,
             ]
         );
+
+        assert_eq!(x.validity_mask.data.len(), 64);
+        // pixel mask is pixel == 255 from the top left 8x8 block from MOD13A2_M_NDVI_2014-04-01_27x27_bytes.txt
+        assert_eq!(
+            x.validity_mask.data,
+            &[
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, false, false, false, false, false,
+                false, false, false, false, false, false, false, true, false, false, false, false,
+                false, false, true, true, false, false, false, false, true, true, true, true,
+                false, false, false, true, true, true, true, true, false, false, false, true, true,
+                true, true, true,
+            ]
+        );
     }
 
     #[tokio::test]

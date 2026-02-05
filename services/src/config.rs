@@ -238,6 +238,7 @@ impl ConfigElement for Upload {
 pub struct Logging {
     pub log_spec: String,
     pub log_to_file: bool,
+    pub log_to_flame: bool,
     pub filename_prefix: String,
     pub log_directory: Option<String>,
     pub raw_error_messages: bool,

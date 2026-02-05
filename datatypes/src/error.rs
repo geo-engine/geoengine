@@ -3,6 +3,7 @@ use crate::{
     primitives::{BoundingBox2D, Coordinate2D, PrimitivesError, TimeInstance, TimeInterval},
     raster::RasterDataType,
     spatial_reference::SpatialReference,
+    util::geodesy_projector,
 };
 use snafu::{AsErrorSource, ErrorCompat, IntoError, prelude::*};
 use std::{any::Any, convert::Infallible, path::PathBuf, sync::Arc};
@@ -70,7 +71,7 @@ pub enum Error {
     ProjInternal {
         source: proj::ProjError,
     },
-    #[snafu(display("No CoordinateProjector available for: {:?} --> {:?}", from, to))]
+    #[snafu(display("No ProjCoordinateProjector available for: {:?} --> {:?}", from, to))]
     NoCoordinateProjector {
         from: SpatialReference,
         to: SpatialReference,
@@ -81,6 +82,10 @@ pub enum Error {
     ))]
     ProjStringUnresolvable {
         spatial_ref: SpatialReference,
+    },
+
+    Geodesy {
+        source: geodesy_projector::Error,
     },
 
     #[snafu(display("Field is reserved or already in use: {}", name))]
@@ -404,5 +409,11 @@ impl From<gdal::errors::GdalError> for Error {
 impl From<std::io::Error> for Error {
     fn from(e: std::io::Error) -> Self {
         Self::Io { source: e }
+    }
+}
+
+impl From<geodesy_projector::Error> for Error {
+    fn from(source: geodesy_projector::Error) -> Self {
+        Error::Geodesy { source }
     }
 }

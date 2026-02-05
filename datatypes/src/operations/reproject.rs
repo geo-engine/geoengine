@@ -10,10 +10,9 @@ use crate::{
         GridSize, SamplePoints, SpatialGridDefinition,
     },
     spatial_reference::SpatialReference,
-    util::Result,
+    util::{Result, mixed_projector::MixedCoordinateProjector},
 };
 use num_traits::Zero;
-use proj::Proj;
 use snafu::ensure;
 
 pub trait CoordinateProjection {
@@ -27,64 +26,28 @@ pub trait CoordinateProjection {
     fn project_coordinates<A: AsRef<[Coordinate2D]>>(&self, coords: A)
     -> Result<Vec<Coordinate2D>>;
 
+    fn project_bounds<B: AxisAlignedRectangle + Reproject<Self, Out = B>>(
+        &self,
+        bounds: B,
+    ) -> Result<B>
+    where
+        Self: Sized,
+    {
+        let start_time: std::time::Instant = std::time::Instant::now();
+
+        let projected_bounds = bounds.reproject(self)?;
+
+        tracing::trace!(
+            "CoordinateProjection::project_bounds took {}",
+            start_time.elapsed().as_nanos()
+        );
+
+        Ok(projected_bounds)
+    }
+
     fn source_srs(&self) -> SpatialReference;
 
     fn target_srs(&self) -> SpatialReference;
-}
-
-pub struct CoordinateProjector {
-    pub from: SpatialReference,
-    pub to: SpatialReference,
-    p: Proj,
-}
-
-impl CoordinateProjection for CoordinateProjector {
-    fn from_known_srs(from: SpatialReference, to: SpatialReference) -> Result<Self> {
-        let p = Proj::new_known_crs(&from.proj_string()?, &to.proj_string()?, None)
-            .map_err(|_| error::Error::NoCoordinateProjector { from, to })?;
-        Ok(CoordinateProjector { from, to, p })
-    }
-
-    fn project_coordinate(&self, c: Coordinate2D) -> Result<Coordinate2D> {
-        self.p.convert(c).map_err(Into::into)
-    }
-
-    fn project_coordinates<A: AsRef<[Coordinate2D]>>(
-        &self,
-        coords: A,
-    ) -> Result<Vec<Coordinate2D>> {
-        let c_ref = coords.as_ref();
-
-        let mut cc = Vec::from(c_ref);
-        self.p.convert_array(&mut cc)?;
-
-        Ok(cc)
-    }
-
-    fn source_srs(&self) -> SpatialReference {
-        self.from
-    }
-
-    fn target_srs(&self) -> SpatialReference {
-        self.to
-    }
-}
-
-impl Clone for CoordinateProjector {
-    fn clone(&self) -> Self {
-        CoordinateProjector {
-            from: self.from,
-            to: self.to,
-            p: Proj::new_known_crs(&self.from.to_string(), &self.to.to_string(), None)
-                .expect("the Proj object creation should work because it already worked in the creation of the `CoordinateProjector`"),
-        }
-    }
-}
-
-impl AsRef<CoordinateProjector> for CoordinateProjector {
-    fn as_ref(&self) -> &CoordinateProjector {
-        self
-    }
 }
 
 pub trait Reproject<P: CoordinateProjection> {
@@ -259,7 +222,7 @@ where
         const POINTS_PER_LINE: i32 = 7;
 
         // clip bbox to the area of use of the target projection
-        let area_of_use_projector = CoordinateProjector::from_known_srs(
+        let area_of_use_projector = MixedCoordinateProjector::from_known_srs(
             SpatialReference::epsg_4326(),
             projector.source_srs(),
         )?;
@@ -361,7 +324,7 @@ pub fn suggest_pixel_size_like_gdal_helper<B: AxisAlignedRectangle>(
     source_srs: SpatialReference,
     target: SpatialReference,
 ) -> Result<SpatialResolution> {
-    let projector = CoordinateProjector::from_known_srs(source_srs, target)?;
+    let projector = MixedCoordinateProjector::from_known_srs(source_srs, target)?;
 
     suggest_pixel_size_like_gdal(bbox, spatial_resolution, &projector)
 }
@@ -394,7 +357,7 @@ pub fn suggest_output_spatial_grid_like_gdal_helper(
     source_srs: SpatialReference,
     target_srs: SpatialReference,
 ) -> Result<SpatialGridDefinition> {
-    let projector = CoordinateProjector::from_known_srs(source_srs, target_srs)?;
+    let projector = MixedCoordinateProjector::from_known_srs(source_srs, target_srs)?;
 
     suggest_output_spatial_grid_like_gdal(spatial_grid, &projector)
 }
@@ -403,7 +366,9 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
     spatial_grid: &SpatialGridDefinition,
     projector: &P,
 ) -> Result<Option<A>> {
-    const SAMPLE_POINT_STEPS: usize = 2;
+    const SAMPLE_POINT_STEPS: usize = 32;
+
+    let bounds_start = std::time::Instant::now();
 
     // First, try to reproject the bounds:
     let full_bounds: std::result::Result<BoundingBox2D, error::Error> = spatial_grid
@@ -411,13 +376,26 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
         .as_bbox()
         .reproject(projector);
 
+    let bounds_duration = bounds_start.elapsed();
+
     if let Ok(projected_bounds) = full_bounds {
         let res = A::from_min_max(
             projected_bounds.lower_left(),
             projected_bounds.upper_right(),
         );
+
+        tracing::trace!(
+            "reproject spatial grid bounds using direct bbox reprojection in {} ns",
+            bounds_duration.as_nanos()
+        );
+
         return Some(res).transpose();
     }
+
+    tracing::trace!(
+        "failed to reproject spatial grid bounds using direct bbox reprojection in {} ns, falling back to outline sampling",
+        bounds_duration.as_nanos()
+    );
 
     // Second, create a grid of coordinates project that and use the valid bounds.
     // To do this, we generate a `SpatialGridDefinition` ...
@@ -432,15 +410,27 @@ pub fn reproject_spatial_grid_bounds<P: CoordinateProjection, A: AxisAlignedRect
     // let coord_grid = spatial_grid.generate_coord_grid_upper_left_edge();
     // However, this creates a lot of redundant points == work.
     // The better way, also employed by GDAL is to use a "Haus vom Nikolaus" strategy which is done below:
-    let mut coord_grid_sample = sample_bounds.sample_outline(SAMPLE_POINT_STEPS);
-    coord_grid_sample.append(&mut sample_bounds.sample_diagonals(SAMPLE_POINT_STEPS));
-    coord_grid_sample.append(&mut sample_bounds.sample_cross(SAMPLE_POINT_STEPS));
-    // Then, we try to reproject the sample coordinates and gather all the valid coordinates.
-    let proj_outline_coordinates: Vec<Coordinate2D> =
-        project_coordinates_fail_tolerant(&coord_grid_sample, projector)
+    // let coord_grid_sample_bounds_ft = sample_bounds.sample_outline(FAST_TRACK_SAMPLE_POINT_STEPS);
+
+    let mut coord_grid_sample_bounds: Vec<Coordinate2D> =
+        sample_bounds.sample_diagonals(SAMPLE_POINT_STEPS);
+    coord_grid_sample_bounds.append(&mut sample_bounds.sample_cross(SAMPLE_POINT_STEPS));
+
+    let proj_outline_coordinates: Vec<_> =
+        project_coordinates_fail_tolerant(&coord_grid_sample_bounds, projector)
             .into_iter()
             .flatten()
             .collect();
+
+    let sampling_duration = bounds_start.elapsed() - bounds_duration;
+
+    tracing::trace!(
+        "reproject spatial grid outline using {} sample points. Took {} ns. Total time since start: {} ns",
+        coord_grid_sample_bounds.len(),
+        sampling_duration.as_nanos(),
+        bounds_start.elapsed().as_nanos()
+    );
+
     // TODO: we need a way to indicate that the operator might produce no data, e.g. if no points are valid after reprojection.
     if proj_outline_coordinates.is_empty() {
         return Ok(None);
@@ -528,7 +518,7 @@ pub fn suggest_pixel_size_from_diag_cross_helper<B: AxisAlignedRectangle>(
     source_srs: SpatialReference,
     target: SpatialReference,
 ) -> Result<SpatialResolution> {
-    let projector = CoordinateProjector::from_known_srs(source_srs, target)?;
+    let projector = MixedCoordinateProjector::from_known_srs(source_srs, target)?;
 
     suggest_pixel_size_from_diag_cross(bbox, spatial_resolution, &projector)
 }
@@ -646,8 +636,8 @@ fn reproject_and_unify_bbox_internal<T: AxisAlignedRectangle>(
     target: SpatialReference,
     force_clipping: bool,
 ) -> Result<(Option<T>, Option<T>)> {
-    let proj_from_to = CoordinateProjector::from_known_srs(source, target)?;
-    let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
+    let proj_from_to = MixedCoordinateProjector::from_known_srs(source, target)?;
+    let proj_to_from = MixedCoordinateProjector::from_known_srs(target, source)?;
 
     let target_bbox_clipped = source_bbox.reproject_clipped(&proj_from_to)?;
 
@@ -690,16 +680,18 @@ pub fn reproject_and_unify_proj_bounds<T: AxisAlignedRectangle>(
     source: SpatialReference,
     target: SpatialReference,
 ) -> Result<(Option<T>, Option<T>)> {
-    let proj_from_to = CoordinateProjector::from_known_srs(source, target)?;
-    let proj_to_from = CoordinateProjector::from_known_srs(target, source)?;
+    let proj_from_to = MixedCoordinateProjector::from_known_srs(source, target)?;
+    let proj_to_from = MixedCoordinateProjector::from_known_srs(target, source)?;
 
-    let target_bbox_clipped = source
-        .area_of_use_projected::<T>()?
-        .reproject_clipped(&proj_from_to)?; // TODO: can we intersect areas of use first?
+    let source_bbox = source.area_of_use_projected::<T>()?;
+
+    let target_bbox_clipped = source_bbox.reproject_clipped(&proj_from_to)?; // TODO: can we intersect areas of use first?
 
     if let Some(target_b) = target_bbox_clipped {
-        let source_bbox_clipped = target_b.reproject(&proj_to_from)?;
-        Ok((Some(source_bbox_clipped), target_bbox_clipped))
+        let source_bbox_clipped = target_b
+            .reproject(&proj_to_from)?
+            .intersection(&source_bbox);
+        Ok((source_bbox_clipped, target_bbox_clipped))
     } else {
         Ok((None, None))
     }
@@ -711,10 +703,10 @@ mod tests {
     use crate::primitives::{BoundingBox2D, SpatialPartition2D};
     use crate::spatial_reference::SpatialReferenceAuthority;
     use crate::util::well_known_data::{
-        COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
-        MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
+        COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
+        MARBURG_EPSG_3857, MARBURG_EPSG_4326,
     };
-    use float_cmp::approx_eq;
+    use float_cmp::{approx_eq, assert_approx_eq};
 
     use super::*;
 
@@ -722,7 +714,7 @@ mod tests {
     fn new_proj() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::from_known_srs(from, to);
+        let p = MixedCoordinateProjector::from_known_srs(from, to);
         assert!(p.is_ok());
     }
 
@@ -730,7 +722,7 @@ mod tests {
     fn new_proj_fail() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 8_008_135);
-        let p = CoordinateProjector::from_known_srs(from, to);
+        let p = MixedCoordinateProjector::from_known_srs(from, to);
         assert!(p.is_err());
     }
 
@@ -738,29 +730,29 @@ mod tests {
     fn proj_coordinate_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let p = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
         let rp = p.project_coordinate(MARBURG_EPSG_4326).unwrap();
 
-        assert!(approx_eq!(f64, rp.x, MARBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rp.y, MARBURG_EPSG_900_913.y));
+        assert!(approx_eq!(f64, rp.x, MARBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, rp.y, MARBURG_EPSG_3857.y));
     }
 
     #[test]
     fn reproject_coordinate_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let p = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
         let rp = MARBURG_EPSG_4326.reproject(&p).unwrap();
 
-        assert!(approx_eq!(f64, rp.x, MARBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rp.y, MARBURG_EPSG_900_913.y));
+        assert!(approx_eq!(f64, rp.x, MARBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, rp.y, MARBURG_EPSG_3857.y));
     }
 
     #[test]
     fn reproject_line_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let p = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let l = Line {
             start: MARBURG_EPSG_4326,
@@ -768,51 +760,51 @@ mod tests {
         };
         let rl = l.reproject(&p).unwrap();
 
-        assert!(approx_eq!(f64, rl.start.x, MARBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rl.start.y, MARBURG_EPSG_900_913.y));
-        assert!(approx_eq!(f64, rl.end.x, COLOGNE_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rl.end.y, COLOGNE_EPSG_900_913.y));
+        assert!(approx_eq!(f64, rl.start.x, MARBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, rl.start.y, MARBURG_EPSG_3857.y));
+        assert!(approx_eq!(f64, rl.end.x, COLOGNE_EPSG_3857.x));
+        assert!(approx_eq!(f64, rl.end.y, COLOGNE_EPSG_3857.y));
     }
 
     #[test]
     fn reproject_bounding_box_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let p = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let bbox =
             BoundingBox2D::from_coord_ref_iter(&[MARBURG_EPSG_4326, COLOGNE_EPSG_4326]).unwrap();
 
         let rl = bbox.reproject(&p).unwrap();
 
-        assert!(approx_eq!(f64, rl.lower_left().x, COLOGNE_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rl.lower_left().y, MARBURG_EPSG_900_913.y));
-        assert!(approx_eq!(f64, rl.upper_right().x, MARBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rl.upper_right().y, COLOGNE_EPSG_900_913.y));
+        assert!(approx_eq!(f64, rl.lower_left().x, COLOGNE_EPSG_3857.x));
+        assert!(approx_eq!(f64, rl.lower_left().y, MARBURG_EPSG_3857.y));
+        assert!(approx_eq!(f64, rl.upper_right().x, MARBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, rl.upper_right().y, COLOGNE_EPSG_3857.y));
     }
 
     #[test]
     fn reproject_multi_point_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let p = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![MARBURG_EPSG_4326, COLOGNE_EPSG_4326];
 
         let mp = MultiPoint::new(cs).unwrap();
         let rp = mp.reproject(&p).unwrap();
 
-        assert!(approx_eq!(f64, rp.points()[0].x, MARBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rp.points()[0].y, MARBURG_EPSG_900_913.y));
-        assert!(approx_eq!(f64, rp.points()[1].x, COLOGNE_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rp.points()[1].y, COLOGNE_EPSG_900_913.y));
+        assert!(approx_eq!(f64, rp.points()[0].x, MARBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, rp.points()[0].y, MARBURG_EPSG_3857.y));
+        assert!(approx_eq!(f64, rp.points()[1].x, COLOGNE_EPSG_3857.x));
+        assert!(approx_eq!(f64, rp.points()[1].y, COLOGNE_EPSG_3857.y));
     }
 
     #[test]
     fn reproject_multi_line_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let p = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![vec![
             MARBURG_EPSG_4326,
@@ -823,19 +815,19 @@ mod tests {
         let mp = MultiLineString::new(cs).unwrap();
         let rp = mp.reproject(&p).unwrap();
 
-        assert!(approx_eq!(f64, rp.lines()[0][0].x, MARBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rp.lines()[0][0].y, MARBURG_EPSG_900_913.y));
-        assert!(approx_eq!(f64, rp.lines()[0][1].x, COLOGNE_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rp.lines()[0][1].y, COLOGNE_EPSG_900_913.y));
-        assert!(approx_eq!(f64, rp.lines()[0][2].x, HAMBURG_EPSG_900_913.x));
-        assert!(approx_eq!(f64, rp.lines()[0][2].y, HAMBURG_EPSG_900_913.y));
+        assert!(approx_eq!(f64, rp.lines()[0][0].x, MARBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, rp.lines()[0][0].y, MARBURG_EPSG_3857.y));
+        assert!(approx_eq!(f64, rp.lines()[0][1].x, COLOGNE_EPSG_3857.x));
+        assert!(approx_eq!(f64, rp.lines()[0][1].y, COLOGNE_EPSG_3857.y));
+        assert!(approx_eq!(f64, rp.lines()[0][2].x, HAMBURG_EPSG_3857.x));
+        assert!(approx_eq!(f64, rp.lines()[0][2].y, HAMBURG_EPSG_3857.y));
     }
 
     #[test]
     fn reproject_multi_polygon_4326_900913() {
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let p = CoordinateProjector::from_known_srs(from, to).unwrap();
+        let p = MixedCoordinateProjector::from_known_srs(from, to).unwrap();
 
         let cs = vec![vec![vec![
             MARBURG_EPSG_4326,
@@ -850,39 +842,39 @@ mod tests {
         assert!(approx_eq!(
             f64,
             rp.polygons()[0][0][0].x,
-            MARBURG_EPSG_900_913.x
+            MARBURG_EPSG_3857.x
         ));
         assert!(approx_eq!(
             f64,
             rp.polygons()[0][0][0].y,
-            MARBURG_EPSG_900_913.y
+            MARBURG_EPSG_3857.y
         ));
         assert!(approx_eq!(
             f64,
             rp.polygons()[0][0][1].x,
-            COLOGNE_EPSG_900_913.x
+            COLOGNE_EPSG_3857.x
         ));
         assert!(approx_eq!(
             f64,
             rp.polygons()[0][0][1].y,
-            COLOGNE_EPSG_900_913.y
+            COLOGNE_EPSG_3857.y
         ));
         assert!(approx_eq!(
             f64,
             rp.polygons()[0][0][2].x,
-            HAMBURG_EPSG_900_913.x
+            HAMBURG_EPSG_3857.x
         ));
         assert!(approx_eq!(
             f64,
             rp.polygons()[0][0][2].y,
-            HAMBURG_EPSG_900_913.y
+            HAMBURG_EPSG_3857.y
         ));
     }
 
     #[test]
     fn reproject_clipped_bbox_4326_3857() {
         let bbox = BoundingBox2D::new_unchecked((-180., -90.).into(), (180., 90.).into());
-        let p = CoordinateProjector::from_known_srs(
+        let p = MixedCoordinateProjector::from_known_srs(
             SpatialReference::epsg_4326(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
         )
@@ -908,7 +900,7 @@ mod tests {
             (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
             (20_037_508.342_789_244, 20_048_966.104_014_594).into(),
         );
-        let p = CoordinateProjector::from_known_srs(
+        let p = MixedCoordinateProjector::from_known_srs(
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 3857),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913),
         )
@@ -954,7 +946,7 @@ mod tests {
             epsilon = 0.000_000_1
         ));
 
-        let projector = CoordinateProjector::from_known_srs(
+        let projector = MixedCoordinateProjector::from_known_srs(
             SpatialReference::epsg_4326(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632), //EPSG4326 --> UTM 32 N
         )
@@ -998,7 +990,7 @@ mod tests {
             epsilon = 0.000_000_1
         ));
 
-        let projector = CoordinateProjector::from_known_srs(
+        let projector = MixedCoordinateProjector::from_known_srs(
             SpatialReference::epsg_4326(),
             SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632), //EPSG4326 --> UTM 32 N
         )
@@ -1028,9 +1020,17 @@ mod tests {
         )
         .unwrap();
 
-        assert_eq!(
-            input.unwrap(),
-            SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into())
+        let expected = SpatialPartition2D::new_unchecked((-180., 90.).into(), (180., -90.).into());
+
+        assert_approx_eq!(
+            Coordinate2D,
+            input.unwrap().lower_left(),
+            expected.lower_left()
+        );
+        assert_approx_eq!(
+            Coordinate2D,
+            input.unwrap().upper_right(),
+            expected.upper_right()
         );
 
         assert_eq!(

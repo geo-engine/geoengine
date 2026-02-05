@@ -1,11 +1,15 @@
 mod any;
 pub mod arrow;
 mod byte_size;
+pub mod crs_definitions;
 mod db_types;
 pub mod gdal;
+pub mod geodesy_projector;
 pub mod helpers;
 pub mod identifiers;
 mod image;
+pub mod mixed_projector;
+pub mod proj_projector;
 pub mod ranges;
 mod result;
 pub mod test;
