@@ -1331,7 +1331,7 @@ CREATE TABLE dataset_tiles (
     time "TimeInterval" NOT NULL, -- noqa: references.keywords
     bbox "SpatialPartition2D" NOT NULL,
     band oid NOT NULL,
-    z_index oid NOT NULL,
+    z_index bigint NOT NULL,
     gdal_params "GdalDatasetParameters" NOT NULL
 );
 
@@ -1348,7 +1348,7 @@ CREATE TYPE "TileKey" AS (
     time "TimeInterval",
     bbox "SpatialPartition2D",
     band oid,
-    z_index oid
+    z_index bigint
 );
 
 -- helper type for batch inserting tiles
@@ -1358,7 +1358,7 @@ CREATE TYPE "TileEntry" AS (
     time "TimeInterval",
     bbox "SpatialPartition2D",
     band oid,
-    z_index oid,
+    z_index bigint,
     gdal_params "GdalDatasetParameters"
 );
 

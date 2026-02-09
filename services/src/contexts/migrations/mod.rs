@@ -1,4 +1,3 @@
-use crate::contexts::migrations::migration_0032_gdal_tiles::Migration0032GdalTiles;
 pub use crate::contexts::migrations::{
     current_schema::CurrentSchemaMigration,
     migration_0016_merge_providers::Migration0016MergeProviders,
@@ -11,6 +10,10 @@ pub use crate::contexts::migrations::{
     migration_0023_wildlive_oidc::Migration0023WildliveOidc,
     migration_0030_raster_result_desc::Migration0030RasterResultDesc,
     migration_0031_time_descriptor::Migration0031TimeDescriptor,
+};
+use crate::contexts::migrations::{
+    migration_0032_gdal_tiles::Migration0032GdalTiles,
+    migration_0033_tile_z_index::Migration0033TileZIndex,
 };
 pub use database_migration::{
     DatabaseVersion, Migration, MigrationResult, initialize_database, migrate_database,
@@ -29,6 +32,7 @@ mod migration_0023_wildlive_oidc;
 mod migration_0030_raster_result_desc;
 mod migration_0031_time_descriptor;
 mod migration_0032_gdal_tiles;
+mod migration_0033_tile_z_index;
 
 #[cfg(test)]
 mod schema_info;
@@ -61,6 +65,7 @@ pub fn all_migrations() -> Vec<Box<dyn Migration>> {
         Box::new(Migration0030RasterResultDesc),
         Box::new(Migration0031TimeDescriptor),
         Box::new(Migration0032GdalTiles),
+        Box::new(Migration0033TileZIndex),
     ]
 }
 

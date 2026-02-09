@@ -1051,7 +1051,7 @@ struct TileKey {
     time: crate::api::model::datatypes::TimeInterval,
     bbox: SpatialPartition2D,
     band: u32,
-    z_index: u32,
+    z_index: i64,
 }
 
 identifier!(DatasetTileId);
@@ -1063,7 +1063,7 @@ struct TileEntry {
     time: crate::api::model::datatypes::TimeInterval,
     bbox: SpatialPartition2D,
     band: u32,
-    z_index: u32,
+    z_index: i64,
     gdal_params: GdalDatasetParameters,
 }
 
@@ -1407,6 +1407,7 @@ async fn validate_z_index(
             z_index: tile.z_index,
         })
         .collect::<Vec<_>>();
+
     let incompatible_z_index = tx
         .query(
             r#"

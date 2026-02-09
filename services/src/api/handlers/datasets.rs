@@ -387,7 +387,7 @@ pub struct AddDatasetTile {
     pub time: crate::api::model::datatypes::TimeInterval,
     pub spatial_partition: SpatialPartition2D,
     pub band: u32,
-    pub z_index: u32,
+    pub z_index: i64,
     pub params: GdalDatasetParameters,
 }
 
