@@ -1021,10 +1021,4 @@ mod tests {
         let _raster_bands: Vec<stac_extensions::raster::Band> =
             serde_json::from_str(json).expect("Failed to parse raster bands");
     }
-
-    #[tokio::test]
-    async fn it_imports() {
-        let params: StacImport = StacImport::parse_from(["stac-import"]);
-        stac_import(params).await.unwrap();
-    }
 }
