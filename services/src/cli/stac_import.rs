@@ -1,10 +1,8 @@
 #![allow(clippy::print_stdout)]
 
-use gdal::raster::{self, RasterBand};
 use ordered_float::OrderedFloat;
 use std::{
     collections::{HashMap, HashSet},
-    ops::ControlFlow,
     str::FromStr,
 };
 
@@ -12,15 +10,12 @@ use anyhow::Context;
 use chrono::Timelike;
 use clap::Parser;
 use geoengine_datatypes::{
-    operations::reproject::{CoordinateProjection, CoordinateProjector, Reproject},
-    primitives::{AxisAlignedRectangle, DateTime, TimeInstance, TimeInterval},
+    primitives::{DateTime, TimeInstance, TimeInterval},
     raster::{GdalGeoTransform, GeoTransform},
     spatial_reference::{SpatialReference, SpatialReferenceAuthority, SpatialReferenceOption},
-    util::well_known_data::HAMBURG_EPSG_900_913,
 };
 use serde::Deserialize;
 use stac::Asset;
-// use stac_extensions::raster::
 
 use crate::{
     api::{
@@ -43,9 +38,8 @@ use crate::{
             },
         },
     },
-    datasets::{DatasetName, dataset_listing_provider, upload::VolumeName},
+    datasets::{DatasetName, upload::VolumeName},
     permissions::{Permission, Role},
-    util::sentinel_2_utm_zones::UtmZone,
 };
 
 const EXTERNAL_VOLUME_NAME: &str = "external";
@@ -106,6 +100,9 @@ pub struct StacImport {
 
     #[arg(long, default_value = "Sentinal2")]
     dataset_name_prefix: String,
+
+    #[arg(long, default_value = None)]
+    z_index_property_name: Option<String>,
     // TODO: time granularity (validity of items)
 
     // /// Parent layer collection ID
@@ -121,321 +118,493 @@ pub struct StacImport {
     // share_layers: LayerShareMode,
 }
 
+/// Example call for Sentinel 2 from Element 84:
+/// `cargo run --bin geoengine-cli stac-import -- --z-index-property-name "s2:sequence"`
 pub async fn stac_import(params: StacImport) -> Result<(), anyhow::Error> {
-    let (client, session_id) = login(
-        &params.geo_engine_url,
-        &params.geo_engine_email,
-        &params.geo_engine_password,
-    )
-    .await?;
+    let mut importer = StacImporter::new(params).await?;
+    importer.run().await
+}
 
-    let query_params = create_query_params(&params);
+struct StacImporter {
+    params: StacImport,
+    client: reqwest::Client,
+    session_id: String,
+    bands_by_data_type: HashMap<RasterDataType, Vec<RasterBandDescriptor>>,
+    created_datasets: HashSet<DatasetKey>,
+}
 
-    let bands_by_data_type = scan_collection(&params, &client)
-        .await
-        .context("Failed to scan collection")?;
-
-    println!("Scanned collection, found bands for data types:");
-    for (data_type, bands) in &bands_by_data_type {
-        println!(
-            "  {:?}: {} bands",
-            data_type,
-            bands
-                .iter()
-                .map(|b| b.name.as_str())
-                .collect::<Vec<&str>>()
-                .join(", ")
-        );
-    }
-
-    // keep track of created datasets to create them on-the-fly when an items occurs that gives us the data needed to create it
-    let mut created_datasets: HashSet<DatasetKey> = HashSet::new();
-
-    let mut query_state = QueryState::FirstPage {
-        query_url: format!(
-            "{}/collections/{}/items",
-            params.stac_url, params.stac_collection
-        ),
-        query_params,
-    };
-
-    // process page by page and insert all tiles as they come
-    loop {
-        let (item_collection, new_query_state) =
-            query_item_collection(&client, &query_state).await?;
-
-        if matches!(new_query_state, QueryState::Finished) || item_collection.items.is_empty() {
-            break;
-        }
-
-        query_state = new_query_state;
-
-        let dataset_tiles = process_items(
-            &params,
-            &client,
-            &session_id,
-            &bands_by_data_type,
-            &mut created_datasets,
-            item_collection,
+impl StacImporter {
+    async fn new(params: StacImport) -> Result<Self, anyhow::Error> {
+        let (client, session_id) = login(
+            &params.geo_engine_url,
+            &params.geo_engine_email,
+            &params.geo_engine_password,
         )
         .await?;
 
-        for (dataset_key, tiles) in &dataset_tiles {
-            let dataset_name = dataset_key.dataset_name(&params.stac_collection);
-            println!("Adding {} tiles to dataset {}", tiles.len(), dataset_name,);
-
-            let response = client
-                .post(format!(
-                    "{}/dataset/{}/tiles",
-                    params.geo_engine_url, dataset_name
-                ))
-                .header("Content-Type", "application/json")
-                .header("Authorization", format!("Bearer {session_id}"))
-                .json(&tiles)
-                .send()
-                .await
-                .context("Failed to send add tiles request")?;
-
-            if !response.status().is_success() {
-                let error_text = response.text().await.unwrap_or_default();
-
-                // TODO: retry or continue instead of exit?
-
-                return Err(anyhow::anyhow!(
-                    "Failed to add tile to dataset: {error_text}"
-                ));
-            }
-        }
-    }
-
-    println!("Dataset tiles added successfully");
-
-    Ok(())
-}
-
-async fn process_items(
-    params: &StacImport,
-    client: &reqwest::Client,
-    session_id: &String,
-    bands_by_data_type: &HashMap<RasterDataType, Vec<RasterBandDescriptor>>,
-    created_datasets: &mut HashSet<DatasetKey>,
-    item_collection: stac::ItemCollection,
-) -> Result<HashMap<DatasetKey, Vec<AddDatasetTile>>, anyhow::Error> {
-    let mut dataset_tiles = HashMap::new();
-
-    for item in item_collection.items {
-        let mut date = item.properties.datetime.unwrap(); // TODO: handle Option
-        date = date
-            .with_hour(0)
-            .and_then(|d| d.with_minute(0))
-            .and_then(|d| d.with_second(0))
-            .and_then(|d| d.with_nanosecond(0))
-            .context("Failed to set time to zero")?;
-        let date: DateTime = date.into();
-        let time: TimeInstance = date.into();
-
-        let epsg = item
-            .properties
-            .additional_fields
-            .get("proj:epsg")
-            .and_then(|v| v.as_u64())
-            .context("Missing proj:epsg in item properties")? as u32;
-
-        for (asset_key, asset) in &item.assets {
-            if let Err(err) = process_item(
-                params,
-                client,
-                session_id,
-                bands_by_data_type,
-                created_datasets,
-                asset_key,
-                asset,
-                epsg,
-                date,
-                time,
-                &mut dataset_tiles,
-            )
+        let bands_by_data_type = scan_collection(&params, &client)
             .await
-            {
-                eprintln!(
-                    "Skipping asset {} of item {}: {:#}",
-                    asset_key, item.id, err
-                );
-            }
-        }
-    }
+            .context("Failed to scan collection")?;
 
-    Ok(dataset_tiles)
-}
-
-async fn process_item(
-    params: &StacImport,
-    client: &reqwest::Client,
-    session_id: &String,
-    bands_by_data_type: &HashMap<RasterDataType, Vec<RasterBandDescriptor>>,
-    created_datasets: &mut HashSet<DatasetKey>,
-    asset_key: &str,
-    asset: &Asset,
-    epsg: u32,
-    date: DateTime,
-    time: TimeInstance,
-    dataset_tiles: &mut HashMap<DatasetKey, Vec<AddDatasetTile>>,
-) -> Result<(), anyhow::Error> {
-    if asset.r#type != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
-    {
-        anyhow::bail!("non-geotiff asset");
-    }
-
-    let geo_transform = geo_transform_from_fields(&asset.additional_fields)
-        .ok_or(anyhow::anyhow!("missing proj:transform"))?;
-
-    let data_type = data_type_from_asset(asset).context("unknown data type")?;
-
-    let dataset_key = DatasetKey {
-        epsg,
-        data_type,
-        resolution: geo_transform.x_pixel_size().into(),
-    };
-
-    if !created_datasets.contains(&dataset_key) {
-        // create dataset on-the-fly
-
-        dbg!(&dataset_key);
-        dbg!(&created_datasets);
-
-        // TODO: if dataset already exists on server, skip creation, but check compatibility?
-        create_dataset(
+        Ok(Self {
             params,
             client,
             session_id,
-            &dataset_key,
-            &bands_by_data_type,
-            geo_transform,
-        )
-        .await
-        .context(format!("failed to create dataset {:?}", dataset_key))?;
-
-        created_datasets.insert(dataset_key.clone());
+            bands_by_data_type,
+            created_datasets: HashSet::new(),
+        })
     }
 
-    let eo_bands: Vec<EoBand> = serde_json::from_value(
-        asset
-            .additional_fields
-            .get("eo:bands")
-            .ok_or(anyhow::anyhow!("Missing eo:bands in asset"))?
-            .clone(),
-    )
-    .context("Failed to parse eo:bands")?;
+    async fn run(&mut self) -> Result<(), anyhow::Error> {
+        println!("Scanned collection, found bands for data types:");
+        for (data_type, bands) in &self.bands_by_data_type {
+            println!(
+                "  {:?}: {} bands",
+                data_type,
+                bands
+                    .iter()
+                    .map(|b| b.name.as_str())
+                    .collect::<Vec<&str>>()
+                    .join(", ")
+            );
+        }
 
-    let dataset_bands = bands_by_data_type
-        .get(&dataset_key.data_type)
-        .ok_or(anyhow::anyhow!("unknown dataset key: {:?}", dataset_key))?;
+        let query_params = create_query_params(&self.params);
+        dbg!(&query_params);
 
-    // if multiple bands for asset, prefix band names with asset key
-    let prefix = if eo_bands.len() > 1 {
-        format!("{}_", asset_key)
-    } else {
-        "".to_string()
-    };
+        let mut query_state = QueryState::FirstPage {
+            query_url: format!(
+                "{}/collections/{}/items",
+                self.params.stac_url, self.params.stac_collection
+            ),
+            query_params,
+        };
 
-    for eo_band in &eo_bands {
-        process_band(
+        // process page by page and insert all tiles as they come
+        loop {
+            let (item_collection, new_query_state) =
+                query_item_collection(&self.client, &query_state).await?;
+
+            if matches!(new_query_state, QueryState::Finished) || item_collection.items.is_empty() {
+                break;
+            }
+
+            query_state = new_query_state;
+
+            let dataset_tiles = self.process_items(item_collection).await?;
+
+            for (dataset_key, tiles) in &dataset_tiles {
+                let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
+
+                println!("Adding {} tiles to dataset {}", tiles.len(), dataset_name,);
+
+                let response = self
+                    .client
+                    .post(format!(
+                        "{}/dataset/{}/tiles",
+                        self.params.geo_engine_url, dataset_name
+                    ))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {}", self.session_id))
+                    .json(&tiles)
+                    .send()
+                    .await
+                    .context("Failed to send add tiles request")?;
+
+                if !response.status().is_success() {
+                    let error_text = response.text().await.unwrap_or_default();
+
+                    // TODO: retry or continue instead of exit?
+
+                    return Err(anyhow::anyhow!(
+                        "Failed to add tile to dataset: {error_text}"
+                    ));
+                }
+            }
+        }
+
+        println!("Dataset tiles added successfully");
+
+        Ok(())
+    }
+
+    async fn process_items(
+        &mut self,
+        item_collection: stac::ItemCollection,
+    ) -> Result<HashMap<DatasetKey, Vec<AddDatasetTile>>, anyhow::Error> {
+        let mut dataset_tiles = HashMap::new();
+
+        for item in item_collection.items {
+            let datetime = item.properties.datetime.unwrap(); // TODO: handle Option
+
+            // TODO: make mapping of item datetime to tile time validity configurable
+            let date_without_time = datetime
+                .with_hour(0)
+                .and_then(|d| d.with_minute(0))
+                .and_then(|d| d.with_second(0))
+                .and_then(|d| d.with_nanosecond(0))
+                .context("Failed to set time to zero")?;
+            let date_without_time: DateTime = date_without_time.into();
+            let time: TimeInstance = date_without_time.into();
+
+            let epsg = item
+                .properties
+                .additional_fields
+                .get("proj:epsg")
+                .and_then(|v| v.as_u64())
+                .context("Missing proj:epsg in item properties")? as u32;
+
+            // TODO: provide other ways to compute z-index, e.g. from date updated
+            // let z_index = if let Some(z_index_property_name) = &self.params.z_index_property_name {
+            //     item.properties
+            //         .additional_fields
+            //         .get(z_index_property_name)
+            //         .and_then(|v| {
+            //             v.as_u64()
+            //                 .map(|n| n as u32)
+            //                 .or_else(|| v.as_str().and_then(|s| s.parse::<u32>().ok()))
+            //         })
+            //         .ok_or(anyhow::anyhow!(
+            //             "Missing or invalid z index property for item {}",
+            //             item.id
+            //         ))?
+            // } else {
+            //     0
+            // };
+
+            // TODO: make z-index computation configurable
+            let z_index = chrono::DateTime::parse_from_rfc3339(&item.properties.updated.unwrap())
+                .unwrap()
+                .timestamp_millis();
+
+            for (asset_key, asset) in &item.assets {
+                match self
+                    .process_item_asset(asset_key, asset, epsg, date_without_time, time, z_index)
+                    .await
+                {
+                    Ok(tiles) => {
+                        for (dataset_key, tile) in tiles {
+                            dataset_tiles
+                                .entry(dataset_key)
+                                .or_insert_with(Vec::new)
+                                .push(tile);
+                        }
+                    }
+                    Err(err) => {
+                        // eprintln!(
+                        //     "Skipping asset {} of item {}: {:#}",
+                        //     asset_key, item.id, err
+                        // );
+                    }
+                }
+            }
+        }
+
+        Ok(dataset_tiles)
+    }
+
+    async fn process_item_asset(
+        &mut self,
+        asset_key: &str,
+        asset: &Asset,
+        epsg: u32,
+        date: DateTime,
+        time: TimeInstance,
+        z_index: i64,
+    ) -> Result<Vec<(DatasetKey, AddDatasetTile)>, anyhow::Error> {
+        if asset.r#type
+            != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
+        {
+            anyhow::bail!("non-geotiff asset");
+        }
+
+        let geo_transform = geo_transform_from_fields(&asset.additional_fields)
+            .ok_or(anyhow::anyhow!("missing proj:transform"))?;
+
+        let data_type = data_type_from_asset(asset).context("unknown data type")?;
+
+        let dataset_key = DatasetKey {
+            epsg,
+            data_type,
+            resolution: geo_transform.x_pixel_size().into(),
+        };
+
+        if !self.created_datasets.contains(&dataset_key) {
+            // create dataset on-the-fly
+            // TODO: if dataset already exists on server, skip creation, but check compatibility?
+            self.create_dataset(&dataset_key, geo_transform)
+                .await
+                .context(format!("failed to create dataset {:?}", dataset_key))?;
+
+            self.created_datasets.insert(dataset_key.clone());
+
+            debug_assert!(
+                self.created_datasets.contains(&dataset_key),
+                "Dataset should have been marked as created"
+            );
+        }
+
+        let eo_bands: Vec<EoBand> = serde_json::from_value(
+            asset
+                .additional_fields
+                .get("eo:bands")
+                .ok_or(anyhow::anyhow!("Missing eo:bands in asset"))?
+                .clone(),
+        )
+        .context("Failed to parse eo:bands")?;
+
+        let dataset_bands = self
+            .bands_by_data_type
+            .get(&dataset_key.data_type)
+            .ok_or(anyhow::anyhow!("unknown dataset key: {:?}", dataset_key))?;
+
+        // if multiple bands for asset, prefix band names with asset key
+        let prefix = if eo_bands.len() > 1 {
+            format!("{}_", asset_key)
+        } else {
+            "".to_string()
+        };
+
+        let processor = AssetBandProcessor {
             asset_key,
             asset,
             date,
             time,
-            dataset_tiles,
             geo_transform,
-            &dataset_key,
             dataset_bands,
-            &prefix,
-            eo_band,
-        )
-        .context(format!("Failed to process band {}", eo_band.name))?;
+            prefix: &prefix,
+            z_index,
+        };
+
+        let mut tiles = Vec::new();
+        for eo_band in &eo_bands {
+            let tile = processor
+                .process_band(eo_band)
+                .context(format!("Failed to process band {}", eo_band.name))?;
+            tiles.push((dataset_key.clone(), tile));
+        }
+
+        Ok(tiles)
     }
 
-    Ok(())
+    async fn create_dataset(
+        &self,
+        dataset_key: &DatasetKey,
+        geo_transform: GeoTransform,
+    ) -> Result<(), anyhow::Error> {
+        let dataset_name_str = &dataset_key.dataset_name(&self.params.stac_collection);
+
+        let bands = self
+            .bands_by_data_type
+            .get(&dataset_key.data_type)
+            .context("Failed to get bands for dataset")?;
+
+        let create_dataset = CreateDataset {
+            data_path: DataPath::Volume(VolumeName(EXTERNAL_VOLUME_NAME.to_string())),
+            definition: DatasetDefinition {
+                properties: AddDataset {
+                    name: Some(
+                        DatasetName::from_str(dataset_name_str)
+                            .context("Failed to create dataset name")?,
+                    ),
+                    display_name: dataset_name_str.to_string(),
+                    description: format!(
+                        "{dataset_name_str} imported from STAC {}",
+                        self.params.stac_collection
+                    ),
+                    source_operator: "MultiBandGdalSource".to_string(),
+                    symbology: None,
+                    provenance: None,
+                    tags: None,
+                },
+                meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
+                    r#type:
+                        crate::api::model::operators::GdalMultiBandTypeTag::GdalMultiBandTypeTag,
+                    result_descriptor: RasterResultDescriptor {
+                        data_type: dataset_key.data_type,
+                        spatial_reference: SpatialReferenceOption::SpatialReference(
+                            SpatialReference::new(
+                                SpatialReferenceAuthority::Epsg,
+                                dataset_key.epsg,
+                            ),
+                        )
+                        .into(),
+                        time: TimeDescriptor {
+                            bounds: None, // TODO: from params
+                            dimension: TimeDimension::Regular(RegularTimeDimension {
+                                // TODO: irregular?
+                                origin: TimeInstance::from_millis(0).unwrap().into(), // TODO
+                                step: TimeStep {
+                                    granularity: TimeGranularity::Days, // TODO
+                                    step: 1,                            // TODO
+                                },
+                            }),
+                        },
+                        spatial_grid: SpatialGridDescriptor {
+                            spatial_grid: SpatialGridDefinition {
+                                geo_transform: geo_transform.into(),
+                                grid_bounds: GridBoundingBox2D {
+                                    top_left_idx: GridIdx2D { x_idx: 0, y_idx: 0 },
+                                    bottom_right_idx: GridIdx2D { x_idx: 1, y_idx: 1 }, // TODO, but will be overridden when adding tiles anyway
+                                }, // TODO from  query bbox and asset proj:shape??
+                            },
+                            descriptor: SpatialGridDescriptorState::Source,
+                        },
+                        bands: RasterBandDescriptors::new(bands.clone())
+                            .context(format!("Failed to create band descriptors {:?}", bands))?,
+                    },
+                }),
+            },
+        };
+
+        let response = self
+            .client
+            .post(format!("{}/dataset", self.params.geo_engine_url))
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", self.session_id))
+            .json(&create_dataset)
+            .send()
+            .await
+            .context("Failed to send dataset creation request")?;
+
+        let dataset_name = if let Ok(json) = response.json::<serde_json::Value>().await {
+            if let Some(id) = json.get("datasetName").and_then(|v| v.as_str()) {
+                // println!(
+                //     "Creatied dataset: {} for {:?}",
+                //     dataset_name_str, dataset_key
+                // );
+                id.to_string()
+            } else {
+                anyhow::bail!("Failed to get dataset id from response: {json:?}");
+            }
+        } else {
+            anyhow::bail!("Failed to parse dataset creation response as JSON");
+        };
+
+        let permissions = vec![
+            PermissionRequest {
+                resource: crate::api::handlers::permissions::Resource::Dataset(
+                    DatasetResource {
+                        id: DatasetName::new(None, dataset_name.clone()),
+                        r#type: crate::api::handlers::permissions::DatasetResourceTypeTag::DatasetResourceTypeTag
+                    },
+                ),
+                role_id: Role::registered_user_role_id(),
+                permission: Permission::Read,
+            },
+            PermissionRequest {
+                resource: crate::api::handlers::permissions::Resource::Dataset(
+                    DatasetResource {
+                        id: DatasetName::new(None, dataset_name.clone()),
+                        r#type: crate::api::handlers::permissions::DatasetResourceTypeTag::DatasetResourceTypeTag
+                    },
+                ),
+                role_id: Role::anonymous_role_id(),
+                permission: Permission::Read,
+            },
+        ];
+
+        for permission in &permissions {
+            let response = self
+                .client
+                .put(format!("{}/permissions", self.params.geo_engine_url))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", self.session_id))
+                .json(&permission)
+                .send()
+                .await
+                .context("Failed to add permission")?;
+
+            // println!(
+            //     "Dataset '{}' shared with role {}: {}",
+            //     dataset_name,
+            //     permission.role_id,
+            //     response.text().await.unwrap_or_default()
+            // );
+        }
+
+        Ok(())
+    }
 }
 
-fn process_band(
-    asset_key: &str,
-    asset: &Asset,
+struct AssetBandProcessor<'a> {
+    asset_key: &'a str,
+    asset: &'a Asset,
     date: DateTime,
     time: TimeInstance,
-    dataset_tiles: &mut HashMap<DatasetKey, Vec<AddDatasetTile>>,
     geo_transform: GeoTransform,
-    dataset_key: &DatasetKey,
-    dataset_bands: &Vec<RasterBandDescriptor>,
-    prefix: &String,
-    eo_band: &EoBand,
-) -> anyhow::Result<()> {
-    let band_name = format!("{}{}", prefix, eo_band.name);
+    dataset_bands: &'a [RasterBandDescriptor],
+    prefix: &'a str,
+    z_index: i64,
+}
 
-    let band_index = dataset_bands
-        .iter()
-        .position(|b| b.name == band_name.as_str())
-        .ok_or(anyhow::anyhow!("unknown band: {}", band_name))?;
+impl<'a> AssetBandProcessor<'a> {
+    fn process_band(&self, eo_band: &EoBand) -> anyhow::Result<AddDatasetTile> {
+        let band_name = format!("{}{}", self.prefix, eo_band.name);
 
-    let tile_file = asset.href.clone();
+        let band_index = self
+            .dataset_bands
+            .iter()
+            .position(|b| b.name == band_name.as_str())
+            .ok_or(anyhow::anyhow!("unknown band: {}", band_name))?;
 
-    let proj_shape = asset
-        .additional_fields
-        .get("proj:shape")
-        .ok_or(anyhow::anyhow!("missing proj:shape"))?;
+        let tile_file = self.asset.href.clone();
 
-    let proj_shape = proj_shape
-        .as_array()
-        .ok_or(anyhow::anyhow!("proj:shape is not an array"))?;
+        let proj_shape = self
+            .asset
+            .additional_fields
+            .get("proj:shape")
+            .ok_or(anyhow::anyhow!("missing proj:shape"))?;
 
-    let (height, width) = (
-        proj_shape[0].as_u64().unwrap() as usize,
-        proj_shape[1].as_u64().unwrap() as usize,
-    );
+        let proj_shape = proj_shape
+            .as_array()
+            .ok_or(anyhow::anyhow!("proj:shape is not an array"))?;
 
-    let grid_bounds = geoengine_datatypes::raster::GridBoundingBox2D::new(
-        GridIdx2D { x_idx: 0, y_idx: 0 },
-        GridIdx2D {
-            x_idx: (width - 1) as isize,
-            y_idx: (height - 1) as isize,
-        },
-    )
-    .unwrap();
+        let (height, width) = (
+            proj_shape[0].as_u64().unwrap() as usize,
+            proj_shape[1].as_u64().unwrap() as usize,
+        );
 
-    let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
+        let grid_bounds = geoengine_datatypes::raster::GridBoundingBox2D::new(
+            GridIdx2D { x_idx: 0, y_idx: 0 },
+            GridIdx2D {
+                x_idx: (width - 1) as isize,
+                y_idx: (height - 1) as isize,
+            },
+        )
+        .unwrap();
 
-    println!(
-        "Importing tile: date: {}, band: {}, href: {}",
-        date, asset_key, asset.href
-    );
+        let spatial_partition = self.geo_transform.grid_to_spatial_bounds(&grid_bounds);
 
-    let tile = AddDatasetTile {
-        time: TimeInterval::new(time, time + i64::from(24 * 60 * 60 * 1000)) // TODO
-            .unwrap()
-            .into(),
-        spatial_partition: spatial_partition.into(),
-        band: band_index as u32,
-        z_index: 0, // TODO: collect all possibly overlapping items...
-        params: GdalDatasetParameters {
-            file_path: format!("/vsicurl/{}", tile_file).into(),
-            rasterband_channel: 1, // TODO
-            geo_transform: geo_transform.into(),
-            width: width,
-            height: height,
-            file_not_found_handling: crate::api::model::operators::FileNotFoundHandling::Error,
-            no_data_value: None,
-            properties_mapping: None,
-            gdal_open_options: None,
-            gdal_config_options: None,
-            allow_alphaband_as_mask: false,
-        },
-    };
+        // println!(
+        //     "Importing tile: date: {}, band: {}, href: {}",
+        //     self.date, self.asset_key, self.asset.href
+        // );
 
-    dataset_tiles
-        .entry(dataset_key.clone())
-        .or_insert_with(Vec::new)
-        .push(tile);
+        let tile = AddDatasetTile {
+            time: TimeInterval::new(self.time, self.time + i64::from(24 * 60 * 60 * 1000)) // TODO
+                .unwrap()
+                .into(),
+            spatial_partition: spatial_partition.into(),
+            band: band_index as u32,
+            z_index: self.z_index,
+            params: GdalDatasetParameters {
+                file_path: format!("/vsicurl/{}", tile_file).into(),
+                rasterband_channel: 1, // TODO !!!
+                geo_transform: self.geo_transform.into(),
+                width: width,
+                height: height,
+                file_not_found_handling: crate::api::model::operators::FileNotFoundHandling::Error,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: false,
+            },
+        };
 
-    Ok(())
+        Ok(tile)
+    }
 }
 
 async fn query_item_collection(
@@ -509,144 +678,6 @@ fn create_query_params(params: &StacImport) -> Vec<(String, String)> {
     }
 
     query_params
-}
-
-async fn create_dataset(
-    params: &StacImport,
-    client: &reqwest::Client,
-    session_id: &str,
-    dataset_key: &DatasetKey,
-    scanned_collection: &HashMap<RasterDataType, Vec<RasterBandDescriptor>>,
-    geo_transform: GeoTransform,
-) -> Result<(), anyhow::Error> {
-    let dataset_name_str = &dataset_key.dataset_name(&params.stac_collection);
-
-    println!(
-        "Creating dataset: {} for {:?}",
-        dataset_name_str, dataset_key
-    );
-
-    let bands = scanned_collection
-        .get(&dataset_key.data_type)
-        .context("Failed to get bands for dataset")?;
-
-    let create_dataset = CreateDataset {
-        data_path: DataPath::Volume(VolumeName(EXTERNAL_VOLUME_NAME.to_string())),
-        definition: DatasetDefinition {
-            properties: AddDataset {
-                name: Some(
-                    DatasetName::from_str(dataset_name_str)
-                        .context("Failed to create dataset name")?,
-                ),
-                display_name: dataset_name_str.to_string(),
-                description: format!(
-                    "{dataset_name_str} imported from STAC {}",
-                    params.stac_collection
-                ),
-                source_operator: "MultiBandGdalSource".to_string(),
-                symbology: None,
-                provenance: None,
-                tags: None,
-            },
-            meta_data: MetaDataDefinition::GdalMultiBand(GdalMultiBand {
-                r#type: crate::api::model::operators::GdalMultiBandTypeTag::GdalMultiBandTypeTag,
-                result_descriptor: RasterResultDescriptor {
-                    data_type: dataset_key.data_type,
-                    spatial_reference: SpatialReferenceOption::SpatialReference(
-                        SpatialReference::new(SpatialReferenceAuthority::Epsg, dataset_key.epsg),
-                    )
-                    .into(),
-                    time: TimeDescriptor {
-                        bounds: None, // TODO: from params
-                        dimension: TimeDimension::Regular(RegularTimeDimension {
-                            // TODO: irregular?
-                            origin: TimeInstance::from_millis(0).unwrap().into(), // TODO
-                            step: TimeStep {
-                                granularity: TimeGranularity::Days, // TODO
-                                step: 1,                            // TODO
-                            },
-                        }),
-                    },
-                    spatial_grid: SpatialGridDescriptor {
-                        spatial_grid: SpatialGridDefinition {
-                            geo_transform: geo_transform.into(),
-                            grid_bounds: GridBoundingBox2D {
-                                top_left_idx: GridIdx2D { x_idx: 0, y_idx: 0 },
-                                bottom_right_idx: GridIdx2D { x_idx: 1, y_idx: 1 }, // TODO, but will be overridden when adding tiles anyway
-                            }, // TODO from  query bbox and asset proj:shape??
-                        },
-                        descriptor: SpatialGridDescriptorState::Source,
-                    },
-                    bands: RasterBandDescriptors::new(bands.clone())
-                        .context(format!("Failed to create band descriptors {:?}", bands))?,
-                },
-            }),
-        },
-    };
-
-    let response = client
-        .post(format!("{}/dataset", params.geo_engine_url))
-        .header("Content-Type", "application/json")
-        .header("Authorization", format!("Bearer {session_id}"))
-        .json(&create_dataset)
-        .send()
-        .await
-        .context("Failed to send dataset creation request")?;
-
-    let dataset_name = if let Ok(json) = response.json::<serde_json::Value>().await {
-        if let Some(id) = json.get("datasetName").and_then(|v| v.as_str()) {
-            println!("Dataset added successfully");
-            id.to_string()
-        } else {
-            anyhow::bail!("Failed to get dataset id from response: {json:?}");
-        }
-    } else {
-        println!();
-        anyhow::bail!("Failed to parse dataset creation response as JSON");
-    };
-
-    let permissions = vec![
-        PermissionRequest {
-            resource: crate::api::handlers::permissions::Resource::Dataset(
-                DatasetResource {
-                    id: DatasetName::new(None, dataset_name.clone()),
-                    r#type: crate::api::handlers::permissions::DatasetResourceTypeTag::DatasetResourceTypeTag
-                },
-            ),
-            role_id: Role::registered_user_role_id(),
-            permission: Permission::Read,
-        },
-        PermissionRequest {
-            resource: crate::api::handlers::permissions::Resource::Dataset(
-                DatasetResource {
-                    id: DatasetName::new(None, dataset_name.clone()),
-                    r#type: crate::api::handlers::permissions::DatasetResourceTypeTag::DatasetResourceTypeTag
-                },
-            ),
-            role_id: Role::anonymous_role_id(),
-            permission: Permission::Read,
-        },
-    ];
-
-    for permission in &permissions {
-        let response = client
-            .put(format!("{}/permissions", params.geo_engine_url))
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {session_id}"))
-            .json(&permission)
-            .send()
-            .await
-            .context("Failed to add permission")?;
-
-        println!(
-            "Dataset '{}' shared with role {}: {}",
-            dataset_name,
-            permission.role_id,
-            response.text().await.unwrap_or_default()
-        );
-    }
-
-    Ok(())
 }
 
 #[derive(Debug)]
@@ -726,25 +757,8 @@ impl From<ProjTransform> for crate::api::model::datatypes::GeoTransform {
 #[derive(Debug, Deserialize)]
 struct EoBand {
     name: String,
-    description: String,
+    // description: String,
     // ...
-}
-
-struct KeyedAssetBand<'a> {
-    key: String,
-    band_index: usize,
-    is_multi_band_asset: bool,
-    asset: &'a stac::ItemAsset,
-}
-
-// Partial data for dataset, gathered from collection API and used as blueprint for creating datasets when scanning items
-// which give us the remining info (spatial grid)
-struct DatasetPlaceholder {
-    // data_path: DataPath,
-    // properties: AddDataset,
-    // time_descriptor: TimeDescriptor,
-    data_type: RasterDataType,
-    bands: RasterBandDescriptors,
 }
 
 async fn scan_collection(
@@ -770,7 +784,7 @@ async fn scan_collection(
         if let Err(err) = scan_item_asset(asset_key, asset, &mut dataset_bands)
             .context(format!("Failed to scan item asset {}", asset_key))
         {
-            eprintln!("Skipping asset {}: {:#}", asset_key, err);
+            // eprintln!("Skipping asset {}: {:#}", asset_key, err);
         }
     }
     Ok(dataset_bands)
@@ -834,28 +848,6 @@ fn scan_item_asset(
 
     Ok(())
 }
-
-// fn spatial_grid_definitions_from_fields(fields: serde_json::Map<String, serde_json::Value>) -> Option<SpatialGridDefinition> {
-//     let geo_transform = geo_transform_from_fields(fields.clone())?;
-//     let Some(proj_shape) = fields.get("proj:shape") else {
-//         return None;
-//     };
-//     let proj_shape_array = proj_shape.as_array().unwrap();
-//     let (height, width) = (
-//         proj_shape_array[0].as_u64().unwrap() as usize,
-//         proj_shape_array[1].as_u64().unwrap() as usize,
-//     );
-
-//     let grid_bounds =  geoengine_datatypes::raster::GridBoundingBox2D::new(
-//         GridIdx2D { x_idx: 0, y_idx: 0 },
-//         GridIdx2D { x_idx: (width - 1) as isize, y_idx: (height - 1) as isize},
-//     ).unwrap();
-
-//     Some(SpatialGridDefinition {
-//         geo_transform,
-//         grid_bounds,
-//     }.into())
-// }
 
 fn geo_transform_from_fields(
     fields: &serde_json::Map<String, serde_json::Value>,
