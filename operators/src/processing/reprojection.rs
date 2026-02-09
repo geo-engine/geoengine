@@ -222,7 +222,7 @@ fn compute_output_spatial_grid(
             let target_proj_total_grid = in_spatial_grid_descriptor
                 .spatial_bounds_to_compatible_spatial_grid(in_srs_area)
                 .reproject_clipped(&proj_from_to)?;
-            // jetzt grid mit origin (tl) auf grid vom dataset. dann umprojeziren. Dann intersection mit boundingbox in dataset
+            // First, move grid to actual dataset grid. Then reproject and then map projected bounds to grid.
             let spatial_bounds_proj = in_spatial_bounds.reproject_clipped(&proj_from_to)?;
             target_proj_total_grid.and_then(|x| {
                 spatial_bounds_proj.map(|spb| x.spatial_bounds_to_compatible_spatial_grid(spb))

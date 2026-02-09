@@ -109,7 +109,7 @@ impl Channel {
     /// Calculates the temperature in K from the given channel and radiance value.
     pub fn calculate_temperature_from_radiance(&self, radiance: f64) -> f64 {
         let temp = (C1 * 1.0e6 * self.vc.powi(3)) / (1.0e-5 * radiance);
-        ((C2 * 100.0 * self.vc / (temp + 1.0).ln()) - self.beta) / self.alpha
+        ((C2 * 100.0 * self.vc / temp.ln_1p()) - self.beta) / self.alpha
     }
 }
 

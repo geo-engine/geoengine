@@ -599,9 +599,9 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert!(
-            result[0].chunks_equal_ignoring_cache_hint(
+            &result[0].chunks_equal_ignoring_cache_hint(
                 &MultiPointCollection::from_slices(
-                    &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
+                    &[(0.0, 0.1), (50.0, 50.1)],
                     &[TimeInterval::default(); 2],
                     &[
                         ("count", FeatureData::Int(vec![9, 1])),
@@ -683,9 +683,9 @@ mod tests {
 
         assert_eq!(result.len(), 1);
         assert!(
-            result[0].chunks_equal_ignoring_cache_hint(
+            &result[0].chunks_equal_ignoring_cache_hint(
                 &MultiPointCollection::from_slices(
-                    &[(0.0, 0.099_999_999_999_999_99), (50.0, 50.1)],
+                    &[(0.0, 0.1), (50.0, 50.1)],
                     &[TimeInterval::default(); 2],
                     &[
                         ("count", FeatureData::Int(vec![9, 1])),

@@ -103,6 +103,9 @@ pub struct StacImport {
 
     #[arg(long, default_value = None)]
     z_index_property_name: Option<String>,
+
+    #[arg(long, default_value_t = false)]
+    verbose: bool,
     // TODO: time granularity (validity of items)
 
     // /// Parent layer collection ID
@@ -279,7 +282,7 @@ impl StacImporter {
 
             for (asset_key, asset) in &item.assets {
                 match self
-                    .process_item_asset(asset_key, asset, epsg, date_without_time, time, z_index)
+                    .process_item_asset(asset_key, asset, epsg, time, z_index)
                     .await
                 {
                     Ok(tiles) => {
@@ -291,10 +294,12 @@ impl StacImporter {
                         }
                     }
                     Err(err) => {
-                        // eprintln!(
-                        //     "Skipping asset {} of item {}: {:#}",
-                        //     asset_key, item.id, err
-                        // );
+                        if self.params.verbose {
+                            eprintln!(
+                                "Skipping asset {} of item {}: {:#}",
+                                asset_key, item.id, err
+                            );
+                        }
                     }
                 }
             }
@@ -308,7 +313,6 @@ impl StacImporter {
         asset_key: &str,
         asset: &Asset,
         epsg: u32,
-        date: DateTime,
         time: TimeInstance,
         z_index: i64,
     ) -> Result<Vec<(DatasetKey, AddDatasetTile)>, anyhow::Error> {
@@ -366,9 +370,7 @@ impl StacImporter {
         };
 
         let processor = AssetBandProcessor {
-            asset_key,
             asset,
-            date,
             time,
             geo_transform,
             dataset_bands,
@@ -515,12 +517,14 @@ impl StacImporter {
                 .await
                 .context("Failed to add permission")?;
 
-            // println!(
-            //     "Dataset '{}' shared with role {}: {}",
-            //     dataset_name,
-            //     permission.role_id,
-            //     response.text().await.unwrap_or_default()
-            // );
+            if self.params.verbose {
+                println!(
+                    "Dataset '{}' shared with role {}: {}",
+                    dataset_name,
+                    permission.role_id,
+                    response.text().await.unwrap_or_default()
+                );
+            }
         }
 
         Ok(())
@@ -528,9 +532,7 @@ impl StacImporter {
 }
 
 struct AssetBandProcessor<'a> {
-    asset_key: &'a str,
     asset: &'a Asset,
-    date: DateTime,
     time: TimeInstance,
     geo_transform: GeoTransform,
     dataset_bands: &'a [RasterBandDescriptor],
@@ -784,7 +786,9 @@ async fn scan_collection(
         if let Err(err) = scan_item_asset(asset_key, asset, &mut dataset_bands)
             .context(format!("Failed to scan item asset {}", asset_key))
         {
-            // eprintln!("Skipping asset {}: {:#}", asset_key, err);
+            if params.verbose {
+                eprintln!("Skipping asset {}: {:#}", asset_key, err);
+            }
         }
     }
     Ok(dataset_bands)

@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
-use crate::error::Error;
 use crate::util::Result;
+use crate::{error::Error, processing::circle_merging_quadtree::weighted_mean};
 
 use serde::{Deserialize, Serialize};
 
@@ -116,9 +116,9 @@ impl AttributeAggregate {
 
 impl AttributeAggregator for MeanAggregator {
     fn merge(&mut self, other: &Self) -> Result<()> {
-        self.mean = ((self.mean * self.n as f64) + (other.mean * other.n as f64))
-            / (self.n + other.n) as f64;
+        self.mean = weighted_mean(self.mean, self.n, other.mean, other.n);
         self.n += other.n;
+
         Ok(())
     }
 }

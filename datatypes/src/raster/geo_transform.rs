@@ -282,6 +282,7 @@ impl GeoTransform {
         let edge = self.nearest_pixel_edge(coordinate);
         let edge_coord = self.grid_idx_to_pixel_upper_left_coordinate_2d(edge);
         // compare x and y separately to account for difference in magnitude
+
         approx_eq!(f64, coordinate.x, edge_coord.x) && approx_eq!(f64, coordinate.y, edge_coord.y)
     }
 
