@@ -5282,8 +5282,7 @@
           },
           "z_index": {
             "type": "integer",
-            "format": "int32",
-            "minimum": 0
+            "format": "int64"
           }
         }
       },
