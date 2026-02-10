@@ -91,10 +91,6 @@ pub struct StacImport {
     // #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ', default_values = &["aot", "nir08", "rededge1", "rededge2", "rededge3", "scl", "swir16", "swir22"])]
     // bands: Vec<String>,
 
-    // epsg codes of the items to import
-    #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ', default_values = &["32630"])]
-    epsgs: Vec<u32>,
-
     // // time range end to import
     // #[arg(long, default_value_t = true)]
     // create_dataset: bool,
@@ -114,12 +110,11 @@ pub struct StacImport {
     #[arg(long, default_value = "geodata")]
     volume_name: String,
 
-    #[arg(long, default_value = "Sentinal2")]
+    #[arg(long, default_value = "Sentinel2")]
     dataset_name_prefix: String,
 
-    #[arg(long, default_value = None)]
-    z_index_property_name: Option<String>,
-
+    // #[arg(long, default_value = None)]
+    // z_index_property_name: Option<String>,
     #[arg(long, default_value_t = false)]
     verbose: bool,
 
@@ -209,10 +204,16 @@ impl StacImporter {
 
         let query_params = create_query_params(&self.params);
 
-        let pages = Self::create_page_stream(
+        let initial_query_state = QueryState::FirstPage {
+            query_url: format!(
+                "{}/collections/{}/items",
+                self.params.stac_url, self.params.stac_collection
+            ),
             query_params,
-            self.params.stac_url.clone(),
-            self.params.stac_collection.clone(),
+        };
+
+        let pages = Self::create_page_stream(
+            initial_query_state,
             self.client.clone(),
             self.params.verbose,
             self.params.prefetch_pages,
@@ -230,18 +231,11 @@ impl StacImporter {
     }
 
     fn create_page_stream(
-        query_params: Vec<(String, String)>,
-        stac_url: String,
-        stac_collection: String,
+        initial_query_state: QueryState,
         client: reqwest::Client,
         _verbose: bool,
         prefetch_buffer: usize,
     ) -> impl futures::Stream<Item = Result<stac::ItemCollection, anyhow::Error>> {
-        let initial_query_state = QueryState::FirstPage {
-            query_url: format!("{}/collections/{}/items", stac_url, stac_collection),
-            query_params,
-        };
-
         let page_stream = futures::stream::unfold(
             (client, initial_query_state),
             move |(client, state)| async move {
@@ -249,7 +243,7 @@ impl StacImporter {
                     return None;
                 }
 
-                println!("Fetching page: {:?}", state);
+                println!("Fetching page: {state:?}");
 
                 let start = Instant::now();
                 let result = query_item_collection(&client, &state).await;
@@ -267,7 +261,7 @@ impl StacImporter {
                     }
                     Err(e) => {
                         // TODO: abort or retry
-                        println!("Error fetching page: {:#}", e);
+                        println!("Error fetching page: {e:#}");
                         Some((Err(e), (client, QueryState::Finished)))
                     }
                 }
@@ -332,7 +326,12 @@ impl StacImporter {
         let mut dataset_tiles = HashMap::new();
 
         for item in item_collection.items {
-            let datetime = item.properties.datetime.unwrap(); // TODO: handle Option
+            let Some(datetime) = item.properties.datetime else {
+                if self.params.verbose {
+                    println!("Skipping item {}: missing datetime", item.id);
+                }
+                continue;
+            };
 
             // TODO: make mapping of item datetime to tile time validity configurable
             let date_without_time = datetime
@@ -348,7 +347,7 @@ impl StacImporter {
                 .properties
                 .additional_fields
                 .get("proj:epsg")
-                .and_then(|v| v.as_u64())
+                .and_then(serde_json::Value::as_u64)
                 .context("Missing proj:epsg in item properties")? as u32;
 
             // TODO: provide other ways to compute z-index, e.g. from date updated
@@ -1159,8 +1158,8 @@ impl<'a> AssetBandProcessor<'a> {
                 file_path: format!("/vsicurl/{}", tile_file).into(),
                 rasterband_channel: band_idx + 1, // gdal channels are 1-based
                 geo_transform: self.geo_transform.into(),
-                width: width,
-                height: height,
+                width,
+                height,
                 file_not_found_handling: crate::api::model::operators::FileNotFoundHandling::Error,
                 no_data_value: None,
                 properties_mapping: None,
