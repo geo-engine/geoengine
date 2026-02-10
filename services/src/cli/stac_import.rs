@@ -4,11 +4,13 @@ use ordered_float::OrderedFloat;
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
+    time::Instant,
 };
 
 use anyhow::Context;
 use chrono::Timelike;
 use clap::Parser;
+use futures::StreamExt;
 use geoengine_datatypes::{
     primitives::{DateTime, TimeInstance, TimeInterval},
     raster::{GdalGeoTransform, GeoTransform},
@@ -44,7 +46,7 @@ use crate::{
 
 const EXTERNAL_VOLUME_NAME: &str = "external";
 
-/// Checks if the Geo Engine server is alive
+/// STAC catalog importer for Geo Engine
 #[derive(Debug, Parser)]
 pub struct StacImport {
     /// STAC API URL
@@ -106,6 +108,17 @@ pub struct StacImport {
 
     #[arg(long, default_value_t = false)]
     verbose: bool,
+
+    /// Number of pages to prefetch while processing the current page
+    #[arg(long, default_value_t = 2)]
+    prefetch_pages: usize,
+
+    // handle missing bands:
+    // no eo:bands and only single-band -> use item key as band name
+    // no raster:bands and role visual and three bands -> use u8 bands
+    // if this parameter is false, assets with missing eo:bands or raster:bands will be skipped
+    #[arg(long, default_value_t = false)]
+    missing_bands_handling: bool,
     // TODO: time granularity (validity of items)
 
     // /// Parent layer collection ID
@@ -122,7 +135,7 @@ pub struct StacImport {
 }
 
 /// Example call for Sentinel 2 from Element 84:
-/// `cargo run --bin geoengine-cli stac-import -- --z-index-property-name "s2:sequence"`
+/// `cargo run --bin geoengine-cli stac-import --limit 267 --missing-bands-handling --verbose`
 pub async fn stac_import(params: StacImport) -> Result<(), anyhow::Error> {
     let mut importer = StacImporter::new(params).await?;
     importer.run().await
@@ -159,40 +172,99 @@ impl StacImporter {
     }
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
-        println!("Scanned collection, found bands for data types:");
-        for (data_type, bands) in &self.bands_by_data_type {
-            println!(
-                "  {:?}: {} bands",
-                data_type,
-                bands
-                    .iter()
-                    .map(|b| b.name.as_str())
-                    .collect::<Vec<&str>>()
-                    .join(", ")
-            );
+        if self.params.verbose {
+            println!("Scanned collection, found bands for data types:");
+            for (data_type, bands) in &self.bands_by_data_type {
+                println!(
+                    "  {:?}: {}",
+                    data_type,
+                    bands
+                        .iter()
+                        .map(|b| b.name.as_str())
+                        .collect::<Vec<&str>>()
+                        .join(", ")
+                );
+            }
         }
 
         let query_params = create_query_params(&self.params);
-        dbg!(&query_params);
 
-        let mut query_state = QueryState::FirstPage {
-            query_url: format!(
-                "{}/collections/{}/items",
-                self.params.stac_url, self.params.stac_collection
-            ),
+        let pages = Self::create_page_stream(
+            query_params,
+            self.params.stac_url.clone(),
+            self.params.stac_collection.clone(),
+            self.client.clone(),
+            self.params.verbose,
+            self.params.prefetch_pages,
+        );
+
+        self.process_pages(pages).await?;
+
+        if self.params.verbose {
+            println!("Dataset tiles added successfully");
+        }
+
+        Ok(())
+    }
+
+    fn create_page_stream(
+        query_params: Vec<(String, String)>,
+        stac_url: String,
+        stac_collection: String,
+        client: reqwest::Client,
+        _verbose: bool,
+        prefetch_buffer: usize,
+    ) -> impl futures::Stream<Item = Result<stac::ItemCollection, anyhow::Error>> {
+        let initial_query_state = QueryState::FirstPage {
+            query_url: format!("{}/collections/{}/items", stac_url, stac_collection),
             query_params,
         };
 
-        // process page by page and insert all tiles as they come
-        loop {
-            let (item_collection, new_query_state) =
-                query_item_collection(&self.client, &query_state).await?;
+        let page_stream = futures::stream::unfold(
+            (client, initial_query_state),
+            move |(client, state)| async move {
+                if matches!(state, QueryState::Finished) {
+                    return None;
+                }
 
-            if matches!(new_query_state, QueryState::Finished) || item_collection.items.is_empty() {
-                break;
-            }
+                println!("Fetching page: {:?}", state);
 
-            query_state = new_query_state;
+                let start = Instant::now();
+                let result = query_item_collection(&client, &state).await;
+                let elapsed = start.elapsed();
+
+                println!("Page fetched in {:.2}s", elapsed.as_secs_f64());
+
+                match result {
+                    Ok((item_collection, new_state)) => {
+                        if item_collection.items.is_empty() {
+                            None
+                        } else {
+                            Some((Ok(item_collection), (client, new_state)))
+                        }
+                    }
+                    Err(e) => {
+                        // TODO: abort or retry
+                        println!("Error fetching page: {:#}", e);
+                        Some((Err(e), (client, QueryState::Finished)))
+                    }
+                }
+            },
+        );
+
+        page_stream
+            .map(|result| async move { result })
+            .buffered(prefetch_buffer)
+    }
+
+    async fn process_pages(
+        &mut self,
+        buffered_stream: impl futures::Stream<Item = Result<stac::ItemCollection, anyhow::Error>>,
+    ) -> Result<(), anyhow::Error> {
+        // Process pages as they arrive from the buffered stream
+        futures::pin_mut!(buffered_stream);
+        while let Some(result) = buffered_stream.next().await {
+            let item_collection = result?;
 
             let dataset_tiles = self.process_items(item_collection).await?;
 
@@ -225,8 +297,6 @@ impl StacImporter {
                 }
             }
         }
-
-        println!("Dataset tiles added successfully");
 
         Ok(())
     }
@@ -399,7 +469,10 @@ impl StacImporter {
         let bands = self
             .bands_by_data_type
             .get(&dataset_key.data_type)
-            .context("Failed to get bands for dataset")?;
+            .context(format!(
+                "Failed to get bands for dataset: {:?}",
+                dataset_key
+            ))?;
 
         let create_dataset = CreateDataset {
             data_path: DataPath::Volume(VolumeName(EXTERNAL_VOLUME_NAME.to_string())),
@@ -613,8 +686,6 @@ async fn query_item_collection(
     client: &reqwest::Client,
     query_state: &QueryState,
 ) -> Result<(stac::ItemCollection, QueryState), anyhow::Error> {
-    println!("Querying STAC items: {:?}", query_state);
-
     match query_state {
         QueryState::FirstPage {
             query_url,
@@ -682,7 +753,7 @@ fn create_query_params(params: &StacImport) -> Vec<(String, String)> {
     query_params
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum QueryState {
     FirstPage {
         query_url: String,
@@ -783,8 +854,13 @@ async fn scan_collection(
     let mut dataset_bands: HashMap<RasterDataType, Vec<RasterBandDescriptor>> = HashMap::new();
 
     for (asset_key, asset) in &collection.item_assets {
-        if let Err(err) = scan_item_asset(asset_key, asset, &mut dataset_bands)
-            .context(format!("Failed to scan item asset {}", asset_key))
+        if let Err(err) = scan_item_asset(
+            asset_key,
+            asset,
+            &mut dataset_bands,
+            params.missing_bands_handling,
+        )
+        .context(format!("Failed to scan item asset {}", asset_key))
         {
             if params.verbose {
                 eprintln!("Skipping asset {}: {:#}", asset_key, err);
@@ -798,29 +874,36 @@ fn scan_item_asset(
     asset_key: &str,
     asset: &stac::ItemAsset,
     dataset_bands: &mut HashMap<RasterDataType, Vec<RasterBandDescriptor>>,
+    missing_bands_handling: bool,
 ) -> anyhow::Result<()> {
     if asset.r#type != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
     {
         anyhow::bail!("Skipping non-geotiff asset: {}", asset_key);
     }
 
-    let raster_bands: Vec<stac_extensions::raster::Band> = asset
+    let raster_bands: anyhow::Result<Vec<stac_extensions::raster::Band>> = asset
         .additional_fields
         .get("raster:bands")
         .ok_or(anyhow::anyhow!("Missing raster:bands"))
         .and_then(|bands| {
             serde_json::from_value(bands.clone())
                 .map_err(|e| anyhow::anyhow!("invalid raster:bands: {}", e))
-        })?;
+        });
 
-    let eo_bands: Vec<EoBand> = asset
+    let eo_bands: anyhow::Result<Vec<EoBand>> = asset
         .additional_fields
         .get("eo:bands")
         .ok_or(anyhow::anyhow!("Missing eo:bands in asset"))
         .and_then(|eo_bands| {
             serde_json::from_value(eo_bands.clone())
                 .map_err(|e| anyhow::anyhow!("invalid eo:bands: {}", e))
-        })?;
+        });
+
+    let (raster_bands, eo_bands) = if missing_bands_handling {
+        handle_missing_bands(raster_bands, eo_bands, asset, asset_key)?
+    } else {
+        (raster_bands?, eo_bands?)
+    };
 
     if raster_bands.len() != eo_bands.len() {
         anyhow::bail!("Skipping asset with mismatched raster:bands and eo:bands length",);
@@ -851,6 +934,98 @@ fn scan_item_asset(
     }
 
     Ok(())
+}
+
+fn handle_missing_bands(
+    raster_bands_result: anyhow::Result<Vec<stac_extensions::raster::Band>>,
+    eo_bands_result: anyhow::Result<Vec<EoBand>>,
+    asset: &stac::ItemAsset,
+    asset_key: &str,
+) -> anyhow::Result<(Vec<stac_extensions::raster::Band>, Vec<EoBand>)> {
+    match (raster_bands_result, eo_bands_result) {
+        (Ok(raster_bands), Ok(eo_bands)) => Ok((raster_bands, eo_bands)),
+        (Err(_), Ok(eo_bands)) => {
+            let raster_bands =
+                handle_missing_raster_bands(asset, &eo_bands).with_context(|| {
+                    format!(
+                        "Missing raster:bands and cannot create defaults for asset {}",
+                        asset_key
+                    )
+                })?;
+            Ok((raster_bands, eo_bands))
+        }
+        (Ok(raster_bands), Err(_)) => {
+            let eo_bands =
+                handle_missing_eo_bands(asset_key, &raster_bands).with_context(|| {
+                    format!(
+                        "Missing eo:bands and cannot create defaults for asset {}",
+                        asset_key
+                    )
+                })?;
+            Ok((raster_bands, eo_bands))
+        }
+        (Err(_), Err(_)) => anyhow::bail!(
+            "Missing both raster:bands and eo:bands for asset {}",
+            asset_key
+        ),
+    }
+}
+
+/// Handle missing raster:bands by creating defaults for visual assets
+/// Returns Ok(bands) if defaults can be created, Err otherwise
+fn handle_missing_raster_bands(
+    asset: &stac::ItemAsset,
+    eo_bands: &[EoBand],
+) -> anyhow::Result<Vec<stac_extensions::raster::Band>> {
+    // Check if asset has visual role by looking at additional_fields
+    let has_visual_role = asset.roles.iter().any(|r| r == "visual");
+
+    if !has_visual_role {
+        anyhow::bail!("Asset does not have visual role");
+    }
+
+    if eo_bands.len() != 3 {
+        anyhow::bail!(
+            "Asset has visual role but does not have exactly 3 eo:bands (found {})",
+            eo_bands.len()
+        );
+    }
+
+    // Create 3 default U8 bands for visual assets (RGB)
+    Ok(vec![
+        stac_extensions::raster::Band {
+            data_type: Some(stac_extensions::raster::DataType::UInt8),
+            ..Default::default()
+        },
+        stac_extensions::raster::Band {
+            data_type: Some(stac_extensions::raster::DataType::UInt8),
+            ..Default::default()
+        },
+        stac_extensions::raster::Band {
+            data_type: Some(stac_extensions::raster::DataType::UInt8),
+            ..Default::default()
+        },
+    ])
+}
+
+/// Handle missing eo:bands by creating defaults based on the number of raster bands
+/// Returns Ok(bands) if defaults can be created, Err otherwise
+fn handle_missing_eo_bands(
+    asset_key: &str,
+    raster_bands: &[stac_extensions::raster::Band],
+) -> anyhow::Result<Vec<EoBand>> {
+    match raster_bands.len() {
+        1 => {
+            // Use asset key as band name for single-band assets without eo:bands
+            Ok(vec![EoBand {
+                name: asset_key.to_string(),
+            }])
+        }
+        _ => anyhow::bail!(
+            "Cannot create default eo:bands for {} raster bands",
+            raster_bands.len()
+        ),
+    }
 }
 
 fn geo_transform_from_fields(
@@ -959,7 +1134,6 @@ async fn login(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use geoengine_datatypes::test_data;
 
     #[test]
