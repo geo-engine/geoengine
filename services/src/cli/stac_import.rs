@@ -147,6 +147,7 @@ struct StacImporter {
     session_id: String,
     bands_by_data_type: HashMap<RasterDataType, Vec<RasterBandDescriptor>>,
     created_datasets: HashSet<DatasetKey>,
+    time_range: TimeInterval,
 }
 
 impl StacImporter {
@@ -163,6 +164,10 @@ impl StacImporter {
             .context("Failed to scan collection")?;
 
         Ok(Self {
+            time_range: TimeInterval::new(
+                DateTime::from_str(&params.time_start)?,
+                DateTime::from_str(&params.time_end)?,
+            )?,
             params,
             client,
             session_id,
@@ -296,6 +301,8 @@ impl StacImporter {
                     ));
                 }
             }
+
+            self.print_progress(dataset_tiles);
         }
 
         Ok(())
@@ -601,6 +608,42 @@ impl StacImporter {
         }
 
         Ok(())
+    }
+
+    fn print_progress(&self, dataset_tiles: HashMap<DatasetKey, Vec<AddDatasetTile>>) {
+        let min_date = dataset_tiles
+            .values()
+            .flatten()
+            .map(|tile| tile.time.start)
+            .min();
+
+        if let Some(min_date) = min_date {
+            let start_millis = self.time_range.start().inner() as f64;
+            let end_millis = self.time_range.end().inner() as f64;
+            let current_millis = min_date.inner() as f64;
+
+            // Items are received in descending order (from end to start)
+            let progress = ((end_millis - current_millis) / (end_millis - start_millis) * 100.0)
+                .max(0.0)
+                .min(100.0);
+
+            println!(
+                "[{:.1}%] Processed items down to date: {} in range {}/{} ",
+                progress,
+                DateTime::try_from(geoengine_datatypes::primitives::TimeInstance::from(
+                    min_date
+                ))
+                .unwrap(),
+                DateTime::try_from(geoengine_datatypes::primitives::TimeInstance::from(
+                    self.time_range.start()
+                ))
+                .unwrap(),
+                DateTime::try_from(geoengine_datatypes::primitives::TimeInstance::from(
+                    self.time_range.end()
+                ))
+                .unwrap(),
+            );
+        }
     }
 }
 
