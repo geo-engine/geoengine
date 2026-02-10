@@ -25,16 +25,16 @@ Content-Type: application/json
 ### 
 
 @workflowId = {{workflow.response.body.$.id}}
-@crs = EPSG:32630
-@width = 5490
-@height = 5490
+@crs = EPSG:4326
+@width = 1000
+@height = 1000
 @time = 2020-12-31T00%3A00%3A00.000Z
 
-@minx = 699960.0000000000000000
-@miny = 3990240.0000000000000000
+@minx = -180
+@miny = -90
 
-@maxx = 809760.0000000000000000
-@maxy = 4100040.0000000000000000
+@maxx = 180
+@maxy = 90
 
 @colorizer_min = 0
 @colorizer_max = 2000

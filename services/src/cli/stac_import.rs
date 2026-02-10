@@ -23,25 +23,39 @@ use crate::{
     api::{
         handlers::{
             datasets::AddDatasetTile,
-            permissions::{DatasetResource, PermissionRequest},
+            permissions::{
+                DatasetResource, LayerCollectionResource, LayerResource, PermissionRequest,
+            },
         },
         model::{
             datatypes::{
-                GridBoundingBox2D, GridIdx2D, Measurement, RasterDataType, SpatialGridDefinition,
-                TimeGranularity, TimeStep, UnitlessMeasurement,
+                GridBoundingBox2D, GridIdx2D, LayerId, Measurement, RasterDataType,
+                SpatialGridDefinition, TimeGranularity, TimeStep, UnitlessMeasurement,
             },
             operators::{
                 GdalDatasetParameters, GdalMultiBand, RasterBandDescriptor, RasterBandDescriptors,
                 RasterResultDescriptor, RegularTimeDimension, SpatialGridDescriptor,
                 SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
             },
+            responses::IdResponse,
             services::{
                 AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
             },
         },
     },
     datasets::{DatasetName, upload::VolumeName},
+    layers::{
+        layer::{AddLayer, AddLayerCollection},
+        listing::LayerCollectionId,
+        storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+    },
     permissions::{Permission, Role},
+    workflows::workflow::Workflow,
+};
+use geoengine_datatypes::dataset::NamedData;
+use geoengine_operators::{
+    engine::{RasterOperator, TypedOperator},
+    source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
 };
 
 const EXTERNAL_VOLUME_NAME: &str = "external";
@@ -62,7 +76,7 @@ pub struct StacImport {
     limit: Option<usize>,
 
     // time range start to import
-    #[arg(long, default_value = "2020-01-01T00:00:00Z")]
+    #[arg(long, default_value = "2020-12-25T00:00:00Z")]
     time_start: String,
 
     // time range end to import
@@ -145,7 +159,7 @@ struct StacImporter {
     params: StacImport,
     client: reqwest::Client,
     session_id: String,
-    bands_by_data_type: HashMap<RasterDataType, Vec<RasterBandDescriptor>>,
+    bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
     created_datasets: HashSet<DatasetKey>,
     time_range: TimeInterval,
 }
@@ -159,7 +173,7 @@ impl StacImporter {
         )
         .await?;
 
-        let bands_by_data_type = scan_collection(&params, &client)
+        let bands = scan_collection(&params, &client)
             .await
             .context("Failed to scan collection")?;
 
@@ -171,18 +185,19 @@ impl StacImporter {
             params,
             client,
             session_id,
-            bands_by_data_type,
+            bands,
             created_datasets: HashSet::new(),
         })
     }
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
         if self.params.verbose {
-            println!("Scanned collection, found bands for data types:");
-            for (data_type, bands) in &self.bands_by_data_type {
+            println!("Scanned collection, found bands for data type and resolution:");
+            for (partial_dataset_key, bands) in &self.bands {
                 println!(
-                    "  {:?}: {}",
-                    data_type,
+                    "  {:?}, {}: {}",
+                    partial_dataset_key.data_type,
+                    partial_dataset_key.resolution,
                     bands
                         .iter()
                         .map(|b| b.name.as_str())
@@ -208,6 +223,8 @@ impl StacImporter {
         if self.params.verbose {
             println!("Dataset tiles added successfully");
         }
+
+        self.create_collections_and_layers().await?;
 
         Ok(())
     }
@@ -402,7 +419,19 @@ impl StacImporter {
         let geo_transform = geo_transform_from_fields(&asset.additional_fields)
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
 
-        let data_type = data_type_from_asset(asset).context("unknown data type")?;
+        let data_type = if let Ok(data_type) = data_type_from_asset(asset) {
+            data_type
+        } else if self.params.missing_bands_handling
+            && asset
+                .roles
+                .iter()
+                .any(|roles| roles.contains(&"visual".to_string()))
+        {
+            // if no data type can be determined but asset has role visual, assume u8 data type with one band per visual asset
+            RasterDataType::U8
+        } else {
+            anyhow::bail!("Failed to determine data type from asset");
+        };
 
         let dataset_key = DatasetKey {
             epsg,
@@ -425,18 +454,28 @@ impl StacImporter {
             );
         }
 
-        let eo_bands: Vec<EoBand> = serde_json::from_value(
+        let eo_bands: Result<Vec<EoBand>, _> = serde_json::from_value(
             asset
                 .additional_fields
                 .get("eo:bands")
                 .ok_or(anyhow::anyhow!("Missing eo:bands in asset"))?
                 .clone(),
-        )
-        .context("Failed to parse eo:bands")?;
+        );
+
+        let eo_bands = if let Ok(eo_bands) = eo_bands {
+            eo_bands
+        } else if self.params.missing_bands_handling {
+            handle_missing_eo_bands_for_asset(asset_key, asset)?
+        } else {
+            anyhow::bail!("Failed to parse eo:bands");
+        };
 
         let dataset_bands = self
-            .bands_by_data_type
-            .get(&dataset_key.data_type)
+            .bands
+            .get(&PartialDatasetKey {
+                data_type: dataset_key.data_type,
+                resolution: dataset_key.resolution,
+            })
             .ok_or(anyhow::anyhow!("unknown dataset key: {:?}", dataset_key))?;
 
         // if multiple bands for asset, prefix band names with asset key
@@ -456,9 +495,9 @@ impl StacImporter {
         };
 
         let mut tiles = Vec::new();
-        for eo_band in &eo_bands {
+        for (band_idx, eo_band) in eo_bands.iter().enumerate() {
             let tile = processor
-                .process_band(eo_band)
+                .process_band(band_idx, eo_band)
                 .context(format!("Failed to process band {}", eo_band.name))?;
             tiles.push((dataset_key.clone(), tile));
         }
@@ -474,8 +513,11 @@ impl StacImporter {
         let dataset_name_str = &dataset_key.dataset_name(&self.params.stac_collection);
 
         let bands = self
-            .bands_by_data_type
-            .get(&dataset_key.data_type)
+            .bands
+            .get(&PartialDatasetKey {
+                data_type: dataset_key.data_type,
+                resolution: dataset_key.resolution,
+            })
             .context(format!(
                 "Failed to get bands for dataset: {:?}",
                 dataset_key
@@ -491,8 +533,8 @@ impl StacImporter {
                     ),
                     display_name: dataset_name_str.to_string(),
                     description: format!(
-                        "{dataset_name_str} imported from STAC {}",
-                        self.params.stac_collection
+                        "{dataset_name_str} imported from STAC collection {} from {}",
+                        self.params.stac_collection, self.params.stac_url
                     ),
                     source_operator: "MultiBandGdalSource".to_string(),
                     symbology: None,
@@ -645,6 +687,413 @@ impl StacImporter {
             );
         }
     }
+
+    async fn create_collections_and_layers(&self) -> anyhow::Result<()> {
+        // Create root collection for STAC collection
+        let root_collection_id = self
+            .create_layer_collection(
+                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+                &self.params.stac_collection,
+                &format!(
+                    "{} datasets imported from STAC",
+                    self.params.stac_collection
+                ),
+            )
+            .await?;
+
+        // Step 1: Create all layers first and store their IDs
+        let mut layer_ids: HashMap<DatasetKey, LayerId> = HashMap::new();
+
+        // Create one layer per dataset in a temporary collection
+        let temp_collection_id = self
+            .create_layer_collection(
+                &root_collection_id,
+                "_layers",
+                "All dataset layers (internal)",
+            )
+            .await?;
+
+        for dataset_key in &self.created_datasets {
+            let layer_id = self.create_layer(&temp_collection_id, dataset_key).await?;
+            layer_ids.insert(dataset_key.clone(), layer_id);
+        }
+
+        // Step 2: Create the three top-level collections
+        let by_datatype_id = self
+            .create_layer_collection(
+                &root_collection_id,
+                "By Data Type",
+                "Organized by data type",
+            )
+            .await?;
+        let by_resolution_id = self
+            .create_layer_collection(
+                &root_collection_id,
+                "By Resolution",
+                "Organized by resolution",
+            )
+            .await?;
+        let by_epsg_id = self
+            .create_layer_collection(&root_collection_id, "By EPSG", "Organized by EPSG code")
+            .await?;
+
+        // Step 3: Create hierarchies with both second-level options
+        use Attribute::*;
+        // Under "By Data Type": DataType -> {Resolution, Epsg} -> layers
+        self.create_hierarchy_with_branches(
+            &by_datatype_id,
+            &layer_ids,
+            DataType,
+            &[Resolution, Epsg],
+        )
+        .await?;
+        // Under "By Resolution": Resolution -> {DataType, Epsg} -> layers
+        self.create_hierarchy_with_branches(
+            &by_resolution_id,
+            &layer_ids,
+            Resolution,
+            &[DataType, Epsg],
+        )
+        .await?;
+        // Under "By EPSG": Epsg -> {DataType, Resolution} -> layers
+        self.create_hierarchy_with_branches(&by_epsg_id, &layer_ids, Epsg, &[DataType, Resolution])
+            .await?;
+
+        Ok(())
+    }
+
+    async fn create_layer_collection(
+        &self,
+        parent_id: &str,
+        name: &str,
+        description: &str,
+    ) -> anyhow::Result<String> {
+        let add_collection = AddLayerCollection {
+            name: name.to_string(),
+            description: description.to_string(),
+            properties: vec![],
+        };
+
+        let response: IdResponse<LayerCollectionId> = self
+            .client
+            .post(format!(
+                "{}/layerDb/collections/{}/collections",
+                self.params.geo_engine_url, parent_id
+            ))
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", self.session_id))
+            .json(&add_collection)
+            .send()
+            .await
+            .context("Failed to add layer collection")?
+            .json()
+            .await
+            .context("Failed to parse layer collection response")?;
+
+        // Share with all users
+        self.share_layer_collection(&response.id).await?;
+
+        if self.params.verbose {
+            println!(
+                "Created layer collection '{}' with id {}",
+                name, response.id.0
+            );
+        }
+
+        Ok(response.id.0)
+    }
+
+    async fn create_layer(
+        &self,
+        collection_id: &str,
+        dataset_key: &DatasetKey,
+    ) -> anyhow::Result<LayerId> {
+        let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
+        let layer_name = format!(
+            "EPSG:{} {:?} res:{}",
+            dataset_key.epsg, dataset_key.data_type, dataset_key.resolution
+        );
+
+        let add_layer = AddLayer {
+            name: layer_name.clone(),
+            description: format!("Dataset: {}", dataset_name),
+            workflow: Workflow {
+                operator: TypedOperator::Raster(
+                    MultiBandGdalSource {
+                        params: MultiBandGdalSourceParameters {
+                            data: NamedData {
+                                namespace: None,
+                                provider: None,
+                                name: dataset_name.clone(),
+                            },
+                            overview_level: None,
+                        },
+                    }
+                    .boxed(),
+                ),
+            },
+            symbology: None,
+            properties: vec![],
+            metadata: Default::default(),
+        };
+
+        let response: IdResponse<LayerId> = self
+            .client
+            .post(format!(
+                "{}/layerDb/collections/{}/layers",
+                self.params.geo_engine_url, collection_id
+            ))
+            .header("Content-Type", "application/json")
+            .header("Authorization", format!("Bearer {}", self.session_id))
+            .json(&add_layer)
+            .send()
+            .await
+            .context("Failed to add layer to collection")?
+            .json()
+            .await
+            .context("Failed to parse layer response")?;
+
+        // Share with all users
+        self.share_layer(&response.id).await?;
+
+        if self.params.verbose {
+            println!(
+                "Created layer '{}' in collection {}",
+                layer_name, collection_id
+            );
+        }
+
+        Ok(response.id)
+    }
+
+    async fn add_existing_layer_to_collection(
+        &self,
+        collection_id: &str,
+        layer_id: &LayerId,
+    ) -> anyhow::Result<()> {
+        self.client
+            .post(format!(
+                "{}/layerDb/collections/{}/layers/{}",
+                self.params.geo_engine_url, collection_id, layer_id.0
+            ))
+            .header("Authorization", format!("Bearer {}", self.session_id))
+            .send()
+            .await
+            .context("Failed to add existing layer to collection")?;
+
+        if self.params.verbose {
+            println!("Added layer {} to collection {}", layer_id.0, collection_id);
+        }
+
+        Ok(())
+    }
+
+    async fn create_hierarchy_with_branches(
+        &self,
+        root_id: &str,
+        layer_ids: &HashMap<DatasetKey, LayerId>,
+        first_attr: Attribute,
+        second_attrs: &[Attribute; 2],
+    ) -> anyhow::Result<()> {
+        // Group by first attribute
+        let grouped_level1 =
+            self.group_by_attribute(layer_ids.keys().cloned().collect(), first_attr);
+
+        // Process each value of the first attribute
+        for (value1, keys1) in grouped_level1 {
+            // Create collection for this value of first attribute (e.g., "U16", "EPSG:32630")
+            let name1 = first_attr.format_value(&value1);
+            let desc1 = format!("{} datasets", name1);
+            let collection1 = self
+                .create_layer_collection(root_id, &name1, &desc1)
+                .await?;
+
+            // Create branches for each possible second attribute
+            for &second_attr in second_attrs {
+                // Create label collection for this second attribute (e.g., "By Resolution")
+                let label_name = format!("By {}", second_attr.capitalize_name());
+                let label_desc =
+                    format!("Organized by {} for {}", second_attr.display_name(), name1);
+                let label_collection = self
+                    .create_layer_collection(&collection1, &label_name, &label_desc)
+                    .await?;
+
+                // Group by second attribute
+                let grouped_level2 = self.group_by_attribute(keys1.clone(), second_attr);
+
+                // Process each value of the second attribute
+                for (value2, keys2) in grouped_level2 {
+                    let name2 = second_attr.format_value(&value2);
+                    let desc2 = format!("Layers: {} + {}", name1, name2);
+                    let collection2 = self
+                        .create_layer_collection(&label_collection, &name2, &desc2)
+                        .await?;
+
+                    // Add layers at the leaf level (all layers with these two attribute values)
+                    for key in &keys2 {
+                        if let Some(layer_id) = layer_ids.get(key) {
+                            self.add_existing_layer_to_collection(&collection2, layer_id)
+                                .await?;
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn group_by_attribute(
+        &self,
+        keys: Vec<DatasetKey>,
+        attribute: Attribute,
+    ) -> HashMap<AttributeValue, Vec<DatasetKey>> {
+        let mut grouped: HashMap<AttributeValue, Vec<DatasetKey>> = HashMap::new();
+        for key in keys {
+            let value = match attribute {
+                Attribute::DataType => AttributeValue::DataType(key.data_type),
+                Attribute::Resolution => AttributeValue::Resolution(key.resolution),
+                Attribute::Epsg => AttributeValue::Epsg(key.epsg),
+            };
+            grouped
+                .entry(value)
+                .or_insert_with(Vec::new)
+                .push(key.clone());
+        }
+        grouped
+    }
+
+    async fn share_layer_collection(
+        &self,
+        collection_id: &LayerCollectionId,
+    ) -> anyhow::Result<()> {
+        let permissions = vec![
+            PermissionRequest {
+                resource: crate::api::handlers::permissions::Resource::LayerCollection(
+                    LayerCollectionResource {
+                        id: collection_id.clone(),
+                        r#type: crate::api::handlers::permissions::LayerCollectionResourceTypeTag::LayerCollectionResourceTypeTag,
+                    },
+                ),
+                role_id: Role::registered_user_role_id(),
+                permission: Permission::Read,
+            },
+            PermissionRequest {
+                resource: crate::api::handlers::permissions::Resource::LayerCollection(
+                    LayerCollectionResource {
+                        id: collection_id.clone(),
+                        r#type: crate::api::handlers::permissions::LayerCollectionResourceTypeTag::LayerCollectionResourceTypeTag,
+                    },
+                ),
+                role_id: Role::anonymous_role_id(),
+                permission: Permission::Read,
+            },
+        ];
+
+        for permission in &permissions {
+            self.client
+                .put(format!("{}/permissions", self.params.geo_engine_url))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", self.session_id))
+                .json(&permission)
+                .send()
+                .await
+                .context("Failed to add permission")?;
+        }
+
+        Ok(())
+    }
+
+    async fn share_layer(&self, layer_id: &LayerId) -> anyhow::Result<()> {
+        let permissions = vec![
+            PermissionRequest {
+                resource: crate::api::handlers::permissions::Resource::Layer(LayerResource {
+                    id: layer_id.clone(),
+                    r#type: crate::api::handlers::permissions::LayerResourceTypeTag::LayerResourceTypeTag,
+                }),
+                role_id: Role::registered_user_role_id(),
+                permission: Permission::Read,
+            },
+            PermissionRequest {
+                resource: crate::api::handlers::permissions::Resource::Layer(LayerResource {
+                    id: layer_id.clone(),
+                    r#type: crate::api::handlers::permissions::LayerResourceTypeTag::LayerResourceTypeTag,
+                }),
+                role_id: Role::anonymous_role_id(),
+                permission: Permission::Read,
+            },
+        ];
+
+        for permission in &permissions {
+            self.client
+                .put(format!("{}/permissions", self.params.geo_engine_url))
+                .header("Content-Type", "application/json")
+                .header("Authorization", format!("Bearer {}", self.session_id))
+                .json(&permission)
+                .send()
+                .await
+                .context("Failed to add permission")?;
+        }
+
+        Ok(())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Attribute {
+    DataType,
+    Resolution,
+    Epsg,
+}
+
+impl Attribute {
+    fn display_name(&self) -> &str {
+        match self {
+            Attribute::DataType => "data type",
+            Attribute::Resolution => "resolution",
+            Attribute::Epsg => "EPSG",
+        }
+    }
+
+    fn capitalize_name(&self) -> &str {
+        match self {
+            Attribute::DataType => "Data Type",
+            Attribute::Resolution => "Resolution",
+            Attribute::Epsg => "EPSG",
+        }
+    }
+
+    fn format_value(&self, value: &AttributeValue) -> String {
+        match (self, value) {
+            (Attribute::DataType, AttributeValue::DataType(dt)) => format!("{:?}", dt),
+            (Attribute::Resolution, AttributeValue::Resolution(res)) => format!("res:{}", res),
+            (Attribute::Epsg, AttributeValue::Epsg(epsg)) => format!("EPSG:{}", epsg),
+            _ => panic!("Mismatched attribute and value"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+enum AttributeValue {
+    DataType(RasterDataType),
+    Resolution(OrderedFloat<f64>),
+    Epsg(u32),
+}
+
+fn handle_missing_eo_bands_for_asset(
+    asset_key: &str,
+    asset: &Asset,
+) -> anyhow::Result<Vec<EoBand>> {
+    let raster_bands: Vec<stac_extensions::raster::Band> = asset
+        .additional_fields
+        .get("raster:bands")
+        .ok_or(anyhow::anyhow!("Missing raster:bands"))
+        .and_then(|bands| {
+            serde_json::from_value(bands.clone())
+                .map_err(|e| anyhow::anyhow!("invalid raster:bands: {}", e))
+        })?;
+
+    handle_missing_eo_bands(asset_key, &raster_bands)
 }
 
 struct AssetBandProcessor<'a> {
@@ -657,7 +1106,7 @@ struct AssetBandProcessor<'a> {
 }
 
 impl<'a> AssetBandProcessor<'a> {
-    fn process_band(&self, eo_band: &EoBand) -> anyhow::Result<AddDatasetTile> {
+    fn process_band(&self, band_idx: usize, eo_band: &EoBand) -> anyhow::Result<AddDatasetTile> {
         let band_name = format!("{}{}", self.prefix, eo_band.name);
 
         let band_index = self
@@ -708,7 +1157,7 @@ impl<'a> AssetBandProcessor<'a> {
             z_index: self.z_index,
             params: GdalDatasetParameters {
                 file_path: format!("/vsicurl/{}", tile_file).into(),
-                rasterband_channel: 1, // TODO !!!
+                rasterband_channel: band_idx + 1, // gdal channels are 1-based
                 geo_transform: self.geo_transform.into(),
                 width: width,
                 height: height,
@@ -818,6 +1267,13 @@ struct DatasetKey {
     resolution: OrderedFloat<f64>,
 }
 
+// partial dataset key used for grouping bands by data type and resolution, because epsgs are only retrieved when querying the actual items and not on collection level
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
+struct PartialDatasetKey {
+    data_type: RasterDataType,
+    resolution: OrderedFloat<f64>,
+}
+
 impl DatasetKey {
     fn dataset_name(&self, collection_name: &str) -> String {
         let cleaned_name = collection_name
@@ -880,7 +1336,7 @@ struct EoBand {
 async fn scan_collection(
     params: &StacImport,
     client: &reqwest::Client,
-) -> anyhow::Result<HashMap<RasterDataType, Vec<RasterBandDescriptor>>> {
+) -> anyhow::Result<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>> {
     let collection: stac::Collection = client
         .get(format!(
             "{}/collections/{}",
@@ -894,7 +1350,7 @@ async fn scan_collection(
     // create datasets by grouping items by (epsg, data_type, resolution/grid)
     // because datasets must have uniform epsg, data_type, resolution
 
-    let mut dataset_bands: HashMap<RasterDataType, Vec<RasterBandDescriptor>> = HashMap::new();
+    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
     for (asset_key, asset) in &collection.item_assets {
         if let Err(err) = scan_item_asset(
@@ -916,7 +1372,7 @@ async fn scan_collection(
 fn scan_item_asset(
     asset_key: &str,
     asset: &stac::ItemAsset,
-    dataset_bands: &mut HashMap<RasterDataType, Vec<RasterBandDescriptor>>,
+    dataset_bands: &mut HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
     missing_bands_handling: bool,
 ) -> anyhow::Result<()> {
     if asset.r#type != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
@@ -963,11 +1419,19 @@ fn scan_item_asset(
         let data_type = raster_band
             .data_type
             .ok_or(anyhow::anyhow!("Missing data_type in raster band"))?;
+        let raster_data_type = raster_data_type_from_stac_data_type(&data_type)?;
+
+        let geo_transform = geo_transform_from_fields(&asset.additional_fields)
+            .ok_or(anyhow::anyhow!("missing proj:transform"))?;
+        let resoution = geo_transform.x_pixel_size().into();
 
         let band_name = format!("{}{}", prefix, eo_band.name);
 
         dataset_bands
-                .entry(raster_data_type_from_stac_data_type(&data_type)?)
+                .entry(PartialDatasetKey {
+                    data_type: raster_data_type,
+                    resolution: resoution,
+                })
                 .or_insert_with(Vec::new)
                 .push(RasterBandDescriptor {
                     name: band_name,
