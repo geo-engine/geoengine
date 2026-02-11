@@ -858,6 +858,7 @@ impl CacheQueryMatch for RasterQueryRectangle {
 
         cache_spatial_query.contains(&query_spatial_query)
             && self.time_interval().contains(&query.time_interval())
+            && self.attributes().contains_all(query.attributes().as_ref())
     }
 }
 

@@ -12,7 +12,7 @@ use crate::error::Error;
 use crate::util::Result;
 use async_trait::async_trait;
 use futures::stream::{BoxStream, FusedStream};
-use futures::{Stream, StreamExt, TryStreamExt, ready};
+use futures::{Stream, StreamExt, ready};
 use geoengine_datatypes::collections::{FeatureCollection, FeatureCollectionInfos};
 use geoengine_datatypes::primitives::{
     BandSelection, Geometry, QueryAttributeSelection, QueryRectangle, RasterQueryRectangle,
@@ -457,15 +457,34 @@ where
 impl<P> ResultStreamWrapper for RasterTile2D<P>
 where
     P: 'static + Pixel,
-    RasterTile2D<P>: CacheElement,
+    RasterTile2D<P>: CacheElement<Query = RasterQueryRectangle>,
     Self::ResultStream: Send + Sync,
 {
     fn wrap_result_stream<'a>(
         stream: Self::ResultStream,
         _chunk_byte_size: ChunkByteSize,
-        _query: Self::Query,
+        query: Self::Query,
     ) -> BoxStream<'a, Result<Self>> {
-        Box::pin(stream.map_err(|ce| Error::CacheCantProduceResult { source: ce.into() }))
+        let query_bands = query.attributes().clone();
+
+        let band_filter_stream = stream.filter_map(move |result| {
+            let qb = query_bands.clone();
+            async move {
+                match result {
+                    Ok(tile) => {
+                        let tile_band = tile.band;
+                        if qb.contains(tile_band) {
+                            Some(Ok(tile))
+                        } else {
+                            None
+                        }
+                    }
+                    Err(e) => Some(Err(Error::CacheCantProduceResult { source: e.into() })),
+                }
+            }
+        });
+
+        Box::pin(band_filter_stream)
     }
 }
 

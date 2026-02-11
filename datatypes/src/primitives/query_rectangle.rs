@@ -176,11 +176,25 @@ impl BandSelection {
     pub fn is_single(&self) -> bool {
         self.count() == 1
     }
+
+    pub fn contains(&self, band: u32) -> bool {
+        self.0.contains(&band)
+    }
+
+    pub fn contains_all(&self, bands: &[u32]) -> bool {
+        bands.iter().all(|band| self.contains(*band))
+    }
 }
 
 impl From<u32> for BandSelection {
     fn from(value: u32) -> Self {
         Self(vec![value])
+    }
+}
+
+impl AsRef<[u32]> for BandSelection {
+    fn as_ref(&self) -> &[u32] {
+        self.as_slice()
     }
 }
 
