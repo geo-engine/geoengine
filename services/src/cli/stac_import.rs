@@ -4,7 +4,7 @@ use ordered_float::OrderedFloat;
 use std::{
     collections::{HashMap, HashSet},
     str::FromStr,
-    time::Instant,
+    time::{Duration, Instant},
 };
 
 use anyhow::Context;
@@ -59,6 +59,8 @@ use geoengine_operators::{
 };
 
 const EXTERNAL_VOLUME_NAME: &str = "external";
+const MAX_RETRIES: u32 = 10;
+const INITIAL_RETRY_DELAY_MS: u64 = 1000;
 
 /// STAC catalog importer for Geo Engine
 #[derive(Debug, Parser)]
@@ -289,18 +291,23 @@ impl StacImporter {
 
                 println!("Adding {} tiles to dataset {}", tiles.len(), dataset_name,);
 
-                let response = self
-                    .client
-                    .post(format!(
-                        "{}/dataset/{}/tiles",
-                        self.params.geo_engine_url, dataset_name
-                    ))
-                    .header("Content-Type", "application/json")
-                    .header("Authorization", format!("Bearer {}", self.session_id))
-                    .json(&tiles)
-                    .send()
-                    .await
-                    .context("Failed to send add tiles request")?;
+                let response = retry_with_backoff(
+                    || async {
+                        self.client
+                            .post(format!(
+                                "{}/dataset/{}/tiles",
+                                self.params.geo_engine_url, dataset_name
+                            ))
+                            .header("Content-Type", "application/json")
+                            .header("Authorization", format!("Bearer {}", self.session_id))
+                            .json(&tiles)
+                            .send()
+                            .await
+                    },
+                    &format!("Add tiles to dataset {dataset_name}"),
+                )
+                .await
+                .context("Failed to send add tiles request")?;
 
                 if !response.status().is_success() {
                     let error_text = response.text().await.unwrap_or_default();
@@ -580,15 +587,20 @@ impl StacImporter {
             },
         };
 
-        let response = self
-            .client
-            .post(format!("{}/dataset", self.params.geo_engine_url))
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.session_id))
-            .json(&create_dataset)
-            .send()
-            .await
-            .context("Failed to send dataset creation request")?;
+        let response = retry_with_backoff(
+            || async {
+                self.client
+                    .post(format!("{}/dataset", self.params.geo_engine_url))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {}", self.session_id))
+                    .json(&create_dataset)
+                    .send()
+                    .await
+            },
+            &format!("Create dataset {dataset_name_str}"),
+        )
+        .await
+        .context("Failed to send dataset creation request")?;
 
         let dataset_name = if let Ok(json) = response.json::<serde_json::Value>().await {
             if let Some(id) = json.get("datasetName").and_then(|v| v.as_str()) {
@@ -628,15 +640,20 @@ impl StacImporter {
         ];
 
         for permission in &permissions {
-            let response = self
-                .client
-                .put(format!("{}/permissions", self.params.geo_engine_url))
-                .header("Content-Type", "application/json")
-                .header("Authorization", format!("Bearer {}", self.session_id))
-                .json(&permission)
-                .send()
-                .await
-                .context("Failed to add permission")?;
+            let response = retry_with_backoff(
+                || async {
+                    self.client
+                        .put(format!("{}/permissions", self.params.geo_engine_url))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", format!("Bearer {}", self.session_id))
+                        .json(&permission)
+                        .send()
+                        .await
+                },
+                &format!("Add dataset permission for role {}", permission.role_id),
+            )
+            .await
+            .context("Failed to add permission")?;
 
             if self.params.verbose {
                 println!(
@@ -773,21 +790,25 @@ impl StacImporter {
             properties: vec![],
         };
 
-        let response: IdResponse<LayerCollectionId> = self
-            .client
-            .post(format!(
-                "{}/layerDb/collections/{}/collections",
-                self.params.geo_engine_url, parent_id
-            ))
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.session_id))
-            .json(&add_collection)
-            .send()
-            .await
-            .context("Failed to add layer collection")?
-            .json()
-            .await
-            .context("Failed to parse layer collection response")?;
+        let response: IdResponse<LayerCollectionId> = retry_with_backoff(
+            || async {
+                self.client
+                    .post(format!(
+                        "{}/layerDb/collections/{}/collections",
+                        self.params.geo_engine_url, parent_id
+                    ))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {}", self.session_id))
+                    .json(&add_collection)
+                    .send()
+                    .await?
+                    .json()
+                    .await
+            },
+            &format!("Create layer collection '{name}'"),
+        )
+        .await
+        .context("Failed to add layer collection")?;
 
         // Share with all users
         self.share_layer_collection(&response.id).await?;
@@ -836,21 +857,25 @@ impl StacImporter {
             metadata: Default::default(),
         };
 
-        let response: IdResponse<LayerId> = self
-            .client
-            .post(format!(
-                "{}/layerDb/collections/{}/layers",
-                self.params.geo_engine_url, collection_id
-            ))
-            .header("Content-Type", "application/json")
-            .header("Authorization", format!("Bearer {}", self.session_id))
-            .json(&add_layer)
-            .send()
-            .await
-            .context("Failed to add layer to collection")?
-            .json()
-            .await
-            .context("Failed to parse layer response")?;
+        let response: IdResponse<LayerId> = retry_with_backoff(
+            || async {
+                self.client
+                    .post(format!(
+                        "{}/layerDb/collections/{}/layers",
+                        self.params.geo_engine_url, collection_id
+                    ))
+                    .header("Content-Type", "application/json")
+                    .header("Authorization", format!("Bearer {}", self.session_id))
+                    .json(&add_layer)
+                    .send()
+                    .await?
+                    .json()
+                    .await
+            },
+            &format!("Create layer '{layer_name}'"),
+        )
+        .await
+        .context("Failed to add layer to collection")?;
 
         // Share with all users
         self.share_layer(&response.id).await?;
@@ -870,15 +895,21 @@ impl StacImporter {
         collection_id: &str,
         layer_id: &LayerId,
     ) -> anyhow::Result<()> {
-        self.client
-            .post(format!(
-                "{}/layerDb/collections/{}/layers/{}",
-                self.params.geo_engine_url, collection_id, layer_id.0
-            ))
-            .header("Authorization", format!("Bearer {}", self.session_id))
-            .send()
-            .await
-            .context("Failed to add existing layer to collection")?;
+        retry_with_backoff(
+            || async {
+                self.client
+                    .post(format!(
+                        "{}/layerDb/collections/{}/layers/{}",
+                        self.params.geo_engine_url, collection_id, layer_id.0
+                    ))
+                    .header("Authorization", format!("Bearer {}", self.session_id))
+                    .send()
+                    .await
+            },
+            &format!("Add layer {} to collection {}", layer_id.0, collection_id),
+        )
+        .await
+        .context("Failed to add existing layer to collection")?;
 
         if self.params.verbose {
             println!("Added layer {} to collection {}", layer_id.0, collection_id);
@@ -990,14 +1021,20 @@ impl StacImporter {
         ];
 
         for permission in &permissions {
-            self.client
-                .put(format!("{}/permissions", self.params.geo_engine_url))
-                .header("Content-Type", "application/json")
-                .header("Authorization", format!("Bearer {}", self.session_id))
-                .json(&permission)
-                .send()
-                .await
-                .context("Failed to add permission")?;
+            retry_with_backoff(
+                || async {
+                    self.client
+                        .put(format!("{}/permissions", self.params.geo_engine_url))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", format!("Bearer {}", self.session_id))
+                        .json(&permission)
+                        .send()
+                        .await
+                },
+                &format!("Share layer collection with role {}", permission.role_id),
+            )
+            .await
+            .context("Failed to add permission")?;
         }
 
         Ok(())
@@ -1024,14 +1061,20 @@ impl StacImporter {
         ];
 
         for permission in &permissions {
-            self.client
-                .put(format!("{}/permissions", self.params.geo_engine_url))
-                .header("Content-Type", "application/json")
-                .header("Authorization", format!("Bearer {}", self.session_id))
-                .json(&permission)
-                .send()
-                .await
-                .context("Failed to add permission")?;
+            retry_with_backoff(
+                || async {
+                    self.client
+                        .put(format!("{}/permissions", self.params.geo_engine_url))
+                        .header("Content-Type", "application/json")
+                        .header("Authorization", format!("Bearer {}", self.session_id))
+                        .json(&permission)
+                        .send()
+                        .await
+                },
+                &format!("Share layer with role {}", permission.role_id),
+            )
+            .await
+            .context("Failed to add permission")?;
         }
 
         Ok(())
@@ -1182,13 +1225,19 @@ async fn query_item_collection(
             query_url,
             query_params,
         } => {
-            let item_collection: stac::ItemCollection = client
-                .get(query_url)
-                .query(&query_params)
-                .send()
-                .await?
-                .json()
-                .await?;
+            let item_collection: stac::ItemCollection = retry_with_backoff(
+                || async {
+                    client
+                        .get(query_url)
+                        .query(&query_params)
+                        .send()
+                        .await?
+                        .json()
+                        .await
+                },
+                "Query STAC first page",
+            )
+            .await?;
 
             let new_query_state = if let Some(next_link) =
                 item_collection.links.iter().find(|link| link.rel == "next")
@@ -1203,8 +1252,11 @@ async fn query_item_collection(
             Ok((item_collection, new_query_state))
         }
         QueryState::NextPage { next_url } => {
-            let item_collection: stac::ItemCollection =
-                client.get(next_url).send().await?.json().await?;
+            let item_collection: stac::ItemCollection = retry_with_backoff(
+                || async { client.get(next_url).send().await?.json().await },
+                "Query STAC next page",
+            )
+            .await?;
 
             let new_query_state = if let Some(next_link) =
                 item_collection.links.iter().find(|link| link.rel == "next")
@@ -1336,15 +1388,21 @@ async fn scan_collection(
     params: &StacImport,
     client: &reqwest::Client,
 ) -> anyhow::Result<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>> {
-    let collection: stac::Collection = client
-        .get(format!(
-            "{}/collections/{}",
-            params.stac_url, params.stac_collection
-        ))
-        .send()
-        .await?
-        .json()
-        .await?;
+    let collection: stac::Collection = retry_with_backoff(
+        || async {
+            client
+                .get(format!(
+                    "{}/collections/{}",
+                    params.stac_url, params.stac_collection
+                ))
+                .send()
+                .await?
+                .json()
+                .await
+        },
+        "Scan STAC collection",
+    )
+    .await?;
 
     // create datasets by grouping items by (epsg, data_type, resolution/grid)
     // because datasets must have uniform epsg, data_type, resolution
@@ -1614,16 +1672,22 @@ async fn login(
     geo_engine_password: &str,
 ) -> anyhow::Result<(reqwest::Client, String)> {
     let client = reqwest::Client::new();
-    let response = client
-        .post(format!("{geo_engine_url}/login"))
-        .header("Content-Type", "application/json")
-        .json(&serde_json::json!({
-            "email": geo_engine_email,
-            "password": geo_engine_password,
-        }))
-        .send()
-        .await
-        .context("Failed to authenticate")?;
+    let response = retry_with_backoff(
+        || async {
+            client
+                .post(format!("{geo_engine_url}/login"))
+                .header("Content-Type", "application/json")
+                .json(&serde_json::json!({
+                    "email": geo_engine_email,
+                    "password": geo_engine_password,
+                }))
+                .send()
+                .await
+        },
+        "Login to Geo Engine",
+    )
+    .await
+    .context("Failed to authenticate")?;
 
     let json = response
         .json::<serde_json::Value>()
@@ -1636,6 +1700,33 @@ async fn login(
         .to_string();
 
     Ok((client, session_id))
+}
+
+/// Helper function to retry async operations with exponential backoff
+async fn retry_with_backoff<F, Fut, T, E>(mut operation: F, operation_name: &str) -> Result<T, E>
+where
+    F: FnMut() -> Fut,
+    Fut: std::future::Future<Output = Result<T, E>>,
+    E: std::fmt::Display,
+{
+    let mut attempt = 0;
+    loop {
+        match operation().await {
+            Ok(result) => return Ok(result),
+            Err(err) => {
+                attempt += 1;
+                if attempt >= MAX_RETRIES {
+                    println!("{operation_name} failed after {MAX_RETRIES} attempts: {err}",);
+                    return Err(err);
+                }
+                let delay = Duration::from_millis(INITIAL_RETRY_DELAY_MS * 2_u64.pow(attempt - 1));
+                println!(
+                    "{operation_name} failed (attempt {attempt}/{MAX_RETRIES}): {err}. Retrying in {delay:?}...",
+                );
+                tokio::time::sleep(delay).await;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
