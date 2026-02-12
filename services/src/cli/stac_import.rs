@@ -476,20 +476,23 @@ impl StacImporter {
             );
         }
 
-        let eo_bands: Result<Vec<EoBand>, _> = serde_json::from_value(
-            asset
-                .additional_fields
-                .get("eo:bands")
-                .ok_or(anyhow::anyhow!("Missing eo:bands in asset"))?
-                .clone(),
-        );
+        let eo_bands: Result<Vec<EoBand>, _> = asset
+            .additional_fields
+            .get("eo:bands")
+            .ok_or(anyhow::anyhow!("Missing eo:bands in asset"))
+            .and_then(|eo_bands| {
+                serde_json::from_value(eo_bands.clone())
+                    .map_err(|e| anyhow::anyhow!("invalid eo:bands: {e}"))
+            });
 
-        let eo_bands = if let Ok(eo_bands) = eo_bands {
-            eo_bands
-        } else if self.params.missing_bands_handling {
-            handle_missing_eo_bands_for_asset(asset_key, asset)?
-        } else {
-            anyhow::bail!("Failed to parse eo:bands");
+        let eo_bands = match eo_bands {
+            Ok(eo_bands) => eo_bands,
+            Err(_) if self.params.missing_bands_handling => {
+                handle_missing_eo_bands_for_asset(asset_key, asset)?
+            }
+            Err(e) => {
+                return Err(e);
+            }
         };
 
         let dataset_bands = self
