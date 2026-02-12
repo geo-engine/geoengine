@@ -42,7 +42,7 @@ use std::path::PathBuf;
 use std::str::FromStr;
 use uuid::Uuid;
 
-/// Checks if the Geo Engine server is alive
+/// Import tiled datasets into a Geo Engine instance via directory scan and using the REST API.
 #[derive(Debug, Parser)]
 pub struct TileImport {
     /// where the files are scanned

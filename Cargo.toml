@@ -171,6 +171,7 @@ serial_test = "3.3"
 sha2 = "0.10"
 snafu = "0.8"
 stac = "0.16"
+stac-extensions = "0.1.5"
 stream-cancel = "0.8"
 strum = { version = "0.27", features = ["derive"] }
 strum_macros = "0.27"
