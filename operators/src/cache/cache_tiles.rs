@@ -6,6 +6,7 @@ use super::shared_cache::{
     RasterLandingQueryEntry,
 };
 use crate::util::Result;
+use geoengine_datatypes::primitives::BandSelection;
 use geoengine_datatypes::raster::{
     BaseTile, EmptyGrid, Grid, GridBoundingBoxExt, GridIntersection, GridOrEmpty, GridShape2D,
     GridSize, GridSpaceToLinearSpace, MaskedGrid, RasterTile,
@@ -204,6 +205,12 @@ where
             .time_interval()
             .union(&self.time)
             .map_err(|_| CacheError::ElementAndQueryDoNotIntersect)?;
+
+        if !query.attributes().contains(self.band) {
+            let mut old_sel = query.attributes().as_vec();
+            old_sel.push(self.band);
+            *query.attributes_mut() = BandSelection::new_unchecked(old_sel);
+        }
         Ok(())
     }
 
@@ -212,7 +219,7 @@ where
             .global_pixel_bounds()
             .intersects(&query.spatial_bounds())
             && self.time.intersects(&query.time_interval())
-            && query.attributes().as_slice().contains(&self.band)
+            && query.attributes().contains(self.band)
     }
 }
 
