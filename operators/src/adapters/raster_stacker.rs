@@ -4,7 +4,7 @@ use futures::stream::{Fuse, FusedStream, Stream};
 use futures::{Future, StreamExt, ready};
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridIdx2D, GridSize, Pixel, RasterTile2D, TileInformation, TilingStrategy,
+    GridBounds, GridIdx2D, Pixel, RasterTile2D, TileIdxBandCrossProductIter, TilingStrategy,
 };
 use pin_project::pin_project;
 use std::pin::Pin;
@@ -42,8 +42,9 @@ enum StreamState<T> {
         first_tiles: Vec<RasterTile2D<T>>,
         time_slice: TimeInterval,
         current_stream: usize,
-        current_band: usize,
-        current_spatial_tile: usize,
+        current_stream_band: u32,
+        current_tile: GridIdx2D,
+        current_out_band: u32,
     },
 }
 
@@ -58,27 +59,6 @@ impl<Q> From<(Q, Vec<u32>)> for RasterStackerSource<Q> {
         Self {
             queryable: value.0,
             band_idxs: value.1,
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct PartialQueryRect {
-    pub spatial_bounds: GridBoundingBox2D,
-    pub time_interval: TimeInterval,
-}
-
-impl PartialQueryRect {
-    fn raster_query_rectangle(&self, attributes: BandSelection) -> RasterQueryRectangle {
-        RasterQueryRectangle::new(self.spatial_bounds, self.time_interval, attributes)
-    }
-}
-
-impl From<RasterQueryRectangle> for PartialQueryRect {
-    fn from(value: RasterQueryRectangle) -> Self {
-        Self {
-            spatial_bounds: value.spatial_bounds(),
-            time_interval: value.time_interval(),
         }
     }
 }
@@ -98,8 +78,10 @@ where
     #[pin]
     state: State<T, F>,
     // the current query rectangle, which is advanced over time by increasing the start time
-    query_rect: PartialQueryRect,
-    num_spatial_tiles: Option<usize>,
+    query_rect: RasterQueryRectangle,
+    tiling_strategy: TilingStrategy,
+    // this iterator helps to keep track of the elements being produced
+    tile_band_iter: TileIdxBandCrossProductIter,
 }
 
 impl<T, F> RasterStackerAdapter<T, F>
@@ -109,41 +91,24 @@ where
     F::Stream: Stream<Item = Result<RasterTile2D<T>>>,
     F::Output: Future<Output = Result<F::Stream>>,
 {
-    pub fn new(queryables: Vec<RasterStackerSource<F>>, query_rect: PartialQueryRect) -> Self {
+    pub fn new(
+        queryables: Vec<RasterStackerSource<F>>,
+        query_rect: RasterQueryRectangle,
+        tiling_strategy: TilingStrategy,
+    ) -> Self {
+        let tile_band_iter = TileIdxBandCrossProductIter::with_grid_bounds_and_selection(
+            tiling_strategy
+                .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_bounds()),
+            query_rect.attributes().clone(),
+        );
+
         Self {
             sources: queryables,
             query_rect,
             state: State::Initial,
-            num_spatial_tiles: None,
+            tiling_strategy,
+            tile_band_iter,
         }
-    }
-
-    fn number_of_tiles_in_grid_bounds(
-        tile_info: &TileInformation,
-        grid_bounds: GridBoundingBox2D,
-    ) -> usize {
-        let strat = TilingStrategy {
-            tile_size_in_pixels: tile_info.tile_size_in_pixels,
-            geo_transform: tile_info.global_geo_transform,
-        };
-        strat
-            .global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds)
-            .number_of_elements()
-    }
-
-    fn grid_idx_for_nth_tile(
-        tile_info: &TileInformation,
-        pixel_bounds: GridBoundingBox2D,
-        n: usize,
-    ) -> Option<GridIdx2D> {
-        let strat = TilingStrategy {
-            tile_size_in_pixels: tile_info.tile_size_in_pixels,
-            geo_transform: tile_info.global_geo_transform,
-        };
-
-        strat
-            .tile_idx_iterator_from_grid_bounds(pixel_bounds)
-            .nth(n)
     }
 }
 
@@ -162,7 +127,8 @@ where
             sources,
             mut state,
             query_rect,
-            num_spatial_tiles,
+            tiling_strategy: _tiling_strategy,
+            tile_band_iter,
         } = self.project();
 
         loop {
@@ -171,7 +137,7 @@ where
                     let array_of_futures = sources
                         .iter()
                         .map(|source| {
-                            let query_rect = query_rect.raster_query_rectangle(
+                            let query_rect = query_rect.select_attributes(
                                 BandSelection::new_unchecked(source.band_idxs.clone()),
                             );
                             source.queryable.query(query_rect)
@@ -266,27 +232,30 @@ where
                                 });
                         }
 
-                        *num_spatial_tiles = Some(Self::number_of_tiles_in_grid_bounds(
-                            &ok_tiles[0].tile_information(),
-                            query_rect.spatial_bounds, //TODO: use direct mehtod instead of conversion
-                        ));
+                        let (first_tile, first_band) = tile_band_iter
+                            .next()
+                            .expect("There must be at least one band");
 
                         *stream_state = StreamState::ProducingTimeSlice {
                             first_tiles: ok_tiles,
                             time_slice: time,
                             current_stream: 0,
-                            current_band: 0,
-                            current_spatial_tile: 0,
+                            current_stream_band: 0,
+                            current_tile: first_tile,
+                            current_out_band: first_band,
                         }
                     }
                     StreamState::ProducingTimeSlice {
                         first_tiles,
                         time_slice,
                         current_stream,
-                        current_band,
-                        current_spatial_tile,
+                        current_stream_band,
+                        current_tile,
+                        current_out_band,
                     } => {
-                        let tile = if *current_spatial_tile == 0 && *current_band == 0 {
+                        let tile = if *current_tile == tile_band_iter.grid_bounds().min_index()
+                            && *current_stream_band == 0
+                        {
                             // consume tiles that were already computed first
                             Some(Ok(first_tiles[*current_stream].clone())) // TODO: avoid clone and instead consume the tile
                         } else {
@@ -305,10 +274,16 @@ where
                             }
                         };
 
+                        debug_assert!(
+                            !tile.time.is_instant(),
+                            "Tile time must be intervals with length > 0. Got an instant {}",
+                            tile.time
+                        );
+
                         debug_assert_eq!(
-                            tile.band, *current_band as u32,
+                            tile.band, *current_stream_band,
                             "RasterStacker got tile with unexpected band index: expected {}, got {} for source {}",
-                            current_band, tile.band, current_stream
+                            current_stream_band, tile.band, current_stream
                         );
 
                         debug_assert!(
@@ -322,70 +297,63 @@ where
                         );
 
                         debug_assert_eq!(
-                            Some(tile.tile_position),
-                            Self::grid_idx_for_nth_tile(
-                                &tile.tile_information(),
-                                query_rect.spatial_bounds,
-                                *current_spatial_tile
-                            ),
-                            "RasteStacker got tile with unexpected tile_position: expected {:?}, got {:?} for source {}",
-                            Self::grid_idx_for_nth_tile(
-                                &tile.tile_information(),
-                                query_rect.spatial_bounds,
-                                *current_spatial_tile
-                            ),
-                            tile.tile_position,
-                            current_stream
+                            tile.tile_position, *current_tile,
+                            "RasteStacker got tile with unexpected tile_position: expected (state) {:?}, got (tile) {:?} for source {}",
+                            current_tile, tile.tile_position, current_stream
                         );
 
-                        tile.band = sources
-                            .iter()
-                            .take(*current_stream)
-                            .map(|b| b.band_idxs.len() as u32)
-                            .sum::<u32>()
-                            + *current_band as u32;
+                        tile.band = *current_out_band;
                         tile.time = *time_slice;
 
-                        // make progress
-                        *current_band += 1;
-                        if *current_band >= sources[*current_stream].band_idxs.len() {
-                            *current_band = 0;
-                            *current_stream += 1;
-                        }
+                        let next_step = tile_band_iter.next();
 
-                        if *current_stream >= streams.len() {
-                            *current_stream = 0;
-                            *current_band = 0;
-                            *current_spatial_tile += 1;
-                        }
+                        match next_step {
+                            Some((next_tile, next_out_band)) if next_tile == *current_tile => {
+                                // the next tile is in the same spatial tile, just a different band
 
-                        if *current_spatial_tile >= num_spatial_tiles.unwrap_or_default() {
-                            *current_spatial_tile = 0;
-                            *current_band = 0;
-                            *current_stream = 0;
-
-                            let mut new_start = time_slice.end();
-
-                            if new_start == query_rect.time_interval.start() {
-                                // in the case that the time interval has no length, i.e. start=end,
-                                // we have to advance `new_start` to prevent infinite loops.
-                                // Otherwise, the new query rectangle would be equal to the previous one.
-                                new_start += 1;
-                            }
-
-                            if new_start >= query_rect.time_interval.end() {
-                                // the query window is exhausted, end the stream
-                                state.set(State::Finished);
-                            } else {
-                                // advance the query rectangle and reset the state so that the sources are queried again for the next time step
-                                query_rect.time_interval = TimeInterval::new_unchecked(
-                                    new_start,
-                                    query_rect.time_interval.end(),
+                                // make progress
+                                *current_out_band = next_out_band;
+                                *current_stream_band += 1;
+                                if *current_stream_band as usize
+                                    >= sources[*current_stream].band_idxs.len()
+                                {
+                                    *current_stream_band = 0;
+                                    *current_stream += 1;
+                                }
+                                debug_assert!(
+                                    *current_stream < sources.len(),
+                                    "Current stream must not excede the number of streams"
                                 );
+                            }
+                            Some((next_tile, next_band)) => {
+                                // the next tile is in a different spatial tile. We need to start with 0 here...
+                                *current_stream_band = 0;
+                                *current_stream = 0;
+                                *current_tile = next_tile;
+                                *current_out_band = next_band;
+                            }
+                            None => {
+                                // this is either a new TimeStep OR finish!
+                                let new_start = time_slice.end();
 
-                                state.set(State::Initial);
+                                if new_start >= query_rect.time_interval().end() {
+                                    // the query window is exhausted, end the stream
+                                    state.set(State::Finished);
+                                } else {
+                                    // advance the query rectangle and reset the state so that the sources are queried again for the next time step
+                                    *query_rect = query_rect.select_time_interval(
+                                        TimeInterval::new_unchecked(
+                                            new_start,
+                                            query_rect.time_interval().end(), // TODO: this could also be start +1
+                                        ),
+                                    );
+                                    tile_band_iter.reset(); // reset iter to start at first tile / band
+
+                                    state.set(State::Initial);
+                                }
                             }
                         }
+
                         return Poll::Ready(Some(Ok(tile)));
                     }
                 },
@@ -582,10 +550,14 @@ mod tests {
                 )
                     .into(),
             ],
-            PartialQueryRect {
-                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                time_interval: TimeInterval::new_unchecked(0, 10),
-            },
+            RasterQueryRectangle::new(
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TimeInterval::new_unchecked(0, 10),
+                BandSelection::new_unchecked(vec![0, 1]),
+            ),
+            result_descriptor
+                .tiling_grid_definition(exe_ctx.tiling_specification)
+                .generate_data_tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
@@ -693,10 +665,14 @@ mod tests {
                 )
                     .into(),
             ],
-            PartialQueryRect {
-                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                time_interval: TimeInterval::new_unchecked(0, 10),
-            },
+            RasterQueryRectangle::new(
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TimeInterval::new_unchecked(0, 10),
+                BandSelection::new_unchecked(vec![0]),
+            ),
+            result_descriptor
+                .tiling_grid_definition(exe_ctx.tiling_specification)
+                .generate_data_tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
@@ -970,10 +946,14 @@ mod tests {
                 )
                     .into(),
             ],
-            PartialQueryRect {
-                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                time_interval: TimeInterval::new_unchecked(0, 10),
-            },
+            RasterQueryRectangle::new(
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TimeInterval::new_unchecked(0, 10),
+                BandSelection::first_n(4),
+            ),
+            result_descriptor_1
+                .tiling_grid_definition(exe_ctx.tiling_specification)
+                .generate_data_tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
@@ -1264,10 +1244,14 @@ mod tests {
                 )
                     .into(),
             ],
-            PartialQueryRect {
-                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                time_interval: TimeInterval::new_unchecked(0, 10),
-            },
+            RasterQueryRectangle::new(
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TimeInterval::new_unchecked(0, 10),
+                BandSelection::first_n(4),
+            ),
+            result_descriptor_1
+                .tiling_grid_definition(exe_ctx.tiling_specification)
+                .generate_data_tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;
@@ -1924,10 +1908,14 @@ mod tests {
                 )
                     .into(),
             ],
-            PartialQueryRect {
-                spatial_bounds: GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                time_interval: TimeInterval::new_unchecked(0, 10),
-            },
+            RasterQueryRectangle::new(
+                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+                TimeInterval::new_unchecked(0, 10),
+                BandSelection::first_n(6),
+            ),
+            result_descriptor_1
+                .tiling_grid_definition(exe_ctx.tiling_specification)
+                .generate_data_tiling_strategy(),
         );
 
         let result = stacker.collect::<Vec<_>>().await;

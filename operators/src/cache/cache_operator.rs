@@ -501,7 +501,7 @@ mod tests {
         source::{GdalSource, GdalSourceParameters},
         util::gdal::add_ndvi_dataset,
     };
-    use futures::StreamExt;
+    use futures::{StreamExt, TryStreamExt};
     use geoengine_datatypes::{
         primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
         raster::{GridBoundingBox2D, RasterDataType, RenameBands, TilesEqualIgnoringCacheHint},
@@ -654,9 +654,9 @@ mod tests {
         // only keep the second band for comparison
         let tiles = tiles
             .into_iter()
-            .filter_map(|mut tile| {
+            .filter_map(|tile| {
                 if tile.band == 1 {
-                    tile.band = 0;
+                    //tile.band = 0;
                     Some(tile)
                 } else {
                     None
@@ -690,5 +690,153 @@ mod tests {
             .unwrap();
 
         assert!(tiles.tiles_equal_ignoring_cache_hint(&tiles_from_cache));
+    }
+
+    #[tokio::test]
+    async fn it_reuses_multi_band_subset() {
+        let mut exe_ctx = MockExecutionContext::test_default();
+
+        let ndvi_id = add_ndvi_dataset(&mut exe_ctx);
+
+        let source_operator_a = GdalSource {
+            params: GdalSourceParameters::new(ndvi_id.clone()),
+        };
+
+        let source_operator_b = GdalSource {
+            params: GdalSourceParameters::new(ndvi_id.clone()),
+        };
+
+        let stacked_operator = RasterStacker {
+            params: RasterStackerParams {
+                rename_bands: RenameBands::Rename(vec!["band_0".to_string(), "band_1".to_string()]),
+            },
+            sources: MultipleRasterSources {
+                rasters: vec![source_operator_a.boxed(), source_operator_b.boxed()],
+            },
+        };
+
+        let operator = stacked_operator
+            .boxed()
+            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
+            .await
+            .unwrap();
+
+        let cached_op = InitializedCacheOperator::new(operator);
+
+        let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
+
+        let tile_cache = Arc::new(SharedCache::test_default());
+
+        let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
+            ChunkByteSize::test_default(),
+            Some(tile_cache),
+            None,
+            None,
+        );
+
+        // query the first two bands
+        let stream = processor
+            .query(
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::new(vec![0, 1]).unwrap(),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        // now count the tiles per band by folding over the stream
+        let tile_per_band_count: (usize, usize) = stream
+            .fold((0usize, 0usize), |mut acc, tile_result| async move {
+                match tile_result {
+                    Ok(tile) => {
+                        if tile.band == 0 {
+                            acc.0 += 1;
+                        } else if tile.band == 1 {
+                            acc.1 += 1;
+                        }
+                    }
+                    Err(_) => {
+                        panic!("Error in tile stream")
+                    }
+                }
+                acc
+            })
+            .await;
+
+        assert!(
+            tile_per_band_count.0 > 0,
+            "There should be tiles for band 0"
+        );
+        assert_eq!(
+            tile_per_band_count.0, tile_per_band_count.1,
+            "Both bands should have the same number of tiles"
+        );
+
+        // wait for the cache to be filled, which happens asynchronously
+        tokio::time::sleep(std::time::Duration::from_millis(1000)).await;
+
+        // delete the dataset to make sure the result is served from the cache
+        exe_ctx.delete_meta_data(&ndvi_id);
+
+        // now query only the second band
+        let stream_from_cache_0 = processor
+            .query(
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::first_n(1),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let band_0_count = stream_from_cache_0
+            .inspect_ok(|tile| {
+                assert_eq!(tile.band, 0, "Only band 0 should be present in the result");
+            })
+            .count()
+            .await;
+
+        assert!(
+            band_0_count > 0,
+            "There should be tiles for band 0 in the cache result"
+        );
+        assert_eq!(
+            band_0_count, tile_per_band_count.0,
+            "The number of tiles for band 0 should match the previous query"
+        );
+
+        // now query only the second band
+        let stream_from_cache_1 = processor
+            .query(
+                RasterQueryRectangle::new(
+                    GridBoundingBox2D::new([-90, -180], [89, 179]).unwrap(),
+                    TimeInterval::default(),
+                    BandSelection::new_single(1),
+                ),
+                &query_ctx,
+            )
+            .await
+            .unwrap();
+
+        let band_1_count = stream_from_cache_1
+            .inspect_ok(|tile| {
+                assert_eq!(tile.band, 1, "Only band 1 should be present in the result");
+            })
+            .count()
+            .await;
+
+        assert!(
+            band_1_count > 1,
+            "There should be tiles for band 1 in the cache result"
+        );
+        assert_eq!(
+            band_1_count, tile_per_band_count.1,
+            "The number of tiles for band 1 should match the previous query"
+        );
     }
 }

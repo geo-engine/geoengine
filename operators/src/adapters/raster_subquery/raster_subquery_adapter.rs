@@ -12,7 +12,9 @@ use futures::{
 use geoengine_datatypes::primitives::RasterQueryRectangle;
 use geoengine_datatypes::primitives::TimeInterval;
 use geoengine_datatypes::primitives::{BandSelectionIter, CacheHint};
-use geoengine_datatypes::raster::{GridOrEmpty, TileInformationIter, TilingStrategy};
+use geoengine_datatypes::raster::{
+    GridOrEmpty, TileInformationBandCrossProductIter, TilingStrategy,
+};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D, TileInformation};
 use rayon::ThreadPool;
 use std::pin::Pin;
@@ -44,56 +46,6 @@ type IntoTileFuture<'a, T> = BoxFuture<'a, Result<RasterTile2D<T>>>;
 /// This adapter allows to generate a tile stream using sub-querys.
 /// This is done using a `TileSubQuery`.
 /// The sub-query is resolved for each produced tile.
-
-#[derive(Clone, Debug)]
-struct TileBandCrossProductIter {
-    tile_iter: TileInformationIter,
-    band_iter: BandSelectionIter,
-    current_tile: Option<TileInformation>,
-}
-
-impl TileBandCrossProductIter {
-    fn new(tile_iter: TileInformationIter, band_iter: BandSelectionIter) -> Self {
-        let mut tile_iter = tile_iter;
-        let current_tile = tile_iter.next();
-        Self {
-            tile_iter,
-            band_iter,
-            current_tile,
-        }
-    }
-
-    fn reset(&mut self) {
-        self.band_iter.reset();
-        self.tile_iter.reset();
-        self.current_tile = self.tile_iter.next();
-    }
-}
-
-impl Iterator for TileBandCrossProductIter {
-    type Item = (TileInformation, u32);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let current_t = self.current_tile;
-
-        match (current_t, self.band_iter.next()) {
-            (None, _) => None,
-            (Some(t), Some(b)) => Some((t, b)),
-            (Some(_t), None) => {
-                self.band_iter.reset();
-                self.current_tile = self.tile_iter.next();
-                self.current_tile.map(|t| {
-                    (
-                        t,
-                        self.band_iter
-                            .next()
-                            .expect("There must be at least one band"),
-                    )
-                })
-            }
-        }
-    }
-}
 
 #[pin_project(project=StateInnerProjection)]
 #[derive(Debug, Clone)]
@@ -173,7 +125,7 @@ where
     /// This `TimeInterval` is the time currently worked on
     current_time: TimeInterval,
 
-    band_tile_iter: TileBandCrossProductIter,
+    band_tile_iter: TileInformationBandCrossProductIter,
 
     /// This current state of the adapter
     #[pin]
@@ -205,7 +157,7 @@ where
         let tile_iter = tiling_strategy
             .tile_information_iterator_from_pixel_bounds(query_rect_to_answer.spatial_bounds());
         let band_iter = BandSelectionIter::new(query_rect_to_answer.attributes().clone());
-        let band_tile_iter = TileBandCrossProductIter::new(tile_iter, band_iter);
+        let band_tile_iter = TileInformationBandCrossProductIter::new(tile_iter, band_iter);
 
         Self {
             current_time: TimeInterval::default(), // This is overwritten in the first poll_next call!

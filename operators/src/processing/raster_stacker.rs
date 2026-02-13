@@ -353,6 +353,10 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<T>>>> {
         let mut sources = vec![];
+        let tiling_strat = self
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         for (idx, source) in self.sources.iter().enumerate() {
             let Some(bands) =
@@ -367,7 +371,7 @@ where
             });
         }
 
-        let output = RasterStackerAdapter::new(sources, query.into());
+        let output = RasterStackerAdapter::new(sources, query, tiling_strat);
 
         Ok(Box::pin(output))
     }
@@ -447,6 +451,18 @@ mod tests {
         assert_eq!(
             map_query_bands_to_source_bands(&[1, 2, 3].try_into().unwrap(), &[2, 2], 1),
             Some([0, 1].try_into().unwrap())
+        );
+    }
+
+    #[test]
+    fn it_maps_query_subsets() {
+        assert_eq!(
+            map_query_bands_to_source_bands(&[0].try_into().unwrap(), &[1, 1], 0),
+            Some(0.into())
+        );
+        assert_eq!(
+            map_query_bands_to_source_bands(&[1].try_into().unwrap(), &[1, 1], 1),
+            Some(0.into())
         );
     }
 
@@ -1044,7 +1060,16 @@ mod tests {
             .await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(data2.tiles_equal_ignoring_cache_hint(&result));
+        let expected_band1: Vec<_> = data2
+            .iter()
+            .map(|t| {
+                let mut t_1 = t.clone();
+                t_1.band = 1;
+                t_1
+            })
+            .collect();
+
+        assert!(expected_band1.tiles_equal_ignoring_cache_hint(&result));
     }
 
     #[tokio::test]
@@ -1096,11 +1121,6 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
 
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
-
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         // query both bands
@@ -1139,9 +1159,10 @@ mod tests {
             .unwrap()
             .collect::<Vec<_>>()
             .await;
-        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+        let result_0 = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(!result.is_empty());
+        assert!(!result_0.is_empty());
+        assert!(result_0.iter().all(|t| t.band == 0));
 
         // query only second band
         let query_rect = RasterQueryRectangle::new(
@@ -1159,9 +1180,12 @@ mod tests {
             .unwrap()
             .collect::<Vec<_>>()
             .await;
-        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+        let result_1 = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(!result.is_empty());
+        assert!(!result_1.is_empty());
+        assert!(result_1.iter().all(|t| t.band == 1));
+
+        assert_eq!(result_0.len(), result_1.len());
     }
 
     #[test]

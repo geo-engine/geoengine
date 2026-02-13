@@ -218,7 +218,7 @@ impl QueryAttributeSelection for BandSelection {}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]
 pub struct BandSelectionIter {
-    band_selection: BandSelection,
+    pub band_selection: BandSelection,
     next_index: usize,
 }
 
