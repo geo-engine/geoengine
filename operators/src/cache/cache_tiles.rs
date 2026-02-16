@@ -6,7 +6,6 @@ use super::shared_cache::{
     RasterLandingQueryEntry,
 };
 use crate::util::Result;
-use geoengine_datatypes::primitives::BandSelection;
 use geoengine_datatypes::raster::{
     BaseTile, EmptyGrid, Grid, GridBoundingBoxExt, GridIntersection, GridOrEmpty, GridShape2D,
     GridSize, GridSpaceToLinearSpace, MaskedGrid, RasterTile,
