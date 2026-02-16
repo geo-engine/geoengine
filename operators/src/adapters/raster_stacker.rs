@@ -234,7 +234,7 @@ where
 
                         let (first_tile, first_band) = tile_band_iter
                             .next()
-                            .expect("There must be at least one band");
+                            .expect("There must be at least one tile and band");
 
                         *stream_state = StreamState::ProducingTimeSlice {
                             first_tiles: ok_tiles,
