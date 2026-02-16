@@ -692,6 +692,7 @@ mod tests {
         assert!(tiles.tiles_equal_ignoring_cache_hint(&tiles_from_cache));
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn it_reuses_multi_band_subset() {
         let mut exe_ctx = MockExecutionContext::test_default();
@@ -758,8 +759,8 @@ mod tests {
                             acc.1 += 1;
                         }
                     }
-                    Err(_) => {
-                        panic!("Error in tile stream")
+                    Err(e) => {
+                        panic!("Error in tile stream: {e}")
                     }
                 }
                 acc
