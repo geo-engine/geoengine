@@ -516,10 +516,6 @@ impl GridIdx2DIter {
         self.x_pos = self.grid_bounds.x_min();
         self.y_pos = self.grid_bounds.y_min();
     }
-
-    pub fn next_is_min_index(&self) -> bool {
-        self.grid_bounds.min_index() == GridIdx::new_y_x(self.y_pos, self.x_pos)
-    }
 }
 
 impl Iterator for GridIdx2DIter {
