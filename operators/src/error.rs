@@ -353,6 +353,10 @@ pub enum Error {
     TimeProjectionOperator {
         source: crate::processing::TimeProjectionError,
     },
+    #[snafu(display("BandFilter error: {source}"), context(false))]
+    BandFilterOperator {
+        source: crate::processing::BandFilterError,
+    },
     #[snafu(display("MockRasterSource error: {}", source))]
     MockRasterSource {
         source: crate::mock::MockRasterSourceError,

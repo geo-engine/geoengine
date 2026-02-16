@@ -1,3 +1,4 @@
+mod band_filter;
 mod band_neighborhood_aggregate;
 mod bandwise_expression;
 mod circle_merging_quadtree;
@@ -21,6 +22,7 @@ mod time_projection;
 mod time_shift;
 mod vector_join;
 
+pub use band_filter::{BandFilter, BandFilterError, BandFilterParams};
 pub use band_neighborhood_aggregate::{
     BandNeighborhoodAggregate, BandNeighborhoodAggregateError, BandNeighborhoodAggregateParams,
 };
