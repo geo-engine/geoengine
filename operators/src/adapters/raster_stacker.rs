@@ -344,7 +344,7 @@ where
                                     *query_rect = query_rect.select_time_interval(
                                         TimeInterval::new_unchecked(
                                             new_start,
-                                            query_rect.time_interval().end(), // TODO: this could also be start +1
+                                            query_rect.time_interval().end(),
                                         ),
                                     );
                                     tile_band_iter.reset(); // reset iter to start at first tile / band
