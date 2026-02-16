@@ -474,6 +474,15 @@ where
             .ok_or(CacheError::QueryNotFoundInLandingZone)?;
         let res = cache.add_query_element_to_landing_zone(query_id, landing_zone_element);
 
+        #[cfg(debug_assertions)]
+        match res.as_ref() {
+            Err(CacheError::TileExpiredBeforeInsertion) => {
+                tracing::trace!("Element expired before insertion.");
+            }
+            Err(er) => tracing::debug!("Error on insert query element: {er}"),
+            _ => {}
+        }
+
         // if we cant add the element to the landing zone, we remove the query from the landing zone
         if res.is_err() {
             let _old_entry = cache.remove_query_from_landing_zone(query_id);
