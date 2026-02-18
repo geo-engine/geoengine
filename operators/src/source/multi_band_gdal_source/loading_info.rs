@@ -67,7 +67,9 @@ impl MultiBandGdalLoadingInfo {
         &self.time_steps
     }
 
-    /// Return all files necessary to load a single tile, sorted by z-index. Might be empty if no files are needed.
+    /// Return all files necessary to load a single tile, sorted by z-index.
+    /// Might be empty if no files are needed.
+    /// Files that are completely covered by files with higher z-index are filtered out.
     pub fn tile_files(
         &self,
         time: TimeInterval,
@@ -76,7 +78,8 @@ impl MultiBandGdalLoadingInfo {
     ) -> Vec<GdalDatasetParameters> {
         let tile_partition = tile.spatial_partition();
 
-        let mut files = vec![];
+        // First, collect all matching files with their intersections with the tile
+        let mut matching_files = vec![];
         for file in &self.files {
             if time.intersects(&file.time)
                 && file.spatial_partition.intersects(&tile_partition)
@@ -84,11 +87,35 @@ impl MultiBandGdalLoadingInfo {
             {
                 debug_assert!(file.time == time, "file's time must match query time");
 
-                files.push(file.params.clone());
+                if let Some(bbox_in_tile) = file.spatial_partition.intersection(&tile_partition) {
+                    matching_files.push((file, bbox_in_tile));
+                }
             }
         }
 
-        files
+        // Filter out files that are completely covered by files with higher z-index
+        // Files are already sorted by z-index (ascending) per the constructor's assertion
+        let mut result = Vec::new();
+
+        for (i, (file, file_bbox_in_tile)) in matching_files.iter().enumerate() {
+            // Check if this file is completely covered by any file with higher z-index
+            let is_completely_covered = matching_files
+                .iter()
+                .skip(i + 1)
+                .any(|(_, higher_bbox)| higher_bbox.contains(file_bbox_in_tile));
+
+            if is_completely_covered {
+                tracing::debug!(
+                    "File {} with z-index {} is completely covered by a file with higher z-index and will be skipped",
+                    file.params.file_path.display(),
+                    file.z_index
+                );
+            } else {
+                result.push(file.params.clone());
+            }
+        }
+
+        result
     }
 
     pub fn cache_hint(&self) -> CacheHint {
