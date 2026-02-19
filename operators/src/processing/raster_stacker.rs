@@ -1,4 +1,4 @@
-use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
+use crate::adapters::{PartialQueryRect, QueryWrapper, RasterStackerAdapter, RasterStackerSource};
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, MultipleRasterSources, Operator, OperatorName, QueryContext,
@@ -11,6 +11,7 @@ use crate::error::{
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
+use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
@@ -371,7 +372,29 @@ where
             });
         }
 
-        let output = RasterStackerAdapter::new(sources, query, tiling_strat);
+        #[cfg(debug_assertions)]
+        {
+            let num_input_bands = self.bands_per_source.iter().sum::<u32>() as usize;
+            let num_query_bands = query.attributes().as_vec().iter().count();
+
+            let fact = num_input_bands as f32 / num_query_bands as f32;
+
+            tracing::debug!(
+                "StackerAdapter queries {num_input_bands} to produce {num_query_bands}. This is {fact}x the work required."
+            );
+        }
+
+        let query_band_selection = query.attributes().clone();
+        let partial_query = PartialQueryRect::from(query);
+        let output =
+            RasterStackerAdapter::new(sources, partial_query, tiling_strat).filter_map(move |o| {
+                let pred = match o {
+                    Ok(tile) if query_band_selection.contains(tile.band) => Some(Ok(tile)),
+                    Ok(_) => None,
+                    Err(e) => Some(Err(e)),
+                };
+                std::future::ready(pred)
+            });
 
         Ok(Box::pin(output))
     }

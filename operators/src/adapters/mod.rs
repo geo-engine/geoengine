@@ -9,7 +9,9 @@ mod time_stream_merge;
 
 use band_extractor::BandExtractor;
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
-pub use raster_stacker::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
+pub use raster_stacker::{
+    PartialQueryRect, QueryWrapper, RasterStackerAdapter, RasterStackerSource,
+};
 pub use raster_subquery::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
     TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,

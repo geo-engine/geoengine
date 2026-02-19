@@ -5,7 +5,8 @@ use futures::stream::{BoxStream, Fuse, FusedStream, Stream};
 use futures::{Future, StreamExt, ready};
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{
-    GridBounds, GridIdx2D, Pixel, RasterTile2D, TileIdxBandCrossProductIter, TilingStrategy,
+    GridBoundingBox2D, GridBounds, GridIdx2D, Pixel, RasterTile2D, TileIdxBandCrossProductIter,
+    TilingStrategy,
 };
 use pin_project::pin_project;
 use std::pin::Pin;
@@ -102,6 +103,33 @@ impl<Q> From<(Q, Vec<u32>)> for RasterStackerSource<Q> {
         }
     }
 }
+#[derive(Debug)]
+pub struct PartialQueryRect {
+    pub spatial_bounds: GridBoundingBox2D,
+    pub time_interval: TimeInterval,
+}
+
+impl PartialQueryRect {
+    fn raster_query_rectangle(&self, attributes: BandSelection) -> RasterQueryRectangle {
+        RasterQueryRectangle::new(self.spatial_bounds, self.time_interval, attributes)
+    }
+
+    pub fn new(spatial_bounds: GridBoundingBox2D, time_interval: TimeInterval) -> Self {
+        PartialQueryRect {
+            spatial_bounds,
+            time_interval,
+        }
+    }
+}
+
+impl From<RasterQueryRectangle> for PartialQueryRect {
+    fn from(value: RasterQueryRectangle) -> Self {
+        Self {
+            spatial_bounds: value.spatial_bounds(),
+            time_interval: value.time_interval(),
+        }
+    }
+}
 
 /// Stacks the bands of the input raster streams to create a single raster stream with all the combined bands.
 /// The input streams are automatically temporally aligned.
@@ -118,7 +146,8 @@ where
     #[pin]
     state: State<T, F>,
     // the current query rectangle, which is advanced over time by increasing the start time
-    query_rect: RasterQueryRectangle,
+    query_rect: PartialQueryRect,
+
     tiling_strategy: TilingStrategy,
     // this iterator helps to keep track of the elements being produced
     tile_band_iter: TileIdxBandCrossProductIter,
@@ -133,13 +162,14 @@ where
 {
     pub fn new(
         queryables: Vec<RasterStackerSource<F>>,
-        query_rect: RasterQueryRectangle,
+        query_rect: PartialQueryRect,
         tiling_strategy: TilingStrategy,
     ) -> Self {
+        let number_of_bands: usize = queryables.iter().map(|s| s.band_idxs.len()).sum();
+
         let tile_band_iter = TileIdxBandCrossProductIter::with_grid_bounds_and_selection(
-            tiling_strategy
-                .global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_bounds()),
-            query_rect.attributes().clone(),
+            tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(query_rect.spatial_bounds),
+            BandSelection::first_n(number_of_bands as u32),
         );
 
         Self {
@@ -177,7 +207,7 @@ where
                     let array_of_futures = sources
                         .iter()
                         .map(|source| {
-                            let query_rect = query_rect.select_attributes(
+                            let query_rect = query_rect.raster_query_rectangle(
                                 BandSelection::new_unchecked(source.band_idxs.clone()),
                             );
                             source.queryable.query(query_rect)
@@ -392,16 +422,14 @@ where
                                 // this is either a new TimeStep OR finish!
                                 let new_start = time_slice.end();
 
-                                if new_start >= query_rect.time_interval().end() {
+                                if new_start >= query_rect.time_interval.end() {
                                     // the query window is exhausted, end the stream
                                     state.set(State::Finished);
                                 } else {
                                     // advance the query rectangle and reset the state so that the sources are queried again for the next time step
-                                    *query_rect = query_rect.select_time_interval(
-                                        TimeInterval::new_unchecked(
-                                            new_start,
-                                            query_rect.time_interval().end(),
-                                        ),
+                                    query_rect.time_interval = TimeInterval::new_unchecked(
+                                        new_start,
+                                        query_rect.time_interval.end(),
                                     );
                                     tile_band_iter.reset(); // reset iter to start at first tile / band
 
@@ -605,10 +633,9 @@ mod tests {
                 )
                     .into(),
             ],
-            RasterQueryRectangle::new(
+            PartialQueryRect::new(
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 TimeInterval::new_unchecked(0, 10),
-                BandSelection::new_unchecked(vec![0, 1]),
             ),
             result_descriptor
                 .tiling_grid_definition(exe_ctx.tiling_specification)
@@ -720,10 +747,9 @@ mod tests {
                 )
                     .into(),
             ],
-            RasterQueryRectangle::new(
+            PartialQueryRect::new(
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 TimeInterval::new_unchecked(0, 10),
-                BandSelection::new_unchecked(vec![0]),
             ),
             result_descriptor
                 .tiling_grid_definition(exe_ctx.tiling_specification)
@@ -1001,10 +1027,9 @@ mod tests {
                 )
                     .into(),
             ],
-            RasterQueryRectangle::new(
+            PartialQueryRect::new(
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 TimeInterval::new_unchecked(0, 10),
-                BandSelection::first_n(4),
             ),
             result_descriptor_1
                 .tiling_grid_definition(exe_ctx.tiling_specification)
@@ -1299,10 +1324,9 @@ mod tests {
                 )
                     .into(),
             ],
-            RasterQueryRectangle::new(
+            PartialQueryRect::new(
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 TimeInterval::new_unchecked(0, 10),
-                BandSelection::first_n(4),
             ),
             result_descriptor_1
                 .tiling_grid_definition(exe_ctx.tiling_specification)
@@ -1963,10 +1987,9 @@ mod tests {
                 )
                     .into(),
             ],
-            RasterQueryRectangle::new(
+            PartialQueryRect::new(
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
                 TimeInterval::new_unchecked(0, 10),
-                BandSelection::first_n(6),
             ),
             result_descriptor_1
                 .tiling_grid_definition(exe_ctx.tiling_specification)
@@ -2341,594 +2364,6 @@ mod tests {
                 band: 4,
                 global_geo_transform: TestDefault::test_default(),
                 grid_array: Grid::new([2, 2].into(), vec![28, 29, 30, 31])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
-                band: 5,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![31, 30, 39, 28])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-        ];
-
-        assert_eq_two_list_of_tiles(&expected, &result, false);
-    }
-
-    #[tokio::test]
-    async fn it_produces_selected_bands() {
-        let result_descriptor_1 = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_regular_with_epoch(None, TimeStep::millis(5).unwrap()),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::test_default(),
-                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-            ),
-            bands: vec![
-                RasterBandDescriptor::new("mrs1 band1".to_string(), Measurement::Unitless),
-                RasterBandDescriptor::new("mrs1 band2".to_string(), Measurement::Unitless),
-                RasterBandDescriptor::new("mrs1 band3".to_string(), Measurement::Unitless),
-            ]
-            .try_into()
-            .unwrap(),
-        };
-
-        let result_descriptor_2 = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_irregular(None),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::test_default(),
-                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-            ),
-            bands: vec![RasterBandDescriptor::new(
-                "mrs2 band2".to_string(),
-                Measurement::Unitless,
-            )]
-            .try_into()
-            .unwrap(),
-        };
-
-        let result_descriptor_3 = RasterResultDescriptor {
-            data_type: RasterDataType::U8,
-            spatial_reference: SpatialReference::epsg_4326().into(),
-            time: TimeDescriptor::new_irregular(None),
-            spatial_grid: SpatialGridDescriptor::source_from_parts(
-                GeoTransform::test_default(),
-                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-            ),
-            bands: vec![
-                RasterBandDescriptor::new("mrs3 band1".to_string(), Measurement::Unitless),
-                RasterBandDescriptor::new("mrs3 band2".to_string(), Measurement::Unitless),
-            ]
-            .try_into()
-            .unwrap(),
-        };
-
-        // input 1: 3 bands
-        let data: Vec<RasterTile2D<u8>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![0, 1, 2, 3]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![3, 2, 1, 0]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![223, 222, 221, 20])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![4, 5, 6, 7]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 6, 5, 4]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 5),
-                tile_position: [-1, 1].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![227, 226, 225, 224])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![8, 9, 10, 11]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![11, 10, 9, 8]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![211, 210, 29, 28])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![12, 13, 14, 15])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![15, 14, 13, 12])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
-                band: 2,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![215, 214, 213, 212])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-        ];
-
-        // input 2: 1 band
-        let data2: Vec<RasterTile2D<u8>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![88, 77, 66, 55])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![87, 76, 65, 54])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-        ];
-
-        // input 3: 2 bands
-        let data3: Vec<RasterTile2D<u8>> = vec![
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![16, 17, 18, 19])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 18, 17, 16])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![20, 21, 22, 23])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![32, 22, 21, 20])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 10),
-                tile_position: [-1, 0].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![24, 25, 26, 27])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 10),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![27, 26, 25, 24])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 10),
-                tile_position: [-1, 1].into(),
-                band: 0,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![28, 29, 30, 31])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 10),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![31, 30, 39, 28])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-        ];
-
-        let mrs1 = MockRasterSource {
-            params: MockRasterSourceParams {
-                data: data.clone(),
-                result_descriptor: result_descriptor_1.clone(),
-            },
-        }
-        .boxed();
-
-        let mrs2 = MockRasterSource {
-            params: MockRasterSourceParams {
-                data: data2.clone(),
-                result_descriptor: result_descriptor_2,
-            },
-        }
-        .boxed();
-
-        let mrs3 = MockRasterSource {
-            params: MockRasterSourceParams {
-                data: data3.clone(),
-                result_descriptor: result_descriptor_3,
-            },
-        }
-        .boxed();
-
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
-
-        let qp1 = mrs1
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap()
-            .query_processor()
-            .unwrap()
-            .get_u8()
-            .unwrap();
-
-        let qp2 = mrs2
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap()
-            .query_processor()
-            .unwrap()
-            .get_u8()
-            .unwrap();
-
-        let qp3 = mrs3
-            .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)
-            .await
-            .unwrap()
-            .query_processor()
-            .unwrap()
-            .get_u8()
-            .unwrap();
-
-        let query_ctx = exe_ctx.mock_query_context_test_default();
-
-        let stacker = RasterStackerAdapter::new(
-            vec![
-                (
-                    QueryWrapper {
-                        p: &qp1,
-                        ctx: &query_ctx,
-                    },
-                    vec![1],
-                )
-                    .into(),
-                (
-                    QueryWrapper {
-                        p: &qp2,
-                        ctx: &query_ctx,
-                    },
-                    vec![0],
-                )
-                    .into(),
-                (
-                    QueryWrapper {
-                        p: &qp3,
-                        ctx: &query_ctx,
-                    },
-                    vec![1],
-                )
-                    .into(),
-            ],
-            RasterQueryRectangle::new(
-                GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
-                TimeInterval::new_unchecked(0, 10),
-                BandSelection::new(vec![1, 3, 5]).unwrap(),
-            ),
-            result_descriptor_1
-                .tiling_grid_definition(exe_ctx.tiling_specification)
-                .generate_data_tiling_strategy(),
-        );
-
-        let result = stacker.collect::<Vec<_>>().await;
-        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
-
-        let expected: Vec<RasterTile2D<u8>> = vec![
-            // time slice 1
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![3, 2, 1, 0]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 0].into(),
-                band: 3,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![88, 77, 66, 55])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 0].into(),
-                band: 5,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![19, 18, 17, 16])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 6, 5, 4]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 1].into(),
-                band: 3,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![87, 76, 65, 54])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(0, 2),
-                tile_position: [-1, 1].into(),
-                band: 5,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![32, 22, 21, 20])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 5),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![3, 2, 1, 0]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 5),
-                tile_position: [-1, 0].into(),
-                band: 3,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![86, 75, 63, 51])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 5),
-                tile_position: [-1, 0].into(),
-                band: 5,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![27, 26, 25, 24])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 5),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![7, 6, 5, 4]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 5),
-                tile_position: [-1, 1].into(),
-                band: 3,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![85, 74, 62, 50])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(2, 5),
-                tile_position: [-1, 1].into(),
-                band: 5,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![31, 30, 39, 28])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            // time slice 3
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![11, 10, 9, 8]).unwrap().into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
-                band: 3,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![86, 75, 63, 51])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 0].into(),
-                band: 5,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![27, 26, 25, 24])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
-                band: 1,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![15, 14, 13, 12])
-                    .unwrap()
-                    .into(),
-                properties: Default::default(),
-                cache_hint: CacheHint::default(),
-            },
-            RasterTile2D {
-                time: TimeInterval::new_unchecked(5, 10),
-                tile_position: [-1, 1].into(),
-                band: 3,
-                global_geo_transform: TestDefault::test_default(),
-                grid_array: Grid::new([2, 2].into(), vec![85, 74, 62, 50])
                     .unwrap()
                     .into(),
                 properties: Default::default(),
