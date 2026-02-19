@@ -335,10 +335,6 @@ pub enum Error {
         source: crate::util::statistics::StatisticsError,
     },
 
-    #[snafu(display("SparseTilesFillAdapter error: {}", source))]
-    SparseTilesFillAdapter {
-        source: crate::adapters::SparseTilesFillAdapterError,
-    },
     #[snafu(display("Expression error: {source}"), context(false))]
     ExpressionOperator {
         source: crate::processing::RasterExpressionError,
@@ -534,12 +530,6 @@ pub enum Error {
     Optimization {
         source: OptimizationError,
     },
-}
-
-impl From<crate::adapters::SparseTilesFillAdapterError> for Error {
-    fn from(source: crate::adapters::SparseTilesFillAdapterError) -> Self {
-        Error::SparseTilesFillAdapter { source }
-    }
 }
 
 impl From<crate::mock::MockRasterSourceError> for Error {
