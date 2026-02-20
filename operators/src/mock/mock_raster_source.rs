@@ -732,6 +732,7 @@ mod tests {
         );
     }
 
+    #[allow(clippy::too_many_lines)]
     #[tokio::test]
     async fn query_interval_larger_then_data_range_irregular() {
         let raster_source = MockRasterSource {

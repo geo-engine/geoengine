@@ -793,6 +793,7 @@ mod tests {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     fn make_raster(cache_hint: CacheHint) -> Box<dyn RasterOperator> {
         // test raster:
         // [0, 10)
