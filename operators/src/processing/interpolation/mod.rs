@@ -803,6 +803,7 @@ mod tests {
         // || 8 | 7 || 6 | 5 ||
         // || 4 | 3 || 2 | 1 ||
         let raster_tiles = vec![
+            // we need to add no-data tiles explicit to force the cahe_hint from the mock source!
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
@@ -880,7 +881,6 @@ mod tests {
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![3, 4, 7, 8]).unwrap()),
                 cache_hint,
             ),
-            // we need to add no-data tiles explicit to for
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
