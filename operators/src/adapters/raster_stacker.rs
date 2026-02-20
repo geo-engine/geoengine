@@ -400,7 +400,7 @@ where
                                 // make progress
                                 *current_out_band = next_out_band;
                                 *current_stream_band_pos += 1;
-                                if *current_stream_band_pos as usize
+                                if *current_stream_band_pos
                                     >= sources[*current_stream].band_idxs.len()
                                 {
                                     *current_stream_band_pos = 0;

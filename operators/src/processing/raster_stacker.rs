@@ -314,30 +314,6 @@ impl<T> RasterStackerProcessor<T> {
     }
 }
 
-/// compute the bands in the input source from the bands in a query that uses multiple sources
-fn map_query_bands_to_source_bands(
-    query_bands: &BandSelection,
-    bands_per_source: &[u32],
-    source_index: usize,
-) -> Option<BandSelection> {
-    let source_start: u32 = bands_per_source.iter().take(source_index).sum();
-    let source_bands = bands_per_source[source_index];
-    let source_end = source_start + source_bands;
-
-    let bands = query_bands
-        .as_slice()
-        .iter()
-        .filter(|output_band| **output_band >= source_start && **output_band < source_end)
-        .map(|output_band| output_band - source_start)
-        .collect::<Vec<_>>();
-
-    if bands.is_empty() {
-        return None;
-    }
-
-    Some(BandSelection::new_unchecked(bands))
-}
-
 #[async_trait]
 impl<T> QueryProcessor for RasterStackerProcessor<T>
 where
@@ -360,11 +336,8 @@ where
             .generate_data_tiling_strategy();
 
         for (idx, source) in self.sources.iter().enumerate() {
-            let Some(bands) =
-                map_query_bands_to_source_bands(query.attributes(), &self.bands_per_source, idx)
-            else {
-                continue;
-            };
+            // FIXME: find a better way to do the selection and avoid work done without benefit.
+            let bands = BandSelection::first_n(self.bands_per_source[idx]);
 
             sources.push(RasterStackerSource {
                 queryable: QueryWrapper { p: source, ctx },
@@ -375,7 +348,7 @@ where
         #[cfg(debug_assertions)]
         {
             let num_input_bands = self.bands_per_source.iter().sum::<u32>() as usize;
-            let num_query_bands = query.attributes().as_vec().iter().count();
+            let num_query_bands = query.attributes().as_vec().len();
 
             let fact = num_input_bands as f32 / num_query_bands as f32;
 
@@ -439,7 +412,7 @@ mod tests {
             TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
-        util::test::TestDefault,
+        util::test::{TestDefault, assert_eq_two_list_of_tiles},
     };
 
     use crate::{
@@ -454,40 +427,6 @@ mod tests {
     };
 
     use super::*;
-
-    #[test]
-    fn it_maps_query_bands_to_source_bands() {
-        assert_eq!(
-            map_query_bands_to_source_bands(&0.into(), &[2, 1], 0),
-            Some(0.into())
-        );
-        assert_eq!(map_query_bands_to_source_bands(&0.into(), &[2, 1], 1), None);
-        assert_eq!(
-            map_query_bands_to_source_bands(&2.into(), &[2, 1], 1),
-            Some(0.into())
-        );
-
-        assert_eq!(
-            map_query_bands_to_source_bands(&[1, 2].try_into().unwrap(), &[2, 2], 0),
-            Some(1.into())
-        );
-        assert_eq!(
-            map_query_bands_to_source_bands(&[1, 2, 3].try_into().unwrap(), &[2, 2], 1),
-            Some([0, 1].try_into().unwrap())
-        );
-    }
-
-    #[test]
-    fn it_maps_query_subsets() {
-        assert_eq!(
-            map_query_bands_to_source_bands(&[0].try_into().unwrap(), &[1, 1], 0),
-            Some(0.into())
-        );
-        assert_eq!(
-            map_query_bands_to_source_bands(&[1].try_into().unwrap(), &[1, 1], 1),
-            Some(0.into())
-        );
-    }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -580,12 +519,12 @@ mod tests {
             },
         ];
 
-        let result_descriptor = RasterResultDescriptor {
+        let result_descriptor1 = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: crate::engine::TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 5)),
-                TimeStep::millis(10).unwrap(),
+                TimeStep::millis(5).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
@@ -597,7 +536,7 @@ mod tests {
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: result_descriptor.clone(),
+                result_descriptor: result_descriptor1.clone(),
             },
         }
         .boxed();
@@ -605,7 +544,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data2.clone(),
-                result_descriptor,
+                result_descriptor: result_descriptor1,
             },
         }
         .boxed();
@@ -838,7 +777,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: crate::engine::TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(10).unwrap(),
+                TimeStep::millis(5).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
@@ -1020,7 +959,7 @@ mod tests {
             spatial_reference: SpatialReference::epsg_4326().into(),
             time: crate::engine::TimeDescriptor::new_regular_with_epoch(
                 Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(10).unwrap(),
+                TimeStep::millis(5).unwrap(),
             ),
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
@@ -1092,7 +1031,7 @@ mod tests {
             })
             .collect();
 
-        assert!(expected_band1.tiles_equal_ignoring_cache_hint(&result));
+        assert_eq_two_list_of_tiles(&result, &expected_band1, false);
     }
 
     #[tokio::test]

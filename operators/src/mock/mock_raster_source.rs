@@ -97,7 +97,7 @@ where
                         tile_time: x.time,
                         time_dim: regular,
                     });
-                };
+                }
             }
         }
 
@@ -206,13 +206,13 @@ where
             .iter()
             .map(|tile| &tile.time)
             .unique_by(|t| *t)
-            .cloned()
+            .copied()
             .collect();
 
         let intersecting_times: Vec<TimeInterval> = unique_times
             .iter()
             .filter(|t| t.intersects(&query.time()))
-            .cloned()
+            .copied()
             .collect();
 
         let times = match self.result_descriptor.time.dimension {
@@ -223,9 +223,11 @@ where
                     } else {
                         let before = unique_times
                             .iter()
-                            .filter(|t| t.end() <= query.time().start())
-                            .last();
-                        before.map(|b| b.end()).unwrap_or(TimeInstance::MIN)
+                            .rfind(|t| t.end() <= query.time().start());
+                        before.map_or(
+                            TimeInstance::MIN,
+                            geoengine_datatypes::primitives::TimeInterval::end,
+                        )
                     }
                 } else {
                     TimeInstance::MIN
@@ -239,7 +241,10 @@ where
                             .iter()
                             .filter(|t| t.start() >= query.time().end())
                             .nth(0);
-                        follow.map(|f| f.start()).unwrap_or(TimeInstance::MAX)
+                        follow.map_or(
+                            TimeInstance::MAX,
+                            geoengine_datatypes::primitives::TimeInterval::start,
+                        )
                     }
                 } else {
                     TimeInstance::MAX

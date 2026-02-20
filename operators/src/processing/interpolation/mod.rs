@@ -675,8 +675,8 @@ mod tests {
             Coordinate2D, RasterQueryRectangle, SpatialResolution, TimeInterval, TimeStep,
         },
         raster::{
-            Grid2D, GridOrEmpty, RasterDataType, RasterTile2D, RenameBands, TileInformation,
-            TilingSpecification,
+            Grid2D, GridOrEmpty, GridShape2D, RasterDataType, RasterTile2D, RenameBands,
+            TileInformation, TilingSpecification,
         },
         spatial_reference::SpatialReference,
         util::test::TestDefault,
@@ -803,6 +803,61 @@ mod tests {
         // || 8 | 7 || 6 | 5 ||
         // || 4 | 3 || 2 | 1 ||
         let raster_tiles = vec![
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-2, -1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-2, 0].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-2, 1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-2, 2].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-1, -1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
             RasterTile2D::<i8>::new_with_tile_info(
                 TimeInterval::new_unchecked(0, 10),
                 TileInformation {
@@ -825,6 +880,117 @@ mod tests {
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![3, 4, 7, 8]).unwrap()),
                 cache_hint,
             ),
+            // we need to add no-data tiles explicit to for
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [-1, 2].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [0, -1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [0, 0].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [0, 1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(0, 10),
+                TileInformation {
+                    global_tile_position: [0, 2].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-2, -1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-2, 0].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-2, 1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-2, 2].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-1, -1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
             RasterTile2D::new_with_tile_info(
                 TimeInterval::new_unchecked(10, 20),
                 TileInformation {
@@ -845,6 +1011,61 @@ mod tests {
                 },
                 0,
                 GridOrEmpty::from(Grid2D::new([2, 2].into(), vec![6, 5, 2, 1]).unwrap()),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [-1, 2].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [0, -1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [0, 0].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [0, 1].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
+                cache_hint,
+            ),
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::new_unchecked(10, 20),
+                TileInformation {
+                    global_tile_position: [0, 2].into(),
+                    tile_size_in_pixels: [2, 2].into(),
+                    global_geo_transform: TestDefault::test_default(),
+                },
+                0,
+                GridOrEmpty::new_empty_shape(GridShape2D::new([2, 2])),
                 cache_hint,
             ),
         ];

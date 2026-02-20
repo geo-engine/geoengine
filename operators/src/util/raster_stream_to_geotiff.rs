@@ -1613,11 +1613,7 @@ mod tests {
             1,
             GridBoundingBox2D::new([-4, -4], [4, 4]).unwrap(),
             GeoTransform::test_default(),
-            TimeDescriptor::new_regular(
-                Some(time_bounds),
-                time_bounds.start(),
-                time_step.try_into().unwrap(),
-            ),
+            TimeDescriptor::new_irregular(Some(time_bounds)),
         );
 
         let query_time = TimeInterval::new(data[0].time.start(), data[1].time.end()).unwrap();
