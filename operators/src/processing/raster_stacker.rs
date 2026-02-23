@@ -1,4 +1,7 @@
-use crate::adapters::{PartialQueryRect, QueryWrapper, RasterStackerAdapter, RasterStackerSource};
+use crate::adapters::{
+    PartialQueryRect, QueryWrapper, RasterStackerAdapter, RasterStackerSource,
+    SimpleRasterStackerAdapter,
+};
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, MultipleRasterSources, Operator, OperatorName, QueryContext,
@@ -312,6 +315,25 @@ impl<T> RasterStackerProcessor<T> {
             bands_per_source,
         }
     }
+
+    fn is_regular_time_aligned(&self) -> bool {
+        let Some(first_time_regular) = self.sources[0]
+            .result_descriptor()
+            .time
+            .dimension
+            .unwrap_regular()
+        else {
+            return false;
+        };
+
+        self.sources.iter().all(|s| {
+            s.result_descriptor()
+                .time
+                .dimension
+                .unwrap_regular()
+                .is_some_and(|r| r.compatible_with(first_time_regular))
+        })
+    }
 }
 
 #[async_trait]
@@ -329,6 +351,20 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<T>>>> {
+        if self.is_regular_time_aligned() {
+            tracing::trace!("Using regular time aligned stacker processor");
+
+            let sdp = SimpleRasterStackerAdapter::<
+                SimpleRasterStackerAdapter<BoxRasterQueryProcessor<T>>,
+            >::stack_selected_regular_aligned_raster_bands(
+                &query, ctx, &self.sources
+            )
+            .await?;
+            return Ok(Box::pin(sdp));
+        }
+
+        tracing::trace!("Using non-regular time aligned stacker processor");
+
         let mut sources = vec![];
         let tiling_strat = self
             .result_descriptor

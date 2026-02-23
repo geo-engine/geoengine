@@ -1,8 +1,9 @@
+use crate::engine::RasterQueryProcessor;
 use crate::error::{AtLeastOneStreamRequired, Error, MustNotHappen};
 use crate::util::Result;
 use futures::future::join_all;
 use futures::ready;
-use futures::stream::Stream;
+use futures::stream::{BoxStream, Stream};
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
@@ -183,6 +184,77 @@ impl<S> SimpleRasterStackerAdapter<S> {
         .collect::<Result<Vec<_>>>()?;
 
         SimpleRasterStackerAdapter::new(band_streams, query.attributes().clone())
+    }
+
+    /// This method queries multiple sources for the requested bands and stacks the results into a multi band raster tile stream.
+    /// The order of the bands is determined by the order of the sources. The query attributes are used to select the relevant bands from the sources.
+    pub async fn stack_selected_regular_aligned_raster_bands<'a, P, R>(
+        query: &RasterQueryRectangle,
+        ctx: &'a dyn crate::engine::QueryContext,
+        sources: &'a [R],
+    ) -> Result<SimpleRasterStackerAdapter<BoxStream<'a, Result<RasterTile2D<P>>>>>
+    where
+        R: RasterQueryProcessor<RasterType = P> + 'a,
+    {
+        let bands_per_source = sources
+            .iter()
+            .map(|rq| rq.result_descriptor().bands.count())
+            .collect::<Vec<_>>();
+
+        let total_bands: u32 = bands_per_source.iter().sum();
+        debug_assert!(
+            total_bands >= query.attributes().count(),
+            "Not enough bands in sources to cover the requested attributes"
+        );
+
+        let temp_bt = BandTracker::new(
+            bands_per_source
+                .iter()
+                .map(|&num_bands| BandSelection::first_n(num_bands))
+                .collect(),
+            BandSelection::first_n(total_bands),
+        )?;
+
+        // Build source bands mapping
+        let mut source_bands: Vec<Vec<u32>> = vec![Vec::new(); sources.len()];
+        for out_band in query.attributes().as_slice() {
+            let (source_idx, in_band, check_out_band) =
+                temp_bt.source_in_and_out_band(*out_band as usize);
+
+            debug_assert_eq!(check_out_band, *out_band, "Band tracking mismatch");
+
+            source_bands[source_idx].push(in_band);
+        }
+
+        // Query relevant sources
+        let (futures, band_lists): (Vec<_>, Vec<_>) = (0..sources.len())
+            .filter_map(|source_idx| {
+                if source_bands[source_idx].is_empty() {
+                    return None;
+                }
+                let bands = source_bands[source_idx].clone();
+                let band_selection = BandSelection::new_unchecked(bands.clone());
+                Some((
+                    sources[source_idx].raster_query(query.select_attributes(band_selection), ctx),
+                    bands,
+                ))
+            })
+            .unzip();
+
+        // Await and construct sources
+        let stacker_sources = join_all(futures)
+            .await
+            .into_iter()
+            .zip(band_lists)
+            .map(|(stream_result, bands)| {
+                stream_result.map(|stream| SimpleRasterStackerSource {
+                    stream,
+                    band_idxs: BandSelection::new_unchecked(bands),
+                })
+            })
+            .collect::<Result<Vec<_>>>()?;
+
+        SimpleRasterStackerAdapter::new(stacker_sources, query.attributes().clone())
     }
 }
 
