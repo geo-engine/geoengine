@@ -1,8 +1,8 @@
-use crate::error::{AtLeastOneStreamRequired, Error};
+use crate::error::{AtLeastOneStreamRequired, Error, MustNotHappen};
 use crate::util::Result;
 use futures::future::join_all;
-use futures::stream::{BoxStream, Stream};
-use futures::{Future, ready};
+use futures::ready;
+use futures::stream::Stream;
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
@@ -19,47 +19,177 @@ use std::task::{Context, Poll};
 pub struct SimpleRasterStackerAdapter<S> {
     #[pin]
     streams: Vec<S>,
-    batch_size_per_stream: Vec<usize>,
-    current_stream: usize,
-    current_stream_item: usize,
+    current_idx: usize,
     current_time: Option<TimeInterval>,
     finished: bool,
+    band_tracking: BandTracker,
+}
+
+pub struct BandTracker {
+    source_band_idxs: Vec<BandSelection>,
+    band_selection: BandSelection,
+}
+
+impl BandTracker {
+    pub fn new(source_bands: Vec<BandSelection>, out_bands: BandSelection) -> Result<Self> {
+        ensure!(!source_bands.is_empty(), AtLeastOneStreamRequired);
+        ensure!(out_bands.count() > 0, AtLeastOneStreamRequired);
+
+        let bt = Self {
+            source_band_idxs: source_bands,
+            band_selection: out_bands,
+        };
+
+        ensure!(
+            bt.num_total_source_bands() == bt.band_selection.as_slice().len(),
+            MustNotHappen {
+                message: "inputs missmatch"
+            }
+        );
+
+        Ok(bt)
+    }
+
+    pub fn num_total_source_bands(&self) -> usize {
+        self.source_band_idxs.iter().map(|s| s.as_vec().len()).sum()
+    }
+
+    pub fn num_sources(&self) -> usize {
+        self.source_band_idxs.len()
+    }
+
+    pub fn num_source_bands(&self, source: usize) -> usize {
+        self.source_band_idxs[source].as_slice().len()
+    }
+
+    pub fn band_idx_to_source_band_idx(&self, band_idx: usize) -> (usize, usize) {
+        debug_assert!(
+            band_idx < self.num_total_source_bands(),
+            "Band must be in range of all source bands"
+        );
+
+        let mut starts_at = 0;
+        let mut source_idx = 0;
+        for (i, num_bands) in self
+            .source_band_idxs
+            .iter()
+            .map(|s| s.as_slice().len())
+            .enumerate()
+        {
+            let next_starts_at = starts_at + num_bands;
+            if (starts_at..next_starts_at).contains(&band_idx) {
+                source_idx = i;
+                break;
+            }
+            starts_at = next_starts_at;
+        }
+
+        let source_band_idx = band_idx - starts_at;
+
+        debug_assert!(
+            source_idx < self.num_sources(),
+            "Source {source_idx} must be in range {0}",
+            self.num_sources()
+        );
+        debug_assert!(
+            source_band_idx < self.num_source_bands(source_idx),
+            "Band {source_band_idx} must be in range of source bands {0}",
+            self.num_source_bands(source_idx)
+        );
+
+        (source_idx, source_band_idx)
+    }
+
+    pub fn source_in_and_out_band(&self, band_idx: usize) -> (usize, u32, u32) {
+        let (source, in_band_idx) = self.band_idx_to_source_band_idx(band_idx);
+        let in_band = self.source_band_idxs[source].as_slice()[in_band_idx];
+        let out_band = self.band_selection.as_slice()[band_idx];
+
+        (source, in_band, out_band)
+    }
 }
 
 pub struct SimpleRasterStackerSource<S> {
     pub stream: S,
-    pub num_bands: usize,
+    pub band_idxs: BandSelection,
 }
 
-impl<S> From<(S, usize)> for SimpleRasterStackerSource<S> {
-    fn from(value: (S, usize)) -> Self {
-        debug_assert!(value.1 > 0, "At least one band required");
-        Self {
+impl<S> SimpleRasterStackerSource<S> {
+    pub fn num_bands(&self) -> usize {
+        self.band_idxs.as_slice().len()
+    }
+}
+
+impl<S, I: TryInto<BandSelection>> TryFrom<(S, I)> for SimpleRasterStackerSource<S> {
+    type Error = I::Error;
+
+    fn try_from(value: (S, I)) -> Result<Self, Self::Error> {
+        value.1.try_into().map(|bs| SimpleRasterStackerSource {
             stream: value.0,
-            num_bands: value.1,
-        }
+            band_idxs: bs,
+        })
     }
 }
 
 impl<S> SimpleRasterStackerAdapter<S> {
-    pub fn new(streams: Vec<SimpleRasterStackerSource<S>>) -> Result<Self> {
+    pub fn new(
+        streams: Vec<SimpleRasterStackerSource<S>>,
+        out_bands: BandSelection,
+    ) -> Result<Self> {
         ensure!(!streams.is_empty(), AtLeastOneStreamRequired);
 
+        let (streams, bandsel): (Vec<S>, Vec<BandSelection>) = streams
+            .into_iter()
+            .map(|s| (s.stream, s.band_idxs))
+            .collect();
+
+        let bt = BandTracker::new(bandsel, out_bands)?;
+
         Ok(SimpleRasterStackerAdapter {
-            batch_size_per_stream: streams.iter().map(|s| s.num_bands).collect(),
-            streams: streams.into_iter().map(|s| s.stream).collect(),
-            current_stream: 0,
-            current_stream_item: 0,
+            streams,
+            current_idx: 0,
             current_time: None,
             finished: false,
+            band_tracking: bt,
         })
+    }
+
+    /// A helper method that computes a function on multiple bands (that are already aligned) individually and then stacks the result into a multi-band raster.
+    pub async fn stack_individual_aligned_raster_bands<'a, F, Fut, P>(
+        query: &RasterQueryRectangle,
+        ctx: &'a dyn crate::engine::QueryContext,
+        create_single_bands_stream_fn: F,
+    ) -> Result<SimpleRasterStackerAdapter<S>>
+    where
+        S: Stream<Item = Result<RasterTile2D<P>>> + Unpin,
+        F: Fn(RasterQueryRectangle, &'a dyn crate::engine::QueryContext) -> Fut,
+        Fut: Future<Output = Result<S>>,
+        P: Pixel,
+    {
+        // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
+        let band_streams = join_all(query.attributes().as_slice().iter().map(|band| {
+            let band_idx = BandSelection::new_single(*band);
+            let query = query.select_attributes(band_idx.clone());
+
+            async {
+                Ok(SimpleRasterStackerSource {
+                    stream: create_single_bands_stream_fn(query, ctx).await?,
+                    band_idxs: band_idx,
+                })
+            }
+        }))
+        .await
+        .into_iter()
+        .collect::<Result<Vec<_>>>()?;
+
+        SimpleRasterStackerAdapter::new(band_streams, query.attributes().clone())
     }
 }
 
 impl<S, T> Stream for SimpleRasterStackerAdapter<S>
 where
     S: Stream<Item = Result<RasterTile2D<T>>> + Unpin,
-    T: Send + Sync,
+    T: Send + Sync + Pixel,
 {
     type Item = Result<RasterTile2D<T>>;
 
@@ -70,34 +200,40 @@ where
 
         let SimpleRasterStackerAdapterProjection {
             mut streams,
-            batch_size_per_stream,
-            current_stream,
-            current_stream_item,
+            current_idx,
             current_time,
-            finished: _,
+            finished,
+            band_tracking,
         } = self.as_mut().project();
 
-        let stream = &mut streams[*current_stream];
+        let (stream_idx, in_band, out_band) = band_tracking.source_in_and_out_band(*current_idx);
+        let stream = &mut streams[stream_idx];
 
         let item = ready!(Pin::new(stream).poll_next(cx));
 
         let Some(mut item) = item else {
             // if one input stream ends, end the output stream
+            *finished = true;
             return Poll::Ready(None);
         };
 
         if let Ok(tile) = item.as_mut() {
-            // compute output band number from its place among all bands of all inputs
-            let band = batch_size_per_stream
-                .iter()
-                .take(*current_stream)
-                .sum::<usize>()
-                + *current_stream_item;
-            tile.band = band as u32;
+            debug_assert!(
+                tile.band == in_band,
+                "Expected stream {stream_idx} band {in_band} got {0} to produce out band {out_band}",
+                tile.band
+            );
 
-            // TODO: replace time check with temporal alignment
+            tile.band = out_band;
+
             if let Some(time) = current_time {
-                if band == 0 {
+                if *current_idx == 0 {
+                    debug_assert!(
+                        *time == tile.time || time.end() == tile.time.start(),
+                        "Time hole discovered! Time of last tile: {time}, time of current tile: {0}. Stream index: {stream_idx}, In band: {in_band}, Out band: {out_band}",
+                        tile.time
+                    );
+
                     // save the first bands time
                     *current_time = Some(tile.time);
                 } else {
@@ -105,7 +241,7 @@ where
                     if tile.time != *time {
                         return Poll::Ready(Some(Err(
                             Error::InputStreamsMustBeTemporallyAligned {
-                                stream_index: *current_stream,
+                                stream_index: stream_idx,
                                 expected: *time,
                                 found: tile.time,
                             },
@@ -119,48 +255,13 @@ where
         }
 
         // next item in stream, or go to next stream
-        *current_stream_item += 1;
-        if *current_stream_item >= batch_size_per_stream[*current_stream] {
-            *current_stream_item = 0;
-            *current_stream = (*current_stream + 1) % streams.len();
+        *current_idx += 1;
+        if *current_idx >= band_tracking.num_total_source_bands() {
+            *current_idx = 0;
         }
 
         Poll::Ready(Some(item))
     }
-}
-
-/// A helper method that computes a function on multiple bands (that are already aligned) individually and then stacks the result into a multi-band raster.
-pub async fn stack_individual_aligned_raster_bands<'a, F, Fut, P>(
-    query: &RasterQueryRectangle,
-    ctx: &'a dyn crate::engine::QueryContext,
-    create_single_bands_stream_fn: F,
-) -> Result<BoxStream<'a, Result<RasterTile2D<P>>>>
-where
-    F: Fn(RasterQueryRectangle, &'a dyn crate::engine::QueryContext) -> Fut,
-    Fut: Future<Output = Result<BoxStream<'a, Result<RasterTile2D<P>>>>>,
-    P: Pixel,
-{
-    if query.attributes().count() == 1 {
-        // special case of single band query requires no tile stacking
-        return create_single_bands_stream_fn(query.clone(), ctx).await;
-    }
-
-    // compute the aggreation for each band separately and stack the streams to get a multi band raster tile stream
-    let band_streams = join_all(query.attributes().as_slice().iter().map(|band| {
-        let query = query.select_attributes(BandSelection::new_single(*band));
-
-        async {
-            Ok(SimpleRasterStackerSource {
-                stream: create_single_bands_stream_fn(query, ctx).await?,
-                num_bands: 1,
-            })
-        }
-    }))
-    .await
-    .into_iter()
-    .collect::<Result<Vec<_>>>()?;
-
-    Ok(Box::pin(SimpleRasterStackerAdapter::new(band_streams)?))
 }
 
 #[cfg(test)]
@@ -173,6 +274,87 @@ mod tests {
     };
 
     use super::*;
+
+    #[test]
+    fn band_tracker_works() {
+        let bt = BandTracker::new(
+            vec![BandSelection::first_n(2), BandSelection::first_n(3)],
+            BandSelection::first_n(5),
+        )
+        .unwrap();
+
+        assert_eq!(bt.num_total_source_bands(), 5);
+        assert_eq!(bt.num_sources(), 2);
+        assert_eq!(bt.num_source_bands(0), 2);
+        assert_eq!(bt.num_source_bands(1), 3);
+
+        assert_eq!(bt.band_idx_to_source_band_idx(0), (0, 0));
+        assert_eq!(bt.band_idx_to_source_band_idx(1), (0, 1));
+        assert_eq!(bt.band_idx_to_source_band_idx(2), (1, 0));
+        assert_eq!(bt.band_idx_to_source_band_idx(3), (1, 1));
+        assert_eq!(bt.band_idx_to_source_band_idx(4), (1, 2));
+
+        assert_eq!(bt.source_in_and_out_band(0), (0, 0, 0));
+        assert_eq!(bt.source_in_and_out_band(1), (0, 1, 1));
+        assert_eq!(bt.source_in_and_out_band(2), (1, 0, 2));
+        assert_eq!(bt.source_in_and_out_band(3), (1, 1, 3));
+        assert_eq!(bt.source_in_and_out_band(4), (1, 2, 4));
+    }
+
+    #[test]
+    fn band_tracker_with_gaps_works() {
+        let bt = BandTracker::new(
+            vec![BandSelection::first_n(2), BandSelection::first_n(3)],
+            BandSelection::new(vec![0, 2, 4, 6, 8]).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(bt.num_total_source_bands(), 5);
+        assert_eq!(bt.num_sources(), 2);
+        assert_eq!(bt.num_source_bands(0), 2);
+        assert_eq!(bt.num_source_bands(1), 3);
+
+        assert_eq!(bt.band_idx_to_source_band_idx(0), (0, 0));
+        assert_eq!(bt.band_idx_to_source_band_idx(1), (0, 1));
+        assert_eq!(bt.band_idx_to_source_band_idx(2), (1, 0));
+        assert_eq!(bt.band_idx_to_source_band_idx(3), (1, 1));
+        assert_eq!(bt.band_idx_to_source_band_idx(4), (1, 2));
+
+        assert_eq!(bt.source_in_and_out_band(0), (0, 0, 0));
+        assert_eq!(bt.source_in_and_out_band(1), (0, 1, 2));
+        assert_eq!(bt.source_in_and_out_band(2), (1, 0, 4));
+        assert_eq!(bt.source_in_and_out_band(3), (1, 1, 6));
+        assert_eq!(bt.source_in_and_out_band(4), (1, 2, 8));
+    }
+
+    #[test]
+    fn band_tracker_with_input_gaps_works() {
+        let bt = BandTracker::new(
+            vec![
+                BandSelection::new(vec![0, 2]).unwrap(),
+                BandSelection::new(vec![1, 3, 5]).unwrap(),
+            ],
+            BandSelection::first_n(5),
+        )
+        .unwrap();
+
+        assert_eq!(bt.num_total_source_bands(), 5);
+        assert_eq!(bt.num_sources(), 2);
+        assert_eq!(bt.num_source_bands(0), 2);
+        assert_eq!(bt.num_source_bands(1), 3);
+
+        assert_eq!(bt.band_idx_to_source_band_idx(0), (0, 0));
+        assert_eq!(bt.band_idx_to_source_band_idx(1), (0, 1));
+        assert_eq!(bt.band_idx_to_source_band_idx(2), (1, 0));
+        assert_eq!(bt.band_idx_to_source_band_idx(3), (1, 1));
+        assert_eq!(bt.band_idx_to_source_band_idx(4), (1, 2));
+
+        assert_eq!(bt.source_in_and_out_band(0), (0, 0, 0));
+        assert_eq!(bt.source_in_and_out_band(1), (0, 2, 1));
+        assert_eq!(bt.source_in_and_out_band(2), (1, 1, 2));
+        assert_eq!(bt.source_in_and_out_band(3), (1, 3, 3));
+        assert_eq!(bt.source_in_and_out_band(4), (1, 5, 4));
+    }
 
     #[tokio::test]
     #[allow(clippy::too_many_lines)]
@@ -268,8 +450,14 @@ mod tests {
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
         let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
 
-        let stacker =
-            SimpleRasterStackerAdapter::new(vec![(stream, 1).into(), (stream2, 1).into()]).unwrap();
+        let stacker = SimpleRasterStackerAdapter::new(
+            vec![
+                (stream, 0).try_into().unwrap(),
+                (stream2, 0).try_into().unwrap(),
+            ],
+            BandSelection::first_n(2),
+        )
+        .unwrap();
 
         let result = stacker.collect::<Vec<_>>().await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
@@ -462,8 +650,14 @@ mod tests {
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
         let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
 
-        let stacker =
-            SimpleRasterStackerAdapter::new(vec![(stream, 2).into(), (stream2, 2).into()]).unwrap();
+        let stacker = SimpleRasterStackerAdapter::new(
+            vec![
+                (stream, [0, 1]).try_into().unwrap(),
+                (stream2, [0, 1]).try_into().unwrap(),
+            ],
+            BandSelection::first_n(4),
+        )
+        .unwrap();
 
         let result = stacker.collect::<Vec<_>>().await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
@@ -514,8 +708,14 @@ mod tests {
         let stream = stream::iter(data.clone().into_iter().map(Result::Ok)).boxed();
         let stream2 = stream::iter(data2.clone().into_iter().map(Result::Ok)).boxed();
 
-        let stacker =
-            SimpleRasterStackerAdapter::new(vec![(stream, 1).into(), (stream2, 1).into()]).unwrap();
+        let stacker = SimpleRasterStackerAdapter::new(
+            vec![
+                (stream, 0).try_into().unwrap(),
+                (stream2, 0).try_into().unwrap(),
+            ],
+            BandSelection::first_n(2),
+        )
+        .unwrap();
 
         let result = stacker.collect::<Vec<_>>().await;
 

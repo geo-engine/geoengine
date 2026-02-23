@@ -214,6 +214,14 @@ impl<const N: usize> TryFrom<[u32; N]> for BandSelection {
     }
 }
 
+impl TryFrom<&[u32]> for BandSelection {
+    type Error = crate::error::Error;
+
+    fn try_from(value: &[u32]) -> Result<Self, Self::Error> {
+        Self::new(value.to_vec())
+    }
+}
+
 impl QueryAttributeSelection for BandSelection {}
 
 #[derive(Clone, Debug, PartialEq, Serialize)]

@@ -9,7 +9,7 @@ use super::first_last_subquery::{
     TemporalRasterAggregationSubQueryNoDataOnly, first_tile_fold_future, last_tile_fold_future,
 };
 use super::subquery::GlobalStateTemporalRasterAggregationSubQuery;
-use crate::adapters::stack_individual_aligned_raster_bands;
+use crate::adapters::SimpleRasterStackerAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedSources, Operator, QueryProcessor,
     RasterOperator, SingleRasterSource, TimeDescriptor, WorkflowOperatorPath,
@@ -503,11 +503,16 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<'a, Result<Self::Output>>> {
-        stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async {
-            self.create_subquery_adapter_stream_for_single_band(query, ctx)
-                .await
-        })
+        SimpleRasterStackerAdapter::stack_individual_aligned_raster_bands(
+            &query,
+            ctx,
+            |query, ctx| async {
+                self.create_subquery_adapter_stream_for_single_band(query, ctx)
+                    .await
+            },
+        )
         .await
+        .map(StreamExt::boxed)
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
