@@ -910,7 +910,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_selects_band_from_stack() {
-        it_selects_band_from_stack_impl(crate::engine::TimeDescriptor::new_irregular(None)).await
+        it_selects_band_from_stack_impl(crate::engine::TimeDescriptor::new_irregular(None)).await;
     }
 
     #[tokio::test]
@@ -919,7 +919,7 @@ mod tests {
             Some(TimeInterval::new_unchecked(0, 10)),
             TimeStep::millis(5).unwrap(),
         ))
-        .await
+        .await;
     }
 
     #[allow(clippy::too_many_lines)]
