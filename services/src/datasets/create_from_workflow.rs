@@ -24,9 +24,9 @@ use geoengine_operators::engine::{
 use geoengine_operators::source::{
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataStatic,
 };
-use geoengine_operators::util::raster_stream_to_geotiff::{
-    GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions, ToGeoTiffProgress,
-    ToGeoTiffProgressConsumer, raster_stream_to_geotiff,
+use geoengine_operators::util::raster_stream_to_geotiff::{GdalCompressionNumThreads, GdalGeoTiffDatasetMetadata, GdalGeoTiffOptions};
+use geoengine_operators::util::raster_stream_to_storage::{
+    ToGeoTiffProgress, ToGeoTiffProgressConsumer, raster_stream_to_geotiff,
 };
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};

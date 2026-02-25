@@ -5,6 +5,7 @@ pub mod math;
 pub mod number_statistics;
 pub mod raster_stream_to_geotiff;
 pub mod raster_stream_to_png;
+pub mod raster_stream_to_storage;
 mod rayon;
 pub mod retry;
 pub mod statistics;
