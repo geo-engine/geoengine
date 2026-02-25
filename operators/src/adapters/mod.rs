@@ -16,7 +16,9 @@ pub use raster_subquery::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
     TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
 };
-pub use simple_raster_stacker::{SimpleRasterStackerAdapter, SimpleRasterStackerSource};
+pub use simple_raster_stacker::{
+    SimpleRasterStackerAdapter, SimpleRasterStackerError, SimpleRasterStackerSource,
+};
 pub use stream_statistics_adapter::StreamStatisticsAdapter;
 pub use time_stream_merge::TimeIntervalStreamMerge;
 

@@ -512,6 +512,7 @@ where
             },
         )
         .await
+        .map_err(|e| crate::error::Error::SimpleRasterStacker { source: e })
         .map(StreamExt::boxed)
     }
 

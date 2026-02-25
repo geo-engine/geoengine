@@ -1,15 +1,46 @@
 use crate::engine::RasterQueryProcessor;
-use crate::error::{AtLeastOneStreamRequired, Error, MustNotHappen};
+use crate::error::Error;
 use crate::util::Result;
 use futures::future::join_all;
-use futures::ready;
 use futures::stream::{BoxStream, Stream};
+use futures::{TryFutureExt, ready};
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, TimeInterval};
 use geoengine_datatypes::raster::{Pixel, RasterTile2D};
 use pin_project::pin_project;
-use snafu::ensure;
+use snafu::{Snafu, ensure};
 use std::pin::Pin;
 use std::task::{Context, Poll};
+use strum::IntoStaticStr;
+
+#[derive(Debug, Snafu, IntoStaticStr)]
+#[snafu(context(suffix(false)))] // disables default `Snafu` suffix
+pub enum SimpleRasterStackerError {
+    #[snafu(display(
+        "BandSelection count exceeds band input count:  {} > {}",
+        selection_bands,
+        source_bands
+    ))]
+    BandInputAndSelectionMissmatch {
+        source_bands: usize,
+        selection_bands: usize,
+    },
+    AtLeastOneStreamRequired,
+
+    InputsNotTemporalAligned,
+
+    CreateSourceStreams {
+        source: Box<Error>,
+    },
+
+    CreateSingleBandStream {
+        source: Box<Error>,
+    },
+
+    UnAlignedElements {
+        t1: TimeInterval,
+        t2: TimeInterval,
+    },
+}
 
 /// Stacks the bands of the input raster streams to create a single raster stream with all the combined bands.
 ///
@@ -32,7 +63,10 @@ pub struct BandTracker {
 }
 
 impl BandTracker {
-    pub fn new(source_bands: Vec<BandSelection>, out_bands: BandSelection) -> Result<Self> {
+    pub fn new(
+        source_bands: Vec<BandSelection>,
+        out_bands: BandSelection,
+    ) -> Result<Self, SimpleRasterStackerError> {
         ensure!(!source_bands.is_empty(), AtLeastOneStreamRequired);
         ensure!(out_bands.count() > 0, AtLeastOneStreamRequired);
 
@@ -43,8 +77,9 @@ impl BandTracker {
 
         ensure!(
             bt.num_total_source_bands() == bt.band_selection.as_slice().len(),
-            MustNotHappen {
-                message: "inputs missmatch"
+            BandInputAndSelectionMissmatch {
+                selection_bands: bt.band_selection.as_slice().len(),
+                source_bands: bt.num_total_source_bands()
             }
         );
 
@@ -136,7 +171,7 @@ impl<S> SimpleRasterStackerAdapter<S> {
     pub fn new(
         streams: Vec<SimpleRasterStackerSource<S>>,
         out_bands: BandSelection,
-    ) -> Result<Self> {
+    ) -> Result<Self, SimpleRasterStackerError> {
         ensure!(!streams.is_empty(), AtLeastOneStreamRequired);
 
         let (streams, bandsel): (Vec<S>, Vec<BandSelection>) = streams
@@ -160,7 +195,7 @@ impl<S> SimpleRasterStackerAdapter<S> {
         query: &RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
         create_single_bands_stream_fn: F,
-    ) -> Result<SimpleRasterStackerAdapter<S>>
+    ) -> Result<SimpleRasterStackerAdapter<S>, SimpleRasterStackerError>
     where
         S: Stream<Item = Result<RasterTile2D<P>>> + Unpin,
         F: Fn(RasterQueryRectangle, &'a dyn crate::engine::QueryContext) -> Fut,
@@ -173,15 +208,20 @@ impl<S> SimpleRasterStackerAdapter<S> {
             let query = query.select_attributes(band_idx.clone());
 
             async {
-                Ok(SimpleRasterStackerSource {
-                    stream: create_single_bands_stream_fn(query, ctx).await?,
-                    band_idxs: band_idx,
-                })
+                create_single_bands_stream_fn(query, ctx)
+                    .await
+                    .map_err(|e| SimpleRasterStackerError::CreateSingleBandStream {
+                        source: Box::new(e),
+                    })
+                    .map(|s| SimpleRasterStackerSource {
+                        stream: s,
+                        band_idxs: band_idx,
+                    })
             }
         }))
         .await
         .into_iter()
-        .collect::<Result<Vec<_>>>()?;
+        .collect::<Result<Vec<_>, _>>()?;
 
         SimpleRasterStackerAdapter::new(band_streams, query.attributes().clone())
     }
@@ -192,20 +232,30 @@ impl<S> SimpleRasterStackerAdapter<S> {
         query: &RasterQueryRectangle,
         ctx: &'a dyn crate::engine::QueryContext,
         sources: &'a [R],
-    ) -> Result<SimpleRasterStackerAdapter<BoxStream<'a, Result<RasterTile2D<P>>>>>
+    ) -> Result<
+        SimpleRasterStackerAdapter<BoxStream<'a, Result<RasterTile2D<P>>>>,
+        SimpleRasterStackerError,
+    >
     where
         R: RasterQueryProcessor<RasterType = P> + 'a,
     {
+        // check that inputs are temp aligned
+        let _regular_time = sources
+            .iter()
+            .map(|r| r.raster_result_descriptor().time.dimension.unwrap_regular())
+            .reduce(|a, f| match (a, f) {
+                (Some(at), Some(ft)) if at.compatible_with(ft) => Some(at),
+                _ => None,
+            })
+            .ok_or(SimpleRasterStackerError::AtLeastOneStreamRequired)?
+            .ok_or(SimpleRasterStackerError::InputsNotTemporalAligned)?;
+
         let bands_per_source = sources
             .iter()
             .map(|rq| rq.result_descriptor().bands.count())
             .collect::<Vec<_>>();
 
         let total_bands: u32 = bands_per_source.iter().sum();
-        debug_assert!(
-            total_bands >= query.attributes().count(),
-            "Not enough bands in sources to cover the requested attributes"
-        );
 
         let temp_bt = BandTracker::new(
             bands_per_source
@@ -235,7 +285,11 @@ impl<S> SimpleRasterStackerAdapter<S> {
                 let bands = source_bands[source_idx].clone();
                 let band_selection = BandSelection::new_unchecked(bands.clone());
                 Some((
-                    sources[source_idx].raster_query(query.select_attributes(band_selection), ctx),
+                    sources[source_idx]
+                        .raster_query(query.select_attributes(band_selection), ctx)
+                        .map_err(|e| SimpleRasterStackerError::CreateSourceStreams {
+                            source: Box::new(e),
+                        }),
                     bands,
                 ))
             })
@@ -252,7 +306,7 @@ impl<S> SimpleRasterStackerAdapter<S> {
                     band_idxs: BandSelection::new_unchecked(bands),
                 })
             })
-            .collect::<Result<Vec<_>>>()?;
+            .collect::<Result<Vec<_>, _>>()?;
 
         SimpleRasterStackerAdapter::new(stacker_sources, query.attributes().clone())
     }

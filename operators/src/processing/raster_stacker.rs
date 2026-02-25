@@ -1,6 +1,6 @@
 use crate::adapters::{
     PartialQueryRect, QueryWrapper, RasterStackerAdapter, RasterStackerSource,
-    SimpleRasterStackerAdapter,
+    SimpleRasterStackerAdapter, SimpleRasterStackerError,
 };
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
@@ -315,25 +315,6 @@ impl<T> RasterStackerProcessor<T> {
             bands_per_source,
         }
     }
-
-    fn is_regular_time_aligned(&self) -> bool {
-        let Some(first_time_regular) = self.sources[0]
-            .result_descriptor()
-            .time
-            .dimension
-            .unwrap_regular()
-        else {
-            return false;
-        };
-
-        self.sources.iter().all(|s| {
-            s.result_descriptor()
-                .time
-                .dimension
-                .unwrap_regular()
-                .is_some_and(|r| r.compatible_with(first_time_regular))
-        })
-    }
 }
 
 #[async_trait]
@@ -351,17 +332,24 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<T>>>> {
-        if self.is_regular_time_aligned() {
-            tracing::trace!("Using regular time aligned stacker processor");
+        // First try to create simple raster stacker for temporal aligned data
+        let sdp = SimpleRasterStackerAdapter::<
+            SimpleRasterStackerAdapter<BoxRasterQueryProcessor<T>>,
+        >::stack_selected_regular_aligned_raster_bands(&query, ctx, &self.sources)
+        .await;
 
-            let sdp = SimpleRasterStackerAdapter::<
-                SimpleRasterStackerAdapter<BoxRasterQueryProcessor<T>>,
-            >::stack_selected_regular_aligned_raster_bands(
-                &query, ctx, &self.sources
-            )
-            .await?;
+        let x = match sdp {
+            Ok(p) => Ok(Some(p)),
+            Err(SimpleRasterStackerError::InputsNotTemporalAligned) => Ok(None),
+            Err(e) => Err(crate::error::Error::SimpleRasterStacker { source: e }),
+        }?;
+
+        if let Some(sdp) = x {
+            tracing::trace!("Using regular time aligned stacker processor");
             return Ok(Box::pin(sdp));
         }
+
+        // if the simple stacker can not be used, try to use the more complex stacker
 
         tracing::trace!("Using non-regular time aligned stacker processor");
 
@@ -465,8 +453,22 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn it_stacks() {
+        it_stacks_impl(crate::engine::TimeDescriptor::new_irregular(None)).await
+    }
+
+    #[tokio::test]
+
+    async fn it_stacks_regular() {
+        it_stacks_impl(crate::engine::TimeDescriptor::new_regular_with_epoch(
+            Some(TimeInterval::new_unchecked(0, 5)),
+            TimeStep::millis(5).unwrap(),
+        ))
+        .await
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn it_stacks_impl(time_desc: crate::engine::TimeDescriptor) {
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -558,10 +560,7 @@ mod tests {
         let result_descriptor1 = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(0, 5)),
-                TimeStep::millis(5).unwrap(),
-            ),
+            time: time_desc,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -636,8 +635,21 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn it_stacks_stacks() {
+        it_stacks_stacks_impl(crate::engine::TimeDescriptor::new_irregular(None)).await
+    }
+
+    #[tokio::test]
+    async fn it_stacks_stacks_regular() {
+        it_stacks_stacks_impl(crate::engine::TimeDescriptor::new_regular_with_epoch(
+            Some(TimeInterval::new_unchecked(0, 10)),
+            TimeStep::millis(5).unwrap(),
+        ))
+        .await
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn it_stacks_stacks_impl(time_desc: crate::engine::TimeDescriptor) {
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -811,10 +823,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(5).unwrap(),
-            ),
+            time: time_desc,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -900,8 +909,21 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn it_selects_band_from_stack() {
+        it_selects_band_from_stack_impl(crate::engine::TimeDescriptor::new_irregular(None)).await
+    }
+
+    #[tokio::test]
+    async fn it_selects_band_from_stack_regular() {
+        it_selects_band_from_stack_impl(crate::engine::TimeDescriptor::new_regular_with_epoch(
+            Some(TimeInterval::new_unchecked(0, 10)),
+            TimeStep::millis(5).unwrap(),
+        ))
+        .await
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn it_selects_band_from_stack_impl(time_desc: crate::engine::TimeDescriptor) {
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -993,10 +1015,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(5).unwrap(),
-            ),
+            time: time_desc,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),

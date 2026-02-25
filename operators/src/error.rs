@@ -1,3 +1,4 @@
+use crate::adapters::SimpleRasterStackerError;
 use crate::engine::SpatialGridDescriptor;
 use crate::optimization::OptimizationError;
 use crate::processing::BandNeighborhoodAggregateError;
@@ -529,6 +530,11 @@ pub enum Error {
     #[snafu(display("Error during workflow optimization: {source}"))]
     Optimization {
         source: OptimizationError,
+    },
+
+    #[snafu(display("Error in the SimpleRasterStacker: {source}"))]
+    SimpleRasterStacker {
+        source: SimpleRasterStackerError,
     },
 }
 
