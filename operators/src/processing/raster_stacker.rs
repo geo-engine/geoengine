@@ -454,7 +454,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_stacks() {
-        it_stacks_impl(crate::engine::TimeDescriptor::new_irregular(None)).await
+        it_stacks_impl(crate::engine::TimeDescriptor::new_irregular(None)).await;
     }
 
     #[tokio::test]
@@ -464,7 +464,7 @@ mod tests {
             Some(TimeInterval::new_unchecked(0, 5)),
             TimeStep::millis(5).unwrap(),
         ))
-        .await
+        .await;
     }
 
     #[allow(clippy::too_many_lines)]
@@ -636,7 +636,7 @@ mod tests {
 
     #[tokio::test]
     async fn it_stacks_stacks() {
-        it_stacks_stacks_impl(crate::engine::TimeDescriptor::new_irregular(None)).await
+        it_stacks_stacks_impl(crate::engine::TimeDescriptor::new_irregular(None)).await;
     }
 
     #[tokio::test]
@@ -645,7 +645,7 @@ mod tests {
             Some(TimeInterval::new_unchecked(0, 10)),
             TimeStep::millis(5).unwrap(),
         ))
-        .await
+        .await;
     }
 
     #[allow(clippy::too_many_lines)]
