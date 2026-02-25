@@ -54,6 +54,7 @@ pub use raster_properties::{
     RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
 };
 pub use raster_traits::{CoordinatePixelAccess, GeoTransformAccess, Raster};
+pub use util::{TileIdxBandCrossProductIter, TileInformationBandCrossProductIter};
 
 mod arrow_conversion;
 mod band_names;
@@ -79,3 +80,4 @@ mod raster_traits;
 mod tiling;
 mod typed_raster_conversion;
 mod typed_raster_tile;
+mod util;

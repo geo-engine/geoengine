@@ -138,6 +138,11 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
 
     let output_tile: BoxFuture<Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)>> =
         Box::pin(tile_stream.fold(accu, |accu, tile| {
+            #[cfg(debug_assertions)]
+            if let Err(er) = tile.as_ref() {
+                tracing::debug!("Error tile passed to single_[..]_to_png: {er}");
+            }
+
             let result: Result<(GridOrEmpty<GridBoundingBox2D, T>, CacheHint)> =
                 blit_tile(accu, tile);
 
@@ -179,13 +184,17 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
     let output_tile = Box::pin(tile_stream.try_chunks(rgb_channel_count).fold(
         accu,
         |raster2d, chunk| async move {
+            #[cfg(debug_assertions)]
+            if let Err(er) = chunk.as_ref() {
+                tracing::debug!("Error chunk passed to multi_[..]_to_png: {er}");
+            }
+
             let chunk = chunk.boxed_context(error::QueryDidNotProduceNextChunk)?;
 
             if chunk.len() != rgb_channel_count {
                 return Err(PngCreationError::RgbChunkIsNotEnoughBands)?;
             }
 
-            // TODO: spawn blocking task
             let rgb_tile = crate::util::spawn_blocking(move || {
                 compute_rgb_tile(
                     [

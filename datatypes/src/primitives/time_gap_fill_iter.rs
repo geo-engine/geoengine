@@ -1364,7 +1364,7 @@ mod tests {
     }
 
     #[test]
-    fn time_irregular_all_caes() {
+    fn time_irregular_all_cases() {
         let intervals = vec![
             TimeInterval::new_unchecked(
                 TimeInstance::from_millis(15).unwrap(),
@@ -1467,6 +1467,52 @@ mod tests {
                 TimeInterval::new_unchecked(
                     TimeInstance::from_millis(1_746_057_600_000).unwrap(),
                     TimeInstance::from_millis(1_748_736_000_000).unwrap()
+                ),
+            ]
+        );
+    }
+
+    #[test]
+    fn irregular_fill_min_max_time() {
+        let intervals = vec![
+            TimeInterval::new_unchecked(
+                TimeInstance::from_millis(15).unwrap(),
+                TimeInstance::from_millis(25).unwrap(),
+            ),
+            TimeInterval::new_unchecked(
+                TimeInstance::from_millis(45).unwrap(),
+                TimeInstance::from_millis(55).unwrap(),
+            ),
+        ];
+
+        let iter = intervals
+            .into_iter()
+            .map(|t| -> Result<TimeInterval, &str> { Ok(t) })
+            .try_time_irregular_range_fill(TimeInterval::default());
+        let result: Result<Vec<TimeInterval>, _> = iter.collect::<Result<Vec<_>, _>>();
+
+        assert_eq!(
+            result.unwrap(),
+            vec![
+                TimeInterval::new_unchecked(
+                    TimeInstance::MIN,
+                    TimeInstance::from_millis(15).unwrap()
+                ),
+                TimeInterval::new_unchecked(
+                    TimeInstance::from_millis(15).unwrap(),
+                    TimeInstance::from_millis(25).unwrap()
+                ),
+                TimeInterval::new_unchecked(
+                    TimeInstance::from_millis(25).unwrap(),
+                    TimeInstance::from_millis(45).unwrap()
+                ),
+                TimeInterval::new_unchecked(
+                    TimeInstance::from_millis(45).unwrap(),
+                    TimeInstance::from_millis(55).unwrap()
+                ),
+                TimeInterval::new_unchecked(
+                    TimeInstance::from_millis(55).unwrap(),
+                    TimeInstance::MAX
                 ),
             ]
         );
