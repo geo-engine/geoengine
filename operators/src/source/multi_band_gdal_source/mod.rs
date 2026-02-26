@@ -902,12 +902,12 @@ where
     let dataset_mask_flags = rasterband.mask_flags()?;
 
     if dataset_mask_flags.is_all_valid() {
-        debug!("all pixels are valid --> skip no-data and mask handling.");
+        tracing::trace!("all pixels are valid --> skip no-data and mask handling.");
         return Ok(MaskedGrid::new_with_data(data_grid).into());
     }
 
     if dataset_mask_flags.is_nodata() {
-        debug!("raster uses a no-data value --> use no-data handling.");
+        tracing::trace!("raster uses a no-data value --> use no-data handling.");
         let no_data_value = dataset_params
             .no_data_value
             .or_else(|| rasterband.no_data_value())

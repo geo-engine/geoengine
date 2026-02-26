@@ -396,9 +396,10 @@ impl GdalRasterLoader {
                     reader_mode.tiling_to_dataset_read_advise(&ds_spatial_grid, &tile_spatial_grid);
 
                 let Some(gdal_read_advise) = gdal_read_advise else {
-                    debug!(
+                    tracing::trace!(
                         "Tile {:?} not intersecting dataset grid or gdal grid {:?}",
-                        &tile_information, ds.file_path
+                        &tile_information,
+                        ds.file_path
                     );
                     return Ok(create_no_data_tile(tile_information, tile_time, cache_hint));
                 };
@@ -438,7 +439,7 @@ impl GdalRasterLoader {
     ) -> Result<Option<GridAndProperties<T>>> {
         let start = Instant::now();
 
-        debug!(
+        tracing::trace!(
             "GridOrEmpty2D<{:?}> requested for {:?}.",
             T::TYPE,
             &read_advise.bounds_of_target,
@@ -519,7 +520,7 @@ impl GdalRasterLoader {
         let properties = read_raster_properties(&dataset, dataset_params, &rasterband);
 
         let elapsed = start.elapsed();
-        debug!("data loaded -> returning data grid, took {elapsed:?}");
+        tracing::trace!("data loaded -> returning data grid, took {elapsed:?}");
 
         Ok(Some(GridAndProperties {
             grid: result_grid,
@@ -704,6 +705,7 @@ where
             }
         };
 
+        let mut last_time: Option<TimeInterval> = None;
         let source_stream = GdalRasterLoader::loading_info_to_tile_stream(
             filled_loading_info_stream
                 .inspect_ok(move |r| {
@@ -714,6 +716,20 @@ where
                             r.time, query_time
                         );
                     }
+                    if let Some(l) = last_time {
+                        if l.end() < r.time.start() {
+                            tracing::warn!("Time hole discovered! last:  {l},  current: {0}", r.time)
+                        }
+                        if l.end() > r.time.start() {
+                            tracing::warn!("Time overlap discovered! last:  {l},  current: {0}", r.time)
+                        }
+                        debug_assert!(
+                            l.end() == r.time.start(),
+                            "Non-consecutive TimeIntervals! last:  {l},  current: {0}",
+                            r.time
+                        )
+                    };
+                    last_time = Some(r.time);
                 }),
             query.spatial_bounds(),
             tiling_strategy,
@@ -1133,12 +1149,12 @@ where
     let dataset_mask_flags = rasterband.mask_flags()?;
 
     if dataset_mask_flags.is_all_valid() {
-        debug!("all pixels are valid --> skip no-data and mask handling.");
+        tracing::trace!("all pixels are valid --> skip no-data and mask handling.");
         return Ok(MaskedGrid::new_with_data(data_grid).into());
     }
 
     if dataset_mask_flags.is_nodata() {
-        debug!("raster uses a no-data value --> use no-data handling.");
+        tracing::trace!("raster uses a no-data value --> use no-data handling.");
         let no_data_value = dataset_params
             .no_data_value
             .or_else(|| rasterband.no_data_value())

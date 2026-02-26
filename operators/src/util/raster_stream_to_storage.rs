@@ -520,6 +520,7 @@ where
 
     // TODO: maybe replace process tracker with a channel...
     let (total_tiles, pc) = tile_stream
+        .inspect_err(|e| tracing::warn!("Writer got Error instead of tile! {e}"))
         .try_fold((0, progress_consumer), |(tile_count, pc), tile| {
             let tx_c = tx.clone();
             let new_tile_count = tile_count + 1;

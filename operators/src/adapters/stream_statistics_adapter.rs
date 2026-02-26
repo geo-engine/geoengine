@@ -76,7 +76,7 @@ where
         match v {
             Some(_) => {
                 *this.element_count += 1;
-                tracing::debug!(
+                tracing::trace!(
                     event = %"poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
@@ -90,7 +90,7 @@ where
                 );
             }
             None => {
-                tracing::debug!(
+                tracing::trace!(
                     event = %"poll_next",
                     poll_next_count = *this.poll_next_count,
                     element_count = *this.element_count,
