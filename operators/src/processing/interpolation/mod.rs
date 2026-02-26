@@ -29,7 +29,7 @@ use rayon::ThreadPool;
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
 
-#[derive(Debug, Serialize, Deserialize, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationParams {
     pub interpolation: InterpolationMethod,
@@ -37,14 +37,14 @@ pub struct InterpolationParams {
     pub output_origin_reference: Option<Coordinate2D>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InterpolationResolution {
     Resolution(SpatialResolution),
     Fraction { x: f64, y: f64 },
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub enum InterpolationMethod {
     NearestNeighbor,
@@ -114,6 +114,8 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
         params: &InterpolationParams,
         tiling_specification: TilingSpecification,
     ) -> Result<Self> {
+        tracing::debug!("Initialized with params: {params:?}");
+
         let in_descriptor = raster_source.result_descriptor();
         let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
 
@@ -690,6 +692,34 @@ mod tests {
         mock::{MockRasterSource, MockRasterSourceParams},
         processing::{RasterStacker, RasterStackerParams},
     };
+
+    #[test]
+    fn it_serializes_params() {
+        let params = InterpolationParams {
+            interpolation: InterpolationMethod::NearestNeighbor,
+            output_resolution: InterpolationResolution::Resolution(SpatialResolution::one()),
+            output_origin_reference: Some(Coordinate2D::new(33., 22.)),
+        };
+
+        let params_ser = serde_json::to_string(&params).unwrap();
+        let expected = "{\"interpolation\":\"nearestNeighbor\",\"outputResolution\":{\"type\":\"resolution\",\"x\":1.0,\"y\":1.0},\"outputOriginReference\":{\"x\":33.0,\"y\":22.0}}";
+
+        assert_eq!(&params_ser, expected);
+    }
+
+    #[test]
+    fn it_deserializes_params() {
+        let expected = InterpolationParams {
+            interpolation: InterpolationMethod::NearestNeighbor,
+            output_resolution: InterpolationResolution::Resolution(SpatialResolution::one()),
+            output_origin_reference: Some(Coordinate2D::new(33., 22.)),
+        };
+
+        let params = "{\"interpolation\":\"nearestNeighbor\",\"outputResolution\":{\"type\":\"resolution\",\"x\":1.0,\"y\":1.0},\"outputOriginReference\":{\"x\":33.0,\"y\":22.0}}";
+        let params_de: InterpolationParams = serde_json::from_str(params).unwrap();
+
+        assert_eq!(params_de, expected);
+    }
 
     #[tokio::test]
     async fn nearest_neighbor_operator() -> Result<()> {
