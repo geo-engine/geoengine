@@ -14,7 +14,7 @@ use geoengine_operators::{
     engine::CanonicOperatorName,
 };
 use rand::rngs::SmallRng;
-use rand::{Rng, SeedableRng};
+use rand::{RngExt, SeedableRng};
 use serde_json::json;
 use std::hint::black_box;
 use std::sync::Arc;
