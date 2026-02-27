@@ -298,7 +298,7 @@ where
                     // The onnx model is not called if any band is empty. This is usefull if the onnx model can't handle missing data.
                     MlModelInputNoDataHandling::SkipIfNoData => tiles.iter().any(geoengine_datatypes::raster::BaseTile::is_empty),
                 };
-                tracing::debug!("skip_tile is set to {skip_tile} after evaluating input empty tiles.");
+                tracing::trace!("skip_tile is set to {skip_tile} after evaluating input empty tiles.");
 
                 // If the model was applied, we need to handle single pixels based on the input pixel validity (mask).
                 // The validity mask is a positive mask (0 == no-data, 1 == valid data).
@@ -324,7 +324,7 @@ where
                 }
 
                 let skip_tile = skip_tile || output_mask.data.iter().all(|&v| !v);
-                tracing::debug!("skip_tile is set to {skip_tile} after merging all input masks.");
+                tracing::trace!("skip_tile is set to {skip_tile} after merging all input masks.");
 
                 // if the tile is skipable or the output mask has no valid pixels:
                 if skip_tile {

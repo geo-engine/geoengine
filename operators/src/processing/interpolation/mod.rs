@@ -114,8 +114,6 @@ impl<O: InitializedRasterOperator> InitializedInterpolation<O> {
         params: &InterpolationParams,
         tiling_specification: TilingSpecification,
     ) -> Result<Self> {
-        tracing::debug!("Initialized with params: {params:?}");
-
         let in_descriptor = raster_source.result_descriptor();
         let in_spatial_grid = in_descriptor.spatial_grid_descriptor();
 

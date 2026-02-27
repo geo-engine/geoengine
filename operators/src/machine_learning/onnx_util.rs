@@ -23,7 +23,7 @@ pub fn load_onnx_model_from_loading_info(
         .commit_from_file(&ml_model_loading_info.storage_path)
         .context(Ort)
         .inspect_err(|e| {
-            tracing::debug!(
+            tracing::warn!(
                 "Could not create ONNX session for {:?}. Error: {}",
                 ml_model_loading_info.storage_path.file_name(),
                 e

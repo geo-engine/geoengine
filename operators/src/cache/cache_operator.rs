@@ -78,7 +78,7 @@ impl InitializedRasterOperator for InitializedCacheOperator<Box<dyn InitializedR
                         CacheQueryProcessor::new(p, self.source.canonic_name()),
                     )),
                 };
-                tracing::debug!(event = "query processor created");
+                tracing::trace!(event = "query processor created");
                 Ok(res_processor)
             }
             Err(err) => {
@@ -140,7 +140,7 @@ impl InitializedVectorOperator for InitializedCacheOperator<Box<dyn InitializedV
                         ))
                     }
                 };
-                tracing::debug!(event = "query processor created");
+                tracing::trace!(event = "query processor created");
 
                 Ok(res_processor)
             }
@@ -229,7 +229,7 @@ where
 
         if let Ok(Some(cache_result)) = cache_result {
             // cache hit
-            tracing::debug!("cache hit for operator {}", self.cache_key);
+            tracing::trace!("cache hit for operator {}", self.cache_key);
 
             let wrapped_result_steam =
                 E::wrap_result_stream(cache_result, ctx.chunk_byte_size(), query.clone());
@@ -238,7 +238,7 @@ where
         }
 
         // cache miss
-        tracing::debug!("cache miss for operator {}", self.cache_key);
+        tracing::trace!("cache miss for operator {}", self.cache_key);
         let source_stream = self.processor.query(query.clone(), ctx).await?;
 
         let query_id = shared_cache.insert_query(&self.cache_key, &query).await;

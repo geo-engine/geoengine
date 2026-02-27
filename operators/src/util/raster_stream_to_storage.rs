@@ -482,7 +482,7 @@ where
                     // For demonstration, we just print the tile information
                     tile_count += 1;
 
-                    tracing::debug!(
+                    tracing::trace!(
                         "Worker processing tile #{tile_count}: {:?}",
                         tile.tile_information()
                     );
@@ -496,15 +496,21 @@ where
                     gdal_wrapper.write_tile_into_band(tile, raster_band)?;
                 }
                 TileMsg::ReOpen => {
-                    tracing::debug!("Closing current dataset for re-opening in next iteration");
+                    tracing::debug!(
+                        "Closing current dataset for re-opening in next iteration. Current tile count: {tile_count}."
+                    );
                     state.close_current_dataset();
                 }
                 TileMsg::Flush => {
-                    tracing::debug!("Flushing current dataset to storage");
+                    tracing::debug!(
+                        "Flushing current dataset to storage. Current tile count: {tile_count}."
+                    );
                     state.flush_current_dataset();
                 }
                 TileMsg::Finish => {
-                    tracing::debug!("Finishing up, closing current dataset");
+                    tracing::debug!(
+                        "Finishing up, closing current dataset. Current tile count: {tile_count}."
+                    );
                     break;
                 }
             }
@@ -525,10 +531,11 @@ where
             let tx_c = tx.clone();
             let new_tile_count = tile_count + 1;
 
-            tracing::debug!("Received tile #{new_tile_count} for time {:?}", tile.time);
+            tracing::trace!("Received tile #{new_tile_count} for time {:?}", tile.time);
 
             async move {
                 if tile_limit.map_or_else(|| false, |limit| new_tile_count >= limit) {
+                    tracing::debug!("TileLimitExceeded: Count: {new_tile_count}");
                     return Err(Error::TileLimitExceeded {
                         limit: tile_limit.expect("limit exist because it is exceeded"),
                     });
@@ -562,11 +569,13 @@ where
                 Ok((new_tile_count, pc))
             }
         })
-        .await?;
-
-    tx.send(TileMsg::Finish)
         .await
-        .map_err(|_| Error::ChannelSend)?;
+        .inspect_err(|e| tracing::warn!("Error while sending tiles to writer: {e}"))?;
+
+    tx.send(TileMsg::Finish).await.map_err(|e| {
+        tracing::warn!("Error while sending tiles to writer: {e}");
+        Error::ChannelSend
+    })?;
 
     drop(tx); // close channel
 

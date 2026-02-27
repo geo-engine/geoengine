@@ -142,7 +142,7 @@ pub trait RasterQueryProcessor:
             );
             let iter = regular_time
                 .intersecting_intervals(query)?
-                .inspect(|t| debug!("time_query regular shortcut yielded {t:?}"))
+                .inspect(|t| tracing::trace!("time_query regular shortcut yielded {t:?}"))
                 .map(Result::Ok);
             return Ok(futures::StreamExt::boxed(futures::stream::iter(iter)));
         }

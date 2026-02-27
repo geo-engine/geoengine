@@ -1171,7 +1171,7 @@ where
         }
     }
 
-    debug!("use mask based no-data handling.");
+    tracing::trace!("use mask based no-data handling.");
 
     let mask_band = rasterband.open_mask_band()?;
     let mask_buffer = mask_band.read_as::<u8>(
