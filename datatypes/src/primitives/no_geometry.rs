@@ -104,7 +104,7 @@ impl ToWkt<f64> for NoGeometry {
 #[derive(Debug)]
 pub struct NoArrowArray;
 
-impl Array for NoArrowArray {
+unsafe impl Array for NoArrowArray {
     fn as_any(&self) -> &dyn Any {
         unreachable!("There is no implementation since there is no geometry")
     }

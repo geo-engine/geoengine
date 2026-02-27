@@ -778,10 +778,7 @@ mod tests {
         // Use for getting the image to compare against
         // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur.png");
 
-        assert_eq!(
-            bytes,
-            include_bytes!("../../../../test_data/wms/gaussian_blur.png")
-        );
+        assert_image_equals(test_data!("wms/gaussian_blur.png"), &bytes);
     }
 
     #[tokio::test]
