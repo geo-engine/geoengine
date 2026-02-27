@@ -52,6 +52,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: lcov.info
+          fail-on-error: false # do not fail the workflow if the upload fails
 
   lint:
     runs-on: ubuntu-24.04
