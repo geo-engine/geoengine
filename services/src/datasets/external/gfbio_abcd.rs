@@ -673,7 +673,7 @@ mod tests {
     use geoengine_datatypes::primitives::{CacheHint, ColumnSelection};
     use geoengine_operators::engine::QueryProcessor;
     use geoengine_operators::source::OgrSourceProcessor;
-    use rand::RngCore;
+    use rand::Rng;
     use std::{fs::File, io::Read, path::PathBuf};
     use tokio_postgres::Config;
 
