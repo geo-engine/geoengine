@@ -9,6 +9,10 @@ repository = "https://github.com/geo-engine/geoengine"
 readme = "../../README.md"
 keywords = ["geoengine", "gis", "geospatial", "data processing"]
 categories = ["science::geo"]
+autobins = false
+autoexamples = false
+autotests = false
+autobenches = false
 
 [lib]
 path = "lib.rs"
@@ -18,7 +22,6 @@ doctest = false
 bench = false
 doc = false
 proc-macro = false
-harness = false
 
 [dependencies]
 geo = "0.32.0"
