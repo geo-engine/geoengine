@@ -71,6 +71,8 @@ impl GdalWriterState {
             .map(|(_, dataset)| dataset)
     }
 
+    /// # Panics
+    // Only if the dataset is broken.
     pub fn get_or_create_dataset_for_time_interval<P: GdalType>(
         &mut self,
         time_interval: TimeInterval,
@@ -89,7 +91,7 @@ impl GdalWriterState {
 
             // if a dataset exists at the path, open it, otherwise create a new one
             let dataset = if dataset_path.exists() {
-                gdal_wrapper.open_existing_file(&dataset_path)?
+                GdalDatasetWriterWrapper::open_existing_file(&dataset_path)?
             } else {
                 gdal_wrapper.create_file::<P>(&dataset_path)?
             };
@@ -101,8 +103,7 @@ impl GdalWriterState {
 
             debug_assert!(
                 dataset
-                    .rasterband(gdal_wrapper.raster_band_index)
-                    .unwrap()
+                    .rasterband(gdal_wrapper.raster_band_index)?
                     .band_type()
                     == P::datatype(),
                 "dataset should have one raster band at index 1 and it should be of the correct type {}",
@@ -120,11 +121,12 @@ impl GdalWriterState {
         Ok(&mut mut_dataset.1)
     }
 
-    pub fn flush_current_dataset(&mut self) {
+    pub fn flush_current_dataset(&mut self) -> Result<()> {
         if let Some((path, dataset)) = self.current_dataset.as_mut() {
             debug!("Flushing dataset at path: {}", path);
-            dataset.flush_cache().expect("Flushing dataset failed");
+            dataset.flush_cache()?;
         }
+        Ok(())
     }
 
     pub fn close_current_dataset(&mut self) {
@@ -135,10 +137,7 @@ impl GdalWriterState {
         }
     }
 
-    pub fn results(
-        self,
-        gdal_wrapper: &GdalDatasetWriterWrapper,
-    ) -> Vec<GdalLoadingInfoTemporalSlice> {
+    fn results(self, gdal_wrapper: &GdalDatasetWriterWrapper) -> Vec<GdalLoadingInfoTemporalSlice> {
         self.result
             .into_iter()
             .map(|time_interval| {
@@ -276,7 +275,7 @@ impl GdalDatasetWriterWrapper {
         let driver =
             DriverManager::get_driver_by_name(self.gdal_driver_code.as_deref().unwrap_or("GTiff"))?;
 
-        let options = create_gdal_tiff_options(&self.gdal_tiff_options)?;
+        let options = create_gdal_tiff_options(self.gdal_tiff_options)?;
 
         let mut dataset = driver.create_with_band_type_with_options::<P, _>(
             path,
@@ -302,7 +301,7 @@ impl GdalDatasetWriterWrapper {
         Ok(dataset)
     }
 
-    fn open_existing_file(&self, path: &Path) -> Result<Dataset> {
+    fn open_existing_file(path: &Path) -> Result<Dataset> {
         let dataset = Dataset::open_ex(
             path,
             DatasetOptions {
@@ -393,6 +392,7 @@ impl GdalDatasetWriterWrapper {
     }
 }
 
+#[allow(clippy::large_enum_variant)]
 pub enum TileMsg<P: Pixel + GdalType> {
     Tile(RasterTile2D<P>),
     ReOpen,
@@ -400,7 +400,11 @@ pub enum TileMsg<P: Pixel + GdalType> {
     Finish,
 }
 
-#[allow(clippy::too_many_arguments, clippy::missing_panics_doc)]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::missing_panics_doc,
+    clippy::too_many_lines
+)]
 pub async fn raster_stream_to_geotiff<G: ToGeoTiffProgressConsumer, P, C: QueryContext + 'static>(
     file_path: &Path,
     processor: BoxRasterQueryProcessor<P>,
@@ -495,6 +499,7 @@ where
 
                     gdal_wrapper.write_tile_into_band(tile, raster_band)?;
                 }
+
                 TileMsg::ReOpen => {
                     tracing::debug!(
                         "Closing current dataset for re-opening in next iteration. Current tile count: {tile_count}."
@@ -505,7 +510,7 @@ where
                     tracing::debug!(
                         "Flushing current dataset to storage. Current tile count: {tile_count}."
                     );
-                    state.flush_current_dataset();
+                    state.flush_current_dataset()?;
                 }
                 TileMsg::Finish => {
                     tracing::debug!(
@@ -697,7 +702,7 @@ impl PathWithPlaceholder {
     }
 }
 
-pub fn create_gdal_tiff_options(opts: &GdalGeoTiffOptions) -> Result<RasterCreationOptions> {
+pub fn create_gdal_tiff_options(opts: GdalGeoTiffOptions) -> Result<RasterCreationOptions> {
     let mut options = RasterCreationOptions::new();
     options.add_name_value("COMPRESS", COMPRESSION_FORMAT)?;
     options.add_name_value("ZLEVEL", COMPRESSION_LEVEL)?;

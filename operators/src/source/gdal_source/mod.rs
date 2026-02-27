@@ -718,17 +718,17 @@ where
                     }
                     if let Some(l) = last_time {
                         if l.end() < r.time.start() {
-                            tracing::warn!("Time hole discovered! last:  {l},  current: {0}", r.time)
+                            tracing::warn!("Time hole discovered! last:  {l},  current: {0}", r.time);
                         }
                         if l.end() > r.time.start() {
-                            tracing::warn!("Time overlap discovered! last:  {l},  current: {0}", r.time)
+                            tracing::warn!("Time overlap discovered! last:  {l},  current: {0}", r.time);
                         }
                         debug_assert!(
                             l.end() == r.time.start(),
                             "Non-consecutive TimeIntervals! last:  {l},  current: {0}",
                             r.time
-                        )
-                    };
+                        );
+                    }
                     last_time = Some(r.time);
                 }),
             query.spatial_bounds(),
