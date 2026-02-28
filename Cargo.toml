@@ -156,7 +156,7 @@ quote = "1.0"
 rand = "0.10"
 rayon = "1.8"
 regex = "1.12"
-reqwest = { version = "0.12", features = [
+reqwest = { version = "0.13", features = [
     "json",
     "multipart",
     "stream",
