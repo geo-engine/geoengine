@@ -108,13 +108,13 @@ anyhow = { workspace = true }
 vergen = { workspace = true, features = ["build", "cargo", "emit_and_set"] }
 vergen-gitcl = { workspace = true, features = ["build"] }
 
-[[bench]]
-name = "quota_check"
-harness = false
+# [[bench]]
+# name = "quota_check"
+# harness = false
 
-[[bench]]
-name = "tiled_gdal_source"
-harness = false
+# [[bench]]
+# name = "tiled_gdal_source"
+# harness = false
 
 [lints]
 workspace = true
