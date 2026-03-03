@@ -1,0 +1,9 @@
+{
+  "type": "Raster",
+  "operator": {
+    "type": "MultiBandGdalSource",
+    "params": {
+      "data": "sentinel-2-l2a_EPSG32632_U8_20"
+    }
+  }
+}
