@@ -131,7 +131,9 @@ pub struct StacImport {
     #[arg(long, default_value_t = false)]
     missing_bands_handling: bool,
     // TODO: time granularity (validity of items)
-
+    /// Filter datasets by EPSG codes (only create and insert tiles for these EPSG codes)
+    #[clap(long, value_parser, num_args = 0.., value_delimiter = ' ')]
+    epsgs: Vec<u32>,
     // /// Parent layer collection ID
     // #[arg(long, default_value_t = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID)]
     // parent_layer_collection_id: Uuid,
@@ -371,6 +373,11 @@ impl StacImporter {
             .get("proj:epsg")
             .and_then(serde_json::Value::as_u64)
             .context("Missing proj:epsg in item properties")? as u32;
+
+        // Filter by EPSG code if epsgs parameter is provided
+        if !self.params.epsgs.is_empty() && !self.params.epsgs.contains(&epsg) {
+            anyhow::bail!("EPSG {epsg} not in filter list");
+        }
 
         // TODO: provide other ways to compute z-index, e.g. from date updated
         // let z_index = if let Some(z_index_property_name) = &self.params.z_index_property_name {
