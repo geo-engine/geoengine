@@ -1,0 +1,50 @@
+
+###
+
+# @name anonymousSession
+POST http://localhost:3030/api/anonymous
+Content-Type: application/json
+
+### 
+
+# @name workflow
+POST http://localhost:3030/api/workflow
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+< workflow-wfs.json
+
+### 
+
+GET http://localhost:3030/api/workflow/{{workflow.response.body.$.id}}/metadata
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+###
+
+@workflowId = {{workflow.response.body.$.id}}
+@crs = EPSG:32632
+@time = 2020-08-07T00:00:00.000000Z
+
+
+
+# @minx = 419960.0000000000000000
+# @miny = 5610200.0000000000000000
+
+# @maxx = 489760.0000000000000000
+# @maxy = 5680000.0000000000000000
+
+# @minx = 166021.44 
+# @miny = 0.0
+# @maxx = 833978.56
+# @maxy = 9329005.18
+
+@minx = 399960.0000000000000000
+@miny = 5590200.0000000000000000
+
+@maxx = 509760.0000000000000000
+@maxy = 5700000.0000000000000000
+
+GET http://localhost:3030/api/wfs/{{workflowId}}?request=GetFeature&service=WFS&typeNames={{workflowId}}&version=2.0.0&srsName={{crs}}&bbox={{minx}},{{miny}},{{maxx}},{{maxy}}&time={{time}}
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+

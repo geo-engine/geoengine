@@ -1,0 +1,111 @@
+{
+  "type": "Vector",
+  "operator": {
+    "type": "RasterVectorJoin",
+    "params": {
+      "featureAggregation": "first",
+      "featureAggregationIgnoreNoData": false,
+      "names": { "type": "default" },
+      "temporalAggregation": "none",
+      "temporalAggregationIgnoreNoData": false
+    },
+    "sources": {
+      "vector": {
+        "type": "Reprojection",
+        "params": {
+          "deriveOutSpec": "projectionBounds",
+          "targetSpatialReference": "EPSG:32632"
+        },
+        "sources": {
+          "source": {
+            "type": "MockPointSource",
+            "params": {
+              "points": [
+                {
+                  "x": 8.77069,
+                  "y": 50.80904
+                }
+              ],
+              "spatialBounds": {
+                "type": "none"
+              }
+            }
+          }
+        }
+      },
+      "rasters": [
+        {
+          "type": "Expression",
+          "params": {
+            "expression": "if (A == 3 || (A >= 7 && A <= 11)) { NODATA } else { (B - C) / (B + C) }",
+            "outputType": "F32",
+            "outputBand": {
+              "name": "NDVI",
+              "measurement": {
+                "type": "continuous",
+                "unit": "NDVI",
+                "measurement": "NDVI"
+              }
+            },
+            "mapNoData": false
+          },
+          "sources": {
+            "raster": {
+              "type": "RasterStacker",
+              "params": {
+                "renameBands": {
+                  "type": "default"
+                }
+              },
+              "sources": {
+                "rasters": [
+                  {
+                    "type": "RasterTypeConversion",
+                    "params": {
+                      "outputDataType": "U16"
+                    },
+                    "sources": {
+                      "raster": {
+                        "type": "Interpolation",
+                        "params": {
+                          "interpolation": "nearestNeighbor",
+                          "outputResolution": {
+                            "type": "fraction",
+                            "x": 2.0,
+                            "y": 2.0
+                          }
+                        },
+                        "sources": {
+                          "raster": {
+                            "type": "MultiBandGdalSource",
+                            "params": {
+                              "data": "sentinel-2-l2a_EPSG32632_U8_20"
+                            }
+                          }
+                        }
+                      }
+                    }
+                  },
+                  {
+                    "type": "BandFilter",
+                    "params": {
+                      "bands": ["nir", "red"]
+                    },
+                    "sources": {
+                      "raster": {
+                        "type": "MultiBandGdalSource",
+                        "params": {
+                          "data": "sentinel-2-l2a_EPSG32632_U16_10"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}
