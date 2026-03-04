@@ -77,7 +77,7 @@ use geoengine_operators::source::{FileNotFoundHandling, GdalDatasetParameters};
 use geoengine_operators::source::{GdalSource, GdalSourceParameters};
 use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
 use geoengine_operators::util::gdal::{create_ndvi_meta_data, create_ports_meta_data};
-use rand::RngCore;
+use rand::Rng;
 use std::fs::File;
 use std::io::BufReader;
 use std::io::Write;

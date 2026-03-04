@@ -68,21 +68,21 @@ multiple_crate_versions = { level = "allow", priority = 1 }
 [workspace.dependencies]
 actix = { version = "0.13", default-features = false }
 actix-files = "0.6"
-actix-http = { version = "3.11", features = ["ws"] }
+actix-http = { version = "3.12", features = ["ws"] }
 actix-multipart = "0.7"
 actix-rt = "2.9"
-actix-web = "4.12"
+actix-web = "4.13"
 actix-web-httpauth = "0.8"
-actix-ws = "0.3"
+actix-ws = "0.4"
 aes-gcm = "0.10.3"
 anyhow = "1.0"
 approx = "0.5"
-arrow = { version = "57.1", features = ["ipc_compression"] }
-arrow-array = "57.1"
-arrow-ord = "57.1"
-arrow-schema = { version = "57.1", features = ["serde"] }
+arrow = { version = "58.0", features = ["ipc_compression"] }
+arrow-array = "58.0"
+arrow-ord = "58.0"
+arrow-schema = { version = "58.0", features = ["serde"] }
 aruna-rust-api = "2.0.2"
-assert_cmd = "2.0"
+assert_cmd = "2.1"
 async-stream = "0.3"
 async-trait = "0.1"
 base64 = "0.22"
@@ -91,12 +91,12 @@ bb8-postgres = { version = "0.9", features = [
     "with-chrono-0_4",
     "with-serde_json-1",
 ] }
-bytes = "1.10" # for postgres-types impls
+bytes = "1.11" # for postgres-types impls
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
 clap_derive = "4.5"
 config = "0.15"
-convert_case = "0.10"
+convert_case = "0.11"
 criterion = "0.8"
 csv = "1.4"
 erased-serde = "0.4"
@@ -109,8 +109,7 @@ gdal = "0.19"
 gdal-sys = "0.12"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.32.0"
-geo-rand = { git = "https://github.com/lelongg/geo-rand.git", branch = "dependabot/cargo/geo-0.32.0" } # TODO: revert back to "0.5" when it is released
-geo-types = "0.7.18"                                                                                   # important for compatibility when linking expressions
+geo-types = "0.7.18"                                      # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
 image = "0.25"
@@ -120,7 +119,7 @@ libloading = "0.9"
 lru = "0.16"
 lz4_flex = "0.12"
 mime = "0.3"
-ndarray = { version = "0.17", features = ["approx"] }                                                  # has to match with `ort`
+ndarray = { version = "0.17", features = ["approx"] }     # has to match with `ort`
 num = "0.4"
 num-traits = "0.2"
 oauth2 = "5.0"
@@ -154,9 +153,9 @@ proj-sys = "0.25" # needs to stay fixed to use fixed proj version
 prost = "0.12" # must be compatible with `aruna-rust-api`
 pwhash = "1.0"
 quote = "1.0"
-rand = "0.9"
+rand = "0.10"
 rayon = "1.8"
-regex = "1.11"
+regex = "1.12"
 reqwest = { version = "0.12", features = [
     "json",
     "multipart",
@@ -166,16 +165,16 @@ rustc-hash = { version = "2.1", default-features = false }
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_json = "1.0"
 serde_urlencoded = "0.7"
-serde_with = "3.16"
-serial_test = "3.3"
+serde_with = "3.17"
+serial_test = "3.4"
 sha2 = "0.10"
 snafu = "0.8"
 stac = "0.16"
 stream-cancel = "0.8"
-strum = { version = "0.27", features = ["derive"] }
-strum_macros = "0.27"
+strum = { version = "0.28", features = ["derive"] }
+strum_macros = "0.28"
 syn = { version = "2.0", features = ["full", "extra-traits"] }
-tempfile = "3.24"
+tempfile = "3.26"
 time = "0.3"
 tokio = { version = "1.49", features = [
     "fs",
@@ -216,8 +215,8 @@ uuid = { version = "1.17", features = [
     "v5",
 ] } # must be compatible with `bb8-postgres`
 validator = { version = "0.20", features = ["derive"] }
-vergen = "9.0"
-vergen-gitcl = "1.0"
+vergen = "9.1"
+vergen-gitcl = "9.1"
 walkdir = "2.4"
 wkt = "0.14"
 xml = "1.2"

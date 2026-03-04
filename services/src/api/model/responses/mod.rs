@@ -132,7 +132,7 @@ where
             // => derive more sensible default than snafu
             let conv = Converter::new()
                 .set_pattern(Pattern::Sentence)
-                .set_delim(' ');
+                .set_delimiter(' ');
             message = conv.convert(variant_name);
         }
         ErrorResponse {

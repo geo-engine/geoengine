@@ -851,7 +851,7 @@ mod tests {
         matchers::{contains, lowercase, request},
         responders::status_code,
     };
-    use rand::RngCore;
+    use rand::Rng;
     use std::{fs::File, io::Read, path::PathBuf};
     use tokio_postgres::Config;
 
