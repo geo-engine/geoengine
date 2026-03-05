@@ -134,7 +134,9 @@ jobs:
 
   benchmarks:
     runs-on: ubuntu-24.04
-    container: quay.io/geoengine/devcontainer:latest
+    container:
+      image: quay.io/geoengine/devcontainer:latest
+      options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined
 
     permissions: # optional for public repositories
       contents: read # required for actions/checkout
