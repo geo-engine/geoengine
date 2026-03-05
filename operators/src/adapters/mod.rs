@@ -2,27 +2,22 @@ mod band_extractor;
 mod feature_collection_merger;
 mod raster_stacker;
 mod raster_subquery;
-mod raster_time;
 mod raster_time_substream;
 mod simple_raster_stacker;
-mod sparse_tiles_fill_adapter;
 mod stream_statistics_adapter;
 mod time_stream_merge;
 
 use band_extractor::BandExtractor;
 pub use feature_collection_merger::FeatureCollectionChunkMerger;
-pub use raster_stacker::{RasterStackerAdapter, RasterStackerSource};
+pub use raster_stacker::{
+    PartialQueryRect, QueryWrapper, RasterStackerAdapter, RasterStackerSource,
+};
 pub use raster_subquery::{
     FoldTileAccu, FoldTileAccuMut, RasterSubQueryAdapter, SubQueryTileAggregator,
     TileReprojectionSubQuery, TileReprojectionSubqueryGridInfo, fold_by_coordinate_lookup_future,
 };
-pub use raster_time::{QueryWrapper, Queryable, RasterArrayTimeAdapter, RasterTimeAdapter};
 pub use simple_raster_stacker::{
-    SimpleRasterStackerAdapter, SimpleRasterStackerSource, stack_individual_aligned_raster_bands,
-};
-pub(crate) use sparse_tiles_fill_adapter::{
-    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
-    SparseTilesFillAdapterError,
+    SimpleRasterStackerAdapter, SimpleRasterStackerError, SimpleRasterStackerSource,
 };
 pub use stream_statistics_adapter::StreamStatisticsAdapter;
 pub use time_stream_merge::TimeIntervalStreamMerge;

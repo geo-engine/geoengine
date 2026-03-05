@@ -1,6 +1,3 @@
-use crate::adapters::{
-    FillerTileCacheExpirationStrategy, FillerTimeBounds, SparseTilesFillAdapter,
-};
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, InitializedRasterOperator, OperatorData,
     OperatorName, QueryProcessor, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -12,15 +9,17 @@ use crate::processing::{
 };
 use crate::util::Result;
 use async_trait::async_trait;
+use futures::TryStreamExt;
 use futures::{stream, stream::StreamExt};
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_datatypes::primitives::{
-    BandSelection, CacheExpiration, RasterQueryRectangle, SpatialResolution, TimeFilledItem,
-    TimeInstance, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
+    BandSelection, CacheHint, RasterQueryRectangle, RegularTimeDimension, SpatialResolution,
+    TimeFilledItem, TimeInstance, TimeInterval, TryIrregularTimeFillIterExt,
+    TryRegularTimeFillIterExt,
 };
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridIntersection, GridShape2D, GridShapeAccess, GridSize, Pixel,
-    RasterTile2D, TilingSpecification,
+    GridBoundingBox2D, GridOrEmpty, GridShape2D, GridShapeAccess, GridSize, Pixel, RasterTile2D,
+    TileIdxBandCrossProductIter, TilingSpecification,
 };
 use itertools::Itertools;
 use serde::{Deserialize, Serialize};
@@ -38,6 +37,16 @@ pub enum MockRasterSourceError {
     TileSizeDiffersFromTilingSpecification {
         tiling_specification_yx: GridShape2D,
         tile_size_yx: GridShape2D,
+    },
+    #[snafu(display(
+        "A tile has a time interval of {} with len {} which is not valid in the specified regular dimension {:?}",
+        tile_time,
+        tile_time.duration_ms(),
+        time_dim
+    ))]
+    InvalidTimeIntervalInRegularDim {
+        tile_time: TimeInterval,
+        time_dim: RegularTimeDimension,
     },
 }
 
@@ -81,6 +90,17 @@ where
             );
         }
 
+        if let Some(regular) = result_descriptor.time.dimension.unwrap_regular() {
+            for x in &data {
+                if !regular.valid_interval(x.time) {
+                    return Err(MockRasterSourceError::InvalidTimeIntervalInRegularDim {
+                        tile_time: x.time,
+                        time_dim: regular,
+                    });
+                }
+            }
+        }
+
         Ok(Self {
             result_descriptor,
             data,
@@ -118,75 +138,50 @@ where
     async fn _query<'a>(
         &'a self,
         query: RasterQueryRectangle,
-        _ctx: &'a dyn crate::engine::QueryContext,
+        ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<futures::stream::BoxStream<crate::util::Result<Self::Output>>> {
-        let mut known_time_start: Option<TimeInstance> = None;
-        let mut known_time_end: Option<TimeInstance> = None;
-        let qt = query.time_interval();
-        let qg = query.spatial_bounds();
-        let parts: Vec<RasterTile2D<T>> = self
-            .data
-            .iter()
-            .inspect(|m| {
-                let time_interval = m.time;
-
-                if time_interval.contains(&qt) {
-                    let t1 = time_interval.start();
-                    let t2 = time_interval.end();
-                    known_time_start = Some(t1);
-                    known_time_end = Some(t2);
-                    return;
-                }
-
-                if time_interval.end() <= qt.start() {
-                    let t1 = time_interval.end();
-                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
-                } else if time_interval.start() <= qt.start() {
-                    let t1 = time_interval.start();
-                    known_time_start = known_time_start.map(|old| old.max(t1)).or(Some(t1));
-                }
-
-                if time_interval.start() >= qt.end() {
-                    let t2 = time_interval.start();
-                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                } else if time_interval.end() >= qt.end() {
-                    let t2 = time_interval.end();
-                    known_time_end = known_time_end.map(|old| old.min(t2)).or(Some(t2));
-                }
-            })
-            .filter(move |t| {
-                t.time.intersects(&qt)
-                    && t.tile_information()
-                        .global_pixel_bounds()
-                        .intersects(&query.spatial_bounds())
-            })
-            .cloned()
-            .collect();
-
-        // if we found no time bound we can assume that there is no data
-        let known_time_before = known_time_start.unwrap_or(TimeInstance::MIN);
-        let known_time_after = known_time_end.unwrap_or(TimeInstance::MAX);
-
-        let inner_stream = stream::iter(parts.into_iter().map(Result::Ok));
-
-        let tiling_grid_spec = self
+        let tiling_strat = self
             .result_descriptor
-            .tiling_grid_definition(self.tiling_specification);
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
-        let tiling_strategy = tiling_grid_spec.generate_data_tiling_strategy();
+        let tiling_bounds =
+            tiling_strat.global_pixel_grid_bounds_to_tile_grid_bounds(query.spatial_bounds());
 
-        // use SparseTilesFillAdapter to fill all the gaps
-        Ok(SparseTilesFillAdapter::new(
-            inner_stream,
-            tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(qg),
-            self.result_descriptor.bands.count(),
-            tiling_strategy.geo_transform,
-            tiling_strategy.tile_size_in_pixels,
-            FillerTileCacheExpirationStrategy::FixedValue(CacheExpiration::max()), // cache forever because we know all mock data
-            qt,
-            FillerTimeBounds::new(known_time_before, known_time_after),
-        )
-        .boxed())
+        let times = self.time_query(query.time_interval(), ctx).await?;
+
+        let ttb = times
+            .map_ok(move |time| {
+                stream::iter(
+                    TileIdxBandCrossProductIter::with_grid_bounds_and_selection(
+                        tiling_bounds,
+                        query.attributes().clone(),
+                    )
+                    .map(move |tile_band| {
+                        crate::util::Result::<_, crate::error::Error>::Ok((time, tile_band))
+                    }),
+                )
+            })
+            .try_flatten();
+
+        let tile_stream = ttb.map_ok(move |(time, (tile, band))| {
+            self.data
+                .iter()
+                .find(|data| data.band == band && data.tile_position == tile && data.time == time)
+                .cloned()
+                .unwrap_or_else(|| {
+                    RasterTile2D::new(
+                        time,
+                        tile,
+                        band,
+                        tiling_strat.geo_transform,
+                        GridOrEmpty::new_empty_shape(tiling_strat.tile_size_in_pixels),
+                        CacheHint::no_cache(),
+                    )
+                })
+        });
+
+        Ok(tile_stream.boxed())
     }
 
     fn result_descriptor(&self) -> &Self::ResultDescription {
@@ -206,21 +201,68 @@ where
         query: geoengine_datatypes::primitives::TimeInterval,
         _ctx: &'a dyn crate::engine::QueryContext,
     ) -> Result<stream::BoxStream<'a, Result<geoengine_datatypes::primitives::TimeInterval>>> {
-        let unique_times = self
+        let unique_times: Vec<TimeInterval> = self
             .data
             .iter()
-            .map(|tile| tile.time)
+            .map(|tile| &tile.time)
             .unique_by(|t| *t)
-            .filter(move |t| t.intersects(&query))
-            .map(Ok);
+            .copied()
+            .collect();
+
+        let intersecting_times: Vec<TimeInterval> = unique_times
+            .iter()
+            .filter(|t| t.intersects(&query.time()))
+            .copied()
+            .collect();
 
         let times = match self.result_descriptor.time.dimension {
             geoengine_datatypes::primitives::TimeDimension::Irregular => {
-                let times = unique_times.try_time_irregular_range_fill(query.time());
+                let r_start = if let Some(first) = intersecting_times.first() {
+                    if first.start() <= query.time().start() {
+                        first.start()
+                    } else {
+                        let before = unique_times
+                            .iter()
+                            .rfind(|t| t.end() <= query.time().start());
+                        before.map_or(
+                            TimeInstance::MIN,
+                            geoengine_datatypes::primitives::TimeInterval::end,
+                        )
+                    }
+                } else {
+                    TimeInstance::MIN
+                };
+
+                let r_end = if let Some(last) = intersecting_times.last() {
+                    if last.end() >= query.time().end() {
+                        last.end()
+                    } else {
+                        let follow = unique_times
+                            .iter()
+                            .filter(|t| t.start() >= query.time().end())
+                            .nth(0);
+                        follow.map_or(
+                            TimeInstance::MAX,
+                            geoengine_datatypes::primitives::TimeInterval::start,
+                        )
+                    }
+                } else {
+                    TimeInstance::MAX
+                };
+
+                let fill_range = TimeInterval::new(r_start, r_end)?;
+
+                let times = intersecting_times
+                    .into_iter()
+                    .map(Result::Ok)
+                    .try_time_irregular_range_fill(fill_range); // Fills min max
                 stream::iter(times).boxed()
             }
             geoengine_datatypes::primitives::TimeDimension::Regular(regular_dim) => {
-                let times = unique_times.try_time_regular_range_fill(regular_dim, query.time());
+                let times = intersecting_times
+                    .into_iter()
+                    .map(Result::Ok)
+                    .try_time_regular_range_fill(regular_dim, query.time());
                 stream::iter(times).boxed()
             }
         };
@@ -415,7 +457,9 @@ mod tests {
         MockExecutionContext, QueryProcessor, RasterBandDescriptors, SpatialGridDescriptor,
         TimeDescriptor,
     };
-    use geoengine_datatypes::primitives::{BandSelection, CacheHint, TimeInterval, TimeStep};
+    use geoengine_datatypes::primitives::{
+        BandSelection, CacheHint, TimeInstance, TimeInterval, TimeStep,
+    };
     use geoengine_datatypes::raster::{
         BoundedGrid, GeoTransform, Grid, Grid2D, GridBoundingBox2D, MaskedGrid, RasterDataType,
         RasterProperties, TileInformation,
@@ -611,9 +655,138 @@ mod tests {
                     data_type: RasterDataType::U8,
                     spatial_reference: SpatialReference::epsg_4326().into(),
                     time: TimeDescriptor::new_regular_with_epoch(
+                        // This is a regular TimeDescriptor!
                         Some(TimeInterval::new_unchecked(1, 3)),
                         TimeStep::millis(1).unwrap(),
                     ),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((0., -3.).into(), 1., -1.),
+                        GridShape2D::new_2d(3, 4).bounding_box(),
+                    ),
+                    bands: RasterBandDescriptors::new_single_band(),
+                },
+            },
+        }
+        .boxed();
+
+        let execution_context =
+            MockExecutionContext::new_with_tiling_spec(TilingSpecification::new([3, 2].into()));
+
+        let query_processor = raster_source
+            .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+            .await
+            .unwrap()
+            .query_processor()
+            .unwrap()
+            .get_u8()
+            .unwrap();
+
+        let query_ctx = execution_context.mock_query_context_test_default();
+
+        // QUERY 1
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(0, 4),
+            BandSelection::first(),
+        );
+
+        let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let result = result_stream.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(
+            result.iter().map(|tile| tile.time).collect::<Vec<_>>(),
+            [
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(0, 1),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(1, 2),
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(3, 4),
+                TimeInterval::new_unchecked(3, 4),
+            ]
+        );
+
+        // QUERY 2
+
+        let query_rect = RasterQueryRectangle::new(
+            GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
+            TimeInterval::new_unchecked(2, 4),
+            BandSelection::first(),
+        );
+
+        let result_stream = query_processor.query(query_rect, &query_ctx).await.unwrap();
+
+        let result = result_stream.map(Result::unwrap).collect::<Vec<_>>().await;
+
+        assert_eq!(
+            result.iter().map(|tile| tile.time).collect::<Vec<_>>(),
+            [
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(2, 3),
+                TimeInterval::new_unchecked(3, 4),
+                TimeInterval::new_unchecked(3, 4),
+            ]
+        );
+    }
+
+    #[allow(clippy::too_many_lines)]
+    #[tokio::test]
+    async fn query_interval_larger_then_data_range_irregular() {
+        let raster_source = MockRasterSource {
+            params: MockRasterSourceParams::<u8> {
+                data: vec![
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(1, 2),
+                        tile_position: [-1, 0].into(),
+                        band: 0,
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![1, 2, 3, 4, 5, 6])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                        cache_hint: CacheHint::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(1, 2),
+                        tile_position: [-1, 1].into(),
+                        band: 0,
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![7, 8, 9, 10, 11, 12])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                        cache_hint: CacheHint::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(2, 3),
+                        tile_position: [-1, 0].into(),
+                        band: 0,
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![13, 14, 15, 16, 17, 18])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                        cache_hint: CacheHint::default(),
+                    },
+                    RasterTile2D {
+                        time: TimeInterval::new_unchecked(2, 3),
+                        tile_position: [-1, 1].into(),
+                        band: 0,
+                        global_geo_transform: TestDefault::test_default(),
+                        grid_array: Grid::new([3, 2].into(), vec![19, 20, 21, 22, 23, 24])
+                            .unwrap()
+                            .into(),
+                        properties: RasterProperties::default(),
+                        cache_hint: CacheHint::default(),
+                    },
+                ],
+                result_descriptor: RasterResultDescriptor {
+                    data_type: RasterDataType::U8,
+                    spatial_reference: SpatialReference::epsg_4326().into(),
+                    time: TimeDescriptor::new_irregular(None),
                     spatial_grid: SpatialGridDescriptor::source_from_parts(
                         GeoTransform::new((0., -3.).into(), 1., -1.),
                         GridShape2D::new_2d(3, 4).bounding_box(),

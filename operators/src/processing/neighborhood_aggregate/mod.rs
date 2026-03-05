@@ -4,7 +4,7 @@ mod tile_sub_query;
 use self::aggregate::{AggregateFunction, Neighborhood, StandardDeviation, Sum};
 use self::tile_sub_query::NeighborhoodAggregateTileNeighborhood;
 use crate::adapters::RasterSubQueryAdapter;
-use crate::adapters::stack_individual_aligned_raster_bands;
+use crate::adapters::SimpleRasterStackerAdapter;
 use crate::engine::{
     CanonicOperatorName, ExecutionContext, InitializedRasterOperator, InitializedSources, Operator,
     OperatorName, QueryContext, QueryProcessor, RasterOperator, RasterQueryProcessor,
@@ -13,6 +13,7 @@ use crate::engine::{
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
+use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
@@ -279,29 +280,35 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
-        stack_individual_aligned_raster_bands(&query, ctx, |query, ctx| async move {
-            let sub_query =
-                NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
+        SimpleRasterStackerAdapter::stack_individual_aligned_raster_bands(
+            &query,
+            ctx,
+            |query, ctx| async move {
+                let sub_query =
+                    NeighborhoodAggregateTileNeighborhood::<P, A>::new(self.neighborhood.clone());
 
-            let time_stream = self.source.time_query(query.time_interval(), ctx).await?;
+                let time_stream = self.source.time_query(query.time_interval(), ctx).await?;
 
-            let tiling_strat = self
-                .source
-                .result_descriptor()
-                .tiling_grid_definition(self.tiling_specification)
-                .generate_data_tiling_strategy();
+                let tiling_strat = self
+                    .source
+                    .result_descriptor()
+                    .tiling_grid_definition(self.tiling_specification)
+                    .generate_data_tiling_strategy();
 
-            let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
-                &self.source,
-                query,
-                tiling_strat,
-                ctx,
-                sub_query,
-                time_stream,
-            );
-            Ok(sq.box_pin())
-        })
+                let sq = RasterSubQueryAdapter::<'a, P, _, _, _>::new(
+                    &self.source,
+                    query,
+                    tiling_strat,
+                    ctx,
+                    sub_query,
+                    time_stream,
+                );
+                Ok(sq.box_pin())
+            },
+        )
         .await
+        .map_err(|e| crate::error::Error::SimpleRasterStacker { source: e })
+        .map(StreamExt::boxed)
     }
 
     fn result_descriptor(&self) -> &RasterResultDescriptor {
@@ -778,10 +785,7 @@ mod tests {
         // Use for getting the image to compare against
         // geoengine_datatypes::util::test::save_test_bytes(&bytes, "gaussian_blur.png");
 
-        assert_eq!(
-            bytes,
-            include_bytes!("../../../../test_data/wms/gaussian_blur.png")
-        );
+        assert_image_equals(test_data!("wms/gaussian_blur.png"), &bytes);
     }
 
     #[tokio::test]

@@ -2283,7 +2283,7 @@ mod tests {
             },
             sources: Expression {
                 params: ExpressionParams {
-                    expression: "if A is NODATA {NODATA} else {A}".to_string(), // FIXME: was "A" because nodata pixels would be skipped. --> The landcover pixels overlapping are NODATA, but why?
+                    expression: "if A is NODATA {NODATA} else {A}".to_string(), // FIXME: was "A" because nodata pixels would be skipped. --> The landcover pixels overlapping are NODATA, but why? Because ther is something wrong here!
                     output_type: RasterDataType::F64,
                     output_band: None,
                     map_no_data: true,

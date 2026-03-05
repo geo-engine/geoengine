@@ -1,8 +1,11 @@
 use float_cmp::approx_eq;
 
-use crate::raster::{
-    EmptyGrid, GeoTransform, Grid, GridIndexAccess, GridOrEmpty, GridSize, MaskedGrid, Pixel,
-    RasterTile2D, grid_idx_iter_2d,
+use crate::{
+    primitives::TimeInterval,
+    raster::{
+        EmptyGrid, GeoTransform, Grid, GridIdx2D, GridIndexAccess, GridOrEmpty, GridSize,
+        MaskedGrid, Pixel, RasterTile2D, grid_idx_iter_2d,
+    },
 };
 use std::panic;
 
@@ -103,6 +106,10 @@ pub fn assert_eq_two_list_of_tiles<P: Pixel>(
     list_b: &[RasterTile2D<P>],
     compare_cache_hint: bool,
 ) {
+    fn tile_pos<T>(tile: &RasterTile2D<T>) -> (TimeInterval, GridIdx2D, u32) {
+        (tile.time, tile.tile_position, tile.band)
+    }
+
     assert_eq!(
         list_a.len(),
         list_b.len(),
@@ -156,10 +163,12 @@ pub fn assert_eq_two_list_of_tiles<P: Pixel>(
             assert_eq!(
                 a.grid_array.is_empty(),
                 b.grid_array.is_empty(),
-                "grid shape of tile {} input_a is_empty: {:?}, input_b is_empty: {:?}",
+                "grid shape of tile {} input_a is_empty: {:?}, input_b is_empty: {:?}, a info: {:?}, b info: {:?}",
                 i,
                 a.grid_array.is_empty(),
                 b.grid_array.is_empty(),
+                tile_pos(a),
+                tile_pos(b)
             );
             if !a.grid_array.is_empty() {
                 let mat_a = a.grid_array.clone().into_materialized_masked_grid();
