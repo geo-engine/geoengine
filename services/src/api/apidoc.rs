@@ -466,7 +466,7 @@ use utoipa::{Modify, OpenApi};
         ),
     ),
     nest(
-        (path = "/process", api = geoengine_api::processes::OperatorsApi),
+        (path = "/processingGraphs", api = crate::api::model::processing_graphs::OperatorsApi),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")

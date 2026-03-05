@@ -2549,24 +2549,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "geoengine-api"
-version = "0.9.0"
-dependencies = [
- "anyhow",
- "futures",
- "geoengine-datatypes",
- "geoengine-macros",
- "geoengine-operators",
- "pretty_assertions",
- "serde",
- "serde_json",
- "serde_with",
- "tracing-opentelemetry",
- "tracing-subscriber",
- "utoipa",
-]
-
-[[package]]
 name = "geoengine-datatypes"
 version = "0.9.0"
 dependencies = [
@@ -2727,7 +2709,6 @@ dependencies = [
  "futures-util",
  "gdal",
  "geo 0.32.0",
- "geoengine-api",
  "geoengine-datatypes",
  "geoengine-expression",
  "geoengine-macros",

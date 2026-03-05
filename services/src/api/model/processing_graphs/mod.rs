@@ -1,6 +1,6 @@
 #![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
 
-use crate::processes::{
+use crate::api::model::processing_graphs::{
     processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
     source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
 };
@@ -18,6 +18,7 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
+mod parameters;
 mod processing;
 mod source;
 

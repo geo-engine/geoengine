@@ -1,4 +1,4 @@
-use crate::parameters::{Coordinate2D, SpatialBoundsDerive};
+use crate::api::model::processing_graphs::parameters::{Coordinate2D, SpatialBoundsDerive};
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_macros::type_tag;
 use geoengine_operators::{
@@ -119,7 +119,7 @@ impl TryFrom<MockPointSource> for OperatorsMockPointSource {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::processes::{RasterOperator, TypedOperator, VectorOperator};
+    use crate::api::model::processing_graphs::{RasterOperator, TypedOperator, VectorOperator};
     use geoengine_operators::engine::TypedOperator as OperatorsTypedOperator;
 
     #[test]

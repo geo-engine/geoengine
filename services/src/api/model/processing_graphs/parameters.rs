@@ -1,4 +1,4 @@
-use crate::processes::{RasterOperator, VectorOperator};
+use crate::api::model::processing_graphs::{RasterOperator, VectorOperator};
 use anyhow::Context;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize, Serializer};

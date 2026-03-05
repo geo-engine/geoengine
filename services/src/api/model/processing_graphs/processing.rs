@@ -1,8 +1,7 @@
-use crate::parameters::{
-    ColumnNames, FeatureAggregationMethod, SingleRasterSource, SingleVectorMultipleRasterSources,
-    TemporalAggregationMethod,
+use crate::api::model::processing_graphs::parameters::{
+    ColumnNames, FeatureAggregationMethod, RasterBandDescriptor, RasterDataType,
+    SingleRasterSource, SingleVectorMultipleRasterSources, TemporalAggregationMethod,
 };
-use crate::parameters::{RasterBandDescriptor, RasterDataType};
 use geoengine_macros::type_tag;
 use geoengine_operators::processing::{
     Expression as OperatorsExpression, ExpressionParams as OperatorsExpressionParameters,
@@ -284,14 +283,10 @@ impl TryFrom<RasterVectorJoin> for OperatorsRasterVectorJoin {
 mod tests {
 
     use super::*;
-    use crate::{
+    use crate::api::model::processing_graphs::{
+        RasterOperator, VectorOperator,
         parameters::{Coordinate2D, SpatialBoundsDerive},
-        processes::{
-            RasterOperator, VectorOperator,
-            source::{
-                GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
-            },
-        },
+        source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
     };
 
     #[test]
