@@ -142,33 +142,33 @@ jobs:
       contents: read # required for actions/checkout
       id-token: write # required for OIDC authentication with CodSpeed
 
+    env:
+      BRANCH_NAME: ${{ github.head_ref || github.ref_name }} 
+
     steps:
       - uses: actions/checkout@v6
-      - name: Init rustup toolchain
-        # somehow rustup show will take care to initialize the version based on the toolchain file
-        run: rustup show
-      - name: Install CodSpeed CLI
-        run: |
-          cargo install cargo-binstall
-          cargo binstall cargo-codspeed
-      - name: setup rust build cache
-        uses: Swatinem/rust-cache@v2
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
         with:
-          # An explicit cache key that is used instead of the automatic `job`-based
-          # cache key and is thus stable across jobs.
-          # Default: empty
-          shared-key: ""
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+      # TODO: Get Cache back
+      # - name: setup rust build cache
+      #   uses: Swatinem/rust-cache@v2
+      #   with:
+      #     # An explicit cache key that is used instead of the automatic `job`-based
+      #     # cache key and is thus stable across jobs.
+      #     # Default: empty
+      #     shared-key: ""
 
-          # An additional cache key that is added alongside the automatic `job`-based
-          # cache key and can be used to further differentiate jobs.
-          # Default: empty
-          key: ci_test_${{ matrix.build }}
-      - name: Prepare the benchmark
-        run: |
-          service postgresql start
-          cargo codspeed build -m simulation
-      - name: Run the benchmarks
-        uses: CodSpeedHQ/action@v4
-        with:
-          mode: simulation
-          run: cargo codspeed run
+      #     # An additional cache key that is added alongside the automatic `job`-based
+      #     # cache key and can be used to further differentiate jobs.
+      #     # Default: empty
+      #     key: ci_test_
+      - name: Benchmark
+        uses: ./.github/actions/test
