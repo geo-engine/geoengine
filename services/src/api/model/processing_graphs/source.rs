@@ -1,4 +1,6 @@
-use crate::api::model::processing_graphs::parameters::{Coordinate2D, SpatialBoundsDerive};
+use crate::api::model::{
+    datatypes::Coordinate2D, processing_graphs::parameters::SpatialBoundsDerive,
+};
 use geoengine_datatypes::dataset::NamedData;
 use geoengine_macros::type_tag;
 use geoengine_operators::{

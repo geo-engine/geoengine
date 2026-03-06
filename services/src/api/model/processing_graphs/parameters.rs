@@ -1,34 +1,12 @@
-use crate::api::model::processing_graphs::{RasterOperator, VectorOperator};
+use crate::api::model::{
+    datatypes::Coordinate2D,
+    processing_graphs::{RasterOperator, VectorOperator},
+};
 use anyhow::Context;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize, Serializer};
 use std::collections::BTreeMap;
 use utoipa::ToSchema;
-
-/// A 2D coordinate with `x` and `y` values.
-#[derive(Clone, Copy, Debug, Deserialize, PartialEq, PartialOrd, Serialize, Default, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct Coordinate2D {
-    pub x: f64,
-    pub y: f64,
-}
-impl From<Coordinate2D> for geoengine_datatypes::primitives::Coordinate2D {
-    fn from(value: Coordinate2D) -> Self {
-        geoengine_datatypes::primitives::Coordinate2D {
-            x: value.x,
-            y: value.y,
-        }
-    }
-}
-
-impl From<geoengine_datatypes::primitives::Coordinate2D> for Coordinate2D {
-    fn from(value: geoengine_datatypes::primitives::Coordinate2D) -> Self {
-        Coordinate2D {
-            x: value.x,
-            y: value.y,
-        }
-    }
-}
 
 /// A raster data type.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]

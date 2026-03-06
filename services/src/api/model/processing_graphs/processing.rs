@@ -283,10 +283,15 @@ impl TryFrom<RasterVectorJoin> for OperatorsRasterVectorJoin {
 mod tests {
 
     use super::*;
-    use crate::api::model::processing_graphs::{
-        RasterOperator, VectorOperator,
-        parameters::{Coordinate2D, SpatialBoundsDerive},
-        source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
+    use crate::api::model::{
+        datatypes::Coordinate2D,
+        processing_graphs::{
+            RasterOperator, VectorOperator,
+            parameters::SpatialBoundsDerive,
+            source::{
+                GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+            },
+        },
     };
 
     #[test]
