@@ -163,6 +163,10 @@ jobs:
           # cache key and can be used to further differentiate jobs.
           # Default: empty
           key: ci_test_${{ matrix.build }}
+      - name: Prepare the benchmark
+        run: |
+          service postgresql start
+          cargo codspeed build -m simulation
       - name: Run the benchmarks
         uses: CodSpeedHQ/action@v4
         with:
