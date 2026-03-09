@@ -35,72 +35,87 @@
       },
       "rasters": [
         {
-          "type": "Expression",
+          "type": "TemporalRasterAggregation",
           "params": {
-            "expression": "if (A == 3 || (A >= 7 && A <= 11)) { NODATA } else { (B - C) / (B + C) }",
-            "outputType": "F32",
-            "outputBand": {
-              "name": "NDVI",
-              "measurement": {
-                "type": "continuous",
-                "unit": "NDVI",
-                "measurement": "NDVI"
-              }
+            "aggregation": {
+              "type": "mean",
+              "ignoreNoData": true
             },
-            "mapNoData": false
+            "window": {
+              "granularity": "months",
+              "step": 1
+            }
           },
           "sources": {
             "raster": {
-              "type": "RasterStacker",
+              "type": "Expression",
               "params": {
-                "renameBands": {
-                  "type": "default"
-                }
+                "expression": "if (A == 3 || (A >= 7 && A <= 11)) { NODATA } else { (B - C) / (B + C) }",
+                "outputType": "F32",
+                "outputBand": {
+                  "name": "NDVI",
+                  "measurement": {
+                    "type": "continuous",
+                    "unit": "NDVI",
+                    "measurement": "NDVI"
+                  }
+                },
+                "mapNoData": false
               },
               "sources": {
-                "rasters": [
-                  {
-                    "type": "RasterTypeConversion",
-                    "params": {
-                      "outputDataType": "U16"
-                    },
-                    "sources": {
-                      "raster": {
-                        "type": "Interpolation",
+                "raster": {
+                  "type": "RasterStacker",
+                  "params": {
+                    "renameBands": {
+                      "type": "default"
+                    }
+                  },
+                  "sources": {
+                    "rasters": [
+                      {
+                        "type": "RasterTypeConversion",
                         "params": {
-                          "interpolation": "nearestNeighbor",
-                          "outputResolution": {
-                            "type": "fraction",
-                            "x": 2.0,
-                            "y": 2.0
+                          "outputDataType": "U16"
+                        },
+                        "sources": {
+                          "raster": {
+                            "type": "Interpolation",
+                            "params": {
+                              "interpolation": "nearestNeighbor",
+                              "outputResolution": {
+                                "type": "fraction",
+                                "x": 2.0,
+                                "y": 2.0
+                              }
+                            },
+                            "sources": {
+                              "raster": {
+                                "type": "MultiBandGdalSource",
+                                "params": {
+                                  "data": "sentinel-2-l2a_EPSG32632_U8_20"
+                                }
+                              }
+                            }
                           }
+                        }
+                      },
+                      {
+                        "type": "BandFilter",
+                        "params": {
+                          "bands": ["nir", "red"]
                         },
                         "sources": {
                           "raster": {
                             "type": "MultiBandGdalSource",
                             "params": {
-                              "data": "sentinel-2-l2a_EPSG32632_U8_20"
+                              "data": "sentinel-2-l2a_EPSG32632_U16_10"
                             }
                           }
                         }
                       }
-                    }
-                  },
-                  {
-                    "type": "BandFilter",
-                    "params": {
-                      "bands": ["nir", "red"]
-                    },
-                    "sources": {
-                      "raster": {
-                        "type": "MultiBandGdalSource",
-                        "params": {
-                          "data": "sentinel-2-l2a_EPSG32632_U16_10"
-                        }
-                      }
-                    }
+                    ]
                   }
-                ]
+                }
               }
             }
           }
