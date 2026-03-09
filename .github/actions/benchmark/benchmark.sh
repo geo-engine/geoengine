@@ -17,4 +17,4 @@ cargo codspeed build --profile bench-ci -m simulation --bench ci_operators
 
 print_headline "Run Benchmarks"
 service postgresql start
-cargo codspeed run --profile bench-ci -m simulation --bench ci_operators
+cargo codspeed run -m simulation --bench ci_operators
