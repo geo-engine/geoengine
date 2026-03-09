@@ -13,8 +13,8 @@ cargo install cargo-binstall
 cargo binstall cargo-codspeed
 
 print_headline "Build benchmarks"
-cargo codspeed build --profile bench-ci -m simulation
+cargo codspeed build --profile bench-ci -m simulation --bench ci_operators
 
 print_headline "Run Benchmarks"
 service postgresql start
-cargo codspeed run --profile bench-ci -m simulation
+cargo codspeed run --profile bench-ci -m simulation --bench ci_operators
