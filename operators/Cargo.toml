@@ -8,6 +8,9 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 
+[lib]
+bench = false
+
 [dependencies]
 arrow = { workspace = true }
 async-trait = { workspace = true }
