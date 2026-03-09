@@ -8,6 +8,9 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 
+[lib]
+bench = false
+
 [dependencies]
 geoengine-expression-deps = { path = "deps-workspace" }
 libloading = { workspace = true }

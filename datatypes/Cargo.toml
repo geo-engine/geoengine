@@ -8,6 +8,9 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 
+[lib]
+bench = false
+
 [features]
 
 [dependencies]
@@ -44,21 +47,21 @@ tempfile = { workspace = true }
 [dev-dependencies]
 criterion = { workspace = true }
 
-[[bench]]
-name = "multi_point_collection"
-harness = false
+# [[bench]]
+# name = "multi_point_collection"
+# harness = false
 
-[[bench]]
-name = "grid_mapping"
-harness = false
+# [[bench]]
+# name = "grid_mapping"
+# harness = false
 
-[[bench]]
-name = "grid_updates"
-harness = false
+# [[bench]]
+# name = "grid_updates"
+# harness = false
 
-[[bench]]
-name = "masked_grid_mapping"
-harness = false
+# [[bench]]
+# name = "masked_grid_mapping"
+# harness = false
 
 [lints]
 workspace = true

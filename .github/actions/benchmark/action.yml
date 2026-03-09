@@ -1,0 +1,7 @@
+name: "Run Benchmarks"
+description: "Run Geo Engine benchmarks"
+runs:
+  using: "docker"
+  image: "docker://quay.io/geoengine/devcontainer:latest"
+  entrypoint: "./.github/actions/benchmark/benchmark.sh"
+  # options: --cap-add=SYS_ADMIN --security-opt seccomp=unconfined

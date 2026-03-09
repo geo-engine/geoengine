@@ -10,6 +10,19 @@ repository.workspace = true
 build = "build.rs"
 default-run = "geoengine-server"
 
+[lib]
+bench = false
+
+[[bin]]
+name = "geoengine-server"
+path = "src/bin/geoengine-server.rs"
+bench = false
+
+[[bin]]
+name = "geoengine-cli"
+path = "src/bin/geoengine-cli.rs"
+bench = false
+
 [dependencies]
 actix = { workspace = true }
 actix-files = { workspace = true }
@@ -108,13 +121,13 @@ anyhow = { workspace = true }
 vergen = { workspace = true, features = ["build", "cargo", "emit_and_set"] }
 vergen-gitcl = { workspace = true, features = ["build"] }
 
-[[bench]]
-name = "quota_check"
-harness = false
+# [[bench]]
+# name = "quota_check"
+# harness = false
 
-[[bench]]
-name = "tiled_gdal_source"
-harness = false
+# [[bench]]
+# name = "tiled_gdal_source"
+# harness = false
 
 [lints]
 workspace = true
