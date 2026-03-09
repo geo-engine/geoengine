@@ -1,9 +1,10 @@
+use crate::api::{handlers::workflows::WorkflowApiError, model::processing_graphs::TypedOperator};
+use crate::error::Result;
+use crate::identifier;
+use geoengine_operators::engine::TypedOperator as OperatorsTypedOperator;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use uuid::Uuid;
-
-use crate::identifier;
-use geoengine_operators::engine::TypedOperator;
 
 identifier!(WorkflowId);
 
@@ -20,10 +21,18 @@ impl WorkflowId {
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
-pub struct Workflow {
-    #[serde(flatten)]
-    #[schema(value_type = crate::api::model::operators::TypedOperator)]
-    pub operator: TypedOperator,
+#[serde(untagged)]
+pub enum Workflow {
+    Typed {
+        #[serde(flatten)]
+        operator: TypedOperator,
+    },
+    // TODO: remove this variant when all workflows are migrated to typed ones
+    Legacy {
+        #[serde(flatten)]
+        #[schema(value_type = crate::api::model::operators::TypedOperator)]
+        operator: OperatorsTypedOperator,
+    },
 }
 
 impl PartialEq for Workflow {
@@ -35,22 +44,42 @@ impl PartialEq for Workflow {
     }
 }
 
+impl Workflow {
+    pub fn operator(&self) -> Result<OperatorsTypedOperator> {
+        match self {
+            Workflow::Typed { operator } => {
+                operator
+                    .clone()
+                    .try_into()
+                    .map_err(|source: anyhow::Error| crate::error::Error::WorkflowApi {
+                        source: WorkflowApiError::EngineTypeConversion { source },
+                    })
+            }
+            Workflow::Legacy { operator } => Ok(operator.clone()),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
-    use geoengine_datatypes::primitives::Coordinate2D;
-    use geoengine_operators::engine::VectorOperator;
-    use geoengine_operators::mock::{MockPointSource, MockPointSourceParams};
+    use crate::api::model::{
+        datatypes::Coordinate2D,
+        processing_graphs::{
+            MockPointSource, MockPointSourceParameters, SpatialBoundsDerive, VectorOperator,
+        },
+    };
 
     #[test]
     fn serde() {
-        let workflow = Workflow {
-            operator: TypedOperator::Vector(
-                MockPointSource {
-                    params: MockPointSourceParams::new(vec![Coordinate2D::new(1., 2.); 3]),
-                }
-                .boxed(),
-            ),
+        let workflow = Workflow::Typed {
+            operator: TypedOperator::Vector(VectorOperator::MockPointSource(MockPointSource {
+                r#type: Default::default(),
+                params: MockPointSourceParameters {
+                    points: vec![Coordinate2D { x: 1., y: 2. }; 3],
+                    spatial_bounds: SpatialBoundsDerive::None(Default::default()),
+                },
+            })),
         };
 
         let serialized_workflow = serde_json::to_value(&workflow).unwrap();
@@ -80,6 +109,8 @@ mod tests {
             })
         );
 
-        // TODO: check deserialization
+        let deserialized_workflow: Workflow = serde_json::from_value(serialized_workflow).unwrap();
+
+        assert_eq!(workflow, deserialized_workflow);
     }
 }

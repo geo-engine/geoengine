@@ -1441,7 +1441,7 @@ mod tests {
                 AddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: Workflow {
+                    workflow: Workflow::Legacy {
                         operator: MockPointSource {
                             params: MockPointSourceParams::new(vec![
                                 (0.0, 0.1).into(),
@@ -1570,7 +1570,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow {
+            workflow: Workflow::Legacy {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams {
@@ -1597,7 +1597,7 @@ mod tests {
         let update_layer = UpdateLayer {
             name: "Foo new".to_string(),
             description: "Bar new".to_string(),
-            workflow: Workflow {
+            workflow: Workflow::Legacy {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams {
@@ -1672,7 +1672,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow {
+            workflow: Workflow::Legacy {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams {
@@ -1722,7 +1722,7 @@ mod tests {
             name: "Foo".to_string(),
             description: "Bar".to_string(),
             properties: Default::default(),
-            workflow: Workflow {
+            workflow: Workflow::Legacy {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams {
@@ -1840,7 +1840,7 @@ mod tests {
                 AddLayer {
                     name: "Layer Name".to_string(),
                     description: "Layer Description".to_string(),
-                    workflow: Workflow {
+                    workflow: Workflow::Legacy {
                         operator: MockPointSource {
                             params: MockPointSourceParams::new(vec![
                                 (0.0, 0.1).into(),
@@ -2618,11 +2618,11 @@ mod tests {
             .boxed();
 
             let workflow = if time_shift_millis == 0 {
-                Workflow {
+                Workflow::Legacy {
                     operator: raster_source.into(),
                 }
             } else {
-                Workflow {
+                Workflow::Legacy {
                     operator: TypedOperator::Raster(Box::new(TimeShift {
                         params: TimeShiftParams::Relative {
                             granularity: TimeGranularity::Millis,
@@ -2761,7 +2761,12 @@ mod tests {
         };
 
         // query the layer
-        let workflow_operator = mock_source.workflow.operator.get_raster().unwrap();
+        let workflow_operator = mock_source
+            .workflow
+            .operator()
+            .unwrap()
+            .get_raster()
+            .unwrap();
 
         // query the newly created dataset
         let dataset_operator = GdalSource {

@@ -204,7 +204,7 @@ async fn workflow_metadata<C: SessionContext>(
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let result_descriptor: geoengine_operators::engine::TypedResultDescriptor = call_on_typed_operator!(
-        workflow.operator,
+        workflow.operator()?,
         operator => {
             let operator = operator
                 .initialize(workflow_operator_path_root, &execution_context).await
@@ -262,7 +262,7 @@ async fn workflow_provenance<C: SessionContext>(
     let db = ctx.db();
     let execution_ctx = ctx.execution_context()?;
 
-    let data_names = workflow.operator.data_names();
+    let data_names = workflow.operator()?.data_names();
     let mut datasets = Vec::<DataId>::with_capacity(data_names.len());
     for data_name in data_names {
         let data_id = execution_ctx.resolve_named_data(&data_name).await?;
@@ -519,7 +519,7 @@ async fn raster_stream_websocket<C: ApplicationContext>(
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow
-        .operator
+        .operator()?
         .get_raster()
         .boxed_context(error::WorkflowMustBeOfTypeRaster)?;
 
@@ -645,7 +645,7 @@ async fn vector_stream_websocket<C: ApplicationContext>(
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
     let operator = workflow
-        .operator
+        .operator()?
         .get_vector()
         .boxed_context(error::WorkflowMustBeOfTypeVector)?;
 
@@ -718,6 +718,8 @@ pub enum WorkflowApiError {
     WorkflowMustBeOfTypeRaster { source: Box<dyn ErrorSource> },
     #[snafu(display("You can only query a vector stream for a vector workflow"))]
     WorkflowMustBeOfTypeVector { source: Box<dyn ErrorSource> },
+    #[snafu(display("Unsupported operator type in workflow: {source}"))]
+    EngineTypeConversion { source: anyhow::Error },
 }
 
 #[cfg(test)]
@@ -790,7 +792,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: MockPointSource {
                 params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
             }
@@ -828,7 +830,7 @@ mod tests {
 
     #[ge_context::test]
     async fn register_missing_header(app_ctx: PostgresContext<NoTls>) {
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: MockPointSource {
                 params: MockPointSourceParams::new(vec![(0.0, 0.1).into(), (1.0, 1.1).into()]),
             }
@@ -993,7 +995,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: MockFeatureCollectionSource::single(
                 MultiPointCollection::from_data(
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
@@ -1063,7 +1065,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: MockRasterSource::<u8> {
                 params: MockRasterSourceParams::<u8> {
                     data: vec![],
@@ -1156,7 +1158,7 @@ mod tests {
         let session = app_ctx.create_anonymous_session().await.unwrap();
         let ctx = app_ctx.session_context(session.clone());
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: MockFeatureCollectionSource::single(
                 MultiPointCollection::from_data(
                     MultiPoint::many(vec![(0.0, 0.1)]).unwrap(),
@@ -1197,7 +1199,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: Statistics {
                 params: StatisticsParams {
                     column_names: vec![],
@@ -1241,7 +1243,7 @@ mod tests {
         let session_id = session.id();
         let (dataset_id, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters::new(dataset),
@@ -1344,7 +1346,7 @@ mod tests {
 
         let (dataset_id, dataset_name) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters::new(dataset_name.clone()),
@@ -1473,7 +1475,7 @@ mod tests {
         }
         .boxed();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Raster(operator_a.clone()),
         };
 
@@ -1569,7 +1571,7 @@ mod tests {
 
         let (_, dataset) = add_ndvi_to_datasets(&app_ctx).await;
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Raster(
                 GdalSource {
                     params: GdalSourceParameters {
@@ -1648,7 +1650,7 @@ mod tests {
 
         let (_, dataset) = add_ports_to_datasets(&app_ctx, true, true).await;
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Vector(
                 OgrSource {
                     params: OgrSourceParameters {

@@ -300,7 +300,7 @@ impl CopernicusDataspaceDataProvider {
                 id.product_band.band_name()
             ),
             description: String::new(),
-            workflow: Workflow {
+            workflow: Workflow::Legacy {
                 operator: TypedOperator::Raster(
                     GdalSource {
                         params: GdalSourceParameters {

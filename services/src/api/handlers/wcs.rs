@@ -243,7 +243,7 @@ async fn wcs_describe_coverage<C: ApplicationContext>(
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let operator = workflow
-        .operator
+        .operator()?
         .get_raster()?
         .initialize(workflow_operator_path_root, &exe_ctx)
         .await?;
@@ -387,7 +387,7 @@ async fn wcs_get_coverage<C: ApplicationContext>(
 
     let workflow = ctx.db().load_workflow(&identifier).await?;
 
-    let operator = workflow.operator.get_raster()?;
+    let operator = workflow.operator()?.get_raster()?;
 
     let execution_context = ctx.execution_context()?;
 

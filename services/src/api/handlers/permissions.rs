@@ -671,7 +671,7 @@ mod tests {
         let layer = AddLayer {
             name: "layer".to_string(),
             description: "description".to_string(),
-            workflow: Workflow {
+            workflow: Workflow::Legacy {
                 operator: TypedOperator::Vector(
                     MockPointSource {
                         params: MockPointSourceParams {

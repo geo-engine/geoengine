@@ -1,9 +1,9 @@
 #![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
 
-use crate::api::model::processing_graphs::{
-    processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
-    source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
-};
+// use crate::api::model::processing_graphs::{
+//     processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
+//     source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
+// };
 use geoengine_operators::{
     engine::{
         RasterOperator as OperatorsRasterOperator, TypedOperator as OperatorsTypedOperator,
@@ -21,6 +21,14 @@ use utoipa::{OpenApi, ToSchema};
 mod parameters;
 mod processing;
 mod source;
+
+// TODO: avoid exporting them to outside of API module
+#[cfg(test)]
+pub(crate) use crate::api::model::processing_graphs::parameters::SpatialBoundsDerive;
+pub(crate) use crate::api::model::processing_graphs::{
+    processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
+    source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
+};
 
 /// Operator outputs are distinguished by their data type.
 /// There are `raster`, `vector` and `plot` operators.

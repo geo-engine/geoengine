@@ -277,7 +277,7 @@ where
             },
             name: dataset.display_name,
             description: dataset.description,
-            workflow: Workflow { operator },
+            workflow: Workflow::Legacy { operator },
             symbology: dataset.symbology,
             properties: vec![],
             metadata: HashMap::new(),
