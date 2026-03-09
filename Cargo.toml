@@ -29,6 +29,10 @@ lto = true
 inherits = "test"
 strip = "debuginfo"
 
+[profile.bench-ci]
+inherits = "bench"
+strip = "debuginfo"
+
 # configure default clippy lints
 [workspace.lints.clippy]
 cargo = { level = "warn", priority = 0 }
