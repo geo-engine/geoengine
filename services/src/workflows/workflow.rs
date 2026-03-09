@@ -30,7 +30,7 @@ pub enum Workflow {
     // TODO: remove this variant when all workflows are migrated to typed ones
     Legacy {
         #[serde(flatten)]
-        #[schema(value_type = crate::api::model::operators::TypedOperator)]
+        #[schema(value_type = crate::api::model::operators::LegacyTypedOperator)]
         operator: OperatorsTypedOperator,
     },
 }

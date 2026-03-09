@@ -5551,6 +5551,7 @@
       },
       "ClassificationMeasurement": {
         "type": "object",
+        "description": "A classification measurement.\nIt contains a mapping from class IDs to class names.",
         "required": [
           "type",
           "measurement",
@@ -5734,6 +5735,7 @@
       },
       "ContinuousMeasurement": {
         "type": "object",
+        "description": "A continuous measurement, e.g., \"temperature\".\nIt may have an optional unit, e.g., \"°C\" for degrees Celsius.",
         "required": [
           "type",
           "measurement"
@@ -7468,6 +7470,58 @@
           }
         }
       },
+      "LegacyTypedOperator": {
+        "type": "object",
+        "description": "An enum to differentiate between `Operator` variants",
+        "required": [
+          "type",
+          "operator"
+        ],
+        "properties": {
+          "operator": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "params": {
+                "type": "object"
+              },
+              "sources": {
+                "type": "object"
+              },
+              "type": {
+                "type": "string"
+              }
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Vector",
+              "Raster",
+              "Plot"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "MockPointSource",
+            "params": {
+              "points": [
+                {
+                  "x": 0.0,
+                  "y": 0.1
+                },
+                {
+                  "x": 1.0,
+                  "y": 1.1
+                }
+              ]
+            }
+          }
+        ]
+      },
       "LineSymbology": {
         "type": "object",
         "required": [
@@ -7578,6 +7632,7 @@
             "$ref": "#/components/schemas/ClassificationMeasurement"
           }
         ],
+        "description": "Measurement information for a raster band.",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
@@ -9193,17 +9248,18 @@
       },
       "RasterDataType": {
         "type": "string",
+        "description": "A raster data type.",
         "enum": [
-          "U8",
-          "U16",
-          "U32",
-          "U64",
-          "I8",
-          "I16",
-          "I32",
-          "I64",
-          "F32",
-          "F64"
+          "u8",
+          "u16",
+          "u32",
+          "u64",
+          "i8",
+          "i16",
+          "i32",
+          "i64",
+          "f32",
+          "f64"
         ]
       },
       "RasterDatasetFromWorkflow": {
@@ -10563,56 +10619,63 @@
         ]
       },
       "TypedOperator": {
-        "type": "object",
-        "description": "An enum to differentiate between `Operator` variants",
-        "required": [
-          "type",
-          "operator"
-        ],
-        "properties": {
-          "operator": {
+        "oneOf": [
+          {
             "type": "object",
             "required": [
+              "operator",
               "type"
             ],
             "properties": {
-              "params": {
-                "type": "object"
-              },
-              "sources": {
-                "type": "object"
+              "operator": {
+                "$ref": "#/components/schemas/VectorOperator"
               },
               "type": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "Vector"
+                ]
               }
             }
           },
-          "type": {
-            "type": "string",
-            "enum": [
-              "Vector",
-              "Raster",
-              "Plot"
-            ]
-          }
-        },
-        "examples": [
           {
-            "type": "MockPointSource",
-            "params": {
-              "points": [
-                {
-                  "x": 0.0,
-                  "y": 0.1
-                },
-                {
-                  "x": 1.0,
-                  "y": 1.1
-                }
-              ]
+            "type": "object",
+            "required": [
+              "operator",
+              "type"
+            ],
+            "properties": {
+              "operator": {
+                "$ref": "#/components/schemas/RasterOperator"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Raster"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "operator",
+              "type"
+            ],
+            "properties": {
+              "operator": {
+                "$ref": "#/components/schemas/PlotOperator"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Plot"
+                ]
+              }
             }
           }
-        ]
+        ],
+        "description": "Operator outputs are distinguished by their data type.\nThere are `raster`, `vector` and `plot` operators."
       },
       "TypedPlotResultDescriptor": {
         "allOf": [
@@ -10700,6 +10763,7 @@
       },
       "UnitlessMeasurement": {
         "type": "object",
+        "description": "A measurement without a unit.",
         "required": [
           "type"
         ],
@@ -11391,9 +11455,20 @@
         ]
       },
       "Workflow": {
-        "allOf": [
+        "oneOf": [
           {
-            "$ref": "#/components/schemas/TypedOperator"
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/TypedOperator"
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/LegacyTypedOperator"
+              }
+            ]
           }
         ]
       },
