@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use utoipa::openapi::{
     Components, HttpMethod, OpenApi, PathItem, Ref, RefOr, Response, Schema,
     path::Operation,
@@ -26,36 +28,61 @@ pub fn visit_schema<T: OpenapiVisitor>(
     components: &Components,
     visitor: &mut T,
     source_location: &str,
+    already_visited: &mut HashSet<String, std::hash::RandomState>,
 ) {
     match schema {
         RefOr::Ref(reference) => {
-            visit_reference(reference, components, visitor, source_location);
+            visit_reference(
+                reference,
+                components,
+                visitor,
+                source_location,
+                already_visited,
+            );
         }
         RefOr::T(concrete) => match concrete {
             Schema::Array(arr) => {
                 if let ArrayItems::RefOrSchema(schema) = &arr.items {
-                    visit_schema(schema, components, visitor, source_location);
+                    visit_schema(
+                        schema,
+                        components,
+                        visitor,
+                        source_location,
+                        already_visited,
+                    );
                 }
             }
             Schema::Object(obj) => {
                 for property in obj.properties.values() {
-                    visit_schema(property, components, visitor, source_location);
+                    visit_schema(
+                        property,
+                        components,
+                        visitor,
+                        source_location,
+                        already_visited,
+                    );
                 }
                 if let Some(additional_properties) = &obj.additional_properties
                     && let AdditionalProperties::RefOr(properties_schema) =
                         additional_properties.as_ref()
                 {
-                    visit_schema(properties_schema, components, visitor, source_location);
+                    visit_schema(
+                        properties_schema,
+                        components,
+                        visitor,
+                        source_location,
+                        already_visited,
+                    );
                 }
             }
             Schema::OneOf(oo) => {
                 for item in &oo.items {
-                    visit_schema(item, components, visitor, source_location);
+                    visit_schema(item, components, visitor, source_location, already_visited);
                 }
             }
             Schema::AllOf(ao) => {
                 for item in &ao.items {
-                    visit_schema(item, components, visitor, source_location);
+                    visit_schema(item, components, visitor, source_location, already_visited);
                 }
             }
             _ => panic!("Unknown schema type"),
@@ -73,17 +100,30 @@ fn visit_response<T: OpenapiVisitor>(
     components: &Components,
     visitor: &mut T,
     source_location: &str,
+    already_visited: &mut HashSet<String>,
 ) {
     match response {
         RefOr::Ref(reference) => {
-            visit_reference(reference, components, visitor, source_location);
+            visit_reference(
+                reference,
+                components,
+                visitor,
+                source_location,
+                already_visited,
+            );
         }
         RefOr::T(concrete) => {
             for content in concrete.content.values() {
                 let Some(content_schema) = &content.schema else {
                     continue;
                 };
-                visit_schema(content_schema, components, visitor, source_location);
+                visit_schema(
+                    content_schema,
+                    components,
+                    visitor,
+                    source_location,
+                    already_visited,
+                );
             }
         }
     }
@@ -100,6 +140,7 @@ fn visit_reference<T: OpenapiVisitor>(
     components: &Components,
     visitor: &mut T,
     source_location: &str,
+    already_visited: &mut HashSet<String>,
 ) {
     const SCHEMA_REF_PREFIX: &str = "#/components/schemas/";
     const RESPONSE_REF_PREFIX: &str = "#/components/responses/";
@@ -111,13 +152,18 @@ fn visit_reference<T: OpenapiVisitor>(
             None => visitor.resolve_failed(ref_location),
             Some(resolved) => {
                 visitor.visit_schema_component(schema_name, resolved, source_location);
-                visit_schema(resolved, components, visitor, ref_location);
+                if !already_visited.insert(ref_location.to_string()) {
+                    return; // prevent infinite recursion
+                }
+                visit_schema(resolved, components, visitor, ref_location, already_visited);
             }
         }
     } else if let Some(response_name) = ref_location.strip_prefix(RESPONSE_REF_PREFIX) {
         match components.responses.get(response_name) {
             None => visitor.resolve_failed(ref_location),
-            Some(resolved) => visit_response(resolved, components, visitor, ref_location),
+            Some(resolved) => {
+                visit_response(resolved, components, visitor, ref_location, already_visited);
+            }
         }
     } else {
         visitor.resolve_failed(ref_location);
@@ -141,7 +187,13 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
         if let Some(parameters) = &path_item.parameters {
             for parameter in parameters {
                 if let Some(schema) = parameter.schema.as_ref() {
-                    visit_schema(schema, components, visitor, source_location);
+                    visit_schema(
+                        schema,
+                        components,
+                        visitor,
+                        source_location,
+                        &mut Default::default(),
+                    );
                 }
             }
         }
@@ -152,14 +204,26 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
                     let Some(content_schema) = &content.schema else {
                         continue;
                     };
-                    visit_schema(content_schema, components, visitor, source_location);
+                    visit_schema(
+                        content_schema,
+                        components,
+                        visitor,
+                        source_location,
+                        &mut Default::default(),
+                    );
                 }
             }
 
             if let Some(parameters) = operation.parameters.as_ref() {
                 for parameter in parameters {
                     if let Some(schema) = parameter.schema.as_ref() {
-                        visit_schema(schema, components, visitor, source_location);
+                        visit_schema(
+                            schema,
+                            components,
+                            visitor,
+                            source_location,
+                            &mut Default::default(),
+                        );
                     }
                 }
             }
@@ -167,14 +231,26 @@ pub fn visit_api<T: OpenapiVisitor>(api: &OpenApi, visitor: &mut T) {
             for response in operation.responses.responses.values() {
                 match response {
                     RefOr::Ref(reference) => {
-                        visit_reference(reference, components, visitor, source_location);
+                        visit_reference(
+                            reference,
+                            components,
+                            visitor,
+                            source_location,
+                            &mut Default::default(),
+                        );
                     }
                     RefOr::T(concrete) => {
                         for content in concrete.content.values() {
                             let Some(content_schema) = &content.schema else {
                                 continue;
                             };
-                            visit_schema(content_schema, components, visitor, source_location);
+                            visit_schema(
+                                content_schema,
+                                components,
+                                visitor,
+                                source_location,
+                                &mut Default::default(),
+                            );
                         }
                     }
                 }

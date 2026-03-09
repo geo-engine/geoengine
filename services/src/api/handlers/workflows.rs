@@ -898,7 +898,7 @@ mod tests {
             res,
             400,
             "BodyDeserializeError",
-            "Error in user input: missing field `type` at line 1 column 2",
+            "Error in user input: data did not match any variant of untagged enum Workflow",
         )
         .await;
     }
