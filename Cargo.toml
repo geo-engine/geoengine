@@ -32,6 +32,7 @@ strip = "debuginfo"
 [profile.bench-ci]
 inherits = "bench"
 strip = "debuginfo"
+codegen-units = 4
 
 # configure default clippy lints
 [workspace.lints.clippy]
