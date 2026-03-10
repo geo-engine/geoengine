@@ -131,7 +131,7 @@ opentelemetry = { version = "0.31", default-features = false, features = [
 ] }
 opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
 opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
-ort = { version = "2.0.0-rc.12", features = ["ndarray"] }
+ort = { version = "2.0.0-rc.12", default-features = false, features = ["std", "ndarray", "tracing", "download-binaries", "tls-native", "copy-dylibs", "api-21"] } # allow default features again wrt. <https://github.com/pykeio/ort/issues/553>
 ouroboros = "0.18"
 paste = "1.0"
 pbkdf2 = "0.12.2"
