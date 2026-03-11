@@ -1,7 +1,4 @@
-use crate::api::model::{
-    datatypes::Coordinate2D,
-    processing_graphs::{RasterOperator, VectorOperator},
-};
+use crate::api::model::datatypes::Coordinate2D;
 use anyhow::Context;
 use geoengine_macros::type_tag;
 use serde::{Deserialize, Serialize, Serializer};
@@ -418,48 +415,6 @@ impl TryFrom<BoundingBox2D> for geoengine_datatypes::primitives::BoundingBox2D {
             value.upper_right_coordinate.into(),
         )
         .context("invalid bounding box")
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[schema(no_recursion)]
-#[serde(rename_all = "camelCase")]
-pub struct SingleRasterSource {
-    pub raster: RasterOperator,
-}
-
-impl TryFrom<SingleRasterSource> for geoengine_operators::engine::SingleRasterSource {
-    type Error = anyhow::Error;
-
-    fn try_from(value: SingleRasterSource) -> Result<Self, Self::Error> {
-        Ok(Self {
-            raster: value.raster.try_into()?,
-        })
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[schema(no_recursion)]
-#[serde(rename_all = "camelCase")]
-pub struct SingleVectorMultipleRasterSources {
-    pub vector: VectorOperator,
-    pub rasters: Vec<RasterOperator>,
-}
-
-impl TryFrom<SingleVectorMultipleRasterSources>
-    for geoengine_operators::engine::SingleVectorMultipleRasterSources
-{
-    type Error = anyhow::Error;
-
-    fn try_from(value: SingleVectorMultipleRasterSources) -> Result<Self, Self::Error> {
-        Ok(Self {
-            vector: value.vector.try_into()?,
-            rasters: value
-                .rasters
-                .into_iter()
-                .map(std::convert::TryInto::try_into)
-                .collect::<Result<_, _>>()?,
-        })
     }
 }
 

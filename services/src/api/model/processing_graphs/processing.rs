@@ -1,6 +1,9 @@
-use crate::api::model::processing_graphs::parameters::{
-    ColumnNames, FeatureAggregationMethod, RasterBandDescriptor, RasterDataType,
-    SingleRasterSource, SingleVectorMultipleRasterSources, TemporalAggregationMethod,
+use crate::api::model::processing_graphs::{
+    parameters::{
+        ColumnNames, FeatureAggregationMethod, RasterBandDescriptor, RasterDataType,
+        TemporalAggregationMethod,
+    },
+    source_parameters::{SingleRasterSource, SingleVectorMultipleRasterSources},
 };
 use geoengine_macros::type_tag;
 use geoengine_operators::processing::{

@@ -6,10 +6,11 @@
 // };
 use geoengine_operators::{
     engine::{
-        RasterOperator as OperatorsRasterOperator, TypedOperator as OperatorsTypedOperator,
-        VectorOperator as OperatorsVectorOperator,
+        PlotOperator as OperatorsPlotOperator, RasterOperator as OperatorsRasterOperator,
+        TypedOperator as OperatorsTypedOperator, VectorOperator as OperatorsVectorOperator,
     },
     mock::MockPointSource as OperatorsMockPointSource,
+    plot::{Histogram as OperatorsHistogram, Statistics as OperatorsStatistics},
     processing::{
         Expression as OperatorsExpression, RasterVectorJoin as OperatorsRasterVectorJoin,
     },
@@ -18,13 +19,17 @@ use geoengine_operators::{
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
 
+mod macros;
 mod parameters;
+mod plots;
 mod processing;
 mod source;
+mod source_parameters;
 
 // TODO: avoid exporting them to outside of API module
 #[cfg(test)]
 pub(crate) use crate::api::model::processing_graphs::parameters::SpatialBoundsDerive;
+use crate::api::model::processing_graphs::plots::{Histogram, Statistics};
 pub(crate) use crate::api::model::processing_graphs::{
     processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
     source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
@@ -61,9 +66,10 @@ pub enum VectorOperator {
 /// An operator that produces plot data.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", untagged)]
-// #[schema(discriminator = "type")]
+#[schema(discriminator = "type")]
 pub enum PlotOperator {
-    // Currently no plot operators are defined
+    Histogram(Histogram),
+    Statistics(Statistics),
 }
 
 impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
@@ -95,12 +101,27 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
     }
 }
 
+impl TryFrom<PlotOperator> for Box<dyn OperatorsPlotOperator> {
+    type Error = anyhow::Error;
+    fn try_from(operator: PlotOperator) -> Result<Self, Self::Error> {
+        match operator {
+            PlotOperator::Histogram(histogram) => {
+                OperatorsHistogram::try_from(histogram).map(OperatorsPlotOperator::boxed)
+            }
+            PlotOperator::Statistics(statistics) => {
+                OperatorsStatistics::try_from(statistics).map(OperatorsPlotOperator::boxed)
+            }
+        }
+    }
+}
+
 impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     type Error = anyhow::Error;
     fn try_from(operator: TypedOperator) -> Result<Self, Self::Error> {
         match operator {
             TypedOperator::Raster(raster_operator) => Ok(Self::Raster(raster_operator.try_into()?)),
             TypedOperator::Vector(vector_operator) => Ok(Self::Vector(vector_operator.try_into()?)),
+            TypedOperator::Plot(plot_operator) => Ok(Self::Plot(plot_operator.try_into()?)),
         }
     }
 }
