@@ -340,7 +340,7 @@ where
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
     let operator = workflow
-        .operator
+        .operator()?
         .get_vector()?
         .initialize(workflow_operator_path_root, &exe_ctx)
         .await?;
@@ -494,7 +494,7 @@ async fn wfs_get_feature<C: ApplicationContext>(
 
     let workflow: Workflow = ctx.db().load_workflow(&type_names).await?;
 
-    let operator = workflow.operator.get_vector()?;
+    let operator = workflow.operator()?.get_vector()?;
 
     let execution_context = ctx.execution_context()?;
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
@@ -840,7 +840,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Vector(Box::new(CsvSource {
                 params: CsvSourceParameters {
                     file_path: temp_file.path().into(),
@@ -910,7 +910,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Vector(Box::new(CsvSource {
                 params: CsvSourceParameters {
                     file_path: temp_file.path().into(),
@@ -1032,7 +1032,7 @@ x;y
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Vector(Box::new(CsvSource {
                 params: CsvSourceParameters {
                     file_path: temp_file.path().into(),

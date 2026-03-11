@@ -79,7 +79,13 @@ mod tests {
 
     fn try_resolve_schema(schema: &RefOr<Schema>, components: &Components) {
         let mut visitor = CanResolveVisitor { unknown_ref: None };
-        visit_schema(schema, components, &mut visitor, "root");
+        visit_schema(
+            schema,
+            components,
+            &mut visitor,
+            "root",
+            &mut Default::default(),
+        );
 
         if let Some(unknown_ref) = visitor.unknown_ref {
             panic!("Cannot resolve reference {unknown_ref}");
@@ -93,7 +99,13 @@ mod tests {
         let mut visitor = SchemaUseCounter {
             parents: HashMap::new(),
         };
-        visit_schema(schema, components, &mut visitor, "root");
+        visit_schema(
+            schema,
+            components,
+            &mut visitor,
+            "root",
+            &mut Default::default(),
+        );
         visitor.get_schema_use_counts()
     }
 

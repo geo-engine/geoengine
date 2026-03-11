@@ -23,12 +23,12 @@ use crate::api::model::datatypes::{
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetParameters,
     GdalLoadingInfoTemporalSlice, GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic,
-    GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder, MlModelMetadata,
-    MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData, OgrSourceColumnSpec,
-    OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec, OgrSourceErrorSpec,
-    OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor, RasterBandDescriptors,
-    RasterResultDescriptor, TimeReference, TypedGeometry, TypedOperator, TypedResultDescriptor,
-    UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
+    GdalMetadataMapping, GdalMetadataNetCdfCf, GdalSourceTimePlaceholder, LegacyTypedOperator,
+    MlModelMetadata, MockDatasetDataSourceLoadingInfo, MockMetaData, OgrMetaData,
+    OgrSourceColumnSpec, OgrSourceDataset, OgrSourceDatasetTimeType, OgrSourceDurationSpec,
+    OgrSourceErrorSpec, OgrSourceTimeFormat, PlotResultDescriptor, RasterBandDescriptor,
+    RasterBandDescriptors, RasterResultDescriptor, TimeReference, TypedGeometry,
+    TypedResultDescriptor, UnixTimeStampType, VectorColumnInfo, VectorResultDescriptor,
 };
 use crate::api::model::responses::datasets::DatasetNameResponse;
 use crate::api::model::responses::ml_models::MlModelNameResponse;
@@ -275,7 +275,7 @@ use utoipa::{Modify, OpenApi};
             ServerInfo,
 
             Workflow,
-            TypedOperator,
+            LegacyTypedOperator,
             TypedResultDescriptor,
             PlotResultDescriptor,
             RasterResultDescriptor,
@@ -464,6 +464,9 @@ use utoipa::{Modify, OpenApi};
             MlModelNameResponse,
             MlTensorShape3D,
         ),
+    ),
+    nest(
+        (path = "/processingGraphs", api = crate::api::model::processing_graphs::OperatorsApi),
     ),
     modifiers(&SecurityAddon, &ApiDocInfo, &OpenApiServerInfo, &DeriveDiscriminatorMapping),
     external_docs(url = "https://docs.geoengine.io", description = "Geo Engine Docs")

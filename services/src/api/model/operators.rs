@@ -245,13 +245,13 @@ impl From<RasterResultDescriptor> for geoengine_operators::engine::RasterResultD
 /// An enum to differentiate between `Operator` variants
 #[derive(Clone, Debug, Serialize, Deserialize)]
 #[serde(tag = "type", content = "operator")]
-pub enum TypedOperator {
+pub enum LegacyTypedOperator {
     Vector(Box<dyn geoengine_operators::engine::VectorOperator>),
     Raster(Box<dyn geoengine_operators::engine::RasterOperator>),
     Plot(Box<dyn geoengine_operators::engine::PlotOperator>),
 }
 
-impl PartialSchema for TypedOperator {
+impl PartialSchema for LegacyTypedOperator {
     fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::Schema> {
         use utoipa::openapi::schema::{Object, ObjectBuilder, SchemaType, Type};
         ObjectBuilder::new()
@@ -288,7 +288,7 @@ impl PartialSchema for TypedOperator {
     }
 }
 
-impl ToSchema for TypedOperator {}
+impl ToSchema for LegacyTypedOperator {}
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
