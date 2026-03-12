@@ -29,10 +29,15 @@ mod source_parameters;
 // TODO: avoid exporting them to outside of API module
 #[cfg(test)]
 pub(crate) use crate::api::model::processing_graphs::parameters::SpatialBoundsDerive;
-use crate::api::model::processing_graphs::plots::{Histogram, Statistics};
 pub(crate) use crate::api::model::processing_graphs::{
+    plots::{Histogram, HistogramParameters, Statistics, StatisticsParameters},
     processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
     source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
+    source_parameters::{
+        MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
+        SingleRasterOrVectorOperator, SingleRasterOrVectorSource, SingleRasterSource,
+        SingleVectorMultipleRasterSources,
+    },
 };
 
 /// Operator outputs are distinguished by their data type.
@@ -128,17 +133,33 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
 
 #[derive(OpenApi)]
 #[openapi(components(schemas(
-    Expression,
-    ExpressionParameters,
+    // General
+    PlotOperator,
+    TypedOperator,
+    VectorOperator,
+    // Source
     GdalSource,
     GdalSourceParameters,
     MockPointSource,
     MockPointSourceParameters,
+    // Processing
+    Expression,
+    ExpressionParameters,
     RasterOperator,
     RasterVectorJoin,
     RasterVectorJoinParameters,
-    TypedOperator,
-    VectorOperator,
-    PlotOperator,
+    // Plots
+    Histogram,
+    HistogramParameters,
+    Statistics,
+    StatisticsParameters,
+    // Source Parameters
+    MultipleRasterOrSingleVectorOperator,
+    MultipleRasterOrSingleVectorSource,
+    SingleRasterOrVectorOperator,
+    SingleRasterOrVectorSource,
+    SingleRasterSource,
+    SingleVectorMultipleRasterSources,
+
 )))]
 pub struct OperatorsApi;

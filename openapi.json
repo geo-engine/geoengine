@@ -10008,6 +10008,17 @@
           }
         }
       },
+      "SingleRasterOrVectorOperator": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RasterOperator"
+          },
+          {
+            "$ref": "#/components/schemas/VectorOperator"
+          }
+        ],
+        "description": "It is either a set of `RasterOperator` or a single `VectorOperator`"
+      },
       "SingleRasterOrVectorSource": {
         "type": "object",
         "description": "A single vector operator or a single raster operators as source for this operator.",
