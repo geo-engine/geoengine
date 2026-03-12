@@ -7,6 +7,8 @@ pub mod postgres;
 pub mod storage;
 pub mod upload;
 
+#[cfg(test)]
+pub(crate) use create_from_workflow::RasterDatasetFromWorkflowResult;
 pub(crate) use create_from_workflow::{
     RasterDatasetFromWorkflow, RasterDatasetFromWorkflowParams,
     schedule_raster_dataset_from_workflow_task,
