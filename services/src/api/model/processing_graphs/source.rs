@@ -2,7 +2,7 @@ use crate::api::model::{
     datatypes::Coordinate2D, processing_graphs::parameters::SpatialBoundsDerive,
 };
 use geoengine_datatypes::dataset::NamedData;
-use geoengine_macros::type_tag;
+use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::{
     mock::{
         MockPointSource as OperatorsMockPointSource,
@@ -22,10 +22,7 @@ use utoipa::ToSchema;
 ///
 /// If the given dataset does not exist or is not readable, an error is thrown.
 ///
-#[type_tag(value = "GdalSource")]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(
+#[api_operator(
     title = "GDAL Source",
     examples(json!({
         "type": "GdalSource",
@@ -70,10 +67,7 @@ impl TryFrom<GdalSource> for OperatorsGdalSource {
 
 /// The [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes.
 ///
-#[type_tag(value = "MockPointSource")]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(
+#[api_operator(
     title = "Mock Point Source",
     examples(json!({
         "type": "MockPointSource",

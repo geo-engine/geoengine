@@ -4,7 +4,7 @@ use crate::{
     },
     string_token,
 };
-use geoengine_macros::type_tag;
+use geoengine_macros::{api_operator, type_tag};
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
@@ -25,35 +25,29 @@ use utoipa::ToSchema;
 ///
 /// If the `buckets` parameter is set to `squareRootChoiceRule`, the operator estimates it using the square root of the number of elements in the data.
 ///
-#[type_tag(value = "Histogram")]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(
-    title = "Histogram",
-    examples(json!({
-        "type": "Histogram",
-        "params": {
-            "columnName": "foobar",
-            "bounds": {
+#[api_operator(examples(json!({
+    "type": "Histogram",
+    "params": {
+        "columnName": "foobar",
+        "bounds": {
             "min": 5.0,
             "max": 10.0
-            },
-            "buckets": {
+        },
+        "buckets": {
             "type": "number",
             "value": 15
-            },
-            "interactive": false
         },
-        "sources": {
-            "vector": {
+        "interactive": false
+    },
+    "sources": {
+        "vector": {
             "type": "OgrSource",
             "params": {
                 "data": "ndvi"
             }
-            }
         }
-    })),
-)]
+    }
+})))]
 pub struct Histogram {
     pub params: HistogramParameters,
     pub sources: SingleRasterOrVectorSource,
@@ -205,29 +199,21 @@ impl TryFrom<Histogram> for geoengine_operators::plot::Histogram {
 /// }
 /// ```
 ///
-#[type_tag(value = "Statistics")]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(
-    title = "Statistics",
-    examples(json!({
-        "type": "Statistics",
-        "params": {
-            "columnNames": ["A"],
-            "percentiles": [0.25, 0.5, 0.75]
-        },
-        "sources": {
-            "source": [
-            {
-                "type": "GdalSource",
-                "params": {
-                "data": "ndvi"
-                }
+#[api_operator(examples(json!({
+    "type": "Statistics",
+    "params": {
+        "columnNames": ["A"],
+        "percentiles": [0.25, 0.5, 0.75]
+    },
+    "sources": {
+        "source": [{
+            "type": "GdalSource",
+            "params": {
+            "data": "ndvi"
             }
-            ]
-        }
-        })),
-)]
+        }]
+    }
+})))]
 pub struct Statistics {
     pub params: StatisticsParameters,
     pub sources: MultipleRasterOrSingleVectorSource,

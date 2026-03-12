@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 
+mod api_operator;
 mod testing;
 mod typetag;
 mod util;
@@ -47,6 +48,23 @@ pub fn type_tag(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     match typetag::type_tag(attr.into(), &item.clone().into()) {
+        Ok(ts) => ts.into(),
+        Err(e) => token_stream_with_error(item.into(), e).into(),
+    }
+}
+
+///
+///
+/// # Parameters
+/// - `value` - the value of the type tag
+/// - `tag` - (optional) the name of the field that is used as a tag (default: `"type"`)
+///
+#[proc_macro_attribute]
+pub fn api_operator(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    match api_operator::api_operator(attr.into(), &item.clone().into()) {
         Ok(ts) => ts.into(),
         Err(e) => token_stream_with_error(item.into(), e).into(),
     }

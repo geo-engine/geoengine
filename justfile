@@ -39,3 +39,9 @@ test filter="":
 test-services filter="":
     @-clear
     cargo test --package geoengine-services -- {{ filter }} --nocapture
+
+# Run the tests for the geoengine-macros package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-macros workflows::workflow::tests
+[group("test")]
+test-macros filter="":
+    @-clear
+    cargo test --package geoengine-macros -- {{ filter }} --nocapture
