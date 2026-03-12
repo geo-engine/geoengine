@@ -5256,37 +5256,6 @@
           }
         }
       },
-      "AddDatasetTile": {
-        "type": "object",
-        "required": [
-          "time",
-          "spatial_partition",
-          "band",
-          "z_index",
-          "params"
-        ],
-        "properties": {
-          "band": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "params": {
-            "$ref": "#/components/schemas/GdalDatasetParameters"
-          },
-          "spatial_partition": {
-            "$ref": "#/components/schemas/SpatialPartition2D"
-          },
-          "time": {
-            "$ref": "#/components/schemas/TimeInterval"
-          },
-          "z_index": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
       "AddLayer": {
         "type": "object",
         "required": [
@@ -5505,13 +5474,6 @@
           "northEast",
           "eastNorth"
         ]
-      },
-      "BandSelection": {
-        "type": "array",
-        "items": {
-          "type": "integer",
-          "minimum": 0
-        }
       },
       "BoundingBox2D": {
         "type": "object",
@@ -6299,9 +6261,6 @@
         }
       },
       "DateTimeParseFormat": {
-        "type": "string"
-      },
-      "DateTimeString": {
         "type": "string"
       },
       "DerivedColor": {
@@ -7897,10 +7856,6 @@
           }
         }
       },
-      "MlModelId": {
-        "type": "string",
-        "format": "uuid"
-      },
       "MlModelInputNoDataHandling": {
         "type": "object",
         "required": [
@@ -8303,9 +8258,6 @@
             "$ref": "#/components/schemas/MultipleRasterOrSingleVectorOperator"
           }
         }
-      },
-      "NamedData": {
-        "type": "string"
       },
       "NetCdfCfDataProviderDefinition": {
         "type": "object",
@@ -8915,25 +8867,6 @@
           "Owner"
         ]
       },
-      "PermissionListOptions": {
-        "type": "object",
-        "required": [
-          "limit",
-          "offset"
-        ],
-        "properties": {
-          "limit": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "offset": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
       "PermissionListing": {
         "type": "object",
         "required": [
@@ -9318,26 +9251,6 @@
           }
         }
       },
-      "ProvenanceOutput": {
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DataId"
-          },
-          "provenance": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/Provenance"
-            }
-          }
-        }
-      },
       "Provenances": {
         "type": "object",
         "required": [
@@ -9523,22 +9436,6 @@
               "start": 1388534400000,
               "end": 1388534401000
             }
-          }
-        }
-      },
-      "RasterDatasetFromWorkflowResult": {
-        "type": "object",
-        "description": "response of the dataset from workflow handler",
-        "required": [
-          "dataset",
-          "upload"
-        ],
-        "properties": {
-          "dataset": {
-            "$ref": "#/components/schemas/DatasetName"
-          },
-          "upload": {
-            "$ref": "#/components/schemas/UploadId"
           }
         }
       },
@@ -10186,16 +10083,6 @@
           }
         }
       },
-      "SpatialReferenceAuthority": {
-        "type": "string",
-        "description": "A spatial reference authority that is part of a spatial reference definition",
-        "enum": [
-          "EPSG",
-          "SR-ORG",
-          "IAU2000",
-          "ESRI"
-        ]
-      },
       "SpatialReferenceSpecification": {
         "type": "object",
         "description": "The specification of a spatial reference, where extent and axis labels are given\nin natural order (x, y) = (east, north)",
@@ -10237,24 +10124,6 @@
           },
           "spatialReference": {
             "type": "string"
-          }
-        }
-      },
-      "SpatialResolution": {
-        "type": "object",
-        "description": "The spatial resolution in SRS units",
-        "required": [
-          "x",
-          "y"
-        ],
-        "properties": {
-          "x": {
-            "type": "number",
-            "format": "double"
-          },
-          "y": {
-            "type": "number",
-            "format": "double"
           }
         }
       },
@@ -10490,14 +10359,6 @@
           }
         }
       },
-      "TaskAbortOptions": {
-        "type": "object",
-        "properties": {
-          "force": {
-            "type": "boolean"
-          }
-        }
-      },
       "TaskFilter": {
         "type": "string",
         "enum": [
@@ -10510,31 +10371,6 @@
       "TaskId": {
         "type": "string",
         "format": "uuid"
-      },
-      "TaskListOptions": {
-        "type": "object",
-        "properties": {
-          "filter": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TaskFilter"
-              }
-            ]
-          },
-          "limit": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "offset": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
       },
       "TaskResponse": {
         "type": "object",
@@ -11622,27 +11458,6 @@
       },
       "VolumeName": {
         "type": "string"
-      },
-      "WcsBoundingbox": {
-        "type": "object",
-        "required": [
-          "bbox"
-        ],
-        "properties": {
-          "bbox": {
-            "type": "array",
-            "items": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          "spatial_reference": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
       },
       "WcsRequest": {
         "type": "string",

@@ -8,7 +8,7 @@ pub mod storage;
 pub mod upload;
 
 pub(crate) use create_from_workflow::{
-    RasterDatasetFromWorkflow, RasterDatasetFromWorkflowParams, RasterDatasetFromWorkflowResult,
+    RasterDatasetFromWorkflow, RasterDatasetFromWorkflowParams,
     schedule_raster_dataset_from_workflow_task,
 };
 pub use name::{DatasetIdAndName, DatasetName, DatasetNameError};

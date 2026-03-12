@@ -1,24 +1,21 @@
 #![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
 
 use crate::api::handlers;
-use crate::api::handlers::datasets::{AddDatasetTile, VolumeFileLayersResponse};
-use crate::api::handlers::permissions::{
-    PermissionListOptions, PermissionListing, PermissionRequest, Resource,
-};
+use crate::api::handlers::datasets::VolumeFileLayersResponse;
+use crate::api::handlers::permissions::{PermissionListing, PermissionRequest, Resource};
 use crate::api::handlers::plots::WrappedPlotOutput;
 use crate::api::handlers::spatial_references::{AxisOrder, SpatialReferenceSpecification};
-use crate::api::handlers::tasks::{TaskAbortOptions, TaskResponse};
+use crate::api::handlers::tasks::TaskResponse;
 use crate::api::handlers::upload::{UploadFileLayersResponse, UploadFilesResponse};
 use crate::api::model::datatypes::{
-    AxisLabels, BandSelection, BoundingBox2D, Breakpoint, CacheTtlSeconds,
-    ClassificationMeasurement, Colorizer, ContinuousMeasurement, Coordinate2D, DataId,
-    DataProviderId, DatasetId, DateTimeParseFormat, DateTimeString, ExternalDataId,
-    FeatureDataType, GdalConfigOption, LayerId, LinearGradient, LogarithmicGradient, Measurement,
-    MlModelName, MlTensorShape3D, MultiLineString, MultiPoint, MultiPolygon, NamedData, NoGeometry,
-    Palette, PlotOutputFormat, RasterColorizer, RasterDataType, RasterPropertiesEntryType,
-    RasterPropertiesKey, RasterToDatasetQueryRectangle, RgbaColor, SpatialPartition2D,
-    SpatialReferenceAuthority, SpatialResolution, StringPair, TimeGranularity, TimeInstance,
-    TimeInterval, TimeStep, VectorDataType,
+    AxisLabels, BoundingBox2D, Breakpoint, CacheTtlSeconds, ClassificationMeasurement, Colorizer,
+    ContinuousMeasurement, Coordinate2D, DataId, DataProviderId, DatasetId, DateTimeParseFormat,
+    ExternalDataId, FeatureDataType, GdalConfigOption, LayerId, LinearGradient,
+    LogarithmicGradient, Measurement, MlModelName, MlTensorShape3D, MultiLineString, MultiPoint,
+    MultiPolygon, NoGeometry, Palette, PlotOutputFormat, RasterColorizer, RasterDataType,
+    RasterPropertiesEntryType, RasterPropertiesKey, RasterToDatasetQueryRectangle, RgbaColor,
+    SpatialPartition2D, StringPair, TimeGranularity, TimeInstance, TimeInterval, TimeStep,
+    VectorDataType,
 };
 use crate::api::model::operators::{
     CsvHeader, FileNotFoundHandling, FormatSpecifics, GdalDatasetParameters,
@@ -42,7 +39,7 @@ use crate::api::model::services::EdrVectorSpec;
 use crate::api::model::services::LayerProviderListing;
 use crate::api::model::services::{
     AddDataset, CreateDataset, DataPath, Dataset, DatasetDefinition, MetaDataDefinition,
-    MetaDataSuggestion, MlModel, Provenance, ProvenanceOutput, Provenances, UpdateDataset, Volume,
+    MetaDataSuggestion, MlModel, Provenance, Provenances, UpdateDataset, Volume,
 };
 use crate::api::model::services::{
     ArunaDataProviderDefinition, CopernicusDataspaceDataProviderDefinition,
@@ -70,7 +67,7 @@ use crate::contexts::SessionId;
 use crate::datasets::listing::{DatasetListing, OrderBy};
 use crate::datasets::storage::{AutoCreateDataset, SuggestMetaData};
 use crate::datasets::upload::{UploadId, VolumeName};
-use crate::datasets::{DatasetName, RasterDatasetFromWorkflow, RasterDatasetFromWorkflowResult};
+use crate::datasets::{DatasetName, RasterDatasetFromWorkflow};
 use crate::layers::layer::{
     AddLayer, AddLayerCollection, CollectionItem, Layer, LayerCollection, LayerCollectionListing,
     LayerListing, Property, ProviderLayerCollectionId, ProviderLayerId, UpdateLayer,
@@ -79,7 +76,6 @@ use crate::layers::layer::{
 use crate::layers::listing::{
     LayerCollectionId, ProviderCapabilities, SearchCapabilities, SearchType, SearchTypes,
 };
-use crate::machine_learning::MlModelId;
 use crate::permissions::{Permission, Role, RoleDescription, RoleId};
 use crate::projects::{
     ColorParam, CreateProject, DerivedColor, DerivedNumber, LayerUpdate, LayerVisibility,
@@ -88,7 +84,7 @@ use crate::projects::{
     RasterSymbology, STRectangle, StrokeParam, Symbology, TextSymbology, UpdateProject,
 };
 use crate::quota::{ComputationQuota, DataUsage, DataUsageSummary, OperatorQuota};
-use crate::tasks::{TaskFilter, TaskId, TaskListOptions, TaskStatus, TaskStatusWithId};
+use crate::tasks::{TaskFilter, TaskId, TaskStatus, TaskStatusWithId};
 use crate::users::{
     AuthCodeRequestURL, AuthCodeResponse, UserCredentials, UserId, UserInfo, UserRegistration,
     UserSession,
@@ -216,7 +212,6 @@ use utoipa::{Modify, OpenApi};
             UserSession,
             UserCredentials,
             UserRegistration,
-            DateTimeString,
             UserInfo,
             Quota,
             UpdateQuota,
@@ -233,7 +228,6 @@ use utoipa::{Modify, OpenApi};
             DatasetId,
             DatasetName,
             DatasetNameResponse,
-            NamedData,
             ExternalDataId,
             LayerId,
             ProjectId,
@@ -254,8 +248,6 @@ use utoipa::{Modify, OpenApi};
             Coordinate2D,
             BoundingBox2D,
             SpatialPartition2D,
-            SpatialResolution,
-            SpatialReferenceAuthority,
             SpatialReferenceSpecification,
             AxisOrder,
             Measurement,
@@ -264,7 +256,6 @@ use utoipa::{Modify, OpenApi};
             STRectangle,
 
             ProvenanceEntry,
-            ProvenanceOutput,
             Provenance,
             Provenances,
 
@@ -284,13 +275,9 @@ use utoipa::{Modify, OpenApi};
             VectorResultDescriptor,
             VectorColumnInfo,
             RasterDatasetFromWorkflow,
-            RasterDatasetFromWorkflowResult,
             RasterToDatasetQueryRectangle,
-            BandSelection,
 
-            TaskAbortOptions,
             TaskFilter,
-            TaskListOptions,
             TaskStatus,
             TaskStatusWithId,
             TaskResponse,
@@ -335,7 +322,6 @@ use utoipa::{Modify, OpenApi};
             wcs::request::WcsService,
             wcs::request::WcsVersion,
             wcs::request::GetCoverageFormat,
-            wcs::request::WcsBoundingbox,
 
             wms::request::WmsRequest,
             wms::request::WmsService,
@@ -404,7 +390,6 @@ use utoipa::{Modify, OpenApi};
             Volume,
             VolumeName,
             DataPath,
-            AddDatasetTile,
 
             PlotOutputFormat,
             WrappedPlotOutput,
@@ -452,13 +437,11 @@ use utoipa::{Modify, OpenApi};
             Resource,
             Permission,
             PermissionListing,
-            PermissionListOptions,
             AddRole,
             RoleDescription,
             Role,
 
             MlModel,
-            MlModelId,
             MlModelName,
             MlModelMetadata,
             MlModelNameResponse,
