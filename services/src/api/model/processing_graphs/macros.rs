@@ -1,4 +1,5 @@
-/// Generates a serializable and OpenAPI compatible string token
+/// Generates a serializable and OpenAPI-compatible string token.
+/// This is a unit struct which serializes as a string that only has one possible value.
 ///
 /// # Examples
 ///
