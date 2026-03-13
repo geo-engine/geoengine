@@ -5513,7 +5513,6 @@
       },
       "ClassificationMeasurement": {
         "type": "object",
-        "description": "A classification measurement.\nIt contains a mapping from class IDs to class names.",
         "required": [
           "type",
           "measurement",
@@ -5697,7 +5696,6 @@
       },
       "ContinuousMeasurement": {
         "type": "object",
-        "description": "A continuous measurement, e.g., \"temperature\".\nIt may have an optional unit, e.g., \"°C\" for degrees Celsius.",
         "required": [
           "type",
           "measurement"
@@ -7759,7 +7757,6 @@
             "$ref": "#/components/schemas/ClassificationMeasurement"
           }
         ],
-        "description": "Measurement information for a raster band.",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
@@ -9368,18 +9365,17 @@
       },
       "RasterDataType": {
         "type": "string",
-        "description": "A raster data type.",
         "enum": [
-          "u8",
-          "u16",
-          "u32",
-          "u64",
-          "i8",
-          "i16",
-          "i32",
-          "i64",
-          "f32",
-          "f64"
+          "U8",
+          "U16",
+          "U32",
+          "U64",
+          "I8",
+          "I16",
+          "I32",
+          "I64",
+          "F32",
+          "F64"
         ]
       },
       "RasterDatasetFromWorkflow": {
@@ -10914,7 +10910,6 @@
       },
       "UnitlessMeasurement": {
         "type": "object",
-        "description": "A measurement without a unit.",
         "required": [
           "type"
         ],
@@ -11587,18 +11582,10 @@
       "Workflow": {
         "oneOf": [
           {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/TypedOperator"
-              }
-            ]
+            "$ref": "#/components/schemas/TypedOperator"
           },
           {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LegacyTypedOperator"
-              }
-            ]
+            "$ref": "#/components/schemas/LegacyTypedOperator"
           }
         ]
       },
