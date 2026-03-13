@@ -1,8 +1,11 @@
-use crate::api::model::processing_graphs::parameters::{
-    ColumnNames, FeatureAggregationMethod, RasterBandDescriptor, RasterDataType,
-    SingleRasterSource, SingleVectorMultipleRasterSources, TemporalAggregationMethod,
+use crate::api::model::processing_graphs::{
+    parameters::{
+        ColumnNames, FeatureAggregationMethod, RasterBandDescriptor, RasterDataType,
+        TemporalAggregationMethod,
+    },
+    source_parameters::{SingleRasterSource, SingleVectorMultipleRasterSources},
 };
-use geoengine_macros::type_tag;
+use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::processing::{
     Expression as OperatorsExpression, ExpressionParams as OperatorsExpressionParameters,
     RasterVectorJoin as OperatorsRasterVectorJoin,
@@ -86,10 +89,7 @@ use utoipa::ToSchema;
 ///
 /// Note, that all assignments are separated by semicolons.
 /// However, the last expression must be without a semicolon.
-#[type_tag(value = "Expression")]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(
+#[api_operator(
     title = "Raster Expression",
     examples(json!({
         "type": "Expression",
@@ -191,10 +191,7 @@ impl TryFrom<Expression> for OperatorsExpression {
 ///
 /// If the length of `names` is not equal to the number of raster inputs, an error is thrown.
 ///
-#[type_tag(value = "RasterVectorJoin")]
-#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
-#[schema(
+#[api_operator(
     title = "Raster Vector Join",
     examples(json!({
         "type": "RasterVectorJoin",
@@ -206,19 +203,17 @@ impl TryFrom<Expression> for OperatorsExpression {
         },
         "sources": {
             "vector": {
-            "type": "OgrSource",
-            "params": {
-                "data": "places"
-            }
+                "type": "OgrSource",
+                "params": {
+                    "data": "places"
+                }
             },
-            "rasters": [
-            {
+            "rasters": [{
                 "type": "GdalSource",
                 "params": {
                 "data": "ndvi"
                 }
-            }
-            ]
+            }]
         }
     }))
 )]

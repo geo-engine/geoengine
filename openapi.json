@@ -5256,37 +5256,6 @@
           }
         }
       },
-      "AddDatasetTile": {
-        "type": "object",
-        "required": [
-          "time",
-          "spatial_partition",
-          "band",
-          "z_index",
-          "params"
-        ],
-        "properties": {
-          "band": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "params": {
-            "$ref": "#/components/schemas/GdalDatasetParameters"
-          },
-          "spatial_partition": {
-            "$ref": "#/components/schemas/SpatialPartition2D"
-          },
-          "time": {
-            "$ref": "#/components/schemas/TimeInterval"
-          },
-          "z_index": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
       "AddLayer": {
         "type": "object",
         "required": [
@@ -5506,13 +5475,6 @@
           "eastNorth"
         ]
       },
-      "BandSelection": {
-        "type": "array",
-        "items": {
-          "type": "integer",
-          "minimum": 0
-        }
-      },
       "BoundingBox2D": {
         "type": "object",
         "description": "A bounding box that includes all border points.\nNote: may degenerate to a point!",
@@ -5551,7 +5513,6 @@
       },
       "ClassificationMeasurement": {
         "type": "object",
-        "description": "A classification measurement.\nIt contains a mapping from class IDs to class names.",
         "required": [
           "type",
           "measurement",
@@ -5735,7 +5696,6 @@
       },
       "ContinuousMeasurement": {
         "type": "object",
-        "description": "A continuous measurement, e.g., \"temperature\".\nIt may have an optional unit, e.g., \"°C\" for degrees Celsius.",
         "required": [
           "type",
           "measurement"
@@ -5907,6 +5867,9 @@
           "no",
           "auto"
         ]
+      },
+      "Data": {
+        "default": null
       },
       "DataId": {
         "oneOf": [
@@ -6296,9 +6259,6 @@
         }
       },
       "DateTimeParseFormat": {
-        "type": "string"
-      },
-      "DateTimeString": {
         "type": "string"
       },
       "DerivedColor": {
@@ -7220,6 +7180,171 @@
           }
         }
       },
+      "Histogram": {
+        "type": "object",
+        "title": "Histogram",
+        "description": "The `Histogram` is a _plot operator_ that computes a histogram plot either over attributes of a vector dataset or values of a raster source.\nThe output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.\n\nFor instance, you want to plot the data distribution of numeric attributes of a feature collection.\nThen you can use a histogram with a suitable number of buckets to visualize and assess this.\n\n## Errors\n\nThe operator returns an error if the selected column (`columnName`) does not exist or is not numeric.\n\n## Notes\n\nIf `bounds` or `buckets` are not defined, the operator will determine these values by itself which requires processing the data twice.\n\nIf the `buckets` parameter is set to `squareRootChoiceRule`, the operator estimates it using the square root of the number of elements in the data.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/HistogramParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Histogram"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Histogram",
+            "params": {
+              "columnName": "foobar",
+              "bounds": {
+                "min": 5.0,
+                "max": 10.0
+              },
+              "buckets": {
+                "type": "number",
+                "value": 15
+              },
+              "interactive": false
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "HistogramBounds": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/Data"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "values"
+            ],
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "min",
+                  "max"
+                ],
+                "properties": {
+                  "max": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "min": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "HistogramBuckets": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "value",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "number"
+                ]
+              },
+              "value": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "maxNumberOfBuckets": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "squareRootChoiceRule"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "HistogramParameters": {
+        "type": "object",
+        "description": "The parameter spec for `Histogram`",
+        "required": [
+          "attributeName",
+          "bounds",
+          "buckets"
+        ],
+        "properties": {
+          "attributeName": {
+            "type": "string",
+            "description": "Name of the (numeric) vector attribute or raster band to compute the histogram on.",
+            "examples": [
+              "temperature"
+            ]
+          },
+          "bounds": {
+            "$ref": "#/components/schemas/HistogramBounds",
+            "description": "If `data`, it computes the bounds of the underlying data. If `values`, one can specify custom bounds."
+          },
+          "buckets": {
+            "$ref": "#/components/schemas/HistogramBuckets",
+            "description": "The number of buckets. The value can be specified or calculated."
+          },
+          "interactive": {
+            "type": "boolean",
+            "description": "Flag, if the histogram should have user interactions for a range selection. It is `false` by default.",
+            "examples": [
+              true
+            ]
+          }
+        }
+      },
       "InternalDataId": {
         "type": "object",
         "required": [
@@ -7632,7 +7757,6 @@
             "$ref": "#/components/schemas/ClassificationMeasurement"
           }
         ],
-        "description": "Measurement information for a raster band.",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
@@ -7728,10 +7852,6 @@
             "$ref": "#/components/schemas/UploadId"
           }
         }
-      },
-      "MlModelId": {
-        "type": "string",
-        "format": "uuid"
       },
       "MlModelInputNoDataHandling": {
         "type": "object",
@@ -8110,8 +8230,31 @@
           }
         }
       },
-      "NamedData": {
-        "type": "string"
+      "MultipleRasterOrSingleVectorOperator": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RasterOperator"
+            }
+          },
+          {
+            "$ref": "#/components/schemas/VectorOperator"
+          }
+        ],
+        "description": "It is either a set of `RasterOperator` or a single `VectorOperator`"
+      },
+      "MultipleRasterOrSingleVectorSource": {
+        "type": "object",
+        "description": "Either one or more raster operators or a single vector operator as source for this operator.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/MultipleRasterOrSingleVectorOperator"
+          }
+        }
       },
       "NetCdfCfDataProviderDefinition": {
         "type": "object",
@@ -8721,25 +8864,6 @@
           "Owner"
         ]
       },
-      "PermissionListOptions": {
-        "type": "object",
-        "required": [
-          "limit",
-          "offset"
-        ],
-        "properties": {
-          "limit": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "offset": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
       "PermissionListing": {
         "type": "object",
         "required": [
@@ -8795,9 +8919,22 @@
         }
       },
       "PlotOperator": {
-        "type": "null",
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Histogram"
+          },
+          {
+            "$ref": "#/components/schemas/Statistics"
+          }
+        ],
         "description": "An operator that produces plot data.",
-        "default": null
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "Histogram": "#/components/schemas/Histogram",
+            "Statistics": "#/components/schemas/Statistics"
+          }
+        }
       },
       "PlotOutputFormat": {
         "type": "string",
@@ -9111,26 +9248,6 @@
           }
         }
       },
-      "ProvenanceOutput": {
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DataId"
-          },
-          "provenance": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/Provenance"
-            }
-          }
-        }
-      },
       "Provenances": {
         "type": "object",
         "required": [
@@ -9248,18 +9365,17 @@
       },
       "RasterDataType": {
         "type": "string",
-        "description": "A raster data type.",
         "enum": [
-          "u8",
-          "u16",
-          "u32",
-          "u64",
-          "i8",
-          "i16",
-          "i32",
-          "i64",
-          "f32",
-          "f64"
+          "U8",
+          "U16",
+          "U32",
+          "U64",
+          "I8",
+          "I16",
+          "I32",
+          "I64",
+          "F32",
+          "F64"
         ]
       },
       "RasterDatasetFromWorkflow": {
@@ -9316,22 +9432,6 @@
               "start": 1388534400000,
               "end": 1388534401000
             }
-          }
-        }
-      },
-      "RasterDatasetFromWorkflowResult": {
-        "type": "object",
-        "description": "response of the dataset from workflow handler",
-        "required": [
-          "dataset",
-          "upload"
-        ],
-        "properties": {
-          "dataset": {
-            "$ref": "#/components/schemas/DatasetName"
-          },
-          "upload": {
-            "$ref": "#/components/schemas/UploadId"
           }
         }
       },
@@ -9801,8 +9901,32 @@
           }
         }
       },
+      "SingleRasterOrVectorOperator": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RasterOperator"
+          },
+          {
+            "$ref": "#/components/schemas/VectorOperator"
+          }
+        ],
+        "description": "It is either a set of `RasterOperator` or a single `VectorOperator`"
+      },
+      "SingleRasterOrVectorSource": {
+        "type": "object",
+        "description": "A single vector operator or a single raster operators as source for this operator.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SingleRasterOrVectorOperator"
+          }
+        }
+      },
       "SingleRasterSource": {
         "type": "object",
+        "description": "A single raster operator as a source for this operator.",
         "required": [
           "raster"
         ],
@@ -9814,6 +9938,7 @@
       },
       "SingleVectorMultipleRasterSources": {
         "type": "object",
+        "description": "A single vector operator and one or more raster operators as source for this operator.",
         "required": [
           "vector",
           "rasters"
@@ -9954,16 +10079,6 @@
           }
         }
       },
-      "SpatialReferenceAuthority": {
-        "type": "string",
-        "description": "A spatial reference authority that is part of a spatial reference definition",
-        "enum": [
-          "EPSG",
-          "SR-ORG",
-          "IAU2000",
-          "ESRI"
-        ]
-      },
       "SpatialReferenceSpecification": {
         "type": "object",
         "description": "The specification of a spatial reference, where extent and axis labels are given\nin natural order (x, y) = (east, north)",
@@ -10005,24 +10120,6 @@
           },
           "spatialReference": {
             "type": "string"
-          }
-        }
-      },
-      "SpatialResolution": {
-        "type": "object",
-        "description": "The spatial resolution in SRS units",
-        "required": [
-          "x",
-          "y"
-        ],
-        "properties": {
-          "x": {
-            "type": "number",
-            "format": "double"
-          },
-          "y": {
-            "type": "number",
-            "format": "double"
           }
         }
       },
@@ -10104,6 +10201,89 @@
           }
         }
       },
+      "Statistics": {
+        "type": "object",
+        "title": "Statistics",
+        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThe output is a JSON description.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each input raster.\n\n## Inputs\n\nThe operator consumes exactly one _vector_ or multiple _raster_ operators.\n\n| Parameter | Type                                 |\n| --------- | ------------------------------------ |\n| `source`  | `MultipleRasterOrSingleVectorSource` |\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n### Example Output\n\n```json\n{\n  \"A\": {\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n}\n```\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/StatisticsParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/MultipleRasterOrSingleVectorSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Statistics"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Statistics",
+            "params": {
+              "columnNames": [
+                "A"
+              ],
+              "percentiles": [
+                0.25,
+                0.5,
+                0.75
+              ]
+            },
+            "sources": {
+              "source": [
+                {
+                  "type": "GdalSource",
+                  "params": {
+                    "data": "ndvi"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "StatisticsParameters": {
+        "type": "object",
+        "description": "The parameter spec for `Statistics`",
+        "properties": {
+          "columnNames": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "examples": [
+                [
+                  "x",
+                  "y"
+                ]
+              ]
+            },
+            "description": "# Vector data\nThe names of the attributes to generate statistics for.\n\n# Raster data\n_Optional_: An alias for each input source.\nThe operator will automatically name the rasters `Raster-1`, `Raster-2`, … if this parameter is empty.\nIf aliases are given, the number of aliases must match the number of input rasters.\nOtherwise an error is returned."
+          },
+          "percentiles": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double",
+              "examples": [
+                [
+                  0.25,
+                  0.5,
+                  0.75
+                ]
+              ]
+            },
+            "description": "The percentiles to compute for each attribute."
+          }
+        }
+      },
       "StringPair": {
         "type": "array",
         "items": {
@@ -10175,14 +10355,6 @@
           }
         }
       },
-      "TaskAbortOptions": {
-        "type": "object",
-        "properties": {
-          "force": {
-            "type": "boolean"
-          }
-        }
-      },
       "TaskFilter": {
         "type": "string",
         "enum": [
@@ -10195,31 +10367,6 @@
       "TaskId": {
         "type": "string",
         "format": "uuid"
-      },
-      "TaskListOptions": {
-        "type": "object",
-        "properties": {
-          "filter": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TaskFilter"
-              }
-            ]
-          },
-          "limit": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "offset": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
       },
       "TaskResponse": {
         "type": "object",
@@ -10763,7 +10910,6 @@
       },
       "UnitlessMeasurement": {
         "type": "object",
-        "description": "A measurement without a unit.",
         "required": [
           "type"
         ],
@@ -11308,27 +11454,6 @@
       "VolumeName": {
         "type": "string"
       },
-      "WcsBoundingbox": {
-        "type": "object",
-        "required": [
-          "bbox"
-        ],
-        "properties": {
-          "bbox": {
-            "type": "array",
-            "items": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          "spatial_reference": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
-      },
       "WcsRequest": {
         "type": "string",
         "enum": [
@@ -11457,18 +11582,10 @@
       "Workflow": {
         "oneOf": [
           {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/TypedOperator"
-              }
-            ]
+            "$ref": "#/components/schemas/TypedOperator"
           },
           {
-            "allOf": [
-              {
-                "$ref": "#/components/schemas/LegacyTypedOperator"
-              }
-            ]
+            "$ref": "#/components/schemas/LegacyTypedOperator"
           }
         ]
       },

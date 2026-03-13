@@ -20,7 +20,7 @@ impl WorkflowId {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, ToSchema)]
+#[derive(Clone, Debug, Serialize, Deserialize /*, ToSchema */)]
 #[serde(untagged)]
 pub enum Workflow {
     Typed {
@@ -30,9 +30,42 @@ pub enum Workflow {
     // TODO: remove this variant when all workflows are migrated to typed ones
     Legacy {
         #[serde(flatten)]
-        #[schema(value_type = crate::api::model::operators::LegacyTypedOperator)]
+        // #[schema(value_type = crate::api::model::operators::LegacyTypedOperator)]
         operator: OperatorsTypedOperator,
     },
+}
+
+/// TODO: Move back to deriving `ToSchema` when this is resolved: <https://github.com/juhaku/utoipa/issues/1456>
+/// Currently, it nests allOf in oneOf unnecessarily.
+mod custom_to_schema {
+    use super::*;
+    use std::borrow::Cow;
+    use utoipa::{
+        PartialSchema,
+        openapi::{
+            OneOfBuilder, RefOr,
+            schema::{RefBuilder, Schema},
+        },
+    };
+
+    impl ToSchema for Workflow {
+        fn name() -> Cow<'static, str> {
+            Cow::Borrowed("Workflow")
+        }
+    }
+    impl PartialSchema for Workflow {
+        fn schema() -> RefOr<Schema> {
+            OneOfBuilder::new()
+                .item(
+                    RefBuilder::new()
+                        .ref_location_from_schema_name(<TypedOperator as ToSchema>::name()),
+                )
+                .item(RefBuilder::new().ref_location_from_schema_name(
+                    <crate::api::model::operators::LegacyTypedOperator as ToSchema>::name(),
+                ))
+                .into()
+        }
+    }
 }
 
 impl PartialEq for Workflow {
