@@ -117,7 +117,7 @@ indoc = "2.0"
 itertools = "0.14"
 libloading = "0.9"
 lru = "0.16"
-lz4_flex = "0.12"
+lz4_flex = "0.13"
 mime = "0.3"
 ndarray = { version = "0.17", features = ["approx"] }     # has to match with `ort`
 num = "0.4"
