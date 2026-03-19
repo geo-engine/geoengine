@@ -1,7 +1,7 @@
 use crate::error::{Error, Result};
 use geoengine_operators::util::retry::retry;
 use prost::Message;
-use rand::Rng;
+use rand::RngExt;
 use std::collections::HashMap;
 use std::convert::Infallible;
 use std::hash::Hash;

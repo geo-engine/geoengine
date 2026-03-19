@@ -212,7 +212,7 @@ where
             .global_pixel_bounds()
             .intersects(&query.spatial_bounds())
             && self.time.intersects(&query.time_interval())
-            && query.attributes().as_slice().contains(&self.band)
+            && query.attributes().contains(self.band)
     }
 }
 

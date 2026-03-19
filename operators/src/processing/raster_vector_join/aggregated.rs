@@ -106,7 +106,7 @@ where
             let raster_query = RasterQueryRectangle::new(
                 pixel_bounds,
                 time_span.time_interval,
-                BandSelection::first(), // FIXME: this should prop. use all bands?
+                BandSelection::first_n(rd.bands.count()),
             );
 
             let mut rasters = raster_processor.raster_query(raster_query, ctx).await?;

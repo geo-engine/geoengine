@@ -1,4 +1,7 @@
-use crate::adapters::{QueryWrapper, RasterStackerAdapter, RasterStackerSource};
+use crate::adapters::{
+    PartialQueryRect, QueryWrapper, RasterStackerAdapter, RasterStackerSource,
+    SimpleRasterStackerAdapter, SimpleRasterStackerError,
+};
 use crate::engine::{
     BoxRasterQueryProcessor, CanonicOperatorName, ExecutionContext, InitializedRasterOperator,
     InitializedSources, MultipleRasterSources, Operator, OperatorName, QueryContext,
@@ -11,6 +14,7 @@ use crate::error::{
 use crate::optimization::OptimizationError;
 use crate::util::Result;
 use async_trait::async_trait;
+use futures::StreamExt;
 use futures::stream::BoxStream;
 use geoengine_datatypes::primitives::{BandSelection, RasterQueryRectangle, SpatialResolution};
 use geoengine_datatypes::raster::{
@@ -313,30 +317,6 @@ impl<T> RasterStackerProcessor<T> {
     }
 }
 
-/// compute the bands in the input source from the bands in a query that uses multiple sources
-fn map_query_bands_to_source_bands(
-    query_bands: &BandSelection,
-    bands_per_source: &[u32],
-    source_index: usize,
-) -> Option<BandSelection> {
-    let source_start: u32 = bands_per_source.iter().take(source_index).sum();
-    let source_bands = bands_per_source[source_index];
-    let source_end = source_start + source_bands;
-
-    let bands = query_bands
-        .as_slice()
-        .iter()
-        .filter(|output_band| **output_band >= source_start && **output_band < source_end)
-        .map(|output_band| output_band - source_start)
-        .collect::<Vec<_>>();
-
-    if bands.is_empty() {
-        return None;
-    }
-
-    Some(BandSelection::new_unchecked(bands))
-}
-
 #[async_trait]
 impl<T> QueryProcessor for RasterStackerProcessor<T>
 where
@@ -352,14 +332,36 @@ where
         query: RasterQueryRectangle,
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<RasterTile2D<T>>>> {
+        // First try to create simple raster stacker for temporal aligned data
+        let sdp = SimpleRasterStackerAdapter::<
+            SimpleRasterStackerAdapter<BoxRasterQueryProcessor<T>>,
+        >::stack_selected_regular_aligned_raster_bands(&query, ctx, &self.sources)
+        .await;
+
+        let x = match sdp {
+            Ok(p) => Ok(Some(p)),
+            Err(SimpleRasterStackerError::InputsNotTemporalAligned) => Ok(None),
+            Err(e) => Err(crate::error::Error::SimpleRasterStacker { source: e }),
+        }?;
+
+        if let Some(sdp) = x {
+            tracing::trace!("Using regular time aligned stacker processor");
+            return Ok(Box::pin(sdp));
+        }
+
+        // if the simple stacker can not be used, try to use the more complex stacker
+
+        tracing::trace!("Using non-regular time aligned stacker processor");
+
         let mut sources = vec![];
+        let tiling_strat = self
+            .result_descriptor
+            .tiling_grid_definition(ctx.tiling_specification())
+            .generate_data_tiling_strategy();
 
         for (idx, source) in self.sources.iter().enumerate() {
-            let Some(bands) =
-                map_query_bands_to_source_bands(query.attributes(), &self.bands_per_source, idx)
-            else {
-                continue;
-            };
+            // FIXME: find a better way to do the selection and avoid work done without benefit.
+            let bands = BandSelection::first_n(self.bands_per_source[idx]);
 
             sources.push(RasterStackerSource {
                 queryable: QueryWrapper { p: source, ctx },
@@ -367,7 +369,29 @@ where
             });
         }
 
-        let output = RasterStackerAdapter::new(sources, query.into());
+        #[cfg(debug_assertions)]
+        {
+            let num_input_bands = self.bands_per_source.iter().sum::<u32>() as usize;
+            let num_query_bands = query.attributes().as_vec().len();
+
+            let fact = num_input_bands as f32 / num_query_bands as f32;
+
+            tracing::debug!(
+                "StackerAdapter queries {num_input_bands} to produce {num_query_bands}. This is {fact}x the work required."
+            );
+        }
+
+        let query_band_selection = query.attributes().clone();
+        let partial_query = PartialQueryRect::from(query);
+        let output =
+            RasterStackerAdapter::new(sources, partial_query, tiling_strat).filter_map(move |o| {
+                let pred = match o {
+                    Ok(tile) if query_band_selection.contains(tile.band) => Some(Ok(tile)),
+                    Ok(_) => None,
+                    Err(e) => Some(Err(e)),
+                };
+                std::future::ready(pred)
+            });
 
         Ok(Box::pin(output))
     }
@@ -412,7 +436,7 @@ mod tests {
             TilesEqualIgnoringCacheHint,
         },
         spatial_reference::SpatialReference,
-        util::test::TestDefault,
+        util::test::{TestDefault, assert_eq_two_list_of_tiles},
     };
 
     use crate::{
@@ -428,31 +452,23 @@ mod tests {
 
     use super::*;
 
-    #[test]
-    fn it_maps_query_bands_to_source_bands() {
-        assert_eq!(
-            map_query_bands_to_source_bands(&0.into(), &[2, 1], 0),
-            Some(0.into())
-        );
-        assert_eq!(map_query_bands_to_source_bands(&0.into(), &[2, 1], 1), None);
-        assert_eq!(
-            map_query_bands_to_source_bands(&2.into(), &[2, 1], 1),
-            Some(0.into())
-        );
-
-        assert_eq!(
-            map_query_bands_to_source_bands(&[1, 2].try_into().unwrap(), &[2, 2], 0),
-            Some(1.into())
-        );
-        assert_eq!(
-            map_query_bands_to_source_bands(&[1, 2, 3].try_into().unwrap(), &[2, 2], 1),
-            Some([0, 1].try_into().unwrap())
-        );
+    #[tokio::test]
+    async fn it_stacks() {
+        it_stacks_impl(crate::engine::TimeDescriptor::new_irregular(None)).await;
     }
 
     #[tokio::test]
+
+    async fn it_stacks_regular() {
+        it_stacks_impl(crate::engine::TimeDescriptor::new_regular_with_epoch(
+            Some(TimeInterval::new_unchecked(0, 5)),
+            TimeStep::millis(5).unwrap(),
+        ))
+        .await;
+    }
+
     #[allow(clippy::too_many_lines)]
-    async fn it_stacks() {
+    async fn it_stacks_impl(time_desc: crate::engine::TimeDescriptor) {
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -541,13 +557,10 @@ mod tests {
             },
         ];
 
-        let result_descriptor = RasterResultDescriptor {
+        let result_descriptor1 = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(0, 5)),
-                TimeStep::millis(10).unwrap(),
-            ),
+            time: time_desc,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -558,7 +571,7 @@ mod tests {
         let mrs1 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data.clone(),
-                result_descriptor: result_descriptor.clone(),
+                result_descriptor: result_descriptor1.clone(),
             },
         }
         .boxed();
@@ -566,7 +579,7 @@ mod tests {
         let mrs2 = MockRasterSource {
             params: MockRasterSourceParams {
                 data: data2.clone(),
-                result_descriptor,
+                result_descriptor: result_descriptor1,
             },
         }
         .boxed();
@@ -622,8 +635,21 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn it_stacks_stacks() {
+        it_stacks_stacks_impl(crate::engine::TimeDescriptor::new_irregular(None)).await;
+    }
+
+    #[tokio::test]
+    async fn it_stacks_stacks_regular() {
+        it_stacks_stacks_impl(crate::engine::TimeDescriptor::new_regular_with_epoch(
+            Some(TimeInterval::new_unchecked(0, 10)),
+            TimeStep::millis(5).unwrap(),
+        ))
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn it_stacks_stacks_impl(time_desc: crate::engine::TimeDescriptor) {
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -797,10 +823,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(10).unwrap(),
-            ),
+            time: time_desc,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -886,8 +909,21 @@ mod tests {
     }
 
     #[tokio::test]
-    #[allow(clippy::too_many_lines)]
     async fn it_selects_band_from_stack() {
+        it_selects_band_from_stack_impl(crate::engine::TimeDescriptor::new_irregular(None)).await;
+    }
+
+    #[tokio::test]
+    async fn it_selects_band_from_stack_regular() {
+        it_selects_band_from_stack_impl(crate::engine::TimeDescriptor::new_regular_with_epoch(
+            Some(TimeInterval::new_unchecked(0, 10)),
+            TimeStep::millis(5).unwrap(),
+        ))
+        .await;
+    }
+
+    #[allow(clippy::too_many_lines)]
+    async fn it_selects_band_from_stack_impl(time_desc: crate::engine::TimeDescriptor) {
         let data: Vec<RasterTile2D<u8>> = vec![
             RasterTile2D {
                 time: TimeInterval::new_unchecked(0, 5),
@@ -979,10 +1015,7 @@ mod tests {
         let result_descriptor = RasterResultDescriptor {
             data_type: RasterDataType::U8,
             spatial_reference: SpatialReference::epsg_4326().into(),
-            time: crate::engine::TimeDescriptor::new_regular_with_epoch(
-                Some(TimeInterval::new_unchecked(0, 10)),
-                TimeStep::millis(10).unwrap(),
-            ),
+            time: time_desc,
             spatial_grid: SpatialGridDescriptor::source_from_parts(
                 GeoTransform::test_default(),
                 GridBoundingBox2D::new([-2, 0], [-1, 3]).unwrap(),
@@ -1044,7 +1077,16 @@ mod tests {
             .await;
         let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(data2.tiles_equal_ignoring_cache_hint(&result));
+        let expected_band1: Vec<_> = data2
+            .iter()
+            .map(|t| {
+                let mut t_1 = t.clone();
+                t_1.band = 1;
+                t_1
+            })
+            .collect();
+
+        assert_eq_two_list_of_tiles(&result, &expected_band1, false);
     }
 
     #[tokio::test]
@@ -1096,11 +1138,6 @@ mod tests {
 
         let processor = operator.query_processor().unwrap().get_u8().unwrap();
 
-        let mut exe_ctx = MockExecutionContext::test_default();
-        exe_ctx.tiling_specification.tile_size_in_pixels = GridShape {
-            shape_array: [2, 2],
-        };
-
         let query_ctx = exe_ctx.mock_query_context_test_default();
 
         // query both bands
@@ -1139,9 +1176,10 @@ mod tests {
             .unwrap()
             .collect::<Vec<_>>()
             .await;
-        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+        let result_0 = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(!result.is_empty());
+        assert!(!result_0.is_empty());
+        assert!(result_0.iter().all(|t| t.band == 0));
 
         // query only second band
         let query_rect = RasterQueryRectangle::new(
@@ -1159,9 +1197,12 @@ mod tests {
             .unwrap()
             .collect::<Vec<_>>()
             .await;
-        let result = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
+        let result_1 = result.into_iter().collect::<Result<Vec<_>>>().unwrap();
 
-        assert!(!result.is_empty());
+        assert!(!result_1.is_empty());
+        assert!(result_1.iter().all(|t| t.band == 1));
+
+        assert_eq!(result_0.len(), result_1.len());
     }
 
     #[test]

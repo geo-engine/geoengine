@@ -10,7 +10,7 @@ use crate::{
 use serde::{Deserialize, Serialize};
 
 /// The static parameters required to create a `TilingStrategy`
-#[derive(Debug, Serialize, Deserialize, Clone, Copy)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq)]
 pub struct TilingSpecification {
     pub tile_size_in_pixels: GridShape2D,
 }

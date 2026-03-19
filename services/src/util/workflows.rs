@@ -8,7 +8,7 @@ pub async fn validate_workflow<E: ExecutionContext>(
 ) -> Result<()> {
     let workflow_operator_path_root = WorkflowOperatorPath::initialize_root();
 
-    match workflow.clone().operator {
+    match workflow.clone().operator()? {
         TypedOperator::Vector(o) => {
             o.initialize(workflow_operator_path_root, execution_context)
                 .await?;

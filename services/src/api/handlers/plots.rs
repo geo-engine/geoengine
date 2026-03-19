@@ -111,7 +111,7 @@ async fn get_plot_handler<C: ApplicationContext>(
     let workflow_id = WorkflowId(id.into_inner());
     let workflow = ctx.db().load_workflow(&workflow_id).await?;
 
-    let operator = workflow.operator.get_plot()?;
+    let operator = workflow.operator()?.get_plot()?;
 
     let execution_context = ctx.execution_context()?;
 
@@ -287,7 +287,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: Statistics {
                 params: StatisticsParams {
                     column_names: vec![],
@@ -353,7 +353,7 @@ mod tests {
 
         let session_id = session.id();
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: Histogram {
                 params: HistogramParams {
                     attribute_name: "band".to_string(),
@@ -487,7 +487,7 @@ mod tests {
 
             let session_id = session.id();
 
-            let workflow = Workflow {
+            let workflow = Workflow::Legacy {
                 operator: Statistics {
                     params: StatisticsParams {
                         column_names: vec![],

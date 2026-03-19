@@ -120,7 +120,7 @@ impl<C: SessionContext> RasterDatasetFromWorkflowTask<C> {
 
         let initialized_operator = workflow
             .clone()
-            .operator
+            .operator()?
             .get_raster()
             .expect("must be raster here")
             .initialize(WorkflowOperatorPath::initialize_root(), &exe_ctx)

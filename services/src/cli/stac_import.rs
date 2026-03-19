@@ -863,7 +863,7 @@ impl StacImporter {
         let add_layer = AddLayer {
             name: layer_name.clone(),
             description: format!("Dataset: {dataset_name}"),
-            workflow: Workflow {
+            workflow: Workflow::Legacy {
                 operator: TypedOperator::Raster(
                     MultiBandGdalSource {
                         params: MultiBandGdalSourceParameters {
@@ -1742,49 +1742,6 @@ where
 
 #[cfg(test)]
 mod tests {
-    use geoengine_datatypes::test_data;
-
-    #[test]
-    fn it_parses_stac_json() {
-        // read stac.json from crate root
-        let stac_json = std::fs::read_to_string(test_data!("../stac.json")).unwrap();
-        // let feature_collection: FeatureCollection =
-        //     serde_json::from_str(&stac_json).expect("Failed to parse stac.json");
-        // println!("{:?}", feature_collection);
-
-        let feature_collection: stac::ItemCollection =
-            serde_json::from_str(&stac_json).expect("Failed to parse stac.json");
-        // println!("{:?}", feature_collection)
-
-        println!("Feature Collection");
-
-        feature_collection
-            .additional_fields
-            .iter()
-            .for_each(|(key, value)| {
-                println!("    {key}: {value}");
-            });
-
-        feature_collection.items.iter().for_each(|item| {
-            println!("Item ID: {}", item.id);
-            println!("  Fields:");
-            item.assets.iter().for_each(|(key, asset)| {
-                println!("  Asset Key: {key}");
-                println!("    Title: {:?}", asset.title);
-                println!("    Type: {:?}", asset.r#type);
-                println!("    Href: {}", asset.href);
-                if let Some(bands) = asset.additional_fields.get("raster:bands")
-                    && let Some(bands_array) = bands.as_array()
-                {
-                    for band in bands_array {
-                        if let Some(name) = band.get("name").and_then(|n| n.as_str()) {
-                            println!("    Raster Band Name: {name}");
-                        }
-                    }
-                }
-            });
-        });
-    }
 
     #[test]
     fn it_parses_raster_bands() {

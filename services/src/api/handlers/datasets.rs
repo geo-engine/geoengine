@@ -3557,7 +3557,7 @@ mod tests {
         assert_eq!(res.status(), 200, "response: {res:?}");
 
         // create workflow
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: geoengine_operators::engine::TypedOperator::Raster(
                 MultiBandGdalSource {
                     params: MultiBandGdalSourceParameters::new(dataset_name.into()),

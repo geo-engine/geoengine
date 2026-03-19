@@ -284,7 +284,7 @@ impl GeoTransformAccess for SpatialGridDefinition {
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq)]
 pub struct TilingSpatialGridDefinition {
     // Don't make this public to avoid leaking inner
     element_grid_definition: SpatialGridDefinition,

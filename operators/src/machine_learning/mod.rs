@@ -8,7 +8,7 @@ use geoengine_datatypes::{
 pub use metadata::{
     MlModelInputNoDataHandling, MlModelLoadingInfo, MlModelMetadata, MlModelOutputNoDataHandling,
 };
-use ort::tensor::TensorElementType;
+use ort::value::TensorElementType;
 use snafu::Snafu;
 pub mod db_types;
 mod metadata;
@@ -64,13 +64,13 @@ pub enum MachineLearningError {
     InvalidOutputType { output_type: ort::value::ValueType },
     #[snafu(display("Onnx tensor element type {:?} is not supported.", element_type))]
     UnsupportedTensorElementType {
-        element_type: ort::tensor::TensorElementType,
+        element_type: ort::value::TensorElementType,
     },
     #[snafu(display(
         "The input shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
     MetadataModelInputShapeMismatch {
-        model_dimensions: ort::tensor::Shape,
+        model_dimensions: ort::value::Shape,
         model_shape: MlTensorShape3D,
         metadata_shape: MlTensorShape3D,
     },
@@ -78,7 +78,7 @@ pub enum MachineLearningError {
         "The output shape of the model input  ({model_dimensions:?} => {model_shape:?}) does not match the metadata input spec ({metadata_shape:?})."
     ))]
     MetadataModelOutputShapeMismatch {
-        model_dimensions: ort::tensor::Shape,
+        model_dimensions: ort::value::Shape,
         model_shape: MlTensorShape3D,
         metadata_shape: MlTensorShape3D,
     },

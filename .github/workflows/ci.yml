@@ -52,6 +52,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: lcov.info
+          fail-on-error: false # do not fail the workflow if the upload fails
 
   lint:
     runs-on: ubuntu-24.04
@@ -83,7 +84,7 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets --locked -- -D warnings
       - name: SQLFluff
-        run: pipx run sqlfluff==3.5.0 lint
+        run: pipx run sqlfluff==4.0.4 lint
 
   openapi:
     name: OpenAPI Validation
