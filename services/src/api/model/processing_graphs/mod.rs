@@ -45,8 +45,11 @@ pub(crate) use crate::api::model::processing_graphs::{
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(tag = "type", content = "operator")]
 pub enum TypedOperator {
+    #[schema(title = "TypedVectorOperator")]
     Vector(VectorOperator),
+    #[schema(title = "TypedRasterOperator")]
     Raster(RasterOperator),
+    #[schema(title = "TypedPlotOperator")]
     Plot(PlotOperator),
 }
 

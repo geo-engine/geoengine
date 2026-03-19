@@ -10769,6 +10769,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "TypedVectorOperator",
             "required": [
               "operator",
               "type"
@@ -10787,6 +10788,7 @@
           },
           {
             "type": "object",
+            "title": "TypedRasterOperator",
             "required": [
               "operator",
               "type"
@@ -10805,6 +10807,7 @@
           },
           {
             "type": "object",
+            "title": "TypedPlotOperator",
             "required": [
               "operator",
               "type"
