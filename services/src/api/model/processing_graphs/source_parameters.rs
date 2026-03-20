@@ -20,6 +20,28 @@ impl TryFrom<SingleRasterSource> for geoengine_operators::engine::SingleRasterSo
     }
 }
 
+/// One or more raster operators as sources for this operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[schema(no_recursion)]
+#[serde(rename_all = "camelCase")]
+pub struct MultipleRasterSources {
+    pub rasters: Vec<RasterOperator>,
+}
+
+impl TryFrom<MultipleRasterSources> for geoengine_operators::engine::MultipleRasterSources {
+    type Error = anyhow::Error;
+
+    fn try_from(value: MultipleRasterSources) -> Result<Self, Self::Error> {
+        Ok(Self {
+            rasters: value
+                .rasters
+                .into_iter()
+                .map(std::convert::TryInto::try_into)
+                .collect::<Result<_, _>>()?,
+        })
+    }
+}
+
 /// A single vector operator or a single raster operators as source for this operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[schema(no_recursion)]
@@ -143,6 +165,24 @@ mod tests {
 
         let _eng: geoengine_operators::engine::SingleRasterSource =
             api.try_into().expect("conversion failed");
+    }
+
+    #[test]
+    fn it_converts_multiple_raster_sources() {
+        let api = MultipleRasterSources {
+            rasters: vec![RasterOperator::GdalSource(GdalSource {
+                r#type: Default::default(),
+                params: GdalSourceParameters {
+                    data: "example_data".to_string(),
+                    overview_level: None,
+                },
+            })],
+        };
+
+        let eng: geoengine_operators::engine::MultipleRasterSources =
+            api.try_into().expect("conversion failed");
+
+        assert_eq!(eng.rasters.len(), 1);
     }
 
     #[test]

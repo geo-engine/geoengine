@@ -12,9 +12,15 @@ use geoengine_operators::{
     mock::MockPointSource as OperatorsMockPointSource,
     plot::{Histogram as OperatorsHistogram, Statistics as OperatorsStatistics},
     processing::{
-        Expression as OperatorsExpression, RasterVectorJoin as OperatorsRasterVectorJoin,
+        BandFilter as OperatorsBandFilter, Expression as OperatorsExpression,
+        Interpolation as OperatorsInterpolation, RasterStacker as OperatorsRasterStacker,
+        RasterTypeConversion as OperatorsRasterTypeConversion,
+        RasterVectorJoin as OperatorsRasterVectorJoin, Reprojection as OperatorsReprojection,
+        TemporalRasterAggregation as OperatorsTemporalRasterAggregation,
     },
-    source::GdalSource as OperatorsGdalSource,
+    source::{
+        GdalSource as OperatorsGdalSource, MultiBandGdalSource as OperatorsMultiBandGdalSource,
+    },
 };
 use serde::{Deserialize, Serialize};
 use utoipa::{OpenApi, ToSchema};
@@ -31,10 +37,21 @@ mod source_parameters;
 pub(crate) use crate::api::model::processing_graphs::parameters::SpatialBoundsDerive;
 pub(crate) use crate::api::model::processing_graphs::{
     plots::{Histogram, HistogramParameters, Statistics, StatisticsParameters},
-    processing::{Expression, ExpressionParameters, RasterVectorJoin, RasterVectorJoinParameters},
-    source::{GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters},
+    processing::{
+        Aggregation, BandFilter, BandFilterParameters, BandsByNameOrIndex,
+        DeriveOutRasterSpecsSource, Expression, ExpressionParameters, Interpolation,
+        InterpolationMethod, InterpolationParameters, InterpolationResolution, RasterStacker,
+        RasterStackerParameters, RasterTypeConversion, RasterTypeConversionParameters,
+        RasterVectorJoin, RasterVectorJoinParameters, RenameBands, Reprojection,
+        ReprojectionParameters, TemporalRasterAggregation, TemporalRasterAggregationParameters,
+    },
+    source::{
+        GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
+        MultiBandGdalSource,
+    },
     source_parameters::{
         MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
+        MultipleRasterSources,
         SingleRasterOrVectorOperator, SingleRasterOrVectorSource, SingleRasterSource,
         SingleVectorMultipleRasterSources,
     },
@@ -55,8 +72,15 @@ pub enum TypedOperator {
 #[serde(rename_all = "camelCase", untagged)]
 #[schema(discriminator = "type")]
 pub enum RasterOperator {
+    BandFilter(BandFilter),
     Expression(Expression),
     GdalSource(GdalSource),
+    Interpolation(Interpolation),
+    MultiBandGdalSource(MultiBandGdalSource),
+    RasterStacker(RasterStacker),
+    RasterTypeConversion(RasterTypeConversion),
+    Reprojection(Reprojection),
+    TemporalRasterAggregation(TemporalRasterAggregation),
 }
 
 /// An operator that produces vector data.
@@ -66,6 +90,7 @@ pub enum RasterOperator {
 pub enum VectorOperator {
     MockPointSource(MockPointSource),
     RasterVectorJoin(RasterVectorJoin),
+    Reprojection(Reprojection),
 }
 
 /// An operator that produces plot data.
@@ -81,11 +106,36 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
     type Error = anyhow::Error;
     fn try_from(operator: RasterOperator) -> Result<Self, Self::Error> {
         match operator {
+            RasterOperator::BandFilter(band_filter) => {
+                OperatorsBandFilter::try_from(band_filter).map(OperatorsRasterOperator::boxed)
+            }
             RasterOperator::Expression(expression) => {
                 OperatorsExpression::try_from(expression).map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::GdalSource(gdal_source) => {
                 OperatorsGdalSource::try_from(gdal_source).map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::Interpolation(interpolation) => {
+                OperatorsInterpolation::try_from(interpolation).map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::MultiBandGdalSource(gdal_source) => OperatorsMultiBandGdalSource::try_from(
+                gdal_source,
+            )
+            .map(OperatorsRasterOperator::boxed),
+            RasterOperator::RasterStacker(raster_stacker) => {
+                OperatorsRasterStacker::try_from(raster_stacker)
+                    .map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::RasterTypeConversion(type_conversion) => {
+                OperatorsRasterTypeConversion::try_from(type_conversion)
+                    .map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::Reprojection(reprojection) => {
+                OperatorsReprojection::try_from(reprojection).map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::TemporalRasterAggregation(aggregation) => {
+                OperatorsTemporalRasterAggregation::try_from(aggregation)
+                    .map(OperatorsRasterOperator::boxed)
             }
         }
     }
@@ -101,6 +151,9 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
             }
             VectorOperator::RasterVectorJoin(rvj) => {
                 OperatorsRasterVectorJoin::try_from(rvj).map(OperatorsVectorOperator::boxed)
+            }
+            VectorOperator::Reprojection(reprojection) => {
+                OperatorsReprojection::try_from(reprojection).map(OperatorsVectorOperator::boxed)
             }
         }
     }
@@ -142,12 +195,31 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     GdalSourceParameters,
     MockPointSource,
     MockPointSourceParameters,
+    MultiBandGdalSource,
     // Processing
+    Aggregation,
+    BandFilter,
+    BandFilterParameters,
+    BandsByNameOrIndex,
+    DeriveOutRasterSpecsSource,
     Expression,
     ExpressionParameters,
+    Interpolation,
+    InterpolationMethod,
+    InterpolationParameters,
+    InterpolationResolution,
     RasterOperator,
+    RasterStacker,
+    RasterStackerParameters,
+    RasterTypeConversion,
+    RasterTypeConversionParameters,
     RasterVectorJoin,
     RasterVectorJoinParameters,
+    RenameBands,
+    Reprojection,
+    ReprojectionParameters,
+    TemporalRasterAggregation,
+    TemporalRasterAggregationParameters,
     // Plots
     Histogram,
     HistogramParameters,
@@ -156,6 +228,7 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     // Source Parameters
     MultipleRasterOrSingleVectorOperator,
     MultipleRasterOrSingleVectorSource,
+    MultipleRasterSources,
     SingleRasterOrVectorOperator,
     SingleRasterOrVectorSource,
     SingleRasterSource,

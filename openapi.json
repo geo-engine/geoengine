@@ -5338,6 +5338,159 @@
           }
         }
       },
+      "Aggregation": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "min"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "max"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "first"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "last"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "mean"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sum"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "count"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "ignoreNoData",
+              "percentile",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "percentile": {
+                "type": "number",
+                "format": "double"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "percentileEstimate"
+                ]
+              }
+            }
+          }
+        ]
+      },
       "ArunaDataProviderDefinition": {
         "type": "object",
         "required": [
@@ -5473,6 +5626,76 @@
         "enum": [
           "northEast",
           "eastNorth"
+        ]
+      },
+      "BandFilter": {
+        "type": "object",
+        "title": "Band Filter",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/BandFilterParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "BandFilter"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "BandFilter",
+            "params": {
+              "bands": [
+                "nir",
+                "red"
+              ]
+            },
+            "sources": {
+              "raster": {
+                "type": "MultiBandGdalSource",
+                "params": {
+                  "data": "sentinel-2-l2a_EPSG32632_U16_10"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BandFilterParameters": {
+        "type": "object",
+        "required": [
+          "bands"
+        ],
+        "properties": {
+          "bands": {
+            "$ref": "#/components/schemas/BandsByNameOrIndex"
+          }
+        }
+      },
+      "BandsByNameOrIndex": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
         ]
       },
       "BoundingBox2D": {
@@ -6260,6 +6483,13 @@
       },
       "DateTimeParseFormat": {
         "type": "string"
+      },
+      "DeriveOutRasterSpecsSource": {
+        "type": "string",
+        "enum": [
+          "dataBounds",
+          "projectionBounds"
+        ]
       },
       "DerivedColor": {
         "type": "object",
@@ -7363,6 +7593,134 @@
           }
         }
       },
+      "Interpolation": {
+        "type": "object",
+        "title": "Interpolation",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/InterpolationParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Interpolation"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Interpolation",
+            "params": {
+              "interpolation": "nearestNeighbor",
+              "outputResolution": {
+                "type": "fraction",
+                "x": 2.0,
+                "y": 2.0
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "MultiBandGdalSource",
+                "params": {
+                  "data": "sentinel-2-l2a_EPSG32632_U8_20"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "InterpolationMethod": {
+        "type": "string",
+        "enum": [
+          "nearestNeighbor",
+          "biLinear"
+        ]
+      },
+      "InterpolationParameters": {
+        "type": "object",
+        "required": [
+          "interpolation",
+          "outputResolution"
+        ],
+        "properties": {
+          "interpolation": {
+            "$ref": "#/components/schemas/InterpolationMethod"
+          },
+          "outputOriginReference": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Coordinate2D"
+              }
+            ]
+          },
+          "outputResolution": {
+            "$ref": "#/components/schemas/InterpolationResolution"
+          }
+        }
+      },
+      "InterpolationResolution": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "x",
+              "y",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "resolution"
+                ]
+              },
+              "x": {
+                "type": "number",
+                "format": "double"
+              },
+              "y": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "x",
+              "y",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "fraction"
+                ]
+              },
+              "x": {
+                "type": "number",
+                "format": "double"
+              },
+              "y": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          }
+        ]
+      },
       "Layer": {
         "type": "object",
         "required": [
@@ -8089,6 +8447,35 @@
           }
         }
       },
+      "MultiBandGdalSource": {
+        "type": "object",
+        "title": "Multi Band GDAL Source",
+        "description": "The [`MultiBandGdalSource`] is a source operator that reads multi-band raster data using GDAL.",
+        "required": [
+          "type",
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/GdalSourceParameters"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "MultiBandGdalSource"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "MultiBandGdalSource",
+            "params": {
+              "data": "sentinel-2-l2a_EPSG32632_U16_10",
+              "overviewLevel": null
+            }
+          }
+        ]
+      },
       "MultiBandRasterColorizer": {
         "type": "object",
         "required": [
@@ -8253,6 +8640,21 @@
         "properties": {
           "source": {
             "$ref": "#/components/schemas/MultipleRasterOrSingleVectorOperator"
+          }
+        }
+      },
+      "MultipleRasterSources": {
+        "type": "object",
+        "description": "One or more raster operators as sources for this operator.",
+        "required": [
+          "rasters"
+        ],
+        "properties": {
+          "rasters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RasterOperator"
+            }
           }
         }
       },
@@ -9438,18 +9840,46 @@
       "RasterOperator": {
         "oneOf": [
           {
+            "$ref": "#/components/schemas/BandFilter"
+          },
+          {
             "$ref": "#/components/schemas/Expression"
           },
           {
             "$ref": "#/components/schemas/GdalSource"
+          },
+          {
+            "$ref": "#/components/schemas/Interpolation"
+          },
+          {
+            "$ref": "#/components/schemas/MultiBandGdalSource"
+          },
+          {
+            "$ref": "#/components/schemas/RasterStacker"
+          },
+          {
+            "$ref": "#/components/schemas/RasterTypeConversion"
+          },
+          {
+            "$ref": "#/components/schemas/Reprojection"
+          },
+          {
+            "$ref": "#/components/schemas/TemporalRasterAggregation"
           }
         ],
         "description": "An operator that produces raster data.",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "BandFilter": "#/components/schemas/BandFilter",
             "Expression": "#/components/schemas/Expression",
-            "GdalSource": "#/components/schemas/GdalSource"
+            "GdalSource": "#/components/schemas/GdalSource",
+            "Interpolation": "#/components/schemas/Interpolation",
+            "MultiBandGdalSource": "#/components/schemas/MultiBandGdalSource",
+            "RasterStacker": "#/components/schemas/RasterStacker",
+            "RasterTypeConversion": "#/components/schemas/RasterTypeConversion",
+            "Reprojection": "#/components/schemas/Reprojection",
+            "TemporalRasterAggregation": "#/components/schemas/TemporalRasterAggregation"
           }
         }
       },
@@ -9505,6 +9935,66 @@
           }
         }
       },
+      "RasterStacker": {
+        "type": "object",
+        "title": "Raster Stacker",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/RasterStackerParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/MultipleRasterSources"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "RasterStacker"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "RasterStacker",
+            "params": {
+              "renameBands": {
+                "type": "default"
+              }
+            },
+            "sources": {
+              "rasters": [
+                {
+                  "type": "GdalSource",
+                  "params": {
+                    "data": "example-a"
+                  }
+                },
+                {
+                  "type": "GdalSource",
+                  "params": {
+                    "data": "example-b"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "RasterStackerParameters": {
+        "type": "object",
+        "required": [
+          "renameBands"
+        ],
+        "properties": {
+          "renameBands": {
+            "$ref": "#/components/schemas/RenameBands"
+          }
+        }
+      },
       "RasterStreamWebsocketResultType": {
         "type": "string",
         "description": "The stream result type for `raster_stream_websocket`.",
@@ -9548,6 +10038,56 @@
           },
           "timeInterval": {
             "$ref": "#/components/schemas/TimeInterval"
+          }
+        }
+      },
+      "RasterTypeConversion": {
+        "type": "object",
+        "title": "Raster Type Conversion",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/RasterTypeConversionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "RasterTypeConversion"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "RasterTypeConversion",
+            "params": {
+              "outputDataType": "U16"
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RasterTypeConversionParameters": {
+        "type": "object",
+        "required": [
+          "outputDataType"
+        ],
+        "properties": {
+          "outputDataType": {
+            "$ref": "#/components/schemas/RasterDataType"
           }
         }
       },
@@ -9652,6 +10192,128 @@
           },
           "step": {
             "$ref": "#/components/schemas/TimeStep"
+          }
+        }
+      },
+      "RenameBands": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "default"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "values",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "suffix"
+                ]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "values",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "rename"
+                ]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Reprojection": {
+        "type": "object",
+        "title": "Reprojection",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/ReprojectionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Reprojection"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Reprojection",
+            "params": {
+              "deriveOutSpec": "projectionBounds",
+              "targetSpatialReference": "EPSG:32632"
+            },
+            "sources": {
+              "source": {
+                "type": "MockPointSource",
+                "params": {
+                  "points": [
+                    {
+                      "x": 8.77069,
+                      "y": 50.80904
+                    }
+                  ],
+                  "spatialBounds": {
+                    "type": "none"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ReprojectionParameters": {
+        "type": "object",
+        "required": [
+          "targetSpatialReference"
+        ],
+        "properties": {
+          "deriveOutSpec": {
+            "$ref": "#/components/schemas/DeriveOutRasterSpecsSource"
+          },
+          "targetSpatialReference": {
+            "type": "string"
           }
         }
       },
@@ -10521,6 +11183,103 @@
           "mean"
         ]
       },
+      "TemporalRasterAggregation": {
+        "type": "object",
+        "title": "Temporal Raster Aggregation",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/TemporalRasterAggregationParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "TemporalRasterAggregation"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "TemporalRasterAggregation",
+            "params": {
+              "aggregation": {
+                "type": "mean",
+                "ignoreNoData": true
+              },
+              "window": {
+                "granularity": "months",
+                "step": 1
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "Expression",
+                "params": {
+                  "expression": "(A - B) / (A + B)",
+                  "outputType": "F32",
+                  "outputBand": {
+                    "name": "NDVI",
+                    "measurement": {
+                      "type": "unitless"
+                    }
+                  },
+                  "mapNoData": false
+                },
+                "sources": {
+                  "raster": {
+                    "type": "GdalSource",
+                    "params": {
+                      "data": "ndvi"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TemporalRasterAggregationParameters": {
+        "type": "object",
+        "required": [
+          "aggregation",
+          "window"
+        ],
+        "properties": {
+          "aggregation": {
+            "$ref": "#/components/schemas/Aggregation"
+          },
+          "outputType": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RasterDataType"
+              }
+            ]
+          },
+          "window": {
+            "$ref": "#/components/schemas/TimeStep"
+          },
+          "windowReference": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TimeInstance"
+              }
+            ]
+          }
+        }
+      },
       "TextSymbology": {
         "type": "object",
         "required": [
@@ -11364,6 +12123,9 @@
           },
           {
             "$ref": "#/components/schemas/RasterVectorJoin"
+          },
+          {
+            "$ref": "#/components/schemas/Reprojection"
           }
         ],
         "description": "An operator that produces vector data.",
@@ -11371,7 +12133,8 @@
           "propertyName": "type",
           "mapping": {
             "MockPointSource": "#/components/schemas/MockPointSource",
-            "RasterVectorJoin": "#/components/schemas/RasterVectorJoin"
+            "RasterVectorJoin": "#/components/schemas/RasterVectorJoin",
+            "Reprojection": "#/components/schemas/Reprojection"
           }
         }
       },
