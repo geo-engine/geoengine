@@ -1,5 +1,6 @@
 use proc_macro2::TokenStream;
 
+mod api_operator;
 mod testing;
 mod typetag;
 mod util;
@@ -47,6 +48,29 @@ pub fn type_tag(
     item: proc_macro::TokenStream,
 ) -> proc_macro::TokenStream {
     match typetag::type_tag(attr.into(), &item.clone().into()) {
+        Ok(ts) => ts.into(),
+        Err(e) => token_stream_with_error(item.into(), e).into(),
+    }
+}
+
+/// Macro to generate an OpenAPI-described operator for our API.
+/// The following topics are covered:
+/// - Serialization and deserialization of the operator
+/// - Generation of a type tag for the operator, which is used for serialization and deserialization as well as for schema generation
+/// - OpenAPI Schema generation by deriving [`ToSchema`] for the operator
+/// - Specification of an OpenAPI title and examples for the operator, which is used for schema generation and documentation
+/// - Validation of the operator's fields, where `params` is necessary and `sources` is optional
+///
+/// # Parameters
+/// - `examples` - JSON examples of the operator, which are used for schema generation and documentation
+/// - `title` - (optional) the title of the operator, which is used for schema generation and documentation. Default: the name of the struct
+///
+#[proc_macro_attribute]
+pub fn api_operator(
+    attr: proc_macro::TokenStream,
+    item: proc_macro::TokenStream,
+) -> proc_macro::TokenStream {
+    match api_operator::api_operator(attr.into(), &item.clone().into()) {
         Ok(ts) => ts.into(),
         Err(e) => token_stream_with_error(item.into(), e).into(),
     }

@@ -102,7 +102,7 @@ pub fn check_input_output_mapping_supported(
 }
 
 pub fn try_onnx_tensor_to_ml_tensorshape_3d(
-    tensor_dimensions: &ort::tensor::Shape,
+    tensor_dimensions: &ort::value::Shape,
 ) -> Result<MlTensorShape3D, MachineLearningError> {
     let td: &[i64] = tensor_dimensions.as_ref();
 
@@ -293,21 +293,21 @@ pub fn check_model_input_features(
 
 // can't implement `TryFrom` here because `RasterDataType` is in operators crate
 pub(crate) fn try_raster_datatype_from_tensor_element_type(
-    value: ort::tensor::TensorElementType,
+    value: ort::value::TensorElementType,
 ) -> Result<RasterDataType, MachineLearningError> {
     match value {
-        ort::tensor::TensorElementType::Float32 => Ok(RasterDataType::F32),
-        ort::tensor::TensorElementType::Uint8 | ort::tensor::TensorElementType::Bool => {
+        ort::value::TensorElementType::Float32 => Ok(RasterDataType::F32),
+        ort::value::TensorElementType::Uint8 | ort::value::TensorElementType::Bool => {
             Ok(RasterDataType::U8)
         }
-        ort::tensor::TensorElementType::Int8 => Ok(RasterDataType::I8),
-        ort::tensor::TensorElementType::Uint16 => Ok(RasterDataType::U16),
-        ort::tensor::TensorElementType::Int16 => Ok(RasterDataType::I16),
-        ort::tensor::TensorElementType::Int32 => Ok(RasterDataType::I32),
-        ort::tensor::TensorElementType::Int64 => Ok(RasterDataType::I64),
-        ort::tensor::TensorElementType::Float64 => Ok(RasterDataType::F64),
-        ort::tensor::TensorElementType::Uint32 => Ok(RasterDataType::U32),
-        ort::tensor::TensorElementType::Uint64 => Ok(RasterDataType::U64),
+        ort::value::TensorElementType::Int8 => Ok(RasterDataType::I8),
+        ort::value::TensorElementType::Uint16 => Ok(RasterDataType::U16),
+        ort::value::TensorElementType::Int16 => Ok(RasterDataType::I16),
+        ort::value::TensorElementType::Int32 => Ok(RasterDataType::I32),
+        ort::value::TensorElementType::Int64 => Ok(RasterDataType::I64),
+        ort::value::TensorElementType::Float64 => Ok(RasterDataType::F64),
+        ort::value::TensorElementType::Uint32 => Ok(RasterDataType::U32),
+        ort::value::TensorElementType::Uint64 => Ok(RasterDataType::U64),
         _ => Err(MachineLearningError::UnsupportedTensorElementType {
             element_type: value,
         }),

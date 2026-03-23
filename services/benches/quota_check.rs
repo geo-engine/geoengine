@@ -40,7 +40,7 @@ async fn bench() {
 
         let (_, dataset) = add_ndvi_to_datasets2(&app_ctx, true, true).await;
 
-        let workflow = Workflow {
+        let workflow = Workflow::Legacy {
             operator: TypedOperator::Raster(
                 TemporalRasterAggregation {
                     params: TemporalRasterAggregationParameters {

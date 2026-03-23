@@ -29,10 +29,7 @@ use geoengine_datatypes::raster::{
 };
 use geoengine_datatypes::{machine_learning::MlModelName, raster::GridBoundingBox2D};
 use ndarray::{Array2, Array4};
-use ort::{
-    tensor::{IntoTensorElementType, PrimitiveTensorElementType},
-    value::TensorRef,
-};
+use ort::value::{IntoTensorElementType, PrimitiveTensorElementType, TensorRef};
 use serde::{Deserialize, Serialize};
 use snafu::{ResultExt, ensure};
 

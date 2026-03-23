@@ -1036,7 +1036,7 @@ impl LayerCollectionProvider for EdrDataProvider {
             },
             name: collection.title.unwrap_or(collection.id),
             description: String::new(),
-            workflow: Workflow { operator },
+            workflow: Workflow::Legacy { operator },
             symbology: None, // TODO
             properties: vec![],
             metadata: HashMap::new(),

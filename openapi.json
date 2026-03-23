@@ -5256,37 +5256,6 @@
           }
         }
       },
-      "AddDatasetTile": {
-        "type": "object",
-        "required": [
-          "time",
-          "spatial_partition",
-          "band",
-          "z_index",
-          "params"
-        ],
-        "properties": {
-          "band": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "params": {
-            "$ref": "#/components/schemas/GdalDatasetParameters"
-          },
-          "spatial_partition": {
-            "$ref": "#/components/schemas/SpatialPartition2D"
-          },
-          "time": {
-            "$ref": "#/components/schemas/TimeInterval"
-          },
-          "z_index": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
       "AddLayer": {
         "type": "object",
         "required": [
@@ -5506,13 +5475,6 @@
           "eastNorth"
         ]
       },
-      "BandSelection": {
-        "type": "array",
-        "items": {
-          "type": "integer",
-          "minimum": 0
-        }
-      },
       "BoundingBox2D": {
         "type": "object",
         "description": "A bounding box that includes all border points.\nNote: may degenerate to a point!",
@@ -5640,6 +5602,69 @@
             "palette": "#/components/schemas/PaletteColorizer"
           }
         }
+      },
+      "ColumnNames": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "Default",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "default"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "Suffix",
+            "required": [
+              "values",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "suffix"
+                ]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "Names",
+            "required": [
+              "values",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "names"
+                ]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ]
       },
       "ComputationQuota": {
         "type": "object",
@@ -5842,6 +5867,9 @@
           "no",
           "auto"
         ]
+      },
+      "Data": {
+        "default": null
       },
       "DataId": {
         "oneOf": [
@@ -6233,9 +6261,6 @@
       "DateTimeParseFormat": {
         "type": "string"
       },
-      "DateTimeString": {
-        "type": "string"
-      },
       "DerivedColor": {
         "type": "object",
         "required": [
@@ -6436,6 +6461,87 @@
           }
         }
       },
+      "Expression": {
+        "type": "object",
+        "title": "Raster Expression",
+        "description": "The `Expression` operator performs a pixel-wise mathematical expression on one or more bands of a raster source.\nThe expression is specified as a user-defined script in a very simple language.\nThe output is a raster time series with the result of the expression and with time intervals that are the same as for the inputs.\nUsers can specify an output data type.\nInternally, the expression is evaluated using floating-point numbers.\n\nAn example usage scenario is to calculate NDVI for a red and a near-infrared raster channel.\nThe expression uses a raster source with two bands, referred to as A and B, and calculates the formula `(A - B) / (A + B)`.\nWhen the temporal resolution is months, our output NDVI will also be a monthly time series.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Expression\n\nExpressions are simple scripts to perform pixel-wise computations.\nOne can refer to the raster inputs as `A` for the first raster band, `B` for the second, and so on.\nFurthermore, expressions can check with `A IS NODATA`, `B IS NODATA`, etc. for NO DATA values.\nThis is important if `mapNoData` is set to true.\nOtherwise, NO DATA values are mapped automatically to the output NO DATA value.\nFinally, the value `NODATA` can be used to output NO DATA.\n\nUsers can think of this implicit function signature for, e.g., two inputs:\n\n```Rust\nfn (A: f64, B: f64) -> f64\n```\n\nAs a start, expressions contain algebraic operations and mathematical functions.\n\n```Rust\n(A + B) / 2\n```\n\nIn addition, branches can be used to check for conditions.\n\n```Rust\nif A IS NODATA {\n    B\n} else {\n    A\n}\n```\n\nFunction calls can be used to access utility functions.\n\n```Rust\nmax(A, 0)\n```\n\nCurrently, the following functions are available:\n\n- `abs(a)`: absolute value\n- `min(a, b)`, `min(a, b, c)`: minimum value\n- `max(a, b)`, `max(a, b, c)`: maximum value\n- `sqrt(a)`: square root\n- `ln(a)`: natural logarithm\n- `log10(a)`: base 10 logarithm\n- `cos(a)`, `sin(a)`, `tan(a)`, `acos(a)`, `asin(a)`, `atan(a)`: trigonometric functions\n- `pi()`, `e()`: mathematical constants\n- `round(a)`, `ceil(a)`, `floor(a)`: rounding functions\n- `mod(a, b)`: division remainder\n- `to_degrees(a)`, `to_radians(a)`: conversion to degrees or radians\n\nTo generate more complex expressions, it is possible to have variable assignments.\n\n```Rust\nlet mean = (A + B) / 2;\nlet coefficient = 0.357;\nmean * coefficient\n```\n\nNote, that all assignments are separated by semicolons.\nHowever, the last expression must be without a semicolon.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/ExpressionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Expression"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Expression",
+            "params": {
+              "expression": "(A - B) / (A + B)",
+              "outputType": "F32",
+              "outputBand": {
+                "name": "NDVI",
+                "measurement": {
+                  "type": "unitless"
+                }
+              },
+              "mapNoData": true
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ExpressionParameters": {
+        "type": "object",
+        "description": "## Types\n\nThe following describes the types used in the parameters.",
+        "required": [
+          "expression",
+          "outputType",
+          "mapNoData"
+        ],
+        "properties": {
+          "expression": {
+            "type": "string",
+            "description": "Expression script\n\nExample: `\"(A - B) / (A + B)\"`",
+            "examples": [
+              "(A - B) / (A + B)"
+            ]
+          },
+          "mapNoData": {
+            "type": "boolean",
+            "description": "Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.",
+            "examples": [
+              true
+            ]
+          },
+          "outputBand": {
+            "$ref": "#/components/schemas/RasterBandDescriptor",
+            "description": "Description about the output"
+          },
+          "outputType": {
+            "$ref": "#/components/schemas/RasterDataType",
+            "description": "A raster data type for the output"
+          }
+        }
+      },
       "ExternalDataId": {
         "type": "object",
         "required": [
@@ -6457,6 +6563,13 @@
             ]
           }
         }
+      },
+      "FeatureAggregationMethod": {
+        "type": "string",
+        "enum": [
+          "first",
+          "mean"
+        ]
       },
       "FeatureDataType": {
         "type": "string",
@@ -6829,6 +6942,63 @@
           }
         }
       },
+      "GdalSource": {
+        "type": "object",
+        "title": "GDAL Source",
+        "description": "The [`GdalSource`] is a source operator that reads raster data using GDAL.\nThe counterpart for vector data is the [`OgrSource`].\n\n## Errors\n\nIf the given dataset does not exist or is not readable, an error is thrown.\n",
+        "required": [
+          "type",
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/GdalSourceParameters"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "GdalSource"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "GdalSource",
+            "params": {
+              "data": "ndvi",
+              "overviewLevel": null
+            }
+          }
+        ]
+      },
+      "GdalSourceParameters": {
+        "type": "object",
+        "description": "Parameters for the [`GdalSource`] operator.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "data": {
+            "type": "string",
+            "description": "Dataset name or identifier to be loaded.",
+            "examples": [
+              "ndvi"
+            ]
+          },
+          "overviewLevel": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32",
+            "description": "*Optional*: overview level to use.\n\nIf not provided, the data source will determine the resolution, i.e., uses its native resolution.",
+            "examples": [
+              3
+            ],
+            "minimum": 0
+          }
+        }
+      },
       "GdalSourceTimePlaceholder": {
         "type": "object",
         "required": [
@@ -7007,6 +7177,171 @@
           },
           "yIdx": {
             "type": "integer"
+          }
+        }
+      },
+      "Histogram": {
+        "type": "object",
+        "title": "Histogram",
+        "description": "The `Histogram` is a _plot operator_ that computes a histogram plot either over attributes of a vector dataset or values of a raster source.\nThe output is a plot in [Vega-Lite](https://vega.github.io/vega-lite/) specification.\n\nFor instance, you want to plot the data distribution of numeric attributes of a feature collection.\nThen you can use a histogram with a suitable number of buckets to visualize and assess this.\n\n## Errors\n\nThe operator returns an error if the selected column (`columnName`) does not exist or is not numeric.\n\n## Notes\n\nIf `bounds` or `buckets` are not defined, the operator will determine these values by itself which requires processing the data twice.\n\nIf the `buckets` parameter is set to `squareRootChoiceRule`, the operator estimates it using the square root of the number of elements in the data.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/HistogramParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Histogram"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Histogram",
+            "params": {
+              "columnName": "foobar",
+              "bounds": {
+                "min": 5.0,
+                "max": 10.0
+              },
+              "buckets": {
+                "type": "number",
+                "value": 15
+              },
+              "interactive": false
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "ndvi"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "HistogramBounds": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "data"
+            ],
+            "properties": {
+              "data": {
+                "$ref": "#/components/schemas/Data"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "values"
+            ],
+            "properties": {
+              "values": {
+                "type": "object",
+                "required": [
+                  "min",
+                  "max"
+                ],
+                "properties": {
+                  "max": {
+                    "type": "number",
+                    "format": "double"
+                  },
+                  "min": {
+                    "type": "number",
+                    "format": "double"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "HistogramBuckets": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "value",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "number"
+                ]
+              },
+              "value": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "maxNumberOfBuckets": {
+                "type": "integer",
+                "format": "int32",
+                "minimum": 0
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "squareRootChoiceRule"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "HistogramParameters": {
+        "type": "object",
+        "description": "The parameter spec for `Histogram`",
+        "required": [
+          "attributeName",
+          "bounds",
+          "buckets"
+        ],
+        "properties": {
+          "attributeName": {
+            "type": "string",
+            "description": "Name of the (numeric) vector attribute or raster band to compute the histogram on.",
+            "examples": [
+              "temperature"
+            ]
+          },
+          "bounds": {
+            "$ref": "#/components/schemas/HistogramBounds",
+            "description": "If `data`, it computes the bounds of the underlying data. If `values`, one can specify custom bounds."
+          },
+          "buckets": {
+            "$ref": "#/components/schemas/HistogramBuckets",
+            "description": "The number of buckets. The value can be specified or calculated."
+          },
+          "interactive": {
+            "type": "boolean",
+            "description": "Flag, if the histogram should have user interactions for a range selection. It is `false` by default.",
+            "examples": [
+              true
+            ]
           }
         }
       },
@@ -7260,6 +7595,58 @@
           }
         }
       },
+      "LegacyTypedOperator": {
+        "type": "object",
+        "description": "An enum to differentiate between `Operator` variants",
+        "required": [
+          "type",
+          "operator"
+        ],
+        "properties": {
+          "operator": {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "params": {
+                "type": "object"
+              },
+              "sources": {
+                "type": "object"
+              },
+              "type": {
+                "type": "string"
+              }
+            }
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Vector",
+              "Raster",
+              "Plot"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "MockPointSource",
+            "params": {
+              "points": [
+                {
+                  "x": 0.0,
+                  "y": 0.1
+                },
+                {
+                  "x": 1.0,
+                  "y": 1.1
+                }
+              ]
+            }
+          }
+        ]
+      },
       "LineSymbology": {
         "type": "object",
         "required": [
@@ -7466,10 +7853,6 @@
           }
         }
       },
-      "MlModelId": {
-        "type": "string",
-        "format": "uuid"
-      },
       "MlModelInputNoDataHandling": {
         "type": "object",
         "required": [
@@ -7645,6 +8028,67 @@
           }
         }
       },
+      "MockPointSource": {
+        "type": "object",
+        "title": "Mock Point Source",
+        "description": "The [`MockPointSource`] is a source operator that provides mock vector point data for testing and development purposes.\n",
+        "required": [
+          "type",
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/MockPointSourceParameters"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "MockPointSource"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "MockPointSource",
+            "params": {
+              "points": [
+                {
+                  "x": 1.0,
+                  "y": 2.0
+                },
+                {
+                  "x": 3.0,
+                  "y": 4.0
+                }
+              ],
+              "spatialBounds": {
+                "type": "derive"
+              }
+            }
+          }
+        ]
+      },
+      "MockPointSourceParameters": {
+        "type": "object",
+        "description": "Parameters for the [`MockPointSource`] operator.",
+        "required": [
+          "points",
+          "spatialBounds"
+        ],
+        "properties": {
+          "points": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Coordinate2D"
+            },
+            "description": "Points to be output by the mock point source.\n"
+          },
+          "spatialBounds": {
+            "$ref": "#/components/schemas/SpatialBoundsDerive",
+            "description": "Defines how the spatial bounds of the source are derived.\n\nDefaults to `None`."
+          }
+        }
+      },
       "MultiBandRasterColorizer": {
         "type": "object",
         "required": [
@@ -7786,8 +8230,31 @@
           }
         }
       },
-      "NamedData": {
-        "type": "string"
+      "MultipleRasterOrSingleVectorOperator": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RasterOperator"
+            }
+          },
+          {
+            "$ref": "#/components/schemas/VectorOperator"
+          }
+        ],
+        "description": "It is either a set of `RasterOperator` or a single `VectorOperator`"
+      },
+      "MultipleRasterOrSingleVectorSource": {
+        "type": "object",
+        "description": "Either one or more raster operators or a single vector operator as source for this operator.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/MultipleRasterOrSingleVectorOperator"
+          }
+        }
       },
       "NetCdfCfDataProviderDefinition": {
         "type": "object",
@@ -8397,25 +8864,6 @@
           "Owner"
         ]
       },
-      "PermissionListOptions": {
-        "type": "object",
-        "required": [
-          "limit",
-          "offset"
-        ],
-        "properties": {
-          "limit": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "offset": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
-      },
       "PermissionListing": {
         "type": "object",
         "required": [
@@ -8467,6 +8915,24 @@
           },
           "workflow": {
             "$ref": "#/components/schemas/WorkflowId"
+          }
+        }
+      },
+      "PlotOperator": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Histogram"
+          },
+          {
+            "$ref": "#/components/schemas/Statistics"
+          }
+        ],
+        "description": "An operator that produces plot data.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "Histogram": "#/components/schemas/Histogram",
+            "Statistics": "#/components/schemas/Statistics"
           }
         }
       },
@@ -8782,26 +9248,6 @@
           }
         }
       },
-      "ProvenanceOutput": {
-        "type": "object",
-        "required": [
-          "data"
-        ],
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/DataId"
-          },
-          "provenance": {
-            "type": [
-              "array",
-              "null"
-            ],
-            "items": {
-              "$ref": "#/components/schemas/Provenance"
-            }
-          }
-        }
-      },
       "Provenances": {
         "type": "object",
         "required": [
@@ -8989,19 +9435,21 @@
           }
         }
       },
-      "RasterDatasetFromWorkflowResult": {
-        "type": "object",
-        "description": "response of the dataset from workflow handler",
-        "required": [
-          "dataset",
-          "upload"
-        ],
-        "properties": {
-          "dataset": {
-            "$ref": "#/components/schemas/DatasetName"
+      "RasterOperator": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/Expression"
           },
-          "upload": {
-            "$ref": "#/components/schemas/UploadId"
+          {
+            "$ref": "#/components/schemas/GdalSource"
+          }
+        ],
+        "description": "An operator that produces raster data.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "Expression": "#/components/schemas/Expression",
+            "GdalSource": "#/components/schemas/GdalSource"
           }
         }
       },
@@ -9100,6 +9548,95 @@
           },
           "timeInterval": {
             "$ref": "#/components/schemas/TimeInterval"
+          }
+        }
+      },
+      "RasterVectorJoin": {
+        "type": "object",
+        "title": "Raster Vector Join",
+        "description": "The `RasterVectorJoin` operator allows combining a single vector input and multiple raster inputs.\nFor each raster input, a new column is added to the collection from the vector input.\nThe new column contains the value of the raster at the location of the vector feature.\nFor features covering multiple pixels like `MultiPoints` or `MultiPolygons`, the value is calculated using an aggregation function selected by the user.\nThe same is true if the temporal extent of a vector feature covers multiple raster time steps.\nMore details are described below.\n\n**Example**:\nYou have a collection of agricultural fields (`Polygons`) and a collection of raster images containing each pixel's monthly NDVI value.\nFor your application, you want to know the NDVI value of each field.\nThe `RasterVectorJoin` operator allows you to combine the vector and raster data and offers multiple spatial and temporal aggregation strategies.\nFor example, you can use the `first` aggregation function to get the NDVI value of the first pixel that intersects with each field.\nThis is useful for exploratory analysis since the computation is very fast.\nTo calculate the mean NDVI value of all pixels that intersect with the field you should use the `mean` aggregation function.\nSince the NDVI data is a monthly time series, you have to specify the temporal aggregation function as well.\nThe default is `none` which will create a new feature for each month.\nOther options are `first` and `mean` which will calculate the first or mean NDVI value for each field over time.\n\n## Inputs\n\nThe `RasterVectorJoin` operator expects one _vector_ input and one or more _raster_ inputs.\n\n| Parameter | Type                                |\n| --------- | ----------------------------------- |\n| `sources` | `SingleVectorMultipleRasterSources` |\n\n## Errors\n\nIf the length of `names` is not equal to the number of raster inputs, an error is thrown.\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/RasterVectorJoinParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleVectorMultipleRasterSources"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "RasterVectorJoin"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "RasterVectorJoin",
+            "params": {
+              "names": [
+                "NDVI"
+              ],
+              "featureAggregation": "first",
+              "temporalAggregation": "mean",
+              "temporalAggregationIgnoreNoData": true
+            },
+            "sources": {
+              "vector": {
+                "type": "OgrSource",
+                "params": {
+                  "data": "places"
+                }
+              },
+              "rasters": [
+                {
+                  "type": "GdalSource",
+                  "params": {
+                    "data": "ndvi"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "RasterVectorJoinParameters": {
+        "type": "object",
+        "required": [
+          "names",
+          "featureAggregation",
+          "temporalAggregation"
+        ],
+        "properties": {
+          "featureAggregation": {
+            "$ref": "#/components/schemas/FeatureAggregationMethod",
+            "description": "The aggregation function to use for features covering multiple pixels."
+          },
+          "featureAggregationIgnoreNoData": {
+            "type": "boolean",
+            "description": "Whether to ignore no data values in the aggregation. Defaults to `false`.",
+            "examples": [
+              true
+            ]
+          },
+          "names": {
+            "$ref": "#/components/schemas/ColumnNames",
+            "description": "Specify how the new column names are derived from the raster band names.\n\nThe `ColumnNames` type is used to specify how the new column names are derived from the raster band names.\n\n- **default**: Appends \" (n)\" to the band name with the smallest `n` that avoids a conflict.\n- **suffix**: Specifies a suffix for each input, to be appended to the band names.\n- **rename**: A list of names for each new column.\n"
+          },
+          "temporalAggregation": {
+            "$ref": "#/components/schemas/TemporalAggregationMethod",
+            "description": "The aggregation function to use for features covering multiple (raster) time steps."
+          },
+          "temporalAggregationIgnoreNoData": {
+            "type": "boolean",
+            "description": "Whether to ignore no data values in the aggregation. Defaults to `false`.",
+            "examples": [
+              true
+            ]
           }
         }
       },
@@ -9364,6 +9901,131 @@
           }
         }
       },
+      "SingleRasterOrVectorOperator": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/RasterOperator"
+          },
+          {
+            "$ref": "#/components/schemas/VectorOperator"
+          }
+        ],
+        "description": "It is either a set of `RasterOperator` or a single `VectorOperator`"
+      },
+      "SingleRasterOrVectorSource": {
+        "type": "object",
+        "description": "A single vector operator or a single raster operators as source for this operator.",
+        "required": [
+          "source"
+        ],
+        "properties": {
+          "source": {
+            "$ref": "#/components/schemas/SingleRasterOrVectorOperator"
+          }
+        }
+      },
+      "SingleRasterSource": {
+        "type": "object",
+        "description": "A single raster operator as a source for this operator.",
+        "required": [
+          "raster"
+        ],
+        "properties": {
+          "raster": {
+            "$ref": "#/components/schemas/RasterOperator"
+          }
+        }
+      },
+      "SingleVectorMultipleRasterSources": {
+        "type": "object",
+        "description": "A single vector operator and one or more raster operators as source for this operator.",
+        "required": [
+          "vector",
+          "rasters"
+        ],
+        "properties": {
+          "rasters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RasterOperator"
+            }
+          },
+          "vector": {
+            "$ref": "#/components/schemas/VectorOperator"
+          }
+        }
+      },
+      "SpatialBoundsDerive": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/SpatialBoundsDeriveDerive"
+          },
+          {
+            "$ref": "#/components/schemas/SpatialBoundsDeriveBounds"
+          },
+          {
+            "$ref": "#/components/schemas/SpatialBoundsDeriveNone"
+          }
+        ],
+        "description": "Spatial bounds derivation options for the [`MockPointSource`].",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "bounds": "#/components/schemas/SpatialBoundsDeriveBounds",
+            "derive": "#/components/schemas/SpatialBoundsDeriveDerive",
+            "none": "#/components/schemas/SpatialBoundsDeriveNone"
+          }
+        }
+      },
+      "SpatialBoundsDeriveBounds": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/BoundingBox2D"
+          },
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "bounds"
+                ]
+              }
+            }
+          }
+        ]
+      },
+      "SpatialBoundsDeriveDerive": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "derive"
+            ]
+          }
+        }
+      },
+      "SpatialBoundsDeriveNone": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "none"
+            ]
+          }
+        }
+      },
       "SpatialGridDefinition": {
         "type": "object",
         "required": [
@@ -9417,16 +10079,6 @@
           }
         }
       },
-      "SpatialReferenceAuthority": {
-        "type": "string",
-        "description": "A spatial reference authority that is part of a spatial reference definition",
-        "enum": [
-          "EPSG",
-          "SR-ORG",
-          "IAU2000",
-          "ESRI"
-        ]
-      },
       "SpatialReferenceSpecification": {
         "type": "object",
         "description": "The specification of a spatial reference, where extent and axis labels are given\nin natural order (x, y) = (east, north)",
@@ -9468,24 +10120,6 @@
           },
           "spatialReference": {
             "type": "string"
-          }
-        }
-      },
-      "SpatialResolution": {
-        "type": "object",
-        "description": "The spatial resolution in SRS units",
-        "required": [
-          "x",
-          "y"
-        ],
-        "properties": {
-          "x": {
-            "type": "number",
-            "format": "double"
-          },
-          "y": {
-            "type": "number",
-            "format": "double"
           }
         }
       },
@@ -9567,6 +10201,89 @@
           }
         }
       },
+      "Statistics": {
+        "type": "object",
+        "title": "Statistics",
+        "description": "The `Statistics` operator is a _plot operator_ that computes count statistics over\n\n- a selection of numerical columns of a single vector dataset, or\n- multiple raster datasets.\n\nThe output is a JSON description.\n\nFor instance, you want to get an overview of a raster data source.\nThen, you can use this operator to get basic count statistics.\n\n## Vector Data\n\nIn the case of vector data, the operator generates one statistic for each of the selected numerical attributes.\nThe operator returns an error if one of the selected attributes is not numeric.\n\n## Raster Data\n\nFor raster data, the operator generates one statistic for each input raster.\n\n## Inputs\n\nThe operator consumes exactly one _vector_ or multiple _raster_ operators.\n\n| Parameter | Type                                 |\n| --------- | ------------------------------------ |\n| `source`  | `MultipleRasterOrSingleVectorSource` |\n\n## Errors\n\nThe operator returns an error in the following cases.\n\n- Vector data: The `attribute` for one of the given `columnNames` is not numeric.\n- Vector data: The `attribute` for one of the given `columnNames` does not exist.\n- Raster data: The length of the `columnNames` parameter does not match the number of input rasters.\n\n### Example Output\n\n```json\n{\n  \"A\": {\n    \"valueCount\": 6,\n    \"validCount\": 6,\n    \"min\": 1.0,\n    \"max\": 6.0,\n    \"mean\": 3.5,\n    \"stddev\": 1.707,\n    \"percentiles\": [\n      {\n        \"percentile\": 0.25,\n        \"value\": 2.0\n      },\n      {\n        \"percentile\": 0.5,\n        \"value\": 3.5\n      },\n      {\n        \"percentile\": 0.75,\n        \"value\": 5.0\n      }\n    ]\n  }\n}\n```\n",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/StatisticsParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/MultipleRasterOrSingleVectorSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Statistics"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Statistics",
+            "params": {
+              "columnNames": [
+                "A"
+              ],
+              "percentiles": [
+                0.25,
+                0.5,
+                0.75
+              ]
+            },
+            "sources": {
+              "source": [
+                {
+                  "type": "GdalSource",
+                  "params": {
+                    "data": "ndvi"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "StatisticsParameters": {
+        "type": "object",
+        "description": "The parameter spec for `Statistics`",
+        "properties": {
+          "columnNames": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "examples": [
+                [
+                  "x",
+                  "y"
+                ]
+              ]
+            },
+            "description": "# Vector data\nThe names of the attributes to generate statistics for.\n\n# Raster data\n_Optional_: An alias for each input source.\nThe operator will automatically name the rasters `Raster-1`, `Raster-2`, … if this parameter is empty.\nIf aliases are given, the number of aliases must match the number of input rasters.\nOtherwise an error is returned."
+          },
+          "percentiles": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double",
+              "examples": [
+                [
+                  0.25,
+                  0.5,
+                  0.75
+                ]
+              ]
+            },
+            "description": "The percentiles to compute for each attribute."
+          }
+        }
+      },
       "StringPair": {
         "type": "array",
         "items": {
@@ -9638,14 +10355,6 @@
           }
         }
       },
-      "TaskAbortOptions": {
-        "type": "object",
-        "properties": {
-          "force": {
-            "type": "boolean"
-          }
-        }
-      },
       "TaskFilter": {
         "type": "string",
         "enum": [
@@ -9658,31 +10367,6 @@
       "TaskId": {
         "type": "string",
         "format": "uuid"
-      },
-      "TaskListOptions": {
-        "type": "object",
-        "properties": {
-          "filter": {
-            "oneOf": [
-              {
-                "type": "null"
-              },
-              {
-                "$ref": "#/components/schemas/TaskFilter"
-              }
-            ]
-          },
-          "limit": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          },
-          "offset": {
-            "type": "integer",
-            "format": "int32",
-            "minimum": 0
-          }
-        }
       },
       "TaskResponse": {
         "type": "object",
@@ -9827,6 +10511,14 @@
               }
             }
           }
+        ]
+      },
+      "TemporalAggregationMethod": {
+        "type": "string",
+        "enum": [
+          "none",
+          "first",
+          "mean"
         ]
       },
       "TextSymbology": {
@@ -10074,56 +10766,63 @@
         ]
       },
       "TypedOperator": {
-        "type": "object",
-        "description": "An enum to differentiate between `Operator` variants",
-        "required": [
-          "type",
-          "operator"
-        ],
-        "properties": {
-          "operator": {
+        "oneOf": [
+          {
             "type": "object",
             "required": [
+              "operator",
               "type"
             ],
             "properties": {
-              "params": {
-                "type": "object"
-              },
-              "sources": {
-                "type": "object"
+              "operator": {
+                "$ref": "#/components/schemas/VectorOperator"
               },
               "type": {
-                "type": "string"
+                "type": "string",
+                "enum": [
+                  "Vector"
+                ]
               }
             }
           },
-          "type": {
-            "type": "string",
-            "enum": [
-              "Vector",
-              "Raster",
-              "Plot"
-            ]
-          }
-        },
-        "examples": [
           {
-            "type": "MockPointSource",
-            "params": {
-              "points": [
-                {
-                  "x": 0.0,
-                  "y": 0.1
-                },
-                {
-                  "x": 1.0,
-                  "y": 1.1
-                }
-              ]
+            "type": "object",
+            "required": [
+              "operator",
+              "type"
+            ],
+            "properties": {
+              "operator": {
+                "$ref": "#/components/schemas/RasterOperator"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Raster"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "operator",
+              "type"
+            ],
+            "properties": {
+              "operator": {
+                "$ref": "#/components/schemas/PlotOperator"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "Plot"
+                ]
+              }
             }
           }
-        ]
+        ],
+        "description": "Operator outputs are distinguished by their data type.\nThere are `raster`, `vector` and `plot` operators."
       },
       "TypedPlotResultDescriptor": {
         "allOf": [
@@ -10658,6 +11357,24 @@
           "MultiPolygon"
         ]
       },
+      "VectorOperator": {
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/MockPointSource"
+          },
+          {
+            "$ref": "#/components/schemas/RasterVectorJoin"
+          }
+        ],
+        "description": "An operator that produces vector data.",
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "MockPointSource": "#/components/schemas/MockPointSource",
+            "RasterVectorJoin": "#/components/schemas/RasterVectorJoin"
+          }
+        }
+      },
       "VectorResultDescriptor": {
         "type": "object",
         "required": [
@@ -10736,27 +11453,6 @@
       },
       "VolumeName": {
         "type": "string"
-      },
-      "WcsBoundingbox": {
-        "type": "object",
-        "required": [
-          "bbox"
-        ],
-        "properties": {
-          "bbox": {
-            "type": "array",
-            "items": {
-              "type": "number",
-              "format": "double"
-            }
-          },
-          "spatial_reference": {
-            "type": [
-              "string",
-              "null"
-            ]
-          }
-        }
       },
       "WcsRequest": {
         "type": "string",
@@ -10884,9 +11580,12 @@
         ]
       },
       "Workflow": {
-        "allOf": [
+        "oneOf": [
           {
             "$ref": "#/components/schemas/TypedOperator"
+          },
+          {
+            "$ref": "#/components/schemas/LegacyTypedOperator"
           }
         ]
       },

@@ -148,7 +148,7 @@ pub async fn register_ndvi_workflow_helper_with_cache_ttl(
 ) -> (Workflow, WorkflowId) {
     let (_, dataset) = add_ndvi_to_datasets_with_cache_ttl(app_ctx, cache_ttl).await;
 
-    let workflow = Workflow {
+    let workflow = Workflow::Legacy {
         operator: TypedOperator::Raster(
             GdalSource {
                 params: GdalSourceParameters::new(dataset),
@@ -366,7 +366,7 @@ pub async fn register_ne2_multiband_workflow(
     )
     .await;
 
-    let workflow = Workflow {
+    let workflow = Workflow::Legacy {
         operator: TypedOperator::Raster(
             RasterStacker {
                 params: RasterStackerParams {
