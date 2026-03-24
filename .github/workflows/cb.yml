@@ -12,7 +12,9 @@ env:
 jobs:
   benchmarks:
     name: Performance regression check
-    runs-on: quay.io/geoengine/devcontainer:latest
+    
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
 
     permissions:
       contents: read # required for actions/checkout
