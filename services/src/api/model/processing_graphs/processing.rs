@@ -598,14 +598,14 @@ impl TryFrom<RasterTypeConversion> for OperatorsRasterTypeConversion {
 ///
 /// The following describes the types used in the parameters.
 ///
-/// ### InterpolationMethod
+/// ### `InterpolationMethod`
 ///
 /// The operator supports the following interpolation methods:
 ///
 /// - `nearestNeighbor`: nearest-neighbor interpolation
 /// - `biLinear`: bilinear interpolation
 ///
-/// ### InterpolationResolution
+/// ### `InterpolationResolution`
 ///
 /// The target resolution can be configured as:
 ///
