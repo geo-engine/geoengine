@@ -51,9 +51,8 @@ pub(crate) use crate::api::model::processing_graphs::{
     },
     source_parameters::{
         MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
-        MultipleRasterSources,
-        SingleRasterOrVectorOperator, SingleRasterOrVectorSource, SingleRasterSource,
-        SingleVectorMultipleRasterSources,
+        MultipleRasterSources, SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
+        SingleRasterSource, SingleVectorMultipleRasterSources,
     },
 };
 
@@ -105,6 +104,18 @@ pub enum PlotOperator {
 impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
     type Error = anyhow::Error;
     fn try_from(operator: RasterOperator) -> Result<Self, Self::Error> {
+        // TODO: Missing raster operator mappings (operators crate -> OpenAPI model):
+        // [ ] BandNeighborhoodAggregate
+        // [ ] BandwiseExpression
+        // [ ] Downsampling
+        // [ ] NeighborhoodAggregate
+        // [ ] Onnx
+        // [ ] RasterScaling
+        // [ ] Rasterization
+        // [ ] Reflectance
+        // [ ] Radiance
+        // [ ] Temperature
+        // [ ] TimeShift
         match operator {
             RasterOperator::BandFilter(band_filter) => {
                 OperatorsBandFilter::try_from(band_filter).map(OperatorsRasterOperator::boxed)
@@ -118,13 +129,12 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
             RasterOperator::Interpolation(interpolation) => {
                 OperatorsInterpolation::try_from(interpolation).map(OperatorsRasterOperator::boxed)
             }
-            RasterOperator::MultiBandGdalSource(gdal_source) => OperatorsMultiBandGdalSource::try_from(
-                gdal_source,
-            )
-            .map(OperatorsRasterOperator::boxed),
-            RasterOperator::RasterStacker(raster_stacker) => {
-                OperatorsRasterStacker::try_from(raster_stacker)
+            RasterOperator::MultiBandGdalSource(gdal_source) => {
+                OperatorsMultiBandGdalSource::try_from(gdal_source)
                     .map(OperatorsRasterOperator::boxed)
+            }
+            RasterOperator::RasterStacker(raster_stacker) => {
+                OperatorsRasterStacker::try_from(raster_stacker).map(OperatorsRasterOperator::boxed)
             }
             RasterOperator::RasterTypeConversion(type_conversion) => {
                 OperatorsRasterTypeConversion::try_from(type_conversion)
@@ -144,6 +154,18 @@ impl TryFrom<RasterOperator> for Box<dyn OperatorsRasterOperator> {
 impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
     type Error = anyhow::Error;
     fn try_from(operator: VectorOperator) -> Result<Self, Self::Error> {
+        // TODO: Missing vector operator mappings (operators crate -> OpenAPI model):
+        // [ ] ColumnRangeFilter
+        // [ ] CsvSource
+        // [ ] LineSimplification
+        // [ ] MockDatasetDataSource
+        // [ ] OgrSource
+        // [ ] PointInPolygonFilter
+        // [ ] TimeProjection
+        // [ ] TimeShift
+        // [ ] VectorExpression
+        // [ ] VectorJoin
+        // [ ] VisualPointClustering
         match operator {
             VectorOperator::MockPointSource(mock_point_source) => {
                 OperatorsMockPointSource::try_from(mock_point_source)
@@ -162,6 +184,13 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
 impl TryFrom<PlotOperator> for Box<dyn OperatorsPlotOperator> {
     type Error = anyhow::Error;
     fn try_from(operator: PlotOperator) -> Result<Self, Self::Error> {
+        // TODO: Missing plot operator mappings (operators crate -> OpenAPI model):
+        // [ ] BoxPlot
+        // [ ] ClassHistogram
+        // [ ] FeatureAttributeValuesOverTime
+        // [ ] MeanRasterPixelValuesOverTime
+        // [ ] PieChart
+        // [ ] ScatterPlot
         match operator {
             PlotOperator::Histogram(histogram) => {
                 OperatorsHistogram::try_from(histogram).map(OperatorsPlotOperator::boxed)
