@@ -12,7 +12,7 @@ env:
 jobs:
   benchmarks:
     name: Performance regression check
-    
+
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -36,8 +36,8 @@ jobs:
         with:
           name: Geo Engine Benchmark
           tool: 'cargo'
-          output-file-path: ./cache/benchmark-data.json
-          external-data-json-path: output.json
+          output-file-path: output.json
+          external-data-json-path: ./cache/benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           # Show alert with commit comment on detecting possible performance regression
