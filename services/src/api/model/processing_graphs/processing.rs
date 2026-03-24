@@ -1,3 +1,4 @@
+use crate::api::model::datatypes::{SpatialReference, TimeInstance, TimeStep};
 use crate::api::model::processing_graphs::{
     parameters::{
         ColumnNames, FeatureAggregationMethod, RasterBandDescriptor, RasterDataType,
@@ -8,15 +9,13 @@ use crate::api::model::processing_graphs::{
         SingleVectorMultipleRasterSources,
     },
 };
-use crate::api::model::datatypes::{SpatialReference, TimeInstance, TimeStep};
 use geoengine_macros::{api_operator, type_tag};
 use geoengine_operators::processing::{
     Aggregation as OperatorsAggregation, BandFilter as OperatorsBandFilter,
     BandFilterParams as OperatorsBandFilterParameters,
     DeriveOutRasterSpecsSource as OperatorsDeriveOutRasterSpecsSource,
     Expression as OperatorsExpression, ExpressionParams as OperatorsExpressionParameters,
-    Interpolation as OperatorsInterpolation,
-    InterpolationMethod as OperatorsInterpolationMethod,
+    Interpolation as OperatorsInterpolation, InterpolationMethod as OperatorsInterpolationMethod,
     InterpolationParams as OperatorsInterpolationParameters,
     InterpolationResolution as OperatorsInterpolationResolution,
     RasterStacker as OperatorsRasterStacker,
@@ -273,7 +272,10 @@ pub enum Aggregation {
     #[serde(rename_all = "camelCase")]
     Count { ignore_no_data: bool },
     #[serde(rename_all = "camelCase")]
-    PercentileEstimate { ignore_no_data: bool, percentile: f64 },
+    PercentileEstimate {
+        ignore_no_data: bool,
+        percentile: f64,
+    },
 }
 
 impl From<Aggregation> for OperatorsAggregation {
@@ -297,6 +299,40 @@ impl From<Aggregation> for OperatorsAggregation {
     }
 }
 
+/// The `Reprojection` operator reprojects data from one spatial reference system to another.
+/// It accepts exactly one input which can either be a raster or a vector data stream.
+/// The operator produces all data that, after reprojection, is contained in the query rectangle.
+///
+/// ## Data Type Specifics
+///
+/// The concrete behavior depends on the data type.
+///
+/// ### Vector Data
+///
+/// The operator reprojects all coordinates of the features individually.
+/// The result contains all features that, after reprojection, are intersected by the query rectangle.
+///
+/// ### Raster Data
+///
+/// To create tiles in the target projection, the operator loads corresponding tiles in the source projection.
+/// For each output pixel, the value of the nearest input pixel is used.
+///
+/// If parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.
+///
+/// ## Parameters
+///
+/// - `targetSpatialReference`: target spatial reference system.
+/// - `deriveOutSpec`: controls how raster output bounds are derived.
+///   The default `projectionBounds` usually keeps a projection-aligned target grid,
+///   while `dataBounds` derives it directly from the source data bounds.
+///
+/// ## Inputs
+///
+/// The `Reprojection` operator expects exactly one _raster_ or _vector_ input.
+///
+/// ## Errors
+///
+/// The operator returns an error if the target projection is unknown or if input data cannot be reprojected.
 #[api_operator(
     title = "Reprojection",
     examples(json!({
@@ -344,6 +380,36 @@ impl TryFrom<Reprojection> for OperatorsReprojection {
     }
 }
 
+/// The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows.
+/// The output starts with the first window that contains the query start and contains all windows
+/// that overlap the query interval.
+///
+/// Pixel values are computed by aggregating all input rasters that contribute to the current window
+/// with the selected `aggregation` method.
+///
+/// The optional `windowReference` parameter allows specifying a custom anchor point for the windows.
+/// If omitted, windows are anchored at `1970-01-01T00:00:00Z`.
+///
+/// ## Types
+///
+/// The following describes the types used in the parameters.
+///
+/// ### Aggregation
+///
+/// There are different methods that can be used to aggregate raster time series.
+/// Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.
+///
+/// - `min`, `max`, `first`, `last`, `mean`, `sum`, `count`
+/// - `percentileEstimate` with a percentile in `(0, 1)`
+///
+/// ## Inputs
+///
+/// The `TemporalRasterAggregation` operator expects exactly one _raster_ input.
+///
+/// ## Errors
+///
+/// If the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value,
+/// an error is returned.
 #[api_operator(
     title = "Temporal Raster Aggregation",
     examples(json!({
@@ -404,6 +470,29 @@ impl TryFrom<TemporalRasterAggregation> for OperatorsTemporalRasterAggregation {
     }
 }
 
+/// The `RasterStacker` stacks all of its inputs into a single raster time series.
+/// It queries all inputs and combines them by band, space, and then time.
+///
+/// The output raster has as many bands as the sum of all input bands.
+/// Tiles are automatically temporally aligned.
+///
+/// All inputs must have the same data type and spatial reference.
+///
+/// ## Types
+///
+/// The following describes the types used in the parameters.
+///
+/// ### RenameBands
+///
+/// The `RenameBands` type specifies how to rename output bands to avoid naming conflicts:
+///
+/// - `default`: appends ` (n)` with the smallest `n` that avoids a conflict.
+/// - `suffix`: appends one suffix per input.
+/// - `rename`: explicitly provides names for all resulting bands.
+///
+/// ## Inputs
+///
+/// The `RasterStacker` operator expects multiple raster inputs.
 #[api_operator(
     title = "Raster Stacker",
     examples(json!({
@@ -449,6 +538,18 @@ impl TryFrom<RasterStacker> for OperatorsRasterStacker {
     }
 }
 
+/// The `RasterTypeConversion` operator changes the data type of raster pixels.
+///
+/// Applying this conversion may cause precision loss.
+/// For example, converting `F32` value `3.1` to `U8` results in `3`.
+///
+/// If a value is outside of the range of the target data type,
+/// it is clipped to the valid range of that type.
+/// For example, converting `F32` value `300.0` to `U8` results in `255`.
+///
+/// ## Inputs
+///
+/// The `RasterTypeConversion` operator expects exactly one _raster_ input.
 #[api_operator(
     title = "Raster Type Conversion",
     examples(json!({
@@ -488,6 +589,38 @@ impl TryFrom<RasterTypeConversion> for OperatorsRasterTypeConversion {
     }
 }
 
+/// The `Interpolation` operator increases raster resolution by interpolating values of an input raster.
+///
+/// If queried with a resolution that is coarser than the input resolution,
+/// interpolation is not applicable and an error is returned.
+///
+/// ## Types
+///
+/// The following describes the types used in the parameters.
+///
+/// ### InterpolationMethod
+///
+/// The operator supports the following interpolation methods:
+///
+/// - `nearestNeighbor`: nearest-neighbor interpolation
+/// - `biLinear`: bilinear interpolation
+///
+/// ### InterpolationResolution
+///
+/// The target resolution can be configured as:
+///
+/// - `resolution`: explicit output resolution (`x`, `y`)
+/// - `fraction`: upscale factor relative to input resolution (`x >= 1`, `y >= 1`)
+///
+/// ## Parameters
+///
+/// - `interpolation`: interpolation method.
+/// - `outputResolution`: output grid resolution.
+/// - `outputOriginReference` (optional): reference point to align the output grid origin.
+///
+/// ## Inputs
+///
+/// The `Interpolation` operator expects exactly one _raster_ input.
 #[api_operator(
     title = "Interpolation",
     examples(json!({
@@ -536,6 +669,22 @@ impl TryFrom<Interpolation> for OperatorsInterpolation {
     }
 }
 
+/// The `BandFilter` operator selects bands from a raster source by band names or band indices.
+///
+/// It removes all non-selected bands while preserving the original order of remaining bands.
+///
+/// ## Parameters
+///
+/// - `bands`: selected bands either by names (`["nir", "red"]`) or indices (`[0, 2]`).
+///
+/// ## Inputs
+///
+/// The `BandFilter` operator expects exactly one _raster_ input.
+///
+/// ## Errors
+///
+/// The operator returns an error if no bands are selected or if selected band names/indices
+/// cannot be mapped to existing input bands.
 #[api_operator(
     title = "Band Filter",
     examples(json!({
@@ -567,9 +716,9 @@ impl TryFrom<BandFilter> for OperatorsBandFilter {
     type Error = anyhow::Error;
 
     fn try_from(value: BandFilter) -> Result<Self, Self::Error> {
-        let params = serde_json::from_value::<OperatorsBandFilterParameters>(serde_json::to_value(
-            value.params,
-        )?)?;
+        let params = serde_json::from_value::<OperatorsBandFilterParameters>(
+            serde_json::to_value(value.params)?,
+        )?;
 
         Ok(OperatorsBandFilter {
             params,
@@ -698,8 +847,7 @@ mod tests {
     use crate::api::model::{
         datatypes::{Coordinate2D, TimeGranularity},
         processing_graphs::{
-            SingleRasterOrVectorOperator,
-            RasterOperator, VectorOperator,
+            RasterOperator, SingleRasterOrVectorOperator, VectorOperator,
             parameters::SpatialBoundsDerive,
             source::{
                 GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
@@ -849,8 +997,7 @@ mod tests {
             }),
         };
 
-        let ops =
-            OperatorsTemporalRasterAggregation::try_from(api).expect("conversion failed");
+        let ops = OperatorsTemporalRasterAggregation::try_from(api).expect("conversion failed");
 
         assert!(matches!(
             ops.params.aggregation,
