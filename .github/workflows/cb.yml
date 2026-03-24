@@ -36,7 +36,7 @@ jobs:
         with:
           name: Geo Engine Benchmark
           tool: 'cargo'
-          output-file-path: output.json
+          output-file-path: output.txt
           external-data-json-path: ./cache/benchmark-data.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
