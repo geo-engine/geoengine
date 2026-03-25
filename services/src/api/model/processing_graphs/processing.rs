@@ -199,14 +199,18 @@ impl From<RenameBands> for geoengine_datatypes::raster::RenameBands {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(untagged)]
 pub enum BandsByNameOrIndex {
+    /// Select bands by their names.
     Name(Vec<String>),
+    /// Select bands by zero-based band indices.
     Index(Vec<usize>),
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, ToSchema, Default)]
 #[serde(rename_all = "camelCase")]
 pub enum DeriveOutRasterSpecsSource {
+    /// Derive output bounds from source data bounds.
     DataBounds,
+    /// Derive output bounds from the target projection bounds.
     #[default]
     ProjectionBounds,
 }
@@ -223,7 +227,9 @@ impl From<DeriveOutRasterSpecsSource> for OperatorsDeriveOutRasterSpecsSource {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InterpolationResolution {
+    /// Explicit output resolution (`x`, `y`) in target coordinates.
     Resolution { x: f64, y: f64 },
+    /// Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
     Fraction { x: f64, y: f64 },
 }
 
@@ -241,7 +247,9 @@ impl From<InterpolationResolution> for OperatorsInterpolationResolution {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum InterpolationMethod {
+    /// Nearest-neighbor interpolation.
     NearestNeighbor,
+    /// Bilinear interpolation.
     BiLinear,
 }
 
@@ -254,6 +262,10 @@ impl From<InterpolationMethod> for OperatorsInterpolationMethod {
     }
 }
 
+/// Aggregation methods for `TemporalRasterAggregation`.
+///
+/// Available variants are `min`, `max`, `first`, `last`, `mean`, `sum`, `count`, and `percentileEstimate`.
+/// Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Aggregation {
@@ -327,13 +339,6 @@ impl From<Aggregation> for OperatorsAggregation {
 ///
 /// If parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.
 ///
-/// ## Parameters
-///
-/// - `targetSpatialReference`: target spatial reference system.
-/// - `deriveOutSpec`: controls how raster output bounds are derived.
-///   The default `projectionBounds` usually keeps a projection-aligned target grid,
-///   while `dataBounds` derives it directly from the source data bounds.
-///
 /// ## Inputs
 ///
 /// The `Reprojection` operator expects exactly one _raster_ or _vector_ input.
@@ -365,11 +370,18 @@ pub struct Reprojection {
     pub sources: Box<SingleRasterOrVectorSource>,
 }
 
+/// Parameters for the `Reprojection` operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct ReprojectionParameters {
-    #[schema(value_type = String)]
+    /// Target spatial reference system.
+    #[schema(value_type = String, examples("EPSG:32632"))]
     pub target_spatial_reference: SpatialReference,
+    /// Controls how raster output bounds are derived.
+    ///
+    /// The default `projectionBounds` usually keeps a projection-aligned target grid,
+    /// while `dataBounds` derives it directly from source data bounds.
+    #[schema(examples("projectionBounds"))]
     #[serde(default)]
     pub derive_out_spec: DeriveOutRasterSpecsSource,
 }
@@ -392,23 +404,7 @@ impl TryFrom<Reprojection> for OperatorsReprojection {
 /// The output starts with the first window that contains the query start and contains all windows
 /// that overlap the query interval.
 ///
-/// Pixel values are computed by aggregating all input rasters that contribute to the current window
-/// with the selected `aggregation` method.
-///
-/// The optional `windowReference` parameter allows specifying a custom anchor point for the windows.
-/// If omitted, windows are anchored at `1970-01-01T00:00:00Z`.
-///
-/// ## Types
-///
-/// The following describes the types used in the parameters.
-///
-/// ### Aggregation
-///
-/// There are different methods that can be used to aggregate raster time series.
-/// Encountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.
-///
-/// - `min`, `max`, `first`, `last`, `mean`, `sum`, `count`
-/// - `percentileEstimate` with a percentile in `(0, 1)`
+/// Pixel values are computed by aggregating all input rasters that contribute to the current window.
 ///
 /// ## Inputs
 ///
@@ -453,12 +449,26 @@ pub struct TemporalRasterAggregation {
     pub sources: Box<SingleRasterSource>,
 }
 
+/// Parameters for the `TemporalRasterAggregation` operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct TemporalRasterAggregationParameters {
+    /// Aggregation method for values within each time window.
+    ///
+    /// Encountering NO DATA makes the aggregation result NO DATA unless
+    /// `ignoreNoData` is `true` for the selected aggregation variant.
+    #[schema(examples(json!({ "type": "mean", "ignoreNoData": true })))]
     pub aggregation: Aggregation,
+    /// Window size and granularity for the output time series.
+    #[schema(examples(json!({ "granularity": "months", "step": 1 })))]
     pub window: TimeStep,
+    /// Optional reference timestamp used as the anchor for window boundaries.
+    ///
+    /// If omitted, windows are anchored at `1970-01-01T00:00:00Z`.
+    #[schema(examples("2020-01-01T00:00:00.000Z"))]
     pub window_reference: Option<TimeInstance>,
+    /// Optional output raster data type.
+    #[schema(examples("F32"))]
     pub output_type: Option<RasterDataType>,
 }
 
@@ -485,18 +495,6 @@ impl TryFrom<TemporalRasterAggregation> for OperatorsTemporalRasterAggregation {
 /// Tiles are automatically temporally aligned.
 ///
 /// All inputs must have the same data type and spatial reference.
-///
-/// ## Types
-///
-/// The following describes the types used in the parameters.
-///
-/// ### RenameBands
-///
-/// The `RenameBands` type specifies how to rename output bands to avoid naming conflicts:
-///
-/// - `default`: appends ` (n)` with the smallest `n` that avoids a conflict.
-/// - `suffix`: appends one suffix per input.
-/// - `rename`: explicitly provides names for all resulting bands.
 ///
 /// ## Inputs
 ///
@@ -527,9 +525,16 @@ pub struct RasterStacker {
     pub sources: Box<MultipleRasterSources>,
 }
 
+/// Parameters for the `RasterStacker` operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterStackerParameters {
+    /// Strategy for deriving output band names.
+    ///
+    /// - `default`: appends ` (n)` with the smallest `n` that avoids a conflict.
+    /// - `suffix`: appends one suffix per input.
+    /// - `rename`: explicitly provides names for all resulting bands.
+    #[schema(examples(json!({ "type": "default" }), json!({ "type": "suffix", "values": ["_a", "_b"] })))]
     pub rename_bands: RenameBands,
 }
 
@@ -578,9 +583,12 @@ pub struct RasterTypeConversion {
     pub sources: Box<SingleRasterSource>,
 }
 
+/// Parameters for the `RasterTypeConversion` operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct RasterTypeConversionParameters {
+    /// Output raster data type.
+    #[schema(examples("U16"))]
     pub output_data_type: RasterDataType,
 }
 
@@ -601,30 +609,6 @@ impl TryFrom<RasterTypeConversion> for OperatorsRasterTypeConversion {
 ///
 /// If queried with a resolution that is coarser than the input resolution,
 /// interpolation is not applicable and an error is returned.
-///
-/// ## Types
-///
-/// The following describes the types used in the parameters.
-///
-/// ### `InterpolationMethod`
-///
-/// The operator supports the following interpolation methods:
-///
-/// - `nearestNeighbor`: nearest-neighbor interpolation
-/// - `biLinear`: bilinear interpolation
-///
-/// ### `InterpolationResolution`
-///
-/// The target resolution can be configured as:
-///
-/// - `resolution`: explicit output resolution (`x`, `y`)
-/// - `fraction`: upscale factor relative to input resolution (`x >= 1`, `y >= 1`)
-///
-/// ## Parameters
-///
-/// - `interpolation`: interpolation method.
-/// - `outputResolution`: output grid resolution.
-/// - `outputOriginReference` (optional): reference point to align the output grid origin.
 ///
 /// ## Inputs
 ///
@@ -654,11 +638,18 @@ pub struct Interpolation {
     pub sources: Box<SingleRasterSource>,
 }
 
+/// Parameters for the `Interpolation` operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct InterpolationParameters {
+    /// Interpolation method.
+    #[schema(examples("nearestNeighbor"))]
     pub interpolation: InterpolationMethod,
+    /// Target output resolution.
+    #[schema(examples(json!({ "type": "fraction", "x": 2.0, "y": 2.0 })))]
     pub output_resolution: InterpolationResolution,
+    /// Optional reference point used to align the output grid origin.
+    #[schema(examples(json!({ "x": 0.0, "y": 0.0 })))]
     pub output_origin_reference: Option<crate::api::model::datatypes::Coordinate2D>,
 }
 
@@ -680,10 +671,6 @@ impl TryFrom<Interpolation> for OperatorsInterpolation {
 /// The `BandFilter` operator selects bands from a raster source by band names or band indices.
 ///
 /// It removes all non-selected bands while preserving the original order of remaining bands.
-///
-/// ## Parameters
-///
-/// - `bands`: selected bands either by names (`["nir", "red"]`) or indices (`[0, 2]`).
 ///
 /// ## Inputs
 ///
@@ -713,9 +700,11 @@ pub struct BandFilter {
     pub sources: Box<SingleRasterSource>,
 }
 
+/// Parameters for the `BandFilter` operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct BandFilterParameters {
+    /// Selected bands either by names (e.g. `["nir", "red"]`) or indices (e.g. `[0, 2]`).
     #[schema(examples(json!(["nir", "red"]), json!([0, 2])))]
     pub bands: BandsByNameOrIndex,
 }

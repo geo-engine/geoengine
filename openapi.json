@@ -5497,7 +5497,8 @@
               }
             }
           }
-        ]
+        ],
+        "description": "Aggregation methods for `TemporalRasterAggregation`.\n\nAvailable variants are `min`, `max`, `first`, `last`, `mean`, `sum`, `count`, and `percentileEstimate`.\nEncountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`."
       },
       "ArunaDataProviderDefinition": {
         "type": "object",
@@ -5639,7 +5640,7 @@
       "BandFilter": {
         "type": "object",
         "title": "Band Filter",
-        "description": "The `BandFilter` operator selects bands from a raster source by band names or band indices.\n\nIt removes all non-selected bands while preserving the original order of remaining bands.\n\n## Parameters\n\n- `bands`: selected bands either by names (`[\"nir\", \"red\"]`) or indices (`[0, 2]`).\n\n## Inputs\n\nThe `BandFilter` operator expects exactly one _raster_ input.\n\n## Errors\n\nThe operator returns an error if no bands are selected or if selected band names/indices\ncannot be mapped to existing input bands.",
+        "description": "The `BandFilter` operator selects bands from a raster source by band names or band indices.\n\nIt removes all non-selected bands while preserving the original order of remaining bands.\n\n## Inputs\n\nThe `BandFilter` operator expects exactly one _raster_ input.\n\n## Errors\n\nThe operator returns an error if no bands are selected or if selected band names/indices\ncannot be mapped to existing input bands.",
         "required": [
           "type",
           "params",
@@ -5681,12 +5682,14 @@
       },
       "BandFilterParameters": {
         "type": "object",
+        "description": "Parameters for the `BandFilter` operator.",
         "required": [
           "bands"
         ],
         "properties": {
           "bands": {
-            "$ref": "#/components/schemas/BandsByNameOrIndex"
+            "$ref": "#/components/schemas/BandsByNameOrIndex",
+            "description": "Selected bands either by names (e.g. `[\"nir\", \"red\"]`) or indices (e.g. `[0, 2]`)."
           }
         }
       },
@@ -5696,14 +5699,16 @@
             "type": "array",
             "items": {
               "type": "string"
-            }
+            },
+            "description": "Select bands by their names."
           },
           {
             "type": "array",
             "items": {
               "type": "integer",
               "minimum": 0
-            }
+            },
+            "description": "Select bands by zero-based band indices."
           }
         ]
       },
@@ -7605,7 +7610,7 @@
       "Interpolation": {
         "type": "object",
         "title": "Interpolation",
-        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### `InterpolationMethod`\n\nThe operator supports the following interpolation methods:\n\n- `nearestNeighbor`: nearest-neighbor interpolation\n- `biLinear`: bilinear interpolation\n\n### `InterpolationResolution`\n\nThe target resolution can be configured as:\n\n- `resolution`: explicit output resolution (`x`, `y`)\n- `fraction`: upscale factor relative to input resolution (`x >= 1`, `y >= 1`)\n\n## Parameters\n\n- `interpolation`: interpolation method.\n- `outputResolution`: output grid resolution.\n- `outputOriginReference` (optional): reference point to align the output grid origin.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.",
+        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.",
         "required": [
           "type",
           "params",
@@ -7656,13 +7661,15 @@
       },
       "InterpolationParameters": {
         "type": "object",
+        "description": "Parameters for the `Interpolation` operator.",
         "required": [
           "interpolation",
           "outputResolution"
         ],
         "properties": {
           "interpolation": {
-            "$ref": "#/components/schemas/InterpolationMethod"
+            "$ref": "#/components/schemas/InterpolationMethod",
+            "description": "Interpolation method."
           },
           "outputOriginReference": {
             "oneOf": [
@@ -7670,12 +7677,14 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/Coordinate2D"
+                "$ref": "#/components/schemas/Coordinate2D",
+                "description": "Optional reference point used to align the output grid origin."
               }
             ]
           },
           "outputResolution": {
-            "$ref": "#/components/schemas/InterpolationResolution"
+            "$ref": "#/components/schemas/InterpolationResolution",
+            "description": "Target output resolution."
           }
         }
       },
@@ -7683,6 +7692,7 @@
         "oneOf": [
           {
             "type": "object",
+            "description": "Explicit output resolution (`x`, `y`) in target coordinates.",
             "required": [
               "x",
               "y",
@@ -7707,6 +7717,7 @@
           },
           {
             "type": "object",
+            "description": "Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).",
             "required": [
               "x",
               "y",
@@ -9948,7 +9959,7 @@
       "RasterStacker": {
         "type": "object",
         "title": "Raster Stacker",
-        "description": "The `RasterStacker` stacks all of its inputs into a single raster time series.\nIt queries all inputs and combines them by band, space, and then time.\n\nThe output raster has as many bands as the sum of all input bands.\nTiles are automatically temporally aligned.\n\nAll inputs must have the same data type and spatial reference.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### RenameBands\n\nThe `RenameBands` type specifies how to rename output bands to avoid naming conflicts:\n\n- `default`: appends ` (n)` with the smallest `n` that avoids a conflict.\n- `suffix`: appends one suffix per input.\n- `rename`: explicitly provides names for all resulting bands.\n\n## Inputs\n\nThe `RasterStacker` operator expects multiple raster inputs.",
+        "description": "The `RasterStacker` stacks all of its inputs into a single raster time series.\nIt queries all inputs and combines them by band, space, and then time.\n\nThe output raster has as many bands as the sum of all input bands.\nTiles are automatically temporally aligned.\n\nAll inputs must have the same data type and spatial reference.\n\n## Inputs\n\nThe `RasterStacker` operator expects multiple raster inputs.",
         "required": [
           "type",
           "params",
@@ -9997,12 +10008,14 @@
       },
       "RasterStackerParameters": {
         "type": "object",
+        "description": "Parameters for the `RasterStacker` operator.",
         "required": [
           "renameBands"
         ],
         "properties": {
           "renameBands": {
-            "$ref": "#/components/schemas/RenameBands"
+            "$ref": "#/components/schemas/RenameBands",
+            "description": "Strategy for deriving output band names.\n\n- `default`: appends ` (n)` with the smallest `n` that avoids a conflict.\n- `suffix`: appends one suffix per input.\n- `rename`: explicitly provides names for all resulting bands."
           }
         }
       },
@@ -10094,12 +10107,14 @@
       },
       "RasterTypeConversionParameters": {
         "type": "object",
+        "description": "Parameters for the `RasterTypeConversion` operator.",
         "required": [
           "outputDataType"
         ],
         "properties": {
           "outputDataType": {
-            "$ref": "#/components/schemas/RasterDataType"
+            "$ref": "#/components/schemas/RasterDataType",
+            "description": "Output raster data type."
           }
         }
       },
@@ -10270,7 +10285,7 @@
       "Reprojection": {
         "type": "object",
         "title": "Reprojection",
-        "description": "The `Reprojection` operator reprojects data from one spatial reference system to another.\nIt accepts exactly one input which can either be a raster or a vector data stream.\nThe operator produces all data that, after reprojection, is contained in the query rectangle.\n\n## Data Type Specifics\n\nThe concrete behavior depends on the data type.\n\n### Vector Data\n\nThe operator reprojects all coordinates of the features individually.\nThe result contains all features that, after reprojection, are intersected by the query rectangle.\n\n### Raster Data\n\nTo create tiles in the target projection, the operator loads corresponding tiles in the source projection.\nFor each output pixel, the value of the nearest input pixel is used.\n\nIf parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.\n\n## Parameters\n\n- `targetSpatialReference`: target spatial reference system.\n- `deriveOutSpec`: controls how raster output bounds are derived.\n  The default `projectionBounds` usually keeps a projection-aligned target grid,\n  while `dataBounds` derives it directly from the source data bounds.\n\n## Inputs\n\nThe `Reprojection` operator expects exactly one _raster_ or _vector_ input.\n\n## Errors\n\nThe operator returns an error if the target projection is unknown or if input data cannot be reprojected.",
+        "description": "The `Reprojection` operator reprojects data from one spatial reference system to another.\nIt accepts exactly one input which can either be a raster or a vector data stream.\nThe operator produces all data that, after reprojection, is contained in the query rectangle.\n\n## Data Type Specifics\n\nThe concrete behavior depends on the data type.\n\n### Vector Data\n\nThe operator reprojects all coordinates of the features individually.\nThe result contains all features that, after reprojection, are intersected by the query rectangle.\n\n### Raster Data\n\nTo create tiles in the target projection, the operator loads corresponding tiles in the source projection.\nFor each output pixel, the value of the nearest input pixel is used.\n\nIf parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.\n\n## Inputs\n\nThe `Reprojection` operator expects exactly one _raster_ or _vector_ input.\n\n## Errors\n\nThe operator returns an error if the target projection is unknown or if input data cannot be reprojected.",
         "required": [
           "type",
           "params",
@@ -10318,15 +10333,21 @@
       },
       "ReprojectionParameters": {
         "type": "object",
+        "description": "Parameters for the `Reprojection` operator.",
         "required": [
           "targetSpatialReference"
         ],
         "properties": {
           "deriveOutSpec": {
-            "$ref": "#/components/schemas/DeriveOutRasterSpecsSource"
+            "$ref": "#/components/schemas/DeriveOutRasterSpecsSource",
+            "description": "Controls how raster output bounds are derived.\n\nThe default `projectionBounds` usually keeps a projection-aligned target grid,\nwhile `dataBounds` derives it directly from source data bounds."
           },
           "targetSpatialReference": {
-            "type": "string"
+            "type": "string",
+            "description": "Target spatial reference system.",
+            "examples": [
+              "EPSG:32632"
+            ]
           }
         }
       },
@@ -11199,7 +11220,7 @@
       "TemporalRasterAggregation": {
         "type": "object",
         "title": "Temporal Raster Aggregation",
-        "description": "The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows.\nThe output starts with the first window that contains the query start and contains all windows\nthat overlap the query interval.\n\nPixel values are computed by aggregating all input rasters that contribute to the current window\nwith the selected `aggregation` method.\n\nThe optional `windowReference` parameter allows specifying a custom anchor point for the windows.\nIf omitted, windows are anchored at `1970-01-01T00:00:00Z`.\n\n## Types\n\nThe following describes the types used in the parameters.\n\n### Aggregation\n\nThere are different methods that can be used to aggregate raster time series.\nEncountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`.\n\n- `min`, `max`, `first`, `last`, `mean`, `sum`, `count`\n- `percentileEstimate` with a percentile in `(0, 1)`\n\n## Inputs\n\nThe `TemporalRasterAggregation` operator expects exactly one _raster_ input.\n\n## Errors\n\nIf the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value,\nan error is returned.",
+        "description": "The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows.\nThe output starts with the first window that contains the query start and contains all windows\nthat overlap the query interval.\n\nPixel values are computed by aggregating all input rasters that contribute to the current window.\n\n## Inputs\n\nThe `TemporalRasterAggregation` operator expects exactly one _raster_ input.\n\n## Errors\n\nIf the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value,\nan error is returned.",
         "required": [
           "type",
           "params",
@@ -11261,13 +11282,15 @@
       },
       "TemporalRasterAggregationParameters": {
         "type": "object",
+        "description": "Parameters for the `TemporalRasterAggregation` operator.",
         "required": [
           "aggregation",
           "window"
         ],
         "properties": {
           "aggregation": {
-            "$ref": "#/components/schemas/Aggregation"
+            "$ref": "#/components/schemas/Aggregation",
+            "description": "Aggregation method for values within each time window.\n\nEncountering NO DATA makes the aggregation result NO DATA unless\n`ignoreNoData` is `true` for the selected aggregation variant."
           },
           "outputType": {
             "oneOf": [
@@ -11275,12 +11298,14 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/RasterDataType"
+                "$ref": "#/components/schemas/RasterDataType",
+                "description": "Optional output raster data type."
               }
             ]
           },
           "window": {
-            "$ref": "#/components/schemas/TimeStep"
+            "$ref": "#/components/schemas/TimeStep",
+            "description": "Window size and granularity for the output time series."
           },
           "windowReference": {
             "oneOf": [
@@ -11288,7 +11313,8 @@
                 "type": "null"
               },
               {
-                "$ref": "#/components/schemas/TimeInstance"
+                "$ref": "#/components/schemas/TimeInstance",
+                "description": "Optional reference timestamp used as the anchor for window boundaries.\n\nIf omitted, windows are anchored at `1970-01-01T00:00:00Z`."
               }
             ]
           }
