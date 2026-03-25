@@ -5342,6 +5342,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "MinAggregation",
             "required": [
               "ignoreNoData",
               "type"
@@ -5360,6 +5361,7 @@
           },
           {
             "type": "object",
+            "title": "MaxAggregation",
             "required": [
               "ignoreNoData",
               "type"
@@ -5378,6 +5380,7 @@
           },
           {
             "type": "object",
+            "title": "FirstAggregation",
             "required": [
               "ignoreNoData",
               "type"
@@ -5396,6 +5399,7 @@
           },
           {
             "type": "object",
+            "title": "LastAggregation",
             "required": [
               "ignoreNoData",
               "type"
@@ -5414,6 +5418,7 @@
           },
           {
             "type": "object",
+            "title": "MeanAggregation",
             "required": [
               "ignoreNoData",
               "type"
@@ -5432,6 +5437,7 @@
           },
           {
             "type": "object",
+            "title": "SumAggregation",
             "required": [
               "ignoreNoData",
               "type"
@@ -5450,6 +5456,7 @@
           },
           {
             "type": "object",
+            "title": "CountAggregation",
             "required": [
               "ignoreNoData",
               "type"
@@ -5468,6 +5475,7 @@
           },
           {
             "type": "object",
+            "title": "PercentileEstimateAggregation",
             "required": [
               "ignoreNoData",
               "percentile",

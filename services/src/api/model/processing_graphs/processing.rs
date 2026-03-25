@@ -257,20 +257,28 @@ impl From<InterpolationMethod> for OperatorsInterpolationMethod {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum Aggregation {
+    #[schema(title = "MinAggregation")]
     #[serde(rename_all = "camelCase")]
     Min { ignore_no_data: bool },
+    #[schema(title = "MaxAggregation")]
     #[serde(rename_all = "camelCase")]
     Max { ignore_no_data: bool },
+    #[schema(title = "FirstAggregation")]
     #[serde(rename_all = "camelCase")]
     First { ignore_no_data: bool },
+    #[schema(title = "LastAggregation")]
     #[serde(rename_all = "camelCase")]
     Last { ignore_no_data: bool },
+    #[schema(title = "MeanAggregation")]
     #[serde(rename_all = "camelCase")]
     Mean { ignore_no_data: bool },
+    #[schema(title = "SumAggregation")]
     #[serde(rename_all = "camelCase")]
     Sum { ignore_no_data: bool },
+    #[schema(title = "CountAggregation")]
     #[serde(rename_all = "camelCase")]
     Count { ignore_no_data: bool },
+    #[schema(title = "PercentileEstimateAggregation")]
     #[serde(rename_all = "camelCase")]
     PercentileEstimate {
         ignore_no_data: bool,
