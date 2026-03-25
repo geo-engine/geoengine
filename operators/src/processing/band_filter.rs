@@ -248,7 +248,12 @@ where
                                 tile.band = output_band;
                                 Some(Ok(tile))
                             } else {
+                                // fail in tests
+                                debug_assert!(false, "BandFilter: received tile for band {} which is not in the selected bands", tile.band);
+
+                                // in production: log warning
                                 warn!("BandFilter: Received tile for band {} which is not in the selected bands, skipping. This is a bug.", tile.band);
+
                                 None
                             }
                         }
