@@ -61,34 +61,6 @@ httptest = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["json"] }
 rand = { workspace = true }
 
-# [[bench]]
-# name = "bands"
-# harness = false
-
-# [[bench]]
-# name = "cache"
-# harness = false
-
-# [[bench]]
-# name = "cache_concurrent"
-# harness = false
-
-# [[bench]]
-# name = "expression"
-# harness = false
-
-# [[bench]]
-# name = "thread_pool"
-# harness = false
-
-# [[bench]]
-# name = "pip"
-# harness = false
-
-# [[bench]]
-# name = "query_chunks"
-# harness = false
-
 [[bench]]
 name = "ci_operators"
 harness = false
