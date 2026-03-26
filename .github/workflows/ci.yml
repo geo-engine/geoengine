@@ -81,11 +81,11 @@ jobs:
           # Default: empty
           key: ci_test_
       - name: Rustfmt
-        run: just ci-rustfmt
+        run: just lint-rustfmt
       - name: Clippy
-        run: just ci-clippy
+        run: just lint-clippy
       - name: SQLFluff
-        run: just ci-sqlfluff
+        run: just lint sql
 
   openapi:
     name: OpenAPI Validation
@@ -100,7 +100,7 @@ jobs:
         uses: actions/checkout@v5
       - uses: extractions/setup-just@v3
       - name: Validate OpenAPI spec
-        run: just ci-openapi
+        run: just validate-openapi-spec
 
   build:
     runs-on: ubuntu-24.04
@@ -133,4 +133,4 @@ jobs:
           # Default: empty
           key: ci_test_${{ matrix.build }}
       - name: Build
-        run: just ci-build "${{ matrix.build }}"
+        run: just build "${{ matrix.build }}"

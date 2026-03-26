@@ -15,7 +15,7 @@ _generate-openapi-spec:
 # Validate OpenAPI spec.
 [group("lint")]
 validate-openapi-spec:
-    npx @openapitools/openapi-generator-cli validate -i openapi.json
+    npx --yes @openapitools/openapi-generator-cli validate -i openapi.json
     rm openapitools.json
 
 # Run lints.
@@ -34,16 +34,14 @@ lint-clippy: _clear _lint-clippy
 lint-fmt: _clear
     cargo fmt --all -- --check
 
-
 # Run sqlfluff.
 [group("lint")]
 lint-sql: _clear
     pipx run sqlfluff==4.0.4 lint
 
-
 # Build in dev or release mode.
-[group("build")]
 [arg('mode', pattern='|release')]
+[group("build")]
 build mode="":
     cargo build --locked {{ mode }} --verbose
 
@@ -54,7 +52,7 @@ install:
 
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]
-ci-test-coverage output_path="lcov.info":
+test-coverage output_path="lcov.info":
     service postgresql start
     cargo llvm-cov \
     	--locked \
@@ -62,11 +60,6 @@ ci-test-coverage output_path="lcov.info":
     	--profile ci \
     	--lcov \
     	--output-path {{ output_path }}
-
-# Run doctests exactly as in CI test action.
-[group("ci")]
-ci-test-doc:
-    cargo test --doc --all-features --profile ci --locked
 
 # Run all local CI checks in the current environment.
 [group("ci")]
@@ -91,3 +84,8 @@ test-services filter="": _clear
 [group("test")]
 test-macros filter="": _clear
     cargo test --package geoengine-macros -- {{ filter }} --nocapture
+
+# Run doctests
+[group("test")]
+test-doc:
+    cargo test --doc --all-features --profile ci --locked
