@@ -20,7 +20,7 @@ validate-openapi-spec:
 
 # Run lints.
 [group("lint")]
-lint: _clear _lint-clippy validate-openapi-spec
+lint: _clear lint-fmt lint-clippy lint-sql validate-openapi-spec
 
 _lint-clippy:
     cargo clippy --all-features --all-targets
@@ -29,35 +29,27 @@ _lint-clippy:
 [group("lint")]
 lint-clippy: _clear _lint-clippy
 
-# Run rustfmt exactly as in CI.
-[group("ci")]
-ci-rustfmt:
+# Run rustfmt
+[group("lint")]
+lint-fmt: _clear
     cargo fmt --all -- --check
 
-# Run clippy exactly as in CI.
-[group("ci")]
-ci-clippy:
-    cargo clippy --all-targets --locked -- -D warnings
 
-# Run sqlfluff exactly as in CI.
-[group("ci")]
-ci-sqlfluff:
+# Run sqlfluff.
+[group("lint")]
+lint-sql: _clear
     pipx run sqlfluff==4.0.4 lint
 
-# Validate OpenAPI exactly as in CI and remove generated metadata file.
-[group("ci")]
-ci-openapi:
-    npx @openapitools/openapi-generator-cli validate -i openapi.json
-    rm -f openapitools.json
 
-# Build exactly as in CI.
-[group("ci")]
-ci-build mode="":
+# Build in dev or release mode.
+[group("build")]
+[arg('mode', pattern='|release')]
+build mode="":
     cargo build --locked {{ mode }} --verbose
 
-# Install llvm-cov as done in CI test action.
-[group("ci")]
-ci-install-llvm-cov:
+# Install dependencies such as llvm-cov.
+[group("install")]
+install:
     cargo install --locked cargo-llvm-cov
 
 # Run tests and generate lcov exactly as in CI test action.
@@ -78,11 +70,7 @@ ci-test-doc:
 
 # Run all local CI checks in the current environment.
 [group("ci")]
-ci-local: _clear ci-rustfmt ci-clippy ci-sqlfluff ci-openapi
-    just ci-build
-    just ci-install-llvm-cov
-    just ci-test-coverage
-    just ci-test-doc
+ci: _clear install lint test build
 
 # Run the application.
 [group("run")]
