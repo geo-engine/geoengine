@@ -29,6 +29,10 @@ lto = true
 inherits = "test"
 strip = "debuginfo"
 
+[profile.bench-ci]
+inherits = "bench"
+strip = "debuginfo"
+
 # configure default clippy lints
 [workspace.lints.clippy]
 cargo = { level = "warn", priority = 0 }
@@ -97,7 +101,7 @@ clap = { version = "4.5", features = ["derive"] }
 clap_derive = "4.5"
 config = "0.15"
 convert_case = "0.11"
-criterion = "0.8"
+criterion = { package = "codspeed-criterion-compat", version = "4.3", features = ["async_tokio"], default-features = false }
 csv = "1.4"
 erased-serde = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
@@ -170,6 +174,7 @@ serial_test = "3.4"
 sha2 = "0.10"
 snafu = "0.9"
 stac = "0.16"
+stac-extensions = "0.1.5"
 stream-cancel = "0.8"
 strum = { version = "0.28", features = ["derive"] }
 strum_macros = "0.28"

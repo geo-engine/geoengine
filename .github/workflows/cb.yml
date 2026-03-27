@@ -1,0 +1,67 @@
+name: Continuous Benchmarking
+
+on:
+  # For checking performance regressions on pull requests
+  pull_request:
+      branches: [main]
+  # For generating benchmark data on main branch
+  push: 
+    branches: [main]
+  # Allows you to run this workflow manually from the Actions tab
+  workflow_dispatch:
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  benchmarks:
+    name: Performance regression check
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read # required for actions/checkout
+      pull-requests: write # required for commenting on pull requests
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Run benchmark
+        run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee output.txt
+
+      - name: Download previous benchmark data
+        if: github.event_name == 'pull_request'
+        uses: actions/cache@v5
+        with:
+          path: ./cache
+          key: ${{ runner.os }}-benchmark
+
+      - name: Compare benchmark result
+        if: github.event_name == 'pull_request'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Geo Engine Benchmark
+          tool: 'cargo'
+          output-file-path: output.txt
+          external-data-json-path: ./cache/benchmark-data.json
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          # Show alert with commit comment on detecting possible performance regression
+          alert-threshold: '200%'
+          comment-on-alert: true
+          comment-always: true
+          summary-always: true
+          fail-on-alert: false
+          save-data-file: false
+      - name: Store benchmark result
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        uses: benchmark-action/github-action-benchmark@v1
+        with:
+          name: Geo Engine Benchmark
+          tool: 'cargo'
+          output-file-path: output.txt
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          auto-push: false
+          summary-always: true
+          save-data-file: true

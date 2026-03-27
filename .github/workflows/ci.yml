@@ -18,7 +18,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - name: Free Disk Space (Ubuntu)
         uses: jlumbroso/free-disk-space@main
         with:
@@ -63,7 +63,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - uses: extractions/setup-just@v3
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
@@ -97,7 +97,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - uses: extractions/setup-just@v3
       - name: Validate OpenAPI spec
         run: just validate-openapi-spec
@@ -115,7 +115,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
       - uses: extractions/setup-just@v3
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
