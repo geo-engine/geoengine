@@ -80,7 +80,9 @@ impl From<geoengine_operators::engine::SpatialGridDescriptor> for SpatialGridDes
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum TimeDimension {
+    #[schema(title = "Regular")]
     Regular(RegularTimeDimension),
+    #[schema(title = "Irregular")]
     Irregular,
 }
 
@@ -1057,9 +1059,13 @@ impl From<OgrSourceDurationSpec> for geoengine_operators::source::OgrSourceDurat
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum TypedGeometry {
+    #[schema(title = "NoGeometry")]
     Data(NoGeometry),
+    #[schema(title = "MultiPoint")]
     MultiPoint(MultiPoint),
+    #[schema(title = "MultiLineString")]
     MultiLineString(MultiLineString),
+    #[schema(title = "MultiPolygon")]
     MultiPolygon(MultiPolygon),
 }
 

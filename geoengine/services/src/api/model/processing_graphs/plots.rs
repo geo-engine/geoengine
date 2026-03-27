@@ -77,7 +77,9 @@ string_token!(Data, "data");
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum HistogramBounds {
+    #[schema(title = "Data")]
     Data(Data),
+    #[schema(title = "Values")]
     Values {
         #[schema(value_type = f64)]
         min: NotNan<f64>,
@@ -94,8 +96,10 @@ fn default_max_number_of_buckets() -> u8 {
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum HistogramBuckets {
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "Number")]
     Number { value: u8 },
     #[serde(rename_all = "camelCase")]
+    #[schema(title = "SquareRootChoiceRule")]
     SquareRootChoiceRule {
         #[serde(default = "default_max_number_of_buckets")]
         max_number_of_buckets: u8,

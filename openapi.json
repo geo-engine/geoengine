@@ -6130,6 +6130,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "Volume",
             "required": [
               "volume"
             ],
@@ -6141,6 +6142,7 @@
           },
           {
             "type": "object",
+            "title": "Upload",
             "required": [
               "upload"
             ],
@@ -7477,6 +7479,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "Data",
             "required": [
               "data"
             ],
@@ -7488,6 +7491,7 @@
           },
           {
             "type": "object",
+            "title": "Values",
             "required": [
               "values"
             ],
@@ -7517,6 +7521,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "Number",
             "required": [
               "value",
               "type"
@@ -7537,6 +7542,7 @@
           },
           {
             "type": "object",
+            "title": "SquareRootChoiceRule",
             "required": [
               "type"
             ],
@@ -7692,6 +7698,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "Resolution",
             "description": "Explicit output resolution (`x`, `y`) in target coordinates.",
             "required": [
               "x",
@@ -7717,6 +7724,7 @@
           },
           {
             "type": "object",
+            "title": "Fraction",
             "description": "Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).",
             "required": [
               "x",
@@ -10226,6 +10234,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "Default",
             "required": [
               "type"
             ],
@@ -10240,6 +10249,7 @@
           },
           {
             "type": "object",
+            "title": "Suffix",
             "required": [
               "values",
               "type"
@@ -10261,6 +10271,7 @@
           },
           {
             "type": "object",
+            "title": "Rename",
             "required": [
               "values",
               "type"
@@ -11381,10 +11392,12 @@
                   }
                 }
               }
-            ]
+            ],
+            "title": "Regular"
           },
           {
             "type": "object",
+            "title": "Irregular",
             "required": [
               "type"
             ],
@@ -11520,6 +11533,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "NoGeometry",
             "required": [
               "Data"
             ],
@@ -11531,6 +11545,7 @@
           },
           {
             "type": "object",
+            "title": "MultiPoint",
             "required": [
               "MultiPoint"
             ],
@@ -11542,6 +11557,7 @@
           },
           {
             "type": "object",
+            "title": "MultiLineString",
             "required": [
               "MultiLineString"
             ],
@@ -11553,6 +11569,7 @@
           },
           {
             "type": "object",
+            "title": "MultiPolygon",
             "required": [
               "MultiPolygon"
             ],
