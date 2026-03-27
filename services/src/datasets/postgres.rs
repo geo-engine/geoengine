@@ -1051,7 +1051,7 @@ struct TileKey {
     time: crate::api::model::datatypes::TimeInterval,
     bbox: SpatialPartition2D,
     band: u32,
-    z_index: u32,
+    z_index: i64,
 }
 
 identifier!(DatasetTileId);
@@ -1063,7 +1063,7 @@ struct TileEntry {
     time: crate::api::model::datatypes::TimeInterval,
     bbox: SpatialPartition2D,
     band: u32,
-    z_index: u32,
+    z_index: i64,
     gdal_params: GdalDatasetParameters,
 }
 

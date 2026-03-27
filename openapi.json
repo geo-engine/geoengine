@@ -5338,6 +5338,168 @@
           }
         }
       },
+      "Aggregation": {
+        "oneOf": [
+          {
+            "type": "object",
+            "title": "MinAggregation",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "min"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "MaxAggregation",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "max"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "FirstAggregation",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "first"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "LastAggregation",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "last"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "MeanAggregation",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "mean"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "SumAggregation",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "sum"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "CountAggregation",
+            "required": [
+              "ignoreNoData",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "count"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "title": "PercentileEstimateAggregation",
+            "required": [
+              "ignoreNoData",
+              "percentile",
+              "type"
+            ],
+            "properties": {
+              "ignoreNoData": {
+                "type": "boolean"
+              },
+              "percentile": {
+                "type": "number",
+                "format": "double"
+              },
+              "type": {
+                "type": "string",
+                "enum": [
+                  "percentileEstimate"
+                ]
+              }
+            }
+          }
+        ],
+        "description": "Aggregation methods for `TemporalRasterAggregation`.\n\nAvailable variants are `min`, `max`, `first`, `last`, `mean`, `sum`, `count`, and `percentileEstimate`.\nEncountering NO DATA makes the aggregation result NO DATA unless `ignoreNoData` is `true`."
+      },
       "ArunaDataProviderDefinition": {
         "type": "object",
         "required": [
@@ -5473,6 +5635,81 @@
         "enum": [
           "northEast",
           "eastNorth"
+        ]
+      },
+      "BandFilter": {
+        "type": "object",
+        "title": "Band Filter",
+        "description": "The `BandFilter` operator selects bands from a raster source by band names or band indices.\n\nIt removes all non-selected bands while preserving the original order of remaining bands.\n\n## Inputs\n\nThe `BandFilter` operator expects exactly one _raster_ input.\n\n## Errors\n\nThe operator returns an error if no bands are selected or if selected band names/indices\ncannot be mapped to existing input bands.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/BandFilterParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "BandFilter"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "BandFilter",
+            "params": {
+              "bands": [
+                "nir",
+                "red"
+              ]
+            },
+            "sources": {
+              "raster": {
+                "type": "MultiBandGdalSource",
+                "params": {
+                  "data": "sentinel-2-l2a_EPSG32632_U16_10"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "BandFilterParameters": {
+        "type": "object",
+        "description": "Parameters for the `BandFilter` operator.",
+        "required": [
+          "bands"
+        ],
+        "properties": {
+          "bands": {
+            "$ref": "#/components/schemas/BandsByNameOrIndex",
+            "description": "Selected bands either by names (e.g. `[\"nir\", \"red\"]`) or indices (e.g. `[0, 2]`)."
+          }
+        }
+      },
+      "BandsByNameOrIndex": {
+        "oneOf": [
+          {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Select bands by their names."
+          },
+          {
+            "type": "array",
+            "items": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "Select bands by zero-based band indices."
+          }
         ]
       },
       "BoundingBox2D": {
@@ -6260,6 +6497,13 @@
       },
       "DateTimeParseFormat": {
         "type": "string"
+      },
+      "DeriveOutRasterSpecsSource": {
+        "type": "string",
+        "enum": [
+          "dataBounds",
+          "projectionBounds"
+        ]
       },
       "DerivedColor": {
         "type": "object",
@@ -7363,6 +7607,141 @@
           }
         }
       },
+      "Interpolation": {
+        "type": "object",
+        "title": "Interpolation",
+        "description": "The `Interpolation` operator increases raster resolution by interpolating values of an input raster.\n\nIf queried with a resolution that is coarser than the input resolution,\ninterpolation is not applicable and an error is returned.\n\n## Inputs\n\nThe `Interpolation` operator expects exactly one _raster_ input.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/InterpolationParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Interpolation"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Interpolation",
+            "params": {
+              "interpolation": "nearestNeighbor",
+              "outputResolution": {
+                "type": "fraction",
+                "x": 2.0,
+                "y": 2.0
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "MultiBandGdalSource",
+                "params": {
+                  "data": "sentinel-2-l2a_EPSG32632_U8_20"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "InterpolationMethod": {
+        "type": "string",
+        "enum": [
+          "nearestNeighbor",
+          "biLinear"
+        ]
+      },
+      "InterpolationParameters": {
+        "type": "object",
+        "description": "Parameters for the `Interpolation` operator.",
+        "required": [
+          "interpolation",
+          "outputResolution"
+        ],
+        "properties": {
+          "interpolation": {
+            "$ref": "#/components/schemas/InterpolationMethod",
+            "description": "Interpolation method."
+          },
+          "outputOriginReference": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Coordinate2D",
+                "description": "Optional reference point used to align the output grid origin."
+              }
+            ]
+          },
+          "outputResolution": {
+            "$ref": "#/components/schemas/InterpolationResolution",
+            "description": "Target output resolution."
+          }
+        }
+      },
+      "InterpolationResolution": {
+        "oneOf": [
+          {
+            "type": "object",
+            "description": "Explicit output resolution (`x`, `y`) in target coordinates.",
+            "required": [
+              "x",
+              "y",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "resolution"
+                ]
+              },
+              "x": {
+                "type": "number",
+                "format": "double"
+              },
+              "y": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          },
+          {
+            "type": "object",
+            "description": "Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).",
+            "required": [
+              "x",
+              "y",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "fraction"
+                ]
+              },
+              "x": {
+                "type": "number",
+                "format": "double"
+              },
+              "y": {
+                "type": "number",
+                "format": "double"
+              }
+            }
+          }
+        ]
+      },
       "Layer": {
         "type": "object",
         "required": [
@@ -8089,6 +8468,35 @@
           }
         }
       },
+      "MultiBandGdalSource": {
+        "type": "object",
+        "title": "Multi Band GDAL Source",
+        "description": "The [`MultiBandGdalSource`] is a source operator that reads multi-band raster data using GDAL.",
+        "required": [
+          "type",
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/GdalSourceParameters"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "MultiBandGdalSource"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "MultiBandGdalSource",
+            "params": {
+              "data": "sentinel-2-l2a_EPSG32632_U16_10",
+              "overviewLevel": null
+            }
+          }
+        ]
+      },
       "MultiBandRasterColorizer": {
         "type": "object",
         "required": [
@@ -8253,6 +8661,21 @@
         "properties": {
           "source": {
             "$ref": "#/components/schemas/MultipleRasterOrSingleVectorOperator"
+          }
+        }
+      },
+      "MultipleRasterSources": {
+        "type": "object",
+        "description": "One or more raster operators as sources for this operator.",
+        "required": [
+          "rasters"
+        ],
+        "properties": {
+          "rasters": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RasterOperator"
+            }
           }
         }
       },
@@ -9438,18 +9861,46 @@
       "RasterOperator": {
         "oneOf": [
           {
+            "$ref": "#/components/schemas/BandFilter"
+          },
+          {
             "$ref": "#/components/schemas/Expression"
           },
           {
             "$ref": "#/components/schemas/GdalSource"
+          },
+          {
+            "$ref": "#/components/schemas/Interpolation"
+          },
+          {
+            "$ref": "#/components/schemas/MultiBandGdalSource"
+          },
+          {
+            "$ref": "#/components/schemas/RasterStacker"
+          },
+          {
+            "$ref": "#/components/schemas/RasterTypeConversion"
+          },
+          {
+            "$ref": "#/components/schemas/Reprojection"
+          },
+          {
+            "$ref": "#/components/schemas/TemporalRasterAggregation"
           }
         ],
         "description": "An operator that produces raster data.",
         "discriminator": {
           "propertyName": "type",
           "mapping": {
+            "BandFilter": "#/components/schemas/BandFilter",
             "Expression": "#/components/schemas/Expression",
-            "GdalSource": "#/components/schemas/GdalSource"
+            "GdalSource": "#/components/schemas/GdalSource",
+            "Interpolation": "#/components/schemas/Interpolation",
+            "MultiBandGdalSource": "#/components/schemas/MultiBandGdalSource",
+            "RasterStacker": "#/components/schemas/RasterStacker",
+            "RasterTypeConversion": "#/components/schemas/RasterTypeConversion",
+            "Reprojection": "#/components/schemas/Reprojection",
+            "TemporalRasterAggregation": "#/components/schemas/TemporalRasterAggregation"
           }
         }
       },
@@ -9505,6 +9956,69 @@
           }
         }
       },
+      "RasterStacker": {
+        "type": "object",
+        "title": "Raster Stacker",
+        "description": "The `RasterStacker` stacks all of its inputs into a single raster time series.\nIt queries all inputs and combines them by band, space, and then time.\n\nThe output raster has as many bands as the sum of all input bands.\nTiles are automatically temporally aligned.\n\nAll inputs must have the same data type and spatial reference.\n\n## Inputs\n\nThe `RasterStacker` operator expects multiple raster inputs.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/RasterStackerParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/MultipleRasterSources"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "RasterStacker"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "RasterStacker",
+            "params": {
+              "renameBands": {
+                "type": "default"
+              }
+            },
+            "sources": {
+              "rasters": [
+                {
+                  "type": "GdalSource",
+                  "params": {
+                    "data": "example-a"
+                  }
+                },
+                {
+                  "type": "GdalSource",
+                  "params": {
+                    "data": "example-b"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "RasterStackerParameters": {
+        "type": "object",
+        "description": "Parameters for the `RasterStacker` operator.",
+        "required": [
+          "renameBands"
+        ],
+        "properties": {
+          "renameBands": {
+            "$ref": "#/components/schemas/RenameBands",
+            "description": "Strategy for deriving output band names.\n\n- `default`: appends ` (n)` with the smallest `n` that avoids a conflict.\n- `suffix`: appends one suffix per input.\n- `rename`: explicitly provides names for all resulting bands."
+          }
+        }
+      },
       "RasterStreamWebsocketResultType": {
         "type": "string",
         "description": "The stream result type for `raster_stream_websocket`.",
@@ -9548,6 +10062,59 @@
           },
           "timeInterval": {
             "$ref": "#/components/schemas/TimeInterval"
+          }
+        }
+      },
+      "RasterTypeConversion": {
+        "type": "object",
+        "title": "Raster Type Conversion",
+        "description": "The `RasterTypeConversion` operator changes the data type of raster pixels.\n\nApplying this conversion may cause precision loss.\nFor example, converting `F32` value `3.1` to `U8` results in `3`.\n\nIf a value is outside of the range of the target data type,\nit is clipped to the valid range of that type.\nFor example, converting `F32` value `300.0` to `U8` results in `255`.\n\n## Inputs\n\nThe `RasterTypeConversion` operator expects exactly one _raster_ input.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/RasterTypeConversionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "RasterTypeConversion"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "RasterTypeConversion",
+            "params": {
+              "outputDataType": "U16"
+            },
+            "sources": {
+              "raster": {
+                "type": "GdalSource",
+                "params": {
+                  "data": "example"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "RasterTypeConversionParameters": {
+        "type": "object",
+        "description": "Parameters for the `RasterTypeConversion` operator.",
+        "required": [
+          "outputDataType"
+        ],
+        "properties": {
+          "outputDataType": {
+            "$ref": "#/components/schemas/RasterDataType",
+            "description": "Output raster data type."
           }
         }
       },
@@ -9652,6 +10219,135 @@
           },
           "step": {
             "$ref": "#/components/schemas/TimeStep"
+          }
+        }
+      },
+      "RenameBands": {
+        "oneOf": [
+          {
+            "type": "object",
+            "required": [
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "default"
+                ]
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "values",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "suffix"
+                ]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          {
+            "type": "object",
+            "required": [
+              "values",
+              "type"
+            ],
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "rename"
+                ]
+              },
+              "values": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "Reprojection": {
+        "type": "object",
+        "title": "Reprojection",
+        "description": "The `Reprojection` operator reprojects data from one spatial reference system to another.\nIt accepts exactly one input which can either be a raster or a vector data stream.\nThe operator produces all data that, after reprojection, is contained in the query rectangle.\n\n## Data Type Specifics\n\nThe concrete behavior depends on the data type.\n\n### Vector Data\n\nThe operator reprojects all coordinates of the features individually.\nThe result contains all features that, after reprojection, are intersected by the query rectangle.\n\n### Raster Data\n\nTo create tiles in the target projection, the operator loads corresponding tiles in the source projection.\nFor each output pixel, the value of the nearest input pixel is used.\n\nIf parts of a tile are outside of the source extent after projection, the operator produces NO DATA values.\n\n## Inputs\n\nThe `Reprojection` operator expects exactly one _raster_ or _vector_ input.\n\n## Errors\n\nThe operator returns an error if the target projection is unknown or if input data cannot be reprojected.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/ReprojectionParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "Reprojection"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "Reprojection",
+            "params": {
+              "deriveOutSpec": "projectionBounds",
+              "targetSpatialReference": "EPSG:32632"
+            },
+            "sources": {
+              "source": {
+                "type": "MockPointSource",
+                "params": {
+                  "points": [
+                    {
+                      "x": 8.77069,
+                      "y": 50.80904
+                    }
+                  ],
+                  "spatialBounds": {
+                    "type": "none"
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "ReprojectionParameters": {
+        "type": "object",
+        "description": "Parameters for the `Reprojection` operator.",
+        "required": [
+          "targetSpatialReference"
+        ],
+        "properties": {
+          "deriveOutSpec": {
+            "$ref": "#/components/schemas/DeriveOutRasterSpecsSource",
+            "description": "Controls how raster output bounds are derived.\n\nThe default `projectionBounds` usually keeps a projection-aligned target grid,\nwhile `dataBounds` derives it directly from source data bounds."
+          },
+          "targetSpatialReference": {
+            "type": "string",
+            "description": "Target spatial reference system.",
+            "examples": [
+              "EPSG:32632"
+            ]
           }
         }
       },
@@ -10521,6 +11217,109 @@
           "mean"
         ]
       },
+      "TemporalRasterAggregation": {
+        "type": "object",
+        "title": "Temporal Raster Aggregation",
+        "description": "The `TemporalRasterAggregation` operator aggregates a raster time series into uniform time windows.\nThe output starts with the first window that contains the query start and contains all windows\nthat overlap the query interval.\n\nPixel values are computed by aggregating all input rasters that contribute to the current window.\n\n## Inputs\n\nThe `TemporalRasterAggregation` operator expects exactly one _raster_ input.\n\n## Errors\n\nIf the aggregation method is `first`, `last`, or `mean` and the input raster has no NO DATA value,\nan error is returned.",
+        "required": [
+          "type",
+          "params",
+          "sources"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/TemporalRasterAggregationParameters"
+          },
+          "sources": {
+            "$ref": "#/components/schemas/SingleRasterSource"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "TemporalRasterAggregation"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "TemporalRasterAggregation",
+            "params": {
+              "aggregation": {
+                "type": "mean",
+                "ignoreNoData": true
+              },
+              "window": {
+                "granularity": "months",
+                "step": 1
+              }
+            },
+            "sources": {
+              "raster": {
+                "type": "Expression",
+                "params": {
+                  "expression": "(A - B) / (A + B)",
+                  "outputType": "F32",
+                  "outputBand": {
+                    "name": "NDVI",
+                    "measurement": {
+                      "type": "unitless"
+                    }
+                  },
+                  "mapNoData": false
+                },
+                "sources": {
+                  "raster": {
+                    "type": "GdalSource",
+                    "params": {
+                      "data": "ndvi"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TemporalRasterAggregationParameters": {
+        "type": "object",
+        "description": "Parameters for the `TemporalRasterAggregation` operator.",
+        "required": [
+          "aggregation",
+          "window"
+        ],
+        "properties": {
+          "aggregation": {
+            "$ref": "#/components/schemas/Aggregation",
+            "description": "Aggregation method for values within each time window.\n\nEncountering NO DATA makes the aggregation result NO DATA unless\n`ignoreNoData` is `true` for the selected aggregation variant."
+          },
+          "outputType": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/RasterDataType",
+                "description": "Optional output raster data type."
+              }
+            ]
+          },
+          "window": {
+            "$ref": "#/components/schemas/TimeStep",
+            "description": "Window size and granularity for the output time series."
+          },
+          "windowReference": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TimeInstance",
+                "description": "Optional reference timestamp used as the anchor for window boundaries.\n\nIf omitted, windows are anchored at `1970-01-01T00:00:00Z`."
+              }
+            ]
+          }
+        }
+      },
       "TextSymbology": {
         "type": "object",
         "required": [
@@ -11367,6 +12166,9 @@
           },
           {
             "$ref": "#/components/schemas/RasterVectorJoin"
+          },
+          {
+            "$ref": "#/components/schemas/Reprojection"
           }
         ],
         "description": "An operator that produces vector data.",
@@ -11374,7 +12176,8 @@
           "propertyName": "type",
           "mapping": {
             "MockPointSource": "#/components/schemas/MockPointSource",
-            "RasterVectorJoin": "#/components/schemas/RasterVectorJoin"
+            "RasterVectorJoin": "#/components/schemas/RasterVectorJoin",
+            "Reprojection": "#/components/schemas/Reprojection"
           }
         }
       },

@@ -2808,6 +2808,7 @@ dependencies = [
  "sha2 0.10.9",
  "snafu",
  "stac",
+ "stac-extensions",
  "strum",
  "strum_macros",
  "tempfile",
@@ -6809,6 +6810,19 @@ checksum = "087057f442c3a980721f249f723db459460ce74221730c9b2115bd63957027ae"
 dependencies = [
  "quote",
  "syn",
+]
+
+[[package]]
+name = "stac-extensions"
+version = "0.1.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "875ee11e4364dff329ecd38615afeea641bca24e4993559f3ebce3814236c05c"
+dependencies = [
+ "geojson",
+ "indexmap 2.13.0",
+ "serde",
+ "serde_json",
+ "stac",
 ]
 
 [[package]]
