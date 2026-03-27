@@ -71,6 +71,22 @@ jobs:
         if: env.TAG_NAME == 'latest'
         run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
 
+      - name: Build with podman (extended)
+        run: |
+          podman build \
+            -f Dockerfile.extended \
+            --build-arg BASE_IMAGE=${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} \
+            --tag ${{env.CONTAINER_NAME}}:extended-${{env.TAG_NAME}} \
+            .
+        working-directory: container/${{env.CONTAINER_NAME}}
+
+      - name: Push image to quay.io (extended)
+        run: podman push ${{env.CONTAINER_NAME}}:extended-${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:extended-${{env.TAG_NAME}}
+
+      - name: Push latest with date (extended)
+        if: env.TAG_NAME == 'latest'
+        run: podman push ${{env.CONTAINER_NAME}}:extended-${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:extended-${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
+
   notify-slack-on-failure:
     name: Post to a Slack channel in case of failure
     needs: create-container
