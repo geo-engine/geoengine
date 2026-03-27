@@ -85,7 +85,7 @@ jobs:
       - name: Clippy
         run: just lint-clippy
       - name: SQLFluff
-        run: just lint sql
+        run: just lint-sql
 
   openapi:
     name: OpenAPI Validation

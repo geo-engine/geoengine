@@ -20,7 +20,7 @@ validate-openapi-spec:
 
 # Run lints.
 [group("lint")]
-lint: _clear lint-fmt lint-clippy lint-sql validate-openapi-spec
+lint: _clear lint-rustfmt lint-clippy lint-sql validate-openapi-spec
 
 _lint-clippy:
     cargo clippy --all-features --all-targets
@@ -31,7 +31,7 @@ lint-clippy: _clear _lint-clippy
 
 # Run rustfmt
 [group("lint")]
-lint-fmt: _clear
+lint-rustfmt: _clear
     cargo fmt --all -- --check
 
 # Run sqlfluff.
@@ -40,7 +40,7 @@ lint-sql: _clear
     pipx run sqlfluff==4.0.4 lint
 
 # Build in dev or release mode.
-[arg('mode', pattern='|release')]
+[arg('mode', pattern='|--release')]
 [group("build")]
 build mode="":
     cargo build --locked {{ mode }} --verbose
