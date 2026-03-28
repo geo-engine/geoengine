@@ -37,8 +37,8 @@ jobs:
         if: github.event_name == 'pull_request'
         uses: actions/download-artifact@v8
         with:
-          name: ${{ env.BENCH_FILE_PATH }}
-          path: ${{ env.BENCH_UPLOAD_NAME }}
+          name: ${{ env.BENCH_UPLOAD_NAME }}
+          path: ${{ env.BENCH_FILE_PATH }}
 
       - name: Compare benchmark result
         if: github.event_name == 'pull_request'
