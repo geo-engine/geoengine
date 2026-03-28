@@ -34,6 +34,7 @@ jobs:
         run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ${{ env.CARGO_BENCH_FILE_PATH }}
 
       - name: Download previous benchmark data
+        if: github.event_name == 'pull_request'
         uses: actions/download-artifact@v8
         with:
           name: ${{ env.BENCH_FILE_PATH }}
