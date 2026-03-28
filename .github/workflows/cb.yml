@@ -12,6 +12,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  BENCH_FILE_PATH: ./benchmark-data.json
+  BENCH_UPLOAD_NAME: benchmark-results
+  CARGO_BENCH_FILE_PATH: output.txt
 
 jobs:
   benchmarks:
@@ -28,14 +31,13 @@ jobs:
       - uses: actions/checkout@v6
 
       - name: Run benchmark
-        run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee output.txt
+        run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ${{ env.CARGO_BENCH_FILE_PATH }}
 
       - name: Download previous benchmark data
-        if: github.event_name == 'pull_request'
-        uses: actions/cache@v5
+        uses: actions/download-artifact@v8
         with:
-          path: ./cache
-          key: ${{ runner.os }}-benchmark
+          name: ${{ env.BENCH_FILE_PATH }}
+          path: ${{ env.BENCH_UPLOAD_NAME }}
 
       - name: Compare benchmark result
         if: github.event_name == 'pull_request'
@@ -43,8 +45,8 @@ jobs:
         with:
           name: Geo Engine Benchmark
           tool: 'cargo'
-          output-file-path: output.txt
-          external-data-json-path: ./cache/benchmark-data.json
+          output-file-path: ${{ env.CARGO_BENCH_FILE_PATH }}
+          external-data-json-path: ${{ env.BENCH_FILE_PATH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           # Show alert with commit comment on detecting possible performance regression
@@ -54,14 +56,26 @@ jobs:
           summary-always: true
           fail-on-alert: false
           save-data-file: false
+
       - name: Store benchmark result
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Geo Engine Benchmark
           tool: 'cargo'
-          output-file-path: output.txt
+          output-file-path: ${{ env.CARGO_BENCH_FILE_PATH }}
+          external-data-json-path: ${{ env.BENCH_FILE_PATH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           summary-always: true
           save-data-file: true
+          skip-fetch-gh-pages: true
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        with:
+          name: ${{ env.BENCH_UPLOAD_NAME }}
+          path: ${{ env.BENCH_FILE_PATH }}
+          if-no-files-found: warn
+          retention-days: 90
+          overwrite: true
