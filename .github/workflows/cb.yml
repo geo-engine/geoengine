@@ -50,7 +50,11 @@ jobs:
 
       - name: Download previous benchmark data
         run: |
+          # Add the workspace to safe.directory to bypass the ownership check
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
           mkdir -p ${{ env.BENCH_FILE_DIR }}
+          
           gh run download --name benchmark-results --dir ${{ env.BENCH_FILE_DIR }}
         env:
           GH_TOKEN: ${{ github.token }}
