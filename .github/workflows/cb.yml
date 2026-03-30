@@ -36,7 +36,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v19
         with:
           name: ${{ env.BENCH_UPLOAD_NAME }}
-          path: ${{ env.BENCH_FILE_DIR }}
+          path: ${{ runner.temp }}${{ env.BENCH_FILE_DIR }}
           if_no_artifact_found: warn
 
       - name: Run benchmark
@@ -49,7 +49,7 @@ jobs:
           name: Geo Engine Benchmark
           tool: 'cargo'
           output-file-path: ${{ env.CARGO_BENCH_FILE_PATH }}
-          external-data-json-path: ${{ env.BENCH_FILE_PATH }}
+          external-data-json-path: ${{ runner.temp }}${{ env.BENCH_FILE_PATH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           # Show alert with commit comment on detecting possible performance regression
@@ -67,7 +67,7 @@ jobs:
           name: Geo Engine Benchmark
           tool: 'cargo'
           output-file-path: ${{ env.CARGO_BENCH_FILE_PATH }}
-          external-data-json-path: ${{ env.BENCH_FILE_PATH }}
+          external-data-json-path: ${{ runner.temp }}${{ env.BENCH_FILE_PATH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           summary-always: true
@@ -78,7 +78,7 @@ jobs:
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         with:
           name: ${{ env.BENCH_UPLOAD_NAME }}
-          path: ${{ env.BENCH_FILE_PATH }}
+          path: ${{ runner.temp }}${{ env.BENCH_FILE_PATH }}
           if-no-files-found: warn
           retention-days: 90
           overwrite: true
