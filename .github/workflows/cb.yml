@@ -12,6 +12,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  BENCH_UPLOAD_NAME: benchmark-results
+  BENCH_FILE_NAME: benchmark-data.json
+  CARGO_BENCH_FILE_PATH: output.txt
 
 jobs:
   benchmarks:
@@ -25,14 +28,13 @@ jobs:
       actions: read # required for actions/download-artifact
       pull-requests: write # required for commenting on pull requests
 
-    env:
-      BENCH_UPLOAD_NAME: benchmark-results
-      BENCH_FILE_DIR: ${{ runner.temp }}/artifacts
-      BENCH_FILE_PATH: ${{ runner.temp }}/artifacts/benchmark-data.json
-      CARGO_BENCH_FILE_PATH: output.txt
-
     steps:
       - uses: actions/checkout@v6
+
+      - name: Define ENV variables
+        run: |
+          echo  "BENCH_FILE_DIR=${{ runner.temp }}/artifacts" >> $GITHUB_ENV
+          echo "BENCH_FILE_PATH=${{ runner.temp }}/artifacts/benchmark-data.json" >> $GITHUB_ENV
 
       - name: Install GitHub CLI # cf. <https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian>
         run: |
