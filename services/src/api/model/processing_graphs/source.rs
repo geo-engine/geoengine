@@ -10,6 +10,8 @@ use geoengine_operators::{
     },
     source::{
         GdalSource as OperatorsGdalSource, GdalSourceParameters as OperatorsGdalSourceParameters,
+        MultiBandGdalSource as OperatorsMultiBandGdalSource,
+        MultiBandGdalSourceParameters as OperatorsMultiBandGdalSourceParameters,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -56,6 +58,36 @@ impl TryFrom<GdalSource> for OperatorsGdalSource {
     fn try_from(value: GdalSource) -> Result<Self, Self::Error> {
         Ok(OperatorsGdalSource {
             params: OperatorsGdalSourceParameters {
+                data: serde_json::from_str::<NamedData>(&serde_json::to_string(
+                    &value.params.data,
+                )?)?,
+                overview_level: value.params.overview_level,
+            },
+        })
+    }
+}
+
+/// The [`MultiBandGdalSource`] is a source operator that reads multi-band raster data using GDAL.
+#[api_operator(
+    title = "Multi Band GDAL Source",
+    examples(json!({
+        "type": "MultiBandGdalSource",
+        "params": {
+            "data": "sentinel-2-l2a_EPSG32632_U16_10",
+            "overviewLevel": null
+        }
+    }))
+)]
+pub struct MultiBandGdalSource {
+    pub params: GdalSourceParameters,
+}
+
+impl TryFrom<MultiBandGdalSource> for OperatorsMultiBandGdalSource {
+    type Error = anyhow::Error;
+
+    fn try_from(value: MultiBandGdalSource) -> Result<Self, Self::Error> {
+        Ok(OperatorsMultiBandGdalSource {
+            params: OperatorsMultiBandGdalSourceParameters {
                 data: serde_json::from_str::<NamedData>(&serde_json::to_string(
                     &value.params.data,
                 )?)?,
@@ -143,6 +175,36 @@ mod tests {
                 overview_level: None,
             },
         }));
+
+        OperatorsTypedOperator::try_from(typed_operator).expect("it should convert");
+    }
+
+    #[test]
+    fn it_converts_into_multi_band_gdal_source() {
+        let api_operator = MultiBandGdalSource {
+            r#type: Default::default(),
+            params: GdalSourceParameters {
+                data: "example_dataset".to_string(),
+                overview_level: None,
+            },
+        };
+
+        let operators_operator: OperatorsMultiBandGdalSource =
+            api_operator.try_into().expect("it should convert");
+
+        assert_eq!(
+            operators_operator.params.data,
+            NamedData::with_system_name("example_dataset")
+        );
+
+        let typed_operator =
+            TypedOperator::Raster(RasterOperator::MultiBandGdalSource(MultiBandGdalSource {
+                r#type: Default::default(),
+                params: GdalSourceParameters {
+                    data: "example_dataset".to_string(),
+                    overview_level: None,
+                },
+            }));
 
         OperatorsTypedOperator::try_from(typed_operator).expect("it should convert");
     }

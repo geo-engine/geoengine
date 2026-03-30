@@ -7,7 +7,6 @@ use utoipa::ToSchema;
 
 /// A raster data type.
 #[derive(Clone, Debug, PartialEq, Eq, Deserialize, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
 pub enum RasterDataType {
     U8,
     U16,

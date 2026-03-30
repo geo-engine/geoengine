@@ -184,16 +184,14 @@ impl GdalRasterLoader {
         );
         let tile_files = loading_info.tile_files(time, tile_information, band);
 
-        for tile_file in &tile_files {
-            trace!(
-                "tile_file: {:?}, {:?}",
-                tile_file.file_path,
-                tile_file
-                    .spatial_grid_definition()
-                    .geo_transform
-                    .origin_coordinate
-            );
-        }
+        debug!(
+            "tile_files: {}",
+            tile_files
+                .iter()
+                .map(|tf| tf.file_path.display().to_string())
+                .collect::<Vec<_>>()
+                .join(", ")
+        );
 
         let mut tile_raster: GridOrEmpty<GridBoundingBox2D, T> =
             GridOrEmpty::from(EmptyGrid::new(tile_information.global_pixel_bounds()));
@@ -280,7 +278,7 @@ impl GdalRasterLoader {
     ) -> Result<Option<GridAndProperties<T>>> {
         debug!(
             "Loading raster tile from file: {:?}",
-            dataset_params.file_path.file_name().unwrap_or_default()
+            dataset_params.file_path
         );
         let gdal_read_advise: Option<GdalReadAdvise> = reader_mode.tiling_to_dataset_read_advise(
             &dataset_params.spatial_grid_definition(),
@@ -902,12 +900,12 @@ where
     let dataset_mask_flags = rasterband.mask_flags()?;
 
     if dataset_mask_flags.is_all_valid() {
-        debug!("all pixels are valid --> skip no-data and mask handling.");
+        // debug!("all pixels are valid --> skip no-data and mask handling.");
         return Ok(MaskedGrid::new_with_data(data_grid).into());
     }
 
     if dataset_mask_flags.is_nodata() {
-        debug!("raster uses a no-data value --> use no-data handling.");
+        // debug!("raster uses a no-data value --> use no-data handling.");
         let no_data_value = dataset_params
             .no_data_value
             .or_else(|| rasterband.no_data_value())
@@ -918,21 +916,26 @@ where
     }
 
     if dataset_mask_flags.is_alpha() {
-        debug!("raster uses alpha band to mask pixels.");
+        // debug!("raster uses alpha band to mask pixels.");
         if !dataset_params.allow_alphaband_as_mask {
             return Err(Error::AlphaBandAsMaskNotAllowed);
         }
     }
 
-    debug!("use mask based no-data handling.");
+    // debug!("use mask based no-data handling.");
 
     let mask_band = rasterband.open_mask_band()?;
+
+    let start = std::time::Instant::now();
     let mask_buffer = mask_band.read_as::<u8>(
         read_window.gdal_window_start(), // pixelspace origin
         read_window.gdal_window_size(),  // pixelspace size
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
+
+    debug!("read mask band in {:?} s", start.elapsed().as_secs_f64());
+
     let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
     let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);
 
@@ -992,10 +995,10 @@ fn properties_from_gdal_metadata<'a, I, M>(
                 RasterPropertiesEntryType::String => RasterPropertiesEntry::String(d),
             };
 
-            debug!(
-                "gdal properties key \"{:?}\" => target key \"{:?}\". Value: {:?} ",
-                &m.source_key, &m.target_key, &entry
-            );
+            // debug!(
+            //     "gdal properties key \"{:?}\" => target key \"{:?}\". Value: {:?} ",
+            //     &m.source_key, &m.target_key, &entry
+            // );
 
             properties.insert_property(m.target_key.clone(), entry);
         }
