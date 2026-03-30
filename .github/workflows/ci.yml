@@ -33,8 +33,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "cargo"
-          shared-key: ""
-          key: ""
+          shared-key: "ci"
+          key: "k"
           add-job-id-key: "false"
       - name: Testsuite
         uses: ./.github/actions/test
@@ -65,8 +65,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "cargo"
-          shared-key: ""
-          key: ""
+          shared-key: "ci"
+          key: "k"
           add-job-id-key: "false"
       - name: Rustfmt
         run: cargo fmt --all -- --check
@@ -110,8 +110,8 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "cargo"
-          shared-key: ""
-          key: ""
+          shared-key: "ci"
+          key: "k"
           add-job-id-key: "false"
       - name: Build
         run: cargo build --locked ${{ matrix.build }} --verbose
