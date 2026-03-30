@@ -25,6 +25,7 @@ jobs:
 
     permissions:
       contents: read # required for actions/checkout
+      actions: read # required for actions/download-artifact
       pull-requests: write # required for commenting on pull requests
 
     steps:
@@ -32,10 +33,9 @@ jobs:
 
       - name: Download previous benchmark data
         if: github.event_name == 'pull_request'
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ env.BENCH_UPLOAD_NAME }}
-          path: ${{ env.BENCH_FILE_PATH }}
+        run: gh run download --name ${{ env.BENCH_UPLOAD_NAME }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Run benchmark
         run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ${{ env.CARGO_BENCH_FILE_PATH }}
