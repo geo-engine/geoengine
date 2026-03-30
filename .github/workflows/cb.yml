@@ -57,7 +57,7 @@ jobs:
 
           gh run download --name benchmark-results --dir ${{ env.ARTIFACT_FILE_DIR }}
 
-          mv "${{ env.ARTIFACT_FILE_PATH }}" "${{ env.ARTIFACT_FILE_PATH }}" || echo "No previous benchmark data found. This may be the first run or the artifact may not have been uploaded correctly."
+          mv "${{ env.ARTIFACT_FILE_PATH }}" "${{ env.BENCH_FILE_PATH }}" || echo "No previous benchmark data found. This may be the first run or the artifact may not have been uploaded correctly."
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_FILE_DIR: ${{ runner.temp }}/artifacts
