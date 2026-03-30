@@ -61,7 +61,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           ARTIFACT_FILE_DIR: ${{ runner.temp }}/artifacts
-          ARTIFACT_FILE_PATH: ${{ runner.temp }}/artifacts/benchmark-results.json
+          ARTIFACT_FILE_PATH: ${{ runner.temp }}/artifacts/benchmark-data.json
 
       - name: Check that benchmark data is available
         if: github.event_name == 'pull_request'
