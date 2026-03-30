@@ -52,6 +52,9 @@ jobs:
         run: |
           mkdir -p ${{ env.BENCH_FILE_DIR }}
           gh run download --name benchmark-results --dir ${{ env.BENCH_FILE_DIR }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
 
       - name: Run benchmark
         run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ${{ env.CARGO_BENCH_FILE_PATH }}
