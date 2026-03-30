@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Ensure pipx binaries are on PATH
+export PATH="/root/.local/bin:$PATH"
+
 function print_headline() {
     local BOLD_WHITE_ON_CYAN="\e[1;46;37m"
     local BOLD_CYAN="\e[1;49;36m"
