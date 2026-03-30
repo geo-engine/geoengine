@@ -33,9 +33,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "cargo"
-          shared-key: "ci"
-          key: "k"
+          shared-key: ""
+          key: ""
           add-job-id-key: "false"
+          add-rust-environment-hash-key: "false"
       - name: Testsuite
         uses: ./.github/actions/test
       - name: Adjust lcov.info
@@ -65,9 +66,10 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "cargo"
-          shared-key: "ci"
-          key: "k"
+          shared-key: ""
+          key: ""
           add-job-id-key: "false"
+          add-rust-environment-hash-key: "false"
       - name: Rustfmt
         run: cargo fmt --all -- --check
       - name: Clippy
@@ -110,8 +112,9 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "cargo"
-          shared-key: "ci"
-          key: "k"
+          shared-key: ""
+          key: ""
           add-job-id-key: "false"
+          add-rust-environment-hash-key: "false"
       - name: Build
         run: cargo build --locked ${{ matrix.build }} --verbose
