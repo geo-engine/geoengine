@@ -13,7 +13,7 @@ on:
 env:
   CARGO_TERM_COLOR: always
   BENCH_UPLOAD_NAME: benchmark-results
-  BENCH_FILE_NAME: benchmark-data.json
+  BENCH_FILE_PATH: ./benchmark-data.json
   CARGO_BENCH_FILE_PATH: output.txt
 
 jobs:
@@ -30,11 +30,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-
-      - name: Define ENV variables
-        run: |
-          echo  "BENCH_FILE_DIR=${{ runner.temp }}/artifacts" >> $GITHUB_ENV
-          echo "BENCH_FILE_PATH=${{ runner.temp }}/artifacts/benchmark-data.json" >> $GITHUB_ENV
 
       - name: Install GitHub CLI # cf. <https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian>
         run: |
@@ -53,16 +48,19 @@ jobs:
           # Add the workspace to safe.directory to bypass the ownership check
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
-          mkdir -p ${{ env.BENCH_FILE_DIR }}
+          mkdir -p ${{ env.ARTIFACT_FILE_DIR }}
 
-          gh run download --name benchmark-results --dir ${{ env.BENCH_FILE_DIR }}
+          gh run download --name benchmark-results --dir ${{ env.ARTIFACT_FILE_DIR }}
+
+          mv "${{ env.ARTIFACT_FILE_PATH }}" "${{ env.BENCH_FILE_PATH }}" || echo "No previous benchmark data found. This may be the first run or the artifact may not have been uploaded correctly."
         env:
           GH_TOKEN: ${{ github.token }}
+          ARTIFACT_FILE_DIR: ${{ runner.temp }}/artifacts
+          ARTIFACT_FILE_PATH: ${{ runner.temp }}/artifacts/benchmark-data.json
 
       - name: Check that benchmark data is available
         if: github.event_name == 'pull_request'
         run: |
-          ls -l "${{ env.BENCH_FILE_DIR }}"
           if [ ! -f "${{ env.BENCH_FILE_PATH }}" ]; then
             echo "No previous benchmark data found at ${{ env.BENCH_FILE_PATH }}. Please ensure that a benchmark run has been completed on the main branch and that the results have been uploaded as an artifact."
             exit 1
