@@ -54,11 +54,19 @@ jobs:
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
 
           mkdir -p ${{ env.BENCH_FILE_DIR }}
-          
+
           gh run download --name benchmark-results --dir ${{ env.BENCH_FILE_DIR }}
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Check that benchmark data is available
+        if: github.event_name == 'pull_request'
+        run: |
+          ls -l "${{ env.BENCH_FILE_DIR }}"
+          if [ ! -f "${{ env.BENCH_FILE_PATH }}" ]; then
+            echo "No previous benchmark data found at ${{ env.BENCH_FILE_PATH }}. Please ensure that a benchmark run has been completed on the main branch and that the results have been uploaded as an artifact."
+            exit 1
+          fi
 
       - name: Run benchmark
         run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ${{ env.CARGO_BENCH_FILE_PATH }}
