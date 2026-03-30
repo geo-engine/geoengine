@@ -39,7 +39,6 @@ jobs:
         with:
           name: ${{ env.BENCH_UPLOAD_NAME }}
           path: ${{ env.BENCH_FILE_PATH }}
-          github-token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Compare benchmark result
         if: github.event_name == 'pull_request'
