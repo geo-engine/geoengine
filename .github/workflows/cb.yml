@@ -12,7 +12,8 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
-  BENCH_FILE_PATH: ./benchmark-data.json
+  BENCH_FILE_DIR: /artifacts
+  BENCH_FILE_PATH: /artifacts/benchmark-data.json
   BENCH_UPLOAD_NAME: benchmark-results
   CARGO_BENCH_FILE_PATH: output.txt
 
@@ -35,6 +36,7 @@ jobs:
         uses: dawidd6/action-download-artifact@v19
         with:
           name: ${{ env.BENCH_UPLOAD_NAME }}
+          path: ${{ env.BENCH_FILE_DIR }}
           if_no_artifact_found: warn
 
       - name: Run benchmark
