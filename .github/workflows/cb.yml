@@ -37,7 +37,7 @@ jobs:
         with:
           name: ${{ env.BENCH_UPLOAD_NAME }}
           path: ${{ runner.temp }}${{ env.BENCH_FILE_DIR }}
-          if_no_artifact_found: warn
+          if_no_artifact_found: fail
 
       - name: Run benchmark
         run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ${{ env.CARGO_BENCH_FILE_PATH }}
