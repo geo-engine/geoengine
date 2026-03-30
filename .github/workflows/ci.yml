@@ -29,19 +29,12 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
-      # TODO: Get Cache back
-      # - name: setup rust build cache
-      #   uses: Swatinem/rust-cache@v2
-      #   with:
-      #     # An explicit cache key that is used instead of the automatic `job`-based
-      #     # cache key and is thus stable across jobs.
-      #     # Default: empty
-      #     shared-key: ""
-
-      #     # An additional cache key that is added alongside the automatic `job`-based
-      #     # cache key and can be used to further differentiate jobs.
-      #     # Default: empty
-      #     key: ci_test_
+      - name: setup rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "cargo"
+          shared-key: ""
+          key: ""
       - name: Testsuite
         uses: ./.github/actions/test
       - name: Adjust lcov.info
@@ -70,15 +63,9 @@ jobs:
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:
-          # An explicit cache key that is used instead of the automatic `job`-based
-          # cache key and is thus stable across jobs.
-          # Default: empty
+          prefix-key: "cargo"
           shared-key: ""
-
-          # An additional cache key that is added alongside the automatic `job`-based
-          # cache key and can be used to further differentiate jobs.
-          # Default: empty
-          key: ci_test_
+          key: ""
       - name: Rustfmt
         run: cargo fmt --all -- --check
       - name: Clippy
@@ -120,14 +107,8 @@ jobs:
       - name: setup rust build cache
         uses: Swatinem/rust-cache@v2
         with:
-          # An explicit cache key that is used instead of the automatic `job`-based
-          # cache key and is thus stable across jobs.
-          # Default: empty
+          prefix-key: "cargo"
           shared-key: ""
-
-          # An additional cache key that is added alongside the automatic `job`-based
-          # cache key and can be used to further differentiate jobs.
-          # Default: empty
-          key: ci_test_${{ matrix.build }}
+          key: ""
       - name: Build
         run: cargo build --locked ${{ matrix.build }} --verbose
