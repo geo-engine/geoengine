@@ -11,11 +11,11 @@ function print_headline() {
 }
 
 print_headline "Install cargo-llvm-cov"
-just install
+just backend install
 
 print_headline "Run Tests & Generate Code Coverage"
-just test-coverage || exit 1
+just backend test-coverage || exit 1
 
 print_headline "Run Doctests"
 # cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
-just test-doc || exit 1
+just backend test-doc || exit 1

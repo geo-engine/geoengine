@@ -81,11 +81,11 @@ jobs:
           # Default: empty
           key: ci_test_
       - name: Rustfmt
-        run: just lint-rustfmt
+        run: just backend lint-rustfmt
       - name: Clippy
-        run: just lint-clippy
+        run: just backend lint-clippy
       - name: SQLFluff
-        run: just lint-sql
+        run: just backend lint-sql
 
   openapi:
     name: OpenAPI Validation
@@ -133,4 +133,4 @@ jobs:
           # Default: empty
           key: ci_test_${{ matrix.build }}
       - name: Build
-        run: just build "${{ matrix.build }}"
+        run: just backend build "${{ matrix.build }}"
