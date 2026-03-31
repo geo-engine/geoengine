@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Ensure pipx binaries are on PATH
+export PATH="/root/.local/bin:$PATH"
+
 function print_headline() {
     local BOLD_WHITE_ON_CYAN="\e[1;46;37m"
     local BOLD_CYAN="\e[1;49;36m"
@@ -8,18 +11,11 @@ function print_headline() {
 }
 
 print_headline "Install cargo-llvm-cov"
-cargo install --locked cargo-llvm-cov
+just install
 
 print_headline "Run Tests & Generate Code Coverage"
-service postgresql start
-cargo llvm-cov \
-    --locked \
-    --all-features \
-    --profile ci \
-    --lcov \
-    --output-path lcov.info \
-    || exit 1
+just test-coverage || exit 1
 
 print_headline "Run Doctests"
 # cf. https://github.com/taiki-e/cargo-llvm-cov/issues/2
-cargo test --doc --all-features --profile ci --locked || exit 1
+just test-doc || exit 1

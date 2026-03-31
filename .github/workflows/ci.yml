@@ -64,6 +64,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
@@ -80,11 +81,11 @@ jobs:
           # Default: empty
           key: ci_test_
       - name: Rustfmt
-        run: cargo fmt --all -- --check
+        run: just lint-rustfmt
       - name: Clippy
-        run: cargo clippy --all-targets --locked -- -D warnings
+        run: just lint-clippy
       - name: SQLFluff
-        run: pipx run sqlfluff==4.0.4 lint
+        run: just lint-sql
 
   openapi:
     name: OpenAPI Validation
@@ -97,8 +98,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
       - name: Validate OpenAPI spec
-        run: npx @openapitools/openapi-generator-cli validate -i openapi.json
+        run: just validate-openapi-spec
 
   build:
     runs-on: ubuntu-24.04
@@ -114,6 +116,7 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
@@ -130,4 +133,4 @@ jobs:
           # Default: empty
           key: ci_test_${{ matrix.build }}
       - name: Build
-        run: cargo build --locked ${{ matrix.build }} --verbose
+        run: just build "${{ matrix.build }}"
