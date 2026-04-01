@@ -46,9 +46,12 @@ jobs:
         run: |
           echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
 
+      - name: Set DATE_TAG
+        run: echo "DATE_TAG=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+
       - name: Set TAG_NAME to date for scheduled runs
         if: github.event_name == 'schedule'
-        run: echo "TAG_NAME=$(date +'%Y-%m-%d')" >> $GITHUB_ENV
+        run: echo "TAG_NAME=$DATE_TAG" >> $GITHUB_ENV
 
       - name: Checkout container files
         uses: actions/checkout@v4
@@ -73,7 +76,7 @@ jobs:
 
       - name: Push latest with date
         if: env.TAG_NAME == 'latest'
-        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:$(date +'%Y-%m-%d')
+        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.DATE_TAG}}
 
       - name: Build with podman (extended)
         run: |
@@ -89,7 +92,7 @@ jobs:
 
       - name: Push latest with date (extended)
         if: env.TAG_NAME == 'latest'
-        run: podman push ${{env.CONTAINER_NAME}}:extended-${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:extended-$(date +'%Y-%m-%d')
+        run: podman push ${{env.CONTAINER_NAME}}:extended-${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:extended-${{env.DATE_TAG}}
 
   notify-slack-on-failure:
     name: Post to a Slack channel in case of failure
