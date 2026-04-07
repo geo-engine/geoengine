@@ -12,6 +12,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  BENCH_UPLOAD_NAME: benchmark-results
+  BENCH_FILE_PATH: ./benchmark-data.json
+  CARGO_BENCH_FILE_PATH: output.txt
 
 jobs:
   benchmarks:
@@ -22,6 +25,7 @@ jobs:
 
     permissions:
       contents: read # required for actions/checkout
+      actions: read # required for actions/download-artifact
       pull-requests: write # required for commenting on pull requests
 
     defaults:
@@ -31,15 +35,43 @@ jobs:
     steps:
       - uses: actions/checkout@v6
 
-      - name: Run benchmark
-        run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee output.txt
+      - name: Install GitHub CLI # cf. <https://github.com/cli/cli/blob/trunk/docs/install_linux.md#debian>
+        run: |
+          (type -p wget >/dev/null || (sudo apt update && sudo apt install wget -y)) \
+          && sudo mkdir -p -m 755 /etc/apt/keyrings \
+          && out=$(mktemp) && wget -nv -O$out https://cli.github.com/packages/githubcli-archive-keyring.gpg \
+          && cat $out | sudo tee /etc/apt/keyrings/githubcli-archive-keyring.gpg > /dev/null \
+          && sudo chmod go+r /etc/apt/keyrings/githubcli-archive-keyring.gpg \
+          && sudo mkdir -p -m 755 /etc/apt/sources.list.d \
+          && echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" | sudo tee /etc/apt/sources.list.d/github-cli.list > /dev/null \
+          && sudo apt update \
+          && sudo apt install gh -y
 
       - name: Download previous benchmark data
+        run: |
+          # Add the workspace to safe.directory to bypass the ownership check
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          mkdir -p ${{ env.ARTIFACT_FILE_DIR }}
+
+          gh run download --name benchmark-results --dir ${{ env.ARTIFACT_FILE_DIR }}
+
+          mv "${{ env.ARTIFACT_FILE_PATH }}" "${{ env.BENCH_FILE_PATH }}" || echo "No previous benchmark data found. This may be the first run or the artifact may not have been uploaded correctly."
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_FILE_DIR: ${{ runner.temp }}/artifacts
+          ARTIFACT_FILE_PATH: ${{ runner.temp }}/artifacts/benchmark-data.json
+
+      - name: Check that benchmark data is available
         if: github.event_name == 'pull_request'
-        uses: actions/cache@v5
-        with:
-          path: ./cache
-          key: ${{ runner.os }}-benchmark
+        run: |
+          if [ ! -f "${{ env.BENCH_FILE_PATH }}" ]; then
+            echo "No previous benchmark data found at ${{ env.BENCH_FILE_PATH }}. Please ensure that a benchmark run has been completed on the main branch and that the results have been uploaded as an artifact."
+            exit 1
+          fi
+
+      - name: Run benchmark
+        run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ${{ env.CARGO_BENCH_FILE_PATH }}
 
       - name: Compare benchmark result
         if: github.event_name == 'pull_request'
@@ -47,8 +79,8 @@ jobs:
         with:
           name: Geo Engine Benchmark
           tool: 'cargo'
-          output-file-path: output.txt
-          external-data-json-path: ./cache/benchmark-data.json
+          output-file-path: ${{ env.CARGO_BENCH_FILE_PATH }}
+          external-data-json-path: ${{ env.BENCH_FILE_PATH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           # Show alert with commit comment on detecting possible performance regression
@@ -58,14 +90,26 @@ jobs:
           summary-always: true
           fail-on-alert: false
           save-data-file: false
+
       - name: Store benchmark result
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Geo Engine Benchmark
           tool: 'cargo'
-          output-file-path: output.txt
+          output-file-path: ${{ env.CARGO_BENCH_FILE_PATH }}
+          external-data-json-path: ${{ env.BENCH_FILE_PATH }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
           auto-push: false
           summary-always: true
           save-data-file: true
+          skip-fetch-gh-pages: true
+
+      - uses: actions/upload-artifact@v4
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        with:
+          name: ${{ env.BENCH_UPLOAD_NAME }}
+          path: ${{ env.BENCH_FILE_PATH }}
+          if-no-files-found: warn
+          retention-days: 90
+          overwrite: true
