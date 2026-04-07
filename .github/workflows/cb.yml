@@ -24,6 +24,10 @@ jobs:
       contents: read # required for actions/checkout
       pull-requests: write # required for commenting on pull requests
 
+    defaults:
+      run:
+        working-directory: geoengine
+
     steps:
       - uses: actions/checkout@v6
 
