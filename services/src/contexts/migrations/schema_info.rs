@@ -520,6 +520,7 @@ async fn assert_schema_eq<'c>(
         let pool = get_pool().await;
         let mut connection = pool.get_owned().await.unwrap();
         connection = f1(connection).await;
+        connection.execute("DISCARD PLANS", &[]).await.unwrap();
         get_schema(
             connection
                 .build_transaction()
@@ -535,6 +536,7 @@ async fn assert_schema_eq<'c>(
         let pool = get_pool().await;
         let mut connection = pool.get_owned().await.unwrap();
         connection = f2(connection).await;
+        connection.execute("DISCARD PLANS", &[]).await.unwrap();
         get_schema(
             connection
                 .build_transaction()
