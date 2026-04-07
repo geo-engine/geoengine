@@ -24,4 +24,4 @@ services/test_upload/
 geo_engine_*.log
 geo_engine.*.log
 **/**.aux.xml
-# test_data/netcdf4d/overviews/*
+test_data/netcdf4d/overviews/*
