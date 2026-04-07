@@ -71,7 +71,7 @@ jobs:
           fi
 
       - name: Run benchmark
-        run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ${{ env.CARGO_BENCH_FILE_PATH }}
+        run: cargo bench --profile bench-ci --bench ci_operators -- --output-format bencher | tee ../${{ env.CARGO_BENCH_FILE_PATH }}
 
       - name: Compare benchmark result
         if: github.event_name == 'pull_request'
