@@ -46,12 +46,12 @@ jobs:
         uses: ./.github/actions/test
       - name: Adjust lcov.info
         # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
-        run: sed -i 's|/github/workspace/||g' lcov.info
+        run: sed -i 's|/github/workspace/||g' geoengine/lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          file: lcov.info
+          file: geoengine/lcov.info
           fail-on-error: false # do not fail the workflow if the upload fails
 
   lint:
