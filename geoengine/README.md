@@ -1,7 +1,7 @@
 # Geo Engine — Backend
 
-This directory contains the Geo Engine backend service: a Rust-based API server
-that implements the project's geospatial data APIs and core processing logic.
+This directory contains the Geo Engine backend service:
+a Rust-based API server that implements the project's geospatial data APIs, data management, and core processing logic.
 
 ## Quick Overview
 
@@ -16,13 +16,15 @@ that implements the project's geospatial data APIs and core processing logic.
 - Proj (>= 9.4) and its development headers (`libproj-dev` on Debian/Ubuntu)
 - A PostgreSQL database (if using the PostGIS extension for geospatial storage)
 
+You may want to use our [Development Container](https://quay.io/repository/geoengine/devcontainer) for a pre-configured environment with all dependencies.
+
 ## Build & Run (local)
 
 `just backend run` — builds and runs the backend server with development configuration.
 See `just backend build` for just building without running.
 
-Adjust `Settings.toml` or environment variables (database connection, bind address, API keys)
-as required by your environment.
+Create `Settings.toml` or environment variables (database connection, bind address, API keys) as required by your environment.
+Cf. [Settings-default.toml](Settings-default.toml) for all available configuration options.
 
 ## Tests & Formatting
 
