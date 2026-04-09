@@ -90,11 +90,13 @@ jobs:
           podman build \
             --tag ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} \
             --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release" \
+            --build-arg GEOENGINE_CODE_PATH="/geoengine/geoengine" \
+            --build-arg GEOENGINE_GIT_PATH="/geoengine/.git" \
             -f container/${{env.CONTAINER_NAME}}/Dockerfile \
             .
 
       - name: Test the container
-        working-directory: geoengine
+        working-directory: geoengine/geoengine
         run: |
           CONTAINER_ID=${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
           POD_ID=$(podman run --rm -d --network=host $CONTAINER_ID)
