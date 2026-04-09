@@ -159,9 +159,9 @@ pub struct CreateDataset {
 #[derive(Deserialize, Serialize, Debug, Clone, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub enum DataPath {
-    #[schema(title = "Volume")]
+    #[schema(title = "DataPathVolume")]
     Volume(VolumeName),
-    #[schema(title = "Upload")]
+    #[schema(title = "DataPathUpload")]
     Upload(UploadId),
 }
 

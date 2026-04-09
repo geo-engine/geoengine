@@ -1059,13 +1059,13 @@ impl From<OgrSourceDurationSpec> for geoengine_operators::source::OgrSourceDurat
 
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, ToSchema)]
 pub enum TypedGeometry {
-    #[schema(title = "NoGeometry")]
+    #[schema(title = "TypedGeometryNoGeometry")]
     Data(NoGeometry),
-    #[schema(title = "MultiPoint")]
+    #[schema(title = "TypedGeometryMultiPoint")]
     MultiPoint(MultiPoint),
-    #[schema(title = "MultiLineString")]
+    #[schema(title = "TypedGeometryMultiLineString")]
     MultiLineString(MultiLineString),
-    #[schema(title = "MultiPolygon")]
+    #[schema(title = "TypedGeometryMultiPolygon")]
     MultiPolygon(MultiPolygon),
 }
 

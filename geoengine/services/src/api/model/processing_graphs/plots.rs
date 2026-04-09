@@ -1,8 +1,5 @@
-use crate::{
-    api::model::processing_graphs::source_parameters::{
-        MultipleRasterOrSingleVectorSource, SingleRasterOrVectorSource,
-    },
-    string_token,
+use crate::api::model::processing_graphs::source_parameters::{
+    MultipleRasterOrSingleVectorSource, SingleVectorOrRasterSource,
 };
 use geoengine_macros::{api_operator, type_tag};
 use ordered_float::NotNan;
@@ -50,7 +47,7 @@ use utoipa::ToSchema;
 })))]
 pub struct Histogram {
     pub params: HistogramParameters,
-    pub sources: SingleRasterOrVectorSource,
+    pub sources: SingleVectorOrRasterSource,
 }
 
 /// The parameter spec for `Histogram`
@@ -59,8 +56,9 @@ pub struct Histogram {
 pub struct HistogramParameters {
     /// Name of the (numeric) vector attribute or raster band to compute the histogram on.
     #[schema(examples("temperature"))]
-    pub attribute_name: String,
-    /// If `data`, it computes the bounds of the underlying data. If `values`, one can specify custom bounds.
+    pub column_name: String,
+    /// If `data`, it computes the bounds of the underlying data.
+    /// If `{ "min": ..., "max": ... }`, one can specify custom bounds.
     #[schema(examples(json!({ "min": 0.0, "max": 20.0 }), "data"))]
     pub bounds: HistogramBounds,
     /// The number of buckets. The value can be specified or calculated.
@@ -72,20 +70,26 @@ pub struct HistogramParameters {
     pub interactive: bool,
 }
 
-string_token!(Data, "data");
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Default, Serialize, Deserialize, ToSchema)]
+pub enum Data {
+    #[default]
+    #[serde(rename = "data")]
+    Data,
+}
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase")]
+#[serde(untagged)]
 pub enum HistogramBounds {
-    #[schema(title = "Data")]
     Data(Data),
-    #[schema(title = "Values")]
-    Values {
-        #[schema(value_type = f64)]
-        min: NotNan<f64>,
-        #[schema(value_type = f64)]
-        max: NotNan<f64>,
-    },
+    Values(HistogramBoundsValues),
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+pub struct HistogramBoundsValues {
+    #[schema(value_type = f64)]
+    pub min: NotNan<f64>,
+    #[schema(value_type = f64)]
+    pub max: NotNan<f64>,
 }
 
 fn default_max_number_of_buckets() -> u8 {
@@ -93,29 +97,38 @@ fn default_max_number_of_buckets() -> u8 {
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
+#[serde(rename_all = "camelCase", untagged)]
+#[schema(discriminator = "type")]
 pub enum HistogramBuckets {
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "Number")]
-    Number { value: u8 },
-    #[serde(rename_all = "camelCase")]
-    #[schema(title = "SquareRootChoiceRule")]
-    SquareRootChoiceRule {
-        #[serde(default = "default_max_number_of_buckets")]
-        max_number_of_buckets: u8,
-    },
+    Number(HistogramBucketsNumber),
+    SquareRootChoiceRule(HistogramBucketsSquareRootChoiceRule),
+}
+
+#[type_tag(value = "number")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HistogramBucketsNumber {
+    pub value: u8,
+}
+
+#[type_tag(value = "squareRootChoiceRule")]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct HistogramBucketsSquareRootChoiceRule {
+    #[serde(default = "default_max_number_of_buckets")]
+    pub max_number_of_buckets: u8,
 }
 
 impl TryFrom<Histogram> for geoengine_operators::plot::Histogram {
     type Error = anyhow::Error;
     fn try_from(value: Histogram) -> Result<Self, Self::Error> {
         let params = geoengine_operators::plot::HistogramParams {
-            attribute_name: value.params.attribute_name,
+            attribute_name: value.params.column_name,
             bounds: match value.params.bounds {
                 HistogramBounds::Data(_) => {
                     geoengine_operators::plot::HistogramBounds::Data(Default::default())
                 }
-                HistogramBounds::Values { min, max } => {
+                HistogramBounds::Values(HistogramBoundsValues { min, max }) => {
                     geoengine_operators::plot::HistogramBounds::Values {
                         min: *min,
                         max: *max,
@@ -123,12 +136,13 @@ impl TryFrom<Histogram> for geoengine_operators::plot::Histogram {
                 }
             },
             buckets: match value.params.buckets {
-                HistogramBuckets::Number { value } => {
+                HistogramBuckets::Number(HistogramBucketsNumber { r#type: _, value }) => {
                     geoengine_operators::plot::HistogramBuckets::Number { value }
                 }
-                HistogramBuckets::SquareRootChoiceRule {
+                HistogramBuckets::SquareRootChoiceRule(HistogramBucketsSquareRootChoiceRule {
+                    r#type: _,
                     max_number_of_buckets,
-                } => geoengine_operators::plot::HistogramBuckets::SquareRootChoiceRule {
+                }) => geoengine_operators::plot::HistogramBuckets::SquareRootChoiceRule {
                     max_number_of_buckets,
                 },
             },
@@ -259,16 +273,304 @@ impl TryFrom<Statistics> for geoengine_operators::plot::Statistics {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::api::model::processing_graphs::parameters::SpatialBoundsDerive;
-    use crate::api::model::processing_graphs::source::{
-        MockPointSource, MockPointSourceParameters,
+    use crate::api::model::processing_graphs::{
+        GdalSource, GdalSourceParameters, PlotOperator, RasterOperator, VectorOperator,
+        source::{MockPointSource, MockPointSourceParameters, OgrSource, OgrSourceParameters},
+        source_parameters::{
+            MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
+            SingleRasterOrVectorOperator, SingleVectorOrRasterSource,
+        },
     };
-    use crate::api::model::processing_graphs::source_parameters::{
-        MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
-        SingleRasterOrVectorOperator, SingleRasterOrVectorSource,
+    use crate::api::model::{
+        datatypes::Coordinate2D, processing_graphs::parameters::SpatialBoundsDerive,
     };
-    use crate::api::model::{datatypes::Coordinate2D, processing_graphs::VectorOperator};
+    use geoengine_operators::engine::PlotOperator as OperatorsPlotOperatorTrait;
     use ordered_float::NotNan;
+
+    // ---------------------------------------------------------------------------
+    // Histogram
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn it_parses_histogram_api_example() {
+        let example = serde_json::json!({
+            "type": "Histogram",
+            "params": {
+                "columnName": "foobar",
+                "bounds": {
+                    "min": 5.0,
+                    "max": 10.0
+                },
+                "buckets": {
+                    "type": "number",
+                    "value": 15
+                },
+                "interactive": false
+            },
+            "sources": {
+                "vector": {
+                    "type": "OgrSource",
+                    "params": {
+                        "data": "ndvi"
+                    }
+                }
+            }
+        });
+
+        let parsed: Histogram = serde_json::from_value(example).expect("example must parse");
+
+        assert_eq!(parsed.params.column_name, "foobar");
+        assert!(matches!(parsed.params.bounds, HistogramBounds::Values(_)));
+    }
+
+    #[test]
+    fn it_parses_histogram_data_bounds() {
+        let example = serde_json::json!({
+            "type": "Histogram",
+            "params": {
+                "columnName": "temperature",
+                "bounds": "data",
+                "buckets": {
+                    "type": "number",
+                    "value": 10
+                },
+                "interactive": false
+            },
+            "sources": {
+                "vector": {
+                    "type": "OgrSource",
+                    "params": {
+                        "data": "ndvi"
+                    }
+                }
+            }
+        });
+
+        let parsed: Histogram =
+            serde_json::from_value(example).expect(r#""data" bounds must parse"#);
+
+        assert_eq!(parsed.params.column_name, "temperature");
+        assert!(matches!(parsed.params.bounds, HistogramBounds::Data(_)));
+    }
+
+    #[test]
+    fn it_serializes_histogram_data_bounds() {
+        let histogram = Histogram {
+            r#type: Default::default(),
+            params: HistogramParameters {
+                column_name: "temperature".to_string(),
+                bounds: HistogramBounds::Data(Data::Data),
+                buckets: HistogramBuckets::Number(HistogramBucketsNumber {
+                    r#type: Default::default(),
+                    value: 10,
+                }),
+                interactive: false,
+            },
+            sources: SingleVectorOrRasterSource {
+                vector: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
+                    OgrSource {
+                        r#type: Default::default(),
+                        params: OgrSourceParameters {
+                            data: "ndvi".to_string(),
+                            attribute_projection: None,
+                        },
+                    },
+                )),
+            },
+        };
+
+        let json = serde_json::to_value(&histogram).expect("must serialize");
+        assert_eq!(
+            json["params"]["bounds"],
+            serde_json::json!("data"),
+            "bounds should serialize to the string \"data\""
+        );
+
+        // round-trip: deserialize back and check variant
+        let round_tripped: Histogram = serde_json::from_value(json).expect("round-trip must parse");
+        assert!(matches!(
+            round_tripped.params.bounds,
+            HistogramBounds::Data(_)
+        ));
+    }
+
+    #[test]
+    fn it_serializes_histogram_values_bounds() {
+        let histogram = Histogram {
+            r#type: Default::default(),
+            params: HistogramParameters {
+                column_name: "foobar".to_string(),
+                bounds: HistogramBounds::Values(HistogramBoundsValues {
+                    min: NotNan::new(5.0).unwrap(),
+                    max: NotNan::new(10.0).unwrap(),
+                }),
+                buckets: HistogramBuckets::Number(HistogramBucketsNumber {
+                    r#type: Default::default(),
+                    value: 15,
+                }),
+                interactive: false,
+            },
+            sources: SingleVectorOrRasterSource {
+                vector: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
+                    OgrSource {
+                        r#type: Default::default(),
+                        params: OgrSourceParameters {
+                            data: "ndvi".to_string(),
+                            attribute_projection: None,
+                        },
+                    },
+                )),
+            },
+        };
+
+        let json = serde_json::to_value(&histogram).expect("must serialize");
+        assert_eq!(
+            json["params"]["bounds"],
+            serde_json::json!({"min": 5.0, "max": 10.0}),
+            "bounds should serialize to {{min, max}} object"
+        );
+
+        // round-trip
+        let round_tripped: Histogram = serde_json::from_value(json).expect("round-trip must parse");
+        assert!(matches!(
+            round_tripped.params.bounds,
+            HistogramBounds::Values(_)
+        ));
+    }
+
+    #[test]
+    fn it_converts_histogram_example_to_operator() {
+        let histogram = Histogram {
+            r#type: Default::default(),
+            params: HistogramParameters {
+                column_name: "foobar".to_string(),
+                bounds: HistogramBounds::Values(HistogramBoundsValues {
+                    min: NotNan::new(5.0).unwrap(),
+                    max: NotNan::new(10.0).unwrap(),
+                }),
+                buckets: HistogramBuckets::Number(HistogramBucketsNumber {
+                    r#type: Default::default(),
+                    value: 15,
+                }),
+                interactive: false,
+            },
+            sources: SingleVectorOrRasterSource {
+                vector: SingleRasterOrVectorOperator::Vector(VectorOperator::OgrSource(
+                    OgrSource {
+                        r#type: Default::default(),
+                        params: OgrSourceParameters {
+                            data: "ndvi".to_string(),
+                            attribute_projection: None,
+                        },
+                    },
+                )),
+            },
+        };
+
+        let plot_operator = PlotOperator::Histogram(histogram);
+        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+            .map(|_| ())
+            .expect("histogram with OgrSource must convert to operator");
+    }
+
+    #[test]
+    fn it_converts_histogram_operators() {
+        let hist = Histogram {
+            r#type: Default::default(),
+            params: HistogramParameters {
+                column_name: "temperature".to_string(),
+                bounds: HistogramBounds::Data(Data::Data),
+                buckets: HistogramBuckets::Number(HistogramBucketsNumber {
+                    r#type: Default::default(),
+                    value: 10,
+                }),
+                interactive: false,
+            },
+            sources: SingleVectorOrRasterSource {
+                vector: SingleRasterOrVectorOperator::Vector(VectorOperator::MockPointSource(
+                    MockPointSource {
+                        r#type: Default::default(),
+                        params: MockPointSourceParameters {
+                            points: vec![Coordinate2D { x: 1.0, y: 2.0 }],
+                            spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
+                        },
+                    },
+                )),
+            },
+        };
+
+        let operators: geoengine_operators::plot::Histogram =
+            hist.try_into().expect("conversion failed");
+
+        assert_eq!(operators.params.attribute_name, "temperature");
+        assert!(matches!(
+            operators.params.bounds,
+            geoengine_operators::plot::HistogramBounds::Data(_)
+        ));
+        assert!(matches!(
+            operators.params.buckets,
+            geoengine_operators::plot::HistogramBuckets::Number { value: 10 }
+        ));
+    }
+
+    // ---------------------------------------------------------------------------
+    // Statistics
+    // ---------------------------------------------------------------------------
+
+    #[test]
+    fn it_parses_statistics_api_example() {
+        let example = serde_json::json!({
+            "type": "Statistics",
+            "params": {
+                "columnNames": ["A"],
+                "percentiles": [0.25, 0.5, 0.75]
+            },
+            "sources": {
+                "source": [{
+                    "type": "GdalSource",
+                    "params": {
+                        "data": "ndvi"
+                    }
+                }]
+            }
+        });
+
+        let parsed: Statistics = serde_json::from_value(example).expect("example must parse");
+
+        assert_eq!(parsed.params.column_names, vec!["A".to_string()]);
+        assert_eq!(parsed.params.percentiles.len(), 3);
+    }
+
+    #[test]
+    fn it_converts_statistics_example_to_operator() {
+        let statistics = Statistics {
+            r#type: Default::default(),
+            params: StatisticsParameters {
+                column_names: vec!["A".to_string()],
+                percentiles: vec![
+                    NotNan::new(0.25).unwrap(),
+                    NotNan::new(0.5).unwrap(),
+                    NotNan::new(0.75).unwrap(),
+                ],
+            },
+            sources: MultipleRasterOrSingleVectorSource {
+                source: MultipleRasterOrSingleVectorOperator::Raster(vec![
+                    RasterOperator::GdalSource(GdalSource {
+                        r#type: Default::default(),
+                        params: GdalSourceParameters {
+                            data: "ndvi".to_string(),
+                            overview_level: None,
+                        },
+                    }),
+                ]),
+            },
+        };
+
+        let plot_operator = PlotOperator::Statistics(statistics);
+        Box::<dyn OperatorsPlotOperatorTrait>::try_from(plot_operator)
+            .map(|_| ())
+            .expect("statistics with GdalSource must convert to operator");
+    }
 
     #[test]
     fn it_converts_statistics_operators() {
@@ -300,46 +602,5 @@ mod tests {
             operators.params.percentiles[0].clone(),
             NotNan::new(0.5).unwrap()
         );
-    }
-
-    #[test]
-    fn it_converts_histogram_operators() {
-        let hist = Histogram {
-            r#type: Default::default(),
-            params: HistogramParameters {
-                attribute_name: "temperature".to_string(),
-                bounds: HistogramBounds::Data(Data),
-                buckets: HistogramBuckets::Number { value: 10 },
-                interactive: false,
-            },
-            sources: SingleRasterOrVectorSource {
-                source: SingleRasterOrVectorOperator::Vector(VectorOperator::MockPointSource(
-                    MockPointSource {
-                        r#type: Default::default(),
-                        params: MockPointSourceParameters {
-                            points: vec![Coordinate2D { x: 1.0, y: 2.0 }],
-                            spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
-                        },
-                    },
-                )),
-            },
-        };
-
-        let operators: geoengine_operators::plot::Histogram =
-            hist.try_into().expect("conversion failed");
-
-        assert_eq!(operators.params.attribute_name, "temperature");
-        if let geoengine_operators::plot::HistogramBounds::Data(_) = &operators.params.bounds {
-        } else {
-            panic!("expected Data bounds");
-        }
-
-        if let geoengine_operators::plot::HistogramBuckets::Number { value } =
-            &operators.params.buckets
-        {
-            assert_eq!(*value, 10);
-        } else {
-            panic!("expected Number buckets");
-        }
     }
 }

@@ -77,6 +77,33 @@ impl TryFrom<SingleRasterOrVectorSource>
     }
 }
 
+/// A single vector or raster operator as source for this operator, keyed as "vector" in JSON.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[schema(no_recursion)]
+#[serde(rename_all = "camelCase")]
+pub struct SingleVectorOrRasterSource {
+    pub vector: SingleRasterOrVectorOperator,
+}
+
+impl TryFrom<SingleVectorOrRasterSource>
+    for geoengine_operators::engine::SingleRasterOrVectorSource
+{
+    type Error = anyhow::Error;
+
+    fn try_from(value: SingleVectorOrRasterSource) -> Result<Self, Self::Error> {
+        use geoengine_operators::util::input::RasterOrVectorOperator as OperatorsRasterOrVectorOperator;
+        let source = match value.vector {
+            SingleRasterOrVectorOperator::Raster(raster) => {
+                OperatorsRasterOrVectorOperator::Raster(raster.try_into()?)
+            }
+            SingleRasterOrVectorOperator::Vector(vector) => {
+                OperatorsRasterOrVectorOperator::Vector(vector.try_into()?)
+            }
+        };
+        Ok(Self { source })
+    }
+}
+
 /// A single vector operator and one or more raster operators as source for this operator.
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
 #[schema(no_recursion)]
