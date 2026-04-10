@@ -1,0 +1,32 @@
+# Build outputs
+build/
+dist/
+*.egg-info
+
+# Caches
+__pycache__
+.pytest_cache
+.ipynb_checkpoints
+
+# IDEs
+.vscode
+
+# Virtual Environments
+env
+env-*
+.venv
+.venv-*
+
+# Lock files
+uv.lock
+
+# Private files
+.pypirc
+.env
+.mypy_cache
+
+# Downloaded files
+examples/raster_download.tif
+examples/download
+examples/test
+examples/export_data/test

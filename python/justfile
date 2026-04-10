@@ -1,0 +1,55 @@
+mod common '../common.justfile'
+
+IN_VENV := ". .venv/bin/activate &&"
+
+_default:
+    @just --list
+
+# Install Python dependencies via virtualenv. This is not required for development, but can be used to set up a clean environment for testing.
+[group("install")]
+install: install-venv install-dev install-test install-examples
+
+# Create or replace a virtual environment in the .venv directory.
+[group("install")]
+install-venv: common::_clear
+    rm -rf .venv
+    python3 -m venv .venv
+    @-echo "To activate the virtual environment, run: source .venv/bin/activate"
+
+# Install development dependencies such as linters and type checkers.
+[group("install")]
+install-dev: common::_clear
+    {{ IN_VENV }} python3 -m pip install -e .[dev]
+
+# Install test dependencies such as pytest.
+[group("install")]
+install-test: common::_clear
+    {{ IN_VENV }} python3 -m pip install -e .[test]
+
+# Install example dependencies such as jupyter notebooks.
+[group("install")]
+install-examples: common::_clear
+    {{ IN_VENV }} python3 -m pip install -e .[examples]
+
+# Check if Python code is formatted correctly, check for linting errors and type errors.
+[group("lint")]
+lint: common::_clear
+    {{ IN_VENV }} python3 -m ruff format --check
+    {{ IN_VENV }} python3 -m ruff check
+    {{ IN_VENV }} python3 -m mypy geoengine
+    {{ IN_VENV }} python3 -m mypy tests
+
+# Build the Python package. The package is built in the dist directory.
+[group("build")]
+build: common::_clear
+    {{ IN_VENV }} python3 -m build
+
+# Run all Python tests.
+[group("test")]
+test: common::_clear
+    {{ IN_VENV }} pytest
+
+# Run all examples in the examples directory.
+[group("test")]
+run-examples: common::_clear
+    {{ IN_VENV }} python3 test_all_notebooks.py

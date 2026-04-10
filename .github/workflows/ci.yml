@@ -134,3 +134,27 @@ jobs:
           key: ci_test_${{ matrix.build }}
       - name: Build
         run: just backend build "${{ matrix.build }}"
+  
+  python:
+    uses: ./.github/workflows/test-python.yml
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # use all supported versions from https://devguide.python.org/versions/
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    with:
+      python-version: ${{ matrix.python-version }}
+      use-uv: false
+      coverage: false
+
+  # Checks the library using minimum version resolution
+  # `uv` has this feature built-in, c.f. https://github.com/astral-sh/uv
+  python-min-version:
+    uses: ./.github/workflows/test-python.yml
+
+    with:
+      python-version: "3.10"
+      use-uv: true
+      coverage: true

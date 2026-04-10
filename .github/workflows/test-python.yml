@@ -1,0 +1,125 @@
+name: Test Python Library
+
+on:
+  workflow_call:
+    inputs:
+      python-version:
+        type: string
+        required: true
+        description: 'Python version to use, e.g., "3.9"'
+      use-uv:
+        type: boolean
+        default: false
+        description: "Use `uv` for minimum version resolution"
+      coverage:
+        type: boolean
+        default: false
+        description: "Generate coverage report"
+
+jobs:
+  check:
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    defaults:
+      run:
+        working-directory: library
+
+    steps:
+      - name: Checkout library code
+        uses: actions/checkout@v4
+        with:
+          path: library
+      - name: Setup variables
+        id: vars
+        run: |
+          echo "GEOENGINE_VERSION=$(cat .github/.backend_git_ref)" >> $GITHUB_OUTPUT
+          if ${{ inputs.use-uv }}; then
+            echo "PIP_INSTALL=uv pip install --resolution=lowest-direct" >> $GITHUB_OUTPUT
+            echo "VENV_CALL=. .venv/bin/activate" >> $GITHUB_OUTPUT
+          else
+            echo "PIP_INSTALL=python -m pip install" >> $GITHUB_OUTPUT
+            echo "VENV_CALL=" >> $GITHUB_OUTPUT
+          fi
+          if ${{ inputs.coverage }}; then
+            echo "COVERAGE_COMMAND=--cov=geoengine --cov-report=lcov" >> $GITHUB_OUTPUT
+          else
+            echo "COVERAGE_COMMAND=" >> $GITHUB_OUTPUT
+          fi
+      - name: Checkout Geo Engine code
+        uses: actions/checkout@v4
+        with:
+          repository: geo-engine/geoengine
+          ref: ${{ steps.vars.outputs.GEOENGINE_VERSION }}
+          path: backend
+      - name: Set up Python ${{ inputs.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ inputs.python-version }}
+      - name: Upgrade PIP
+        run: python -m pip install --upgrade pip
+      - name: Setup UV and create venv
+        if: ${{ inputs.use-uv }}
+        run: |
+          python -m pip install uv
+          uv venv
+      - name: Install build dependencies
+        run: |
+          ${{ steps.vars.outputs.VENV_CALL }}
+          ${{ steps.vars.outputs.PIP_INSTALL }} -e .[dev]
+      - name: Check Formatting
+        run: |
+          ${{ steps.vars.outputs.VENV_CALL }}
+          python -m ruff format --check
+      - name: Lint code
+        run: |
+          ${{ steps.vars.outputs.VENV_CALL }}
+          python3 -m ruff check
+      - name: Type-check code
+        # mypy seems buggy with uv
+        if: ${{ !inputs.use-uv }}
+        run: |
+          ${{ steps.vars.outputs.VENV_CALL }}
+          python -m mypy geoengine
+      - name: Build
+        run: |
+          ${{ steps.vars.outputs.VENV_CALL }}
+          python -m build .
+      - name: Install test dependencies
+        run: |
+          ${{ steps.vars.outputs.VENV_CALL }}
+          ${{ steps.vars.outputs.PIP_INSTALL }} -e .[test]
+      - name: Type-check tests
+        # mypy seems buggy with uv
+        if: ${{ !inputs.use-uv }}
+        run: |
+          ${{ steps.vars.outputs.VENV_CALL }}
+          python -m mypy tests
+      - name: Test
+        run: |
+          service postgresql start
+          ${{ steps.vars.outputs.VENV_CALL }}
+          pytest ${{ steps.vars.outputs.COVERAGE_COMMAND }}
+        env:
+          GEOENGINE_TEST_CODE_PATH: ${{ github.workspace }}/backend
+          GEOENGINE_TEST_BUILD_TYPE: "release"
+      - name: Examples
+        run: |
+          ${{ steps.vars.outputs.VENV_CALL }}
+          ${{ steps.vars.outputs.PIP_INSTALL }} -e .[examples]
+          python test_all_notebooks.py
+        env:
+          GEOENGINE_TEST_CODE_PATH: ${{ github.workspace }}/backend
+          GEOENGINE_TEST_BUILD_TYPE: "release"
+          COVERAGE_COMMAND: ${{ steps.vars.outputs.COVERAGE_COMMAND }}
+      - name: Report coverage to Coveralls
+        if: ${{ inputs.coverage }}
+        # 1. We need to adjust the paths in the lcov file to match the repository structure.
+        # 2. We need to download the coveralls script and upload the report.
+        run: |
+          sed -i 's|SF:geoengine/|SF:|' ../coverage.lcov
+          curl -sL https://coveralls.io/coveralls-linux.tar.gz | tar -xz && ./coveralls report ../coverage.lcov
+        # If we don't run it in the code folder, the paths in the report will prefixed with `library/geoengine/`.
+        working-directory: library/geoengine
+        env:
+          COVERALLS_REPO_TOKEN: ${{ github.token }}

@@ -1,9 +1,26 @@
 version: 2
+
 updates:
   - package-ecosystem: "cargo"
     # Look for `Cargo.toml` and `lock` files in the `root` directory
-    directory: "/"
+    directory: "/geoengine"
     # Check the `crates.io` for updates every day (weekdays)
+    schedule:
+      interval: "weekly"
+      day: "sunday" # to be checked before Monday
+
+  - package-ecosystem: "pip"
+    directory: "/python"
+    # Check the `crates.io` for updates every day (weekdays)
+    schedule:
+      interval: "weekly"
+      day: "sunday" # to be checked before Monday
+
+  # Enable version updates for GitHub Actions
+  - package-ecosystem: "github-actions"
+    # Workflow files stored in the default location of `.github/workflows`
+    # You don't need to specify `/.github/workflows` for `directory`. You can use `directory: "/"`.
+    directory: "/"
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
