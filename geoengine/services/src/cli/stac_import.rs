@@ -37,7 +37,7 @@ use crate::{
                 RasterResultDescriptor, RegularTimeDimension, SpatialGridDescriptor,
                 SpatialGridDescriptorState, TimeDescriptor, TimeDimension,
             },
-            responses::IdResponse,
+            responses::{ErrorResponse, IdResponse},
             services::{
                 AddDataset, CreateDataset, DataPath, DatasetDefinition, MetaDataDefinition,
             },
@@ -45,9 +45,9 @@ use crate::{
     },
     datasets::{DatasetName, upload::VolumeName},
     layers::{
-        layer::{AddLayer, AddLayerCollection},
+        layer::{AddLayer, AddLayerCollection, CollectionItem, LayerCollection},
         listing::LayerCollectionId,
-        storage::INTERNAL_LAYER_DB_ROOT_COLLECTION_ID,
+        storage::{INTERNAL_LAYER_DB_ROOT_COLLECTION_ID, INTERNAL_PROVIDER_ID},
     },
     permissions::{Permission, Role},
     workflows::workflow::Workflow,
@@ -159,6 +159,7 @@ struct StacImporter {
     client: reqwest::Client,
     session_id: String,
     bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
+    known_datasets: HashSet<DatasetKey>,
     created_datasets: HashSet<DatasetKey>,
     time_range: TimeInterval,
 }
@@ -185,6 +186,7 @@ impl StacImporter {
             client,
             session_id,
             bands,
+            known_datasets: HashSet::new(),
             created_datasets: HashSet::new(),
         })
     }
@@ -468,19 +470,21 @@ impl StacImporter {
             resolution: geo_transform.x_pixel_size().into(),
         };
 
-        if !self.created_datasets.contains(&dataset_key) {
-            // create dataset on-the-fly
-            // TODO: if dataset already exists on server, skip creation, but check compatibility?
-            self.create_dataset(&dataset_key, geo_transform)
+        if !self.known_datasets.contains(&dataset_key) {
+            let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
+            let dataset_exists = self
+                .dataset_exists(&dataset_name)
                 .await
-                .context(format!("failed to create dataset {dataset_key:?}"))?;
+                .with_context(|| format!("failed to check dataset existence for {dataset_name}"))?;
 
-            self.created_datasets.insert(dataset_key.clone());
+            if !dataset_exists {
+                self.create_dataset(&dataset_key, geo_transform)
+                    .await
+                    .context(format!("failed to create dataset {dataset_key:?}"))?;
+                self.created_datasets.insert(dataset_key.clone());
+            }
 
-            debug_assert!(
-                self.created_datasets.contains(&dataset_key),
-                "Dataset should have been marked as created"
-            );
+            self.known_datasets.insert(dataset_key.clone());
         }
 
         let eo_bands: Result<Vec<EoBand>, _> = asset
@@ -535,6 +539,41 @@ impl StacImporter {
         }
 
         Ok(tiles)
+    }
+
+    async fn dataset_exists(&self, dataset_name: &str) -> Result<bool, anyhow::Error> {
+        let response = retry_with_backoff(
+            || async {
+                self.client
+                    .get(format!(
+                        "{}/dataset/{}",
+                        self.params.geo_engine_url, dataset_name
+                    ))
+                    .header("Authorization", format!("Bearer {}", self.session_id))
+                    .send()
+                    .await
+            },
+            &format!("Check dataset existence for {dataset_name}"),
+        )
+        .await
+        .context("Failed to send dataset existence request")?;
+
+        if response.status().is_success() {
+            return Ok(true);
+        }
+
+        let status = response.status();
+        let body = response.text().await.unwrap_or_default();
+        if status == reqwest::StatusCode::BAD_REQUEST
+            && let Ok(error_response) = serde_json::from_str::<ErrorResponse>(&body)
+        {
+            // The dataset API may return a generic CannotLoadDataset message for unknown names.
+            if error_response.error == "CannotLoadDataset" {
+                return Ok(false);
+            }
+        }
+
+        anyhow::bail!("Failed to check dataset '{dataset_name}': HTTP {status}: {body}");
     }
 
     #[allow(clippy::too_many_lines)]
@@ -625,6 +664,14 @@ impl StacImporter {
         )
         .await
         .context("Failed to send dataset creation request")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let error_text = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Failed to create dataset {dataset_name_str}: HTTP {status}: {error_text}"
+            );
+        }
 
         let dataset_name = if let Ok(json) = response.json::<serde_json::Value>().await {
             if let Some(id) = json.get("datasetName").and_then(|v| v.as_str()) {
@@ -729,7 +776,7 @@ impl StacImporter {
         // Create root collection for STAC collection
         let root_collection_id = self
             .create_layer_collection(
-                &INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string(),
+                &LayerCollectionId(INTERNAL_LAYER_DB_ROOT_COLLECTION_ID.to_string()),
                 &self.params.stac_collection,
                 &format!(
                     "{} datasets imported from STAC",
@@ -806,10 +853,23 @@ impl StacImporter {
 
     async fn create_layer_collection(
         &self,
-        parent_id: &str,
+        parent_id: &LayerCollectionId,
         name: &str,
         description: &str,
-    ) -> anyhow::Result<String> {
+    ) -> anyhow::Result<LayerCollectionId> {
+        // Reuse existing collection from previous runs if there is a child collection with the same name.
+        if let Some(existing_id) = self
+            .find_child_collection_id_by_name(parent_id, name)
+            .await
+            .context("Failed to query existing child collections")?
+        {
+            if self.params.verbose {
+                println!("Found existing layer collection '{name}' with id {existing_id}");
+            }
+
+            return Ok(existing_id);
+        }
+
         let add_collection = AddLayerCollection {
             name: name.to_string(),
             description: description.to_string(),
@@ -846,12 +906,55 @@ impl StacImporter {
             );
         }
 
-        Ok(response.id.0)
+        Ok(response.id)
+    }
+
+    async fn find_child_collection_id_by_name(
+        &self,
+        parent_id: &LayerCollectionId,
+        child_name: &str,
+    ) -> anyhow::Result<Option<LayerCollectionId>> {
+        let mut offset: u32 = 0;
+        let limit: u32 = 20;
+
+        loop {
+            let response = retry_with_backoff(
+                || async {
+                    self.client
+                        .get(format!(
+                            "{}/layers/collections/{}/{}",
+                            self.params.geo_engine_url, INTERNAL_PROVIDER_ID, parent_id
+                        ))
+                        .query(&[("offset", offset), ("limit", limit)])
+                        .header("Authorization", format!("Bearer {}", self.session_id))
+                        .send()
+                        .await?
+                        .json::<LayerCollection>()
+                        .await
+                },
+                &format!("List child collections of {parent_id}"),
+            )
+            .await?;
+
+            for item in &response.items {
+                if let CollectionItem::Collection(collection) = item
+                    && collection.name == child_name
+                {
+                    return Ok(Some(collection.id.collection_id.clone()));
+                }
+            }
+
+            if response.items.len() < limit as usize {
+                return Ok(None);
+            }
+
+            offset += limit;
+        }
     }
 
     async fn create_layer(
         &self,
-        collection_id: &str,
+        collection_id: &LayerCollectionId,
         dataset_key: &DatasetKey,
     ) -> anyhow::Result<LayerId> {
         let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
@@ -915,7 +1018,7 @@ impl StacImporter {
 
     async fn add_existing_layer_to_collection(
         &self,
-        collection_id: &str,
+        collection_id: &LayerCollectionId,
         layer_id: &LayerId,
     ) -> anyhow::Result<()> {
         retry_with_backoff(
@@ -943,7 +1046,7 @@ impl StacImporter {
 
     async fn create_hierarchy_with_branches(
         &self,
-        root_id: &str,
+        root_id: &LayerCollectionId,
         layer_ids: &HashMap<DatasetKey, LayerId>,
         first_attr: Attribute,
         second_attrs: &[Attribute; 2],
