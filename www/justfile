@@ -1,0 +1,24 @@
+mod common '../common.justfile'
+
+_default:
+    @just --list
+
+[group("install")]
+install: common::_clear
+    npm ci
+
+[group("install")]
+upgrade: common::_clear
+    npx @astrojs/upgrade
+    npm update
+
+[group("build")]
+build: common::_clear
+    npm run build
+
+[group("run")]
+run: common::_clear
+    npm run dev
+
+format: common::_clear
+    npx prettier --parser=astro --write .

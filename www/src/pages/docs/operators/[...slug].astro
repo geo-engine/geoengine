@@ -1,0 +1,123 @@
+---
+import {getCollection, render} from 'astro:content';
+import {marked} from 'marked';
+import StarlightPage from '@astrojs/starlight/components/StarlightPage.astro';
+import {Code} from '@astrojs/starlight/components';
+
+interface Operator {
+    title: string;
+    description: string;
+    properties: Record<string, {type: string; params: string; sources?: string}>;
+    examples: JSON[];
+}
+
+export async function getStaticPaths() {
+    const entries = await getCollection('openapi-types');
+
+    const filteredEntries = [];
+
+    for (const entry of entries) {
+        const data = entry.data;
+
+        if (!data.description || !data.properties) {
+            continue;
+        }
+
+        const properties = data.properties;
+        if (!properties.type?.enum?.length || !properties.params?.['$ref'] || !properties.sources?.['$ref']) {
+            continue;
+        }
+
+        filteredEntries.push({
+            params: {slug: entry.id.toLowerCase()},
+            props: {
+                title: data.title ?? entry.id,
+                description: data.description,
+                properties: {
+                    type: properties.type.enum[0],
+                    params: properties.params['$ref'],
+                    sources: properties.sources['$ref'],
+                },
+                examples: data.examples ?? [],
+            } as Operator,
+        });
+    }
+
+    console.log(
+        'Filtered entries:',
+        filteredEntries.map((e) => e.params.slug),
+    );
+
+    return filteredEntries;
+}
+
+const {entry} = Astro.props;
+
+console.log('Rendering operator page for:', entry);
+
+// const { Content } = await render(entry.data.description);
+
+const descriptionHtml = marked.parse(entry.data.description || '');
+---
+
+<StarlightPage frontmatter={{title: entry.data.title}}>
+    <div class="sl-markdown-content" set:html={descriptionHtml} />
+
+    <h2>Properties</h2>
+    <table>
+        <thead>
+            <tr><th>Property</th><th>Type</th></tr>
+        </thead>
+        <tbody>
+            {
+                Object.entries(entry.data.properties).map(([key, val]) => (
+                    <tr>
+                        <td>
+                            <code>{key}</code>
+                        </td>
+                        <td>
+                            <code>{val}</code>
+                        </td>
+                    </tr>
+                ))
+            }
+        </tbody>
+    </table>
+
+    {
+        entry.data.properties.sources && (
+            <>
+                <h2>Sources</h2>
+                <p>{JSON.stringify(entry.data.properties.sources)}</p>
+            </>
+        )
+    }
+
+    {
+        entry.data.examples.length && (
+            <>
+                <h2>Examples</h2>
+                {entry.data.examples.map((example) => (
+                    <Code code={JSON.stringify(example, null, 2)} lang="json" />
+                ))}
+            </>
+        )
+    }
+
+    <!-- <table>
+    <thead>
+      <tr><th>Property</th><th>Type</th></tr>
+    </thead>
+    <tbody>
+      {Object.entries(entry.data.properties).map(([key, val]) => (
+        <tr>
+          <td><code>{key}</code></td>
+          <td><code>{val.type}</code></td>
+        </tr>
+      ))}
+    </tbody>
+  </table>
+
+  <h2>Raw Schema</h2>
+  <pre><code>{JSON.stringify(entry.data.raw, null, 2)}</code></pre> -->
+</StarlightPage>

@@ -1,0 +1,21 @@
+name: Check
+
+on:
+    pull_request:
+    merge_group:
+    # Allows you to run this workflow manually from the Actions tab
+    workflow_dispatch:
+
+jobs:
+    test:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@v4
+            - name: Install
+              run: npm install
+            - name: Check formatting and lints
+              run: npm run check
+            - name: Build
+              run: npm run build

@@ -1,0 +1,70 @@
+---
+import SiteLayout from '../layouts/SiteLayout.astro';
+import Hero from '../components/Hero.astro';
+import Features from '../components/Features.astro';
+import FeatureItem from '../components/FeatureItem.astro';
+import Components from '../components/Components.astro';
+import Component from '../components/Component.astro';
+import ComponentLink from '../components/ComponentLink.astro';
+import Spacer from '../components/Spacer.astro';
+import {Picture, Image} from 'astro:assets';
+import {getCollection} from 'astro:content';
+import Section from '../components/Section.astro';
+
+const features = (await getCollection('features')).sort((a, b) => {
+    // Sort features by their lexicographical order
+    return a.id.localeCompare(b.id);
+});
+
+const components = await getCollection('components');
+---
+
+<SiteLayout>
+    <Spacer />
+    <Hero />
+    <Spacer />
+    <div id="features">
+        <Features>
+            {
+                features.map((feature) => (
+                    <FeatureItem title={feature.data.title}>
+                        <Image
+                            class="shrink-0 mt-2 size-8 text-gray-800 dark:text-white"
+                            slot="icon"
+                            src={feature.data.icon}
+                            alt={feature.data.title}
+                        />
+                        {feature.body}
+                    </FeatureItem>
+                ))
+            }
+        </Features>
+    </div>
+    <Spacer />
+    <Section bg="blue" box>
+        <h2 class="mx-auto mb-0 text-xl font-semibold text-center">An open source, spatio-temporal data processing platform.</h2>
+        <p class="mx-auto mb-0 max-w-3xl text-lg text-gray-800 dark:text-neutral-200 text-center">
+            Geo Engine powers a wide range of applications, from individual scientific analyses to interactive web services, and is advanced
+            by contributors from both industry and academia.
+        </p>
+    </Section>
+    <Spacer />
+    <div id="components">
+        <Components>
+            {
+                components.map((component) => (
+                    <Component title={component.data.title} subtitle={component.data.subtitle}>
+                        <Picture class="max-h-64 max-w-64" slot="image" src={component.data.icon} alt={component.data.title} />
+                        {component.body}
+                        {component.data.links.map((link) => (
+                            <ComponentLink slot="link" href={link.url}>
+                                {link.title}
+                            </ComponentLink>
+                        ))}
+                    </Component>
+                ))
+            }
+        </Components>
+    </div>
+    <Spacer />
+</SiteLayout>

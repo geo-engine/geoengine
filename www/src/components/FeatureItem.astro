@@ -1,0 +1,17 @@
+---
+const {title} = Astro.props;
+---
+
+<!-- Icon Block -->
+<div class="flex gap-x-5 sm:gap-x-8">
+    <slot name="icon" />
+    <div class="grow">
+        <h3 class="text-base sm:text-lg font-semibold text-gray-800 dark:text-neutral-200">
+            {title}
+        </h3>
+        <p class="mt-1 text-gray-600 dark:text-neutral-400">
+            <slot />
+        </p>
+    </div>
+</div>
+<!-- End Icon Block -->

@@ -1,4 +1,6 @@
 mod backend 'geoengine'
+mod common 'common.justfile'
+mod www
 
 _default:
     @just --list
