@@ -81,7 +81,7 @@ actix-ws = "0.4"
 aes-gcm = "0.10.3"
 anyhow = "1.0"
 approx = "0.5"
-arrow = { version = "58.0", features = ["ipc_compression"] }
+arrow = { version = "58.1", features = ["ipc_compression"] }
 arrow-array = "58.0"
 arrow-ord = "58.0"
 arrow-schema = { version = "58.0", features = ["serde"] }
