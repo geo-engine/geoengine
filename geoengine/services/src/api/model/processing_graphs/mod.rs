@@ -20,6 +20,7 @@ use geoengine_operators::{
     },
     source::{
         GdalSource as OperatorsGdalSource, MultiBandGdalSource as OperatorsMultiBandGdalSource,
+        OgrSource as OperatorsOgrSource,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -47,7 +48,7 @@ pub(crate) use crate::api::model::processing_graphs::{
     },
     source::{
         GdalSource, GdalSourceParameters, MockPointSource, MockPointSourceParameters,
-        MultiBandGdalSource,
+        MultiBandGdalSource, OgrSource, OgrSourceParameters,
     },
     source_parameters::{
         MultipleRasterOrSingleVectorOperator, MultipleRasterOrSingleVectorSource,
@@ -91,6 +92,7 @@ pub enum RasterOperator {
 #[schema(discriminator = "type")]
 pub enum VectorOperator {
     MockPointSource(MockPointSource),
+    OgrSource(OgrSource),
     RasterVectorJoin(RasterVectorJoin),
     Reprojection(Reprojection),
 }
@@ -162,7 +164,6 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
         // [ ] CsvSource
         // [ ] LineSimplification
         // [ ] MockDatasetDataSource
-        // [ ] OgrSource
         // [ ] PointInPolygonFilter
         // [ ] TimeProjection
         // [ ] TimeShift
@@ -173,6 +174,9 @@ impl TryFrom<VectorOperator> for Box<dyn OperatorsVectorOperator> {
             VectorOperator::MockPointSource(mock_point_source) => {
                 OperatorsMockPointSource::try_from(mock_point_source)
                     .map(OperatorsVectorOperator::boxed)
+            }
+            VectorOperator::OgrSource(ogr_source) => {
+                OperatorsOgrSource::try_from(ogr_source).map(OperatorsVectorOperator::boxed)
             }
             VectorOperator::RasterVectorJoin(rvj) => {
                 OperatorsRasterVectorJoin::try_from(rvj).map(OperatorsVectorOperator::boxed)
@@ -228,6 +232,8 @@ impl TryFrom<TypedOperator> for OperatorsTypedOperator {
     MockPointSource,
     MockPointSourceParameters,
     MultiBandGdalSource,
+    OgrSource,
+    OgrSourceParameters,
     // Processing
     Aggregation,
     BandFilter,

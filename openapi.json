@@ -6106,7 +6106,10 @@
         ]
       },
       "Data": {
-        "default": null
+        "type": "string",
+        "enum": [
+          "data"
+        ]
       },
       "DataId": {
         "oneOf": [
@@ -6130,6 +6133,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "DataPathVolume",
             "required": [
               "volume"
             ],
@@ -6141,6 +6145,7 @@
           },
           {
             "type": "object",
+            "title": "DataPathUpload",
             "required": [
               "upload"
             ],
@@ -7438,7 +7443,7 @@
             "$ref": "#/components/schemas/HistogramParameters"
           },
           "sources": {
-            "$ref": "#/components/schemas/SingleRasterOrVectorSource"
+            "$ref": "#/components/schemas/SingleVectorOrRasterSource"
           },
           "type": {
             "type": "string",
@@ -7476,109 +7481,109 @@
       "HistogramBounds": {
         "oneOf": [
           {
-            "type": "object",
-            "required": [
-              "data"
-            ],
-            "properties": {
-              "data": {
-                "$ref": "#/components/schemas/Data"
-              }
-            }
+            "$ref": "#/components/schemas/Data"
           },
           {
-            "type": "object",
-            "required": [
-              "values"
-            ],
-            "properties": {
-              "values": {
-                "type": "object",
-                "required": [
-                  "min",
-                  "max"
-                ],
-                "properties": {
-                  "max": {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  "min": {
-                    "type": "number",
-                    "format": "double"
-                  }
-                }
-              }
-            }
+            "$ref": "#/components/schemas/HistogramBoundsValues"
           }
         ]
+      },
+      "HistogramBoundsValues": {
+        "type": "object",
+        "required": [
+          "min",
+          "max"
+        ],
+        "properties": {
+          "max": {
+            "type": "number",
+            "format": "double"
+          },
+          "min": {
+            "type": "number",
+            "format": "double"
+          }
+        }
       },
       "HistogramBuckets": {
         "oneOf": [
           {
-            "type": "object",
-            "required": [
-              "value",
-              "type"
-            ],
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "number"
-                ]
-              },
-              "value": {
-                "type": "integer",
-                "format": "int32",
-                "minimum": 0
-              }
-            }
+            "$ref": "#/components/schemas/HistogramBucketsNumber"
           },
           {
-            "type": "object",
-            "required": [
-              "type"
-            ],
-            "properties": {
-              "maxNumberOfBuckets": {
-                "type": "integer",
-                "format": "int32",
-                "minimum": 0
-              },
-              "type": {
-                "type": "string",
-                "enum": [
-                  "squareRootChoiceRule"
-                ]
-              }
-            }
+            "$ref": "#/components/schemas/HistogramBucketsSquareRootChoiceRule"
           }
-        ]
+        ],
+        "discriminator": {
+          "propertyName": "type",
+          "mapping": {
+            "number": "#/components/schemas/HistogramBucketsNumber",
+            "squareRootChoiceRule": "#/components/schemas/HistogramBucketsSquareRootChoiceRule"
+          }
+        }
+      },
+      "HistogramBucketsNumber": {
+        "type": "object",
+        "required": [
+          "type",
+          "value"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "number"
+            ]
+          },
+          "value": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          }
+        }
+      },
+      "HistogramBucketsSquareRootChoiceRule": {
+        "type": "object",
+        "required": [
+          "type"
+        ],
+        "properties": {
+          "maxNumberOfBuckets": {
+            "type": "integer",
+            "format": "int32",
+            "minimum": 0
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "squareRootChoiceRule"
+            ]
+          }
+        }
       },
       "HistogramParameters": {
         "type": "object",
         "description": "The parameter spec for `Histogram`",
         "required": [
-          "attributeName",
+          "columnName",
           "bounds",
           "buckets"
         ],
         "properties": {
-          "attributeName": {
+          "bounds": {
+            "$ref": "#/components/schemas/HistogramBounds",
+            "description": "If `data`, it computes the bounds of the underlying data.\nIf `{ \"min\": ..., \"max\": ... }`, one can specify custom bounds."
+          },
+          "buckets": {
+            "$ref": "#/components/schemas/HistogramBuckets",
+            "description": "The number of buckets. The value can be specified or calculated."
+          },
+          "columnName": {
             "type": "string",
             "description": "Name of the (numeric) vector attribute or raster band to compute the histogram on.",
             "examples": [
               "temperature"
             ]
-          },
-          "bounds": {
-            "$ref": "#/components/schemas/HistogramBounds",
-            "description": "If `data`, it computes the bounds of the underlying data. If `values`, one can specify custom bounds."
-          },
-          "buckets": {
-            "$ref": "#/components/schemas/HistogramBuckets",
-            "description": "The number of buckets. The value can be specified or calculated."
           },
           "interactive": {
             "type": "boolean",
@@ -7692,6 +7697,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "Resolution",
             "description": "Explicit output resolution (`x`, `y`) in target coordinates.",
             "required": [
               "x",
@@ -7717,6 +7723,7 @@
           },
           {
             "type": "object",
+            "title": "Fraction",
             "description": "Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).",
             "required": [
               "x",
@@ -8766,6 +8773,34 @@
           }
         }
       },
+      "OgrSource": {
+        "type": "object",
+        "title": "OGR Source",
+        "description": "The [`OgrSource`] is a source operator that reads vector data using OGR (part of GDAL).\nThe counterpart for raster data is the [`GdalSource`].\n\n## Errors\n\nIf the given dataset does not exist or is not readable, an error is thrown.\n",
+        "required": [
+          "type",
+          "params"
+        ],
+        "properties": {
+          "params": {
+            "$ref": "#/components/schemas/OgrSourceParameters"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "OgrSource"
+            ]
+          }
+        },
+        "examples": [
+          {
+            "type": "OgrSource",
+            "params": {
+              "data": "ndvi"
+            }
+          }
+        ]
+      },
       "OgrSourceColumnSpec": {
         "type": "object",
         "required": [
@@ -9105,6 +9140,32 @@
           "ignore",
           "abort"
         ]
+      },
+      "OgrSourceParameters": {
+        "type": "object",
+        "description": "Parameters for the [`OgrSource`] operator.",
+        "required": [
+          "data"
+        ],
+        "properties": {
+          "attributeProjection": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "description": "*Optional*: list of attributes to include. When `None`, all attributes are included."
+          },
+          "data": {
+            "type": "string",
+            "description": "Dataset name or identifier to be loaded.",
+            "examples": [
+              "ndvi"
+            ]
+          }
+        }
       },
       "OgrSourceTimeFormat": {
         "oneOf": [
@@ -10226,6 +10287,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "Default",
             "required": [
               "type"
             ],
@@ -10240,6 +10302,7 @@
           },
           {
             "type": "object",
+            "title": "Suffix",
             "required": [
               "values",
               "type"
@@ -10261,6 +10324,7 @@
           },
           {
             "type": "object",
+            "title": "Rename",
             "required": [
               "values",
               "type"
@@ -10648,6 +10712,18 @@
           },
           "vector": {
             "$ref": "#/components/schemas/VectorOperator"
+          }
+        }
+      },
+      "SingleVectorOrRasterSource": {
+        "type": "object",
+        "description": "A single vector or raster operator as source for this operator, keyed as \"vector\" in JSON.",
+        "required": [
+          "vector"
+        ],
+        "properties": {
+          "vector": {
+            "$ref": "#/components/schemas/SingleRasterOrVectorOperator"
           }
         }
       },
@@ -11381,10 +11457,12 @@
                   }
                 }
               }
-            ]
+            ],
+            "title": "Regular"
           },
           {
             "type": "object",
+            "title": "Irregular",
             "required": [
               "type"
             ],
@@ -11520,6 +11598,7 @@
         "oneOf": [
           {
             "type": "object",
+            "title": "TypedGeometryNoGeometry",
             "required": [
               "Data"
             ],
@@ -11531,6 +11610,7 @@
           },
           {
             "type": "object",
+            "title": "TypedGeometryMultiPoint",
             "required": [
               "MultiPoint"
             ],
@@ -11542,6 +11622,7 @@
           },
           {
             "type": "object",
+            "title": "TypedGeometryMultiLineString",
             "required": [
               "MultiLineString"
             ],
@@ -11553,6 +11634,7 @@
           },
           {
             "type": "object",
+            "title": "TypedGeometryMultiPolygon",
             "required": [
               "MultiPolygon"
             ],
@@ -12165,6 +12247,9 @@
             "$ref": "#/components/schemas/MockPointSource"
           },
           {
+            "$ref": "#/components/schemas/OgrSource"
+          },
+          {
             "$ref": "#/components/schemas/RasterVectorJoin"
           },
           {
@@ -12176,6 +12261,7 @@
           "propertyName": "type",
           "mapping": {
             "MockPointSource": "#/components/schemas/MockPointSource",
+            "OgrSource": "#/components/schemas/OgrSource",
             "RasterVectorJoin": "#/components/schemas/RasterVectorJoin",
             "Reprojection": "#/components/schemas/Reprojection"
           }
