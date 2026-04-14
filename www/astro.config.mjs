@@ -3,6 +3,7 @@ import {defineConfig} from 'astro/config';
 import tailwindcss from '@tailwindcss/vite';
 import icon from 'astro-icon';
 import starlight from '@astrojs/starlight';
+import openApiOperatorsPlugin from './astro-openapi-plugin.ts';
 
 // https://astro.build/config
 export default defineConfig({
@@ -12,44 +13,50 @@ export default defineConfig({
         plugins: [tailwindcss()],
     },
 
-    integrations: [icon(), starlight({
-        title: 'Geo Engine Docs',
-        description: 'Documentation for the Geo Engine project.',
-        logo: {
-            src: './src/images/GeoEngine_Bildmarke.svg',
-        },
-        favicon:'./src/images/GeoEngine_Bildmarke.svg',
-        sidebar: [
-            {
-          label: 'Welcome to Geo Engine Docs', // Or whatever title you want
-          link: '/docs/', // Link to the page you want to show when this item is clicked
-        },
-        {
-          label: 'The Geo Engine',
-          autogenerate: { directory: 'docs/the-geo-engine' }, 
-          collapsed: false,
-        },
-        {
-          label: 'API',
-          autogenerate: { directory: 'docs/api' }, 
-          collapsed: false,
-        },
-        {
-          label: 'Datatypes',
-          autogenerate: { directory: 'docs/datatypes' }, 
-          collapsed: false,
-        },
-        {
-          label: 'Operators',
-          // autogenerate: { directory: 'docs/operators' },
-          items: [
-            {
-              label: 'BandFilter',
-              link: '/docs/operators/bandfilter/',
+    integrations: [
+        icon(),
+        openApiOperatorsPlugin({input: '../openapi.json', outputDir: './src/content/docs/docs/'}),
+        starlight({
+            title: 'Geo Engine Docs',
+            description: 'Documentation for the Geo Engine project.',
+            logo: {
+                src: './src/images/GeoEngine_Bildmarke.svg',
             },
-          ],
-          collapsed: false,
-        },
-      ],
-    })],
+            favicon: './src/images/GeoEngine_Bildmarke.svg',
+            components: {
+                SiteTitle: './src/components/TitleOverride.astro',
+            },
+            sidebar: [
+                {
+                    label: 'Welcome to Geo Engine Docs',
+                    link: '/docs/',
+                },
+                {
+                    label: 'The Geo Engine',
+                    autogenerate: {directory: 'docs/the-geo-engine'},
+                    collapsed: false,
+                },
+                {
+                    label: 'API',
+                    autogenerate: {directory: 'docs/api'},
+                    collapsed: false,
+                },
+                {
+                    label: 'Datatypes',
+                    autogenerate: {directory: 'docs/datatypes'},
+                    collapsed: false,
+                },
+                {
+                    label: 'Operators',
+                    autogenerate: {directory: 'docs/operators'},
+                    collapsed: false,
+                },
+                {
+                    label: 'Plots',
+                    autogenerate: {directory: 'docs/plots'},
+                    collapsed: false,
+                },
+            ],
+        }),
+    ],
 });

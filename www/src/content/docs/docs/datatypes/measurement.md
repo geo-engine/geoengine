@@ -12,7 +12,7 @@ Some values do not have an associated measurement or no information is present.
 
 ```json
 {
-  "type": "unitless"
+    "type": "unitless"
 }
 ```
 
@@ -24,9 +24,9 @@ The type `continuous` specifies a continuous variable that is measured in a cert
 
 ```json
 {
-  "type": "continuous",
-  "measurement": "Reflectance",
-  "unit": "%"
+    "type": "continuous",
+    "measurement": "Reflectance",
+    "unit": "%"
 }
 ```
 
@@ -38,12 +38,12 @@ A classification maps numbers to named classes.
 
 ```json
 {
-  "type": "classification",
-  "measurement": "Land Cover",
-  "classes": {
-    "0": "Grassland",
-    "1": "Forest",
-    "2": "Water"
-  }
+    "type": "classification",
+    "measurement": "Land Cover",
+    "classes": {
+        "0": "Grassland",
+        "1": "Forest",
+        "2": "Water"
+    }
 }
 ```

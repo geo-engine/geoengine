@@ -13,8 +13,8 @@ Specifying in ISO 8601:
 
 ```json
 {
-  "start": "2010-01-01T00:00:00Z",
-  "end": "2011-01-01T00:00:00Z"
+    "start": "2010-01-01T00:00:00Z",
+    "end": "2011-01-01T00:00:00Z"
 }
 ```
 
@@ -22,7 +22,7 @@ Using the same date as UNIX timestamps in milliseconds:
 
 ```json
 {
-  "start": 1262304000000,
-  "end": 1293840000000
+    "start": 1262304000000,
+    "end": 1293840000000
 }
 ```

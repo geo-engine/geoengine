@@ -12,20 +12,20 @@ Call `/workflow/{workflowId}/metadata` to get the result descriptor of the workf
 
 ```json
 {
-  "type": "raster",
-  "dataType": "U8",
-  "spatialReference": "EPSG:4326",
-  "measurement": {
-    "type": "unitless"
-  },
-  "time": {
-    "start": "2014-01-01T00:00:00.000Z",
-    "end": "2014-07-01T00:00:00.000Z"
-  },
-  "bbox": {
-    "upperLeftCoordinate": [-180.0, 90.0],
-    "lowerRightCoordinate": [180.0, -90.0]
-  }
+    "type": "raster",
+    "dataType": "U8",
+    "spatialReference": "EPSG:4326",
+    "measurement": {
+        "type": "unitless"
+    },
+    "time": {
+        "start": "2014-01-01T00:00:00.000Z",
+        "end": "2014-07-01T00:00:00.000Z"
+    },
+    "bbox": {
+        "upperLeftCoordinate": [-180.0, 90.0],
+        "lowerRightCoordinate": [180.0, -90.0]
+    }
 }
 ```
 
@@ -33,21 +33,21 @@ Call `/workflow/{workflowId}/metadata` to get the result descriptor of the workf
 
 ```json
 {
-  "type": "vector",
-  "dataType": "MultiPoint",
-  "spatialReference": "EPSG:4326",
-  "columns": {
-    "id": "int",
-    "name": "text",
-    "value": "float"
-  },
-  "time": {
-    "start": "2014-04-01T00:00:00.000Z",
-    "end": "2014-07-01T00:00:00.000Z"
-  },
-  "bbox": {
-    "lowerLeftCoordinate": [3.9662060000000001, 45.9030360000000002],
-    "upperRightCoordinate": [19.171284, 51.8473430000000022]
-  }
+    "type": "vector",
+    "dataType": "MultiPoint",
+    "spatialReference": "EPSG:4326",
+    "columns": {
+        "id": "int",
+        "name": "text",
+        "value": "float"
+    },
+    "time": {
+        "start": "2014-04-01T00:00:00.000Z",
+        "end": "2014-07-01T00:00:00.000Z"
+    },
+    "bbox": {
+        "lowerLeftCoordinate": [3.9662060000000001, 45.9030360000000002],
+        "upperRightCoordinate": [19.171284, 51.8473430000000022]
+    }
 }
 ```

@@ -19,23 +19,23 @@ Plot queries behave like vector queries.
 
 ```json
 {
-  "spatial_bounds": {
-    "upper_left_coordinate": {
-      "x": 10.0,
-      "y": 20.0
+    "spatial_bounds": {
+        "upper_left_coordinate": {
+            "x": 10.0,
+            "y": 20.0
+        },
+        "lower_right_coordinate": {
+            "x": 70.0,
+            "y": 80.0
+        }
     },
-    "lower_right_coordinate": {
-      "x": 70.0,
-      "y": 80.0
+    "time_interval": {
+        "start": "2010-01-01T00:00:00Z",
+        "end": "2011-01-01T00:00:00Z"
+    },
+    "spatial_resolution": {
+        "x": 1.0,
+        "y": 1.0
     }
-  },
-  "time_interval": {
-    "start": "2010-01-01T00:00:00Z",
-    "end": "2011-01-01T00:00:00Z"
-  },
-  "spatial_resolution": {
-    "x": 1.0,
-    "y": 1.0
-  }
 }
 ```

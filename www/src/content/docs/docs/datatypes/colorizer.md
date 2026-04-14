@@ -34,20 +34,20 @@ Values above `99.99` are shown as a light gray.
 
 ```json
 {
-  "type": "linearGradient",
-  "breakpoints": [
-    {
-      "value": 0.0,
-      "color": [204, 229, 255, 255]
-    },
-    {
-      "value": 99.99,
-      "color": [0, 0, 255, 255]
-    }
-  ],
-  "noDataColor": [0, 0, 0, 0],
-  "overColor": [224, 224, 224, 255],
-  "underColor": [255, 255, 255, 255]
+    "type": "linearGradient",
+    "breakpoints": [
+        {
+            "value": 0.0,
+            "color": [204, 229, 255, 255]
+        },
+        {
+            "value": 99.99,
+            "color": [0, 0, 255, 255]
+        }
+    ],
+    "noDataColor": [0, 0, 0, 0],
+    "overColor": [224, 224, 224, 255],
+    "underColor": [255, 255, 255, 255]
 }
 ```
 
@@ -65,20 +65,20 @@ Services report errors that try to use a logarithmic gradient specification with
 
 ```json
 {
-  "type": "logarithmicGradient",
-  "breakpoints": [
-    {
-      "value": 1.0,
-      "color": [255, 255, 255, 255]
-    },
-    {
-      "value": 100.0,
-      "color": [0, 0, 0, 255]
-    }
-  ],
-  "noDataColor": [0, 0, 0, 0],
-  "overColor": [0, 0, 0, 255],
-  "underColor": [255, 255, 255, 255]
+    "type": "logarithmicGradient",
+    "breakpoints": [
+        {
+            "value": 1.0,
+            "color": [255, 255, 255, 255]
+        },
+        {
+            "value": 100.0,
+            "color": [0, 0, 0, 255]
+        }
+    ],
+    "noDataColor": [0, 0, 0, 0],
+    "overColor": [0, 0, 0, 255],
+    "underColor": [255, 255, 255, 255]
 }
 ```
 
@@ -91,13 +91,13 @@ Unmapped values result in the `defaultColor`.
 
 ```json
 {
-  "type": "palette",
-  "colors": {
-    "1": [255, 255, 255, 255],
-    "2": [0, 0, 0, 255]
-  },
-  "noDataColor": [0, 0, 0, 0],
-  "defaultColor": [0, 0, 0, 0]
+    "type": "palette",
+    "colors": {
+        "1": [255, 255, 255, 255],
+        "2": [0, 0, 0, 255]
+    },
+    "noDataColor": [0, 0, 0, 0],
+    "defaultColor": [0, 0, 0, 0]
 }
 ```
 
@@ -111,6 +111,6 @@ The RGBA colorizer maps `U32` values "as is" to RGBA colors.
 
 ```json
 {
-  "type": "rgba"
+    "type": "rgba"
 }
 ```

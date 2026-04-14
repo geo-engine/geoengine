@@ -9,10 +9,10 @@ The description contains a name and a [Measurement](/datatypes/measurement.md).
 
 ```json
 {
-  "name": "NDVI",
-  "measurement": {
-    "type": "continuous",
-    "unit": "NDVI"
-  }
+    "name": "NDVI",
+    "measurement": {
+        "type": "continuous",
+        "unit": "NDVI"
+    }
 }
 ```

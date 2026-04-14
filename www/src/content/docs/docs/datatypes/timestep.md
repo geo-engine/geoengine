@@ -29,7 +29,7 @@ The granularity of the time steps can take one of the following values.
 
 ```json
 {
-  "granularity": "months",
-  "step": 1
+    "granularity": "months",
+    "step": 1
 }
 ```

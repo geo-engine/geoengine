@@ -7,15 +7,16 @@
         "build": "astro build",
         "preview": "astro preview",
         "astro": "astro",
-        "check": "prettier --check . && eslint 'src/**/*.{js,astro}'"
+        "check": "prettier --check . && eslint 'src/**/*.{js,astro}'",
+        "eslint": "eslint 'src/**/*.{js,astro}'"
     },
     "dependencies": {
         "@astrojs/starlight": "^0.38.3",
         "@fontsource/poppins": "^5.2.6",
+        "@scalar/openapi-parser": "^0.25.8",
         "@tailwindcss/vite": "^4.1.8",
         "astro": "^6.1.5",
         "astro-icon": "^1.1.5",
-        "marked": "^18.0.0",
         "preline": "^4.1.3",
         "sass": "^1.89.2",
         "tailwindcss": "^4.1.8"
