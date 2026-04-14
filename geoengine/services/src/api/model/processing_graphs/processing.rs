@@ -181,8 +181,11 @@ impl TryFrom<Expression> for OperatorsExpression {
 #[derive(Debug, Serialize, Deserialize, Clone, PartialEq, Eq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type", content = "values")]
 pub enum RenameBands {
+    #[schema(title = "Default")]
     Default,
+    #[schema(title = "Suffix")]
     Suffix(Vec<String>),
+    #[schema(title = "Rename")]
     Rename(Vec<String>),
 }
 
@@ -227,8 +230,10 @@ impl From<DeriveOutRasterSpecsSource> for OperatorsDeriveOutRasterSpecsSource {
 #[derive(Debug, Serialize, Deserialize, Clone, Copy, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum InterpolationResolution {
+    #[schema(title = "Resolution")]
     /// Explicit output resolution (`x`, `y`) in target coordinates.
     Resolution { x: f64, y: f64 },
+    #[schema(title = "Fraction")]
     /// Upscale factor relative to input resolution (`x >= 1`, `y >= 1`).
     Fraction { x: f64, y: f64 },
 }

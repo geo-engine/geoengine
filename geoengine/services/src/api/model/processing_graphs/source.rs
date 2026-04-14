@@ -12,6 +12,7 @@ use geoengine_operators::{
         GdalSource as OperatorsGdalSource, GdalSourceParameters as OperatorsGdalSourceParameters,
         MultiBandGdalSource as OperatorsMultiBandGdalSource,
         MultiBandGdalSourceParameters as OperatorsMultiBandGdalSourceParameters,
+        OgrSource as OperatorsOgrSource,
     },
 };
 use serde::{Deserialize, Serialize};
@@ -144,6 +145,53 @@ impl TryFrom<MockPointSource> for OperatorsMockPointSource {
     }
 }
 
+/// The [`OgrSource`] is a source operator that reads vector data using OGR (part of GDAL).
+/// The counterpart for raster data is the [`GdalSource`].
+///
+/// ## Errors
+///
+/// If the given dataset does not exist or is not readable, an error is thrown.
+///
+#[api_operator(
+    title = "OGR Source",
+    examples(json!({
+        "type": "OgrSource",
+        "params": {
+            "data": "ndvi"
+        }
+    }))
+)]
+pub struct OgrSource {
+    pub params: OgrSourceParameters,
+}
+
+/// Parameters for the [`OgrSource`] operator.
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct OgrSourceParameters {
+    /// Dataset name or identifier to be loaded.
+    #[schema(examples("ndvi"))]
+    pub data: String,
+
+    /// *Optional*: list of attributes to include. When `None`, all attributes are included.
+    pub attribute_projection: Option<Vec<String>>,
+}
+
+impl TryFrom<OgrSource> for OperatorsOgrSource {
+    type Error = anyhow::Error;
+    fn try_from(value: OgrSource) -> Result<Self, Self::Error> {
+        Ok(OperatorsOgrSource {
+            params: geoengine_operators::source::OgrSourceParameters {
+                data: serde_json::from_str::<NamedData>(&serde_json::to_string(
+                    &value.params.data,
+                )?)?,
+                attribute_projection: value.params.attribute_projection,
+                attribute_filters: None,
+            },
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -241,6 +289,49 @@ mod tests {
                     spatial_bounds: SpatialBoundsDerive::Derive(Default::default()),
                 },
             }));
+
+        OperatorsTypedOperator::try_from(typed_operator).expect("it should convert");
+    }
+
+    #[test]
+    fn it_parses_ogr_source_api_example() {
+        let example = serde_json::json!({
+            "type": "OgrSource",
+            "params": {
+                "data": "ndvi"
+            }
+        });
+
+        let parsed: OgrSource = serde_json::from_value(example).expect("example must parse");
+
+        assert_eq!(parsed.params.data, "ndvi");
+    }
+
+    #[test]
+    fn it_converts_ogr_source() {
+        let api_operator = OgrSource {
+            r#type: Default::default(),
+            params: OgrSourceParameters {
+                data: "ndvi".to_string(),
+                attribute_projection: None,
+            },
+        };
+
+        let operators_operator: OperatorsOgrSource =
+            api_operator.try_into().expect("it should convert");
+
+        assert_eq!(
+            operators_operator.params.data,
+            NamedData::with_system_name("ndvi")
+        );
+
+        let typed_operator = TypedOperator::Vector(VectorOperator::OgrSource(OgrSource {
+            r#type: Default::default(),
+            params: OgrSourceParameters {
+                data: "ndvi".to_string(),
+                attribute_projection: None,
+            },
+        }));
 
         OperatorsTypedOperator::try_from(typed_operator).expect("it should convert");
     }
