@@ -6,11 +6,15 @@ on:
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
+permissions:
+   contents: read
+
 env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  test:
+  geoengine-test:
+    name: "geoengine / test"
     runs-on: ubuntu-24.04
 
     permissions:
@@ -54,7 +58,9 @@ jobs:
           file: geoengine/lcov.info
           fail-on-error: false # do not fail the workflow if the upload fails
 
-  lint:
+  geoengine-lint:
+    name: "geoengine / lint"
+    
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -102,7 +108,9 @@ jobs:
       - name: Validate OpenAPI spec
         run: just validate-openapi-spec
 
-  build:
+  geoengine-build:
+    name: "geoengine / build"
+
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -134,6 +142,83 @@ jobs:
           key: ci_test_${{ matrix.build }}
       - name: Build
         run: just backend build "${{ matrix.build }}"
+  
+  python:
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        # use all supported versions from https://devguide.python.org/versions/
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+        uv: [false]
+        module-resolution: [""]
+        coverage: [false]
+        include:
+          - python-version: "3.10" # always test the minimum version
+            uv: true
+            module-resolution: "--resolution=lowest-direct"
+            coverage: true
+
+    env:
+      USE_UV: ${{ matrix.uv }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install uv
+        if: ${{ matrix.uv }}
+        run: just python install-uv
+      - name: Virtual environment
+        run: just python install-venv
+      - name: Dev dependencies
+        run: just python install-dependencies "dev" "${{ matrix.module-resolution }}"
+      - name: Lints
+        run: just python lint-code
+        # TODO: fix issues with mypy and uv
+        if: ${{ !matrix.uv }}
+      - name: Test dependencies
+        run: just python install-dependencies "test" "${{ matrix.module-resolution }}"
+      - name: Test Lints
+        run: just python lint-tests
+        # TODO: fix issues with mypy and uv
+        if: ${{ !matrix.uv }}
+      - name: Start PostgreSQL
+        run: service postgresql start
+      - name: Tests
+        run: >
+          just python test
+          --build-type=release
+          ${{ matrix.coverage && '--coverage' || '' }}
+      - name: Example dependencies
+        run: just python install-dependencies "examples" "${{ matrix.module-resolution }}"
+      - name: Examples
+        run: >
+          just python run-examples
+          --build-type=release
+          ${{ matrix.coverage && '--coverage' || '' }}
+      - name: Report coverage to Coveralls
+        if: ${{ matrix.coverage }}
+        # 1. We need to adjust the paths in the lcov file to match the repository structure.
+        # 2. We need to download the coveralls script and upload the report.
+        run: |
+          sed -i 's|SF:geoengine/|SF:|' ../coverage.lcov
+          curl -sL https://coveralls.io/coveralls-linux.tar.gz | tar -xz
+          ./coveralls report ../coverage.lcov
+        # If we don't run it in the code folder, the paths in the report will prefixed with `library/geoengine/`.
+        working-directory: python/geoengine
+        env:
+          COVERALLS_REPO_TOKEN: ${{ github.token }}
+  
   www:
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
