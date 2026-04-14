@@ -1,10 +1,10 @@
 ---
-title: Geo Engine OpenAPI Client
-subtitle: openapi-client
+title: Geo Engine API Client
+subtitle: api-client
 icon: ../../images/github-mark.svg
 links:
     - title: GitHub
-      url: https://github.com/geo-engine/geoengine/api-client
+      url: https://github.com/geo-engine/geoengine/tree/main/api-client
 ---
 
-Geo Engine OpenAPI Client is a generated client for the Geo Engine Server's OpenAPI specification.
+Geo Engine API Client is a set of language-specific clients based on Geo Engine Server's OpenAPI specification.
