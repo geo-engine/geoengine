@@ -135,7 +135,8 @@ jobs:
       - name: Build
         run: just backend build "${{ matrix.build }}"
   www:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
 
     permissions:
       contents: read
