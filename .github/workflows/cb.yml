@@ -105,7 +105,7 @@ jobs:
           save-data-file: true
           skip-fetch-gh-pages: true
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
         with:
           name: ${{ env.BENCH_UPLOAD_NAME }}
