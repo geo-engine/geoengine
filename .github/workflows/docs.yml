@@ -1,0 +1,41 @@
+# name: Deploy to GitHub Pages
+
+# on:
+#   push:
+#     branches: [main]
+#   # Allows you to run this workflow manually from the Actions tab
+#   workflow_dispatch:
+
+# env:
+#   CARGO_TERM_COLOR: always
+
+# jobs:
+#   build:
+#     runs-on: ubuntu-20.04
+
+#     steps:
+#       - uses: actions/checkout@v2
+#       - name: APT update
+#         run: sudo apt-get update
+#       - name: Install system dependencies
+#         run: sudo apt-get install libgeos-dev libproj-dev
+#       - name: Set up Python 3.9
+#         uses: actions/setup-python@v2
+#         with:
+#           python-version: 3.9
+#       - name: Install build dependencies
+#         run: |
+#           python -m pip install --upgrade pip
+#           pip install -e .
+#           pip install -e .[dev]
+
+#       - name: Generate Python Docs
+#         run: pdoc --html --output-dir docs geoengine
+
+#       - name: Deploy
+#         uses: peaceiris/actions-gh-pages@v3
+#         if: ${{ github.ref == 'refs/heads/main' }}
+#         with:
+#           github_token: ${{ secrets.GITHUB_TOKEN }}
+#           publish_dir: ./docs/geoengine
+#           cname: python.docs.geoengine.io

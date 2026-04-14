@@ -1,0 +1,5 @@
+# IDEs
+.vscode
+
+# Language-specific files that are somehow put to root
+.mypy_cache

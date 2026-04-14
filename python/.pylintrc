@@ -1,0 +1,51 @@
+[MASTER]
+
+[MESSAGES CONTROL]
+
+disable=fixme
+
+[MISCELLANEOUS]
+
+# List of note tags to take in consideration, separated by a comma.
+notes=FIXME,
+      TODO
+
+[FORMAT]
+
+# Maximum number of characters on a single line.
+max-line-length=120
+
+# Good variable names which should always be accepted, separated by a comma.
+good-names=i,
+           j,
+           k,
+           m,
+           r,
+           ax,
+           df,
+           _
+
+[BASIC]
+
+# Minimum line number of a method for requiring a docstring.
+docstring-min-length=3
+
+no-docstring-rgx=^test_.*
+
+[DESIGN]
+
+min-public-methods=1
+
+[SIMILARITIES]
+
+# Minimum lines number of a similarity.
+min-similarity-lines=50
+
+# Ignore comments when computing similarities.
+ignore-comments=yes
+
+# Ignore docstrings when computing similarities.
+ignore-docstrings=yes
+
+# Ignore imports when computing similarities.
+ignore-imports=no
