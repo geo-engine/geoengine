@@ -125,7 +125,7 @@ jobs:
       - name: Post to a Slack channel
         if: ${{ needs.create-container.result == 'failure' }}
         id: slack
-        uses: slackapi/slack-github-action@v1.23.0
+        uses: slackapi/slack-github-action@v3.0.1
         with:
           channel-id: "geoengine-dev-core"
           slack-message: "⚠️ The workflow ${{ github.workflow }} in the repository ${{ github.event.repository.name }} FAILED!"
