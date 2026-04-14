@@ -32,38 +32,6 @@ const components = defineCollection({
         }),
 });
 const docs = defineCollection({loader: docsLoader(), schema: docsSchema()});
-const openapi_types = defineCollection({
-    loader: file('../openapi.json', {
-        parser: async (text) => {
-            const data = JSON.parse(text);
-            return data.components.schemas;
-        },
-    }),
-    schema: z.object({
-        title: z.string().optional(),
-        description: z.string().optional(),
-        properties: z
-            .looseObject({
-                type: z
-                    .object({
-                        enum: z.array(z.string()).optional(),
-                    })
-                    .optional(),
-                params: z
-                    .object({
-                        $ref: z.string().optional(),
-                    })
-                    .optional(),
-                sources: z
-                    .object({
-                        $ref: z.string().optional(),
-                    })
-                    .optional(),
-            })
-            .optional(),
-        examples: z.array(z.json({})).optional(),
-    }),
-});
 
 // 4. Export a single `collections` object to register your collection(s)
-export const collections = {features, components, docs, 'openapi-types': openapi_types};
+export const collections = {features, components, docs};

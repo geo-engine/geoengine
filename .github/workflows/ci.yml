@@ -134,3 +134,16 @@ jobs:
           key: ci_test_${{ matrix.build }}
       - name: Build
         run: just backend build "${{ matrix.build }}"
+  www:
+    runs-on: ubuntu-latest
+
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+        - uses: extractions/setup-just@v3
+        - name: Install
+          run: just www install
+        - name: Check formatting and lints
+          run: just www lint
+        - name: Build
+          run: just www build
