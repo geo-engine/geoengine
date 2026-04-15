@@ -490,23 +490,38 @@ impl GdalRasterLoader {
 
         let gdal_dataset_geotransform = GdalDatasetGeoTransform::from(dataset.geo_transform()?);
         // check that the dataset geo transform is the same as the one we get from GDAL
-        debug_assert!(approx_eq!(
-            Coordinate2D,
-            gdal_dataset_geotransform.origin_coordinate,
-            dataset_params.geo_transform.origin_coordinate
-        ));
+        debug_assert!(
+            approx_eq!(
+                Coordinate2D,
+                gdal_dataset_geotransform.origin_coordinate,
+                dataset_params.geo_transform.origin_coordinate
+            ),
+            "expected dataset geo transform origin coordinate {:?} to be approximately equal to GDAL dataset geo transform origin coordinate {:?}",
+            dataset_params.geo_transform.origin_coordinate,
+            gdal_dataset_geotransform.origin_coordinate
+        );
 
-        debug_assert!(approx_eq!(
-            f64,
-            gdal_dataset_geotransform.x_pixel_size,
-            dataset_params.geo_transform.x_pixel_size
-        ));
+        debug_assert!(
+            approx_eq!(
+                f64,
+                gdal_dataset_geotransform.x_pixel_size,
+                dataset_params.geo_transform.x_pixel_size
+            ),
+            "expected dataset geo transform x pixel size {:?} to be approximately equal to GDAL dataset geo transform x pixel size {:?}",
+            dataset_params.geo_transform.x_pixel_size,
+            gdal_dataset_geotransform.x_pixel_size
+        );
 
-        debug_assert!(approx_eq!(
-            f64,
-            gdal_dataset_geotransform.y_pixel_size,
-            dataset_params.geo_transform.y_pixel_size
-        ));
+        debug_assert!(
+            approx_eq!(
+                f64,
+                gdal_dataset_geotransform.y_pixel_size,
+                dataset_params.geo_transform.y_pixel_size
+            ),
+            "expected dataset geo transform y pixel size {:?} to be approximately equal to GDAL dataset geo transform y pixel size {:?}",
+            dataset_params.geo_transform.y_pixel_size,
+            gdal_dataset_geotransform.y_pixel_size
+        );
 
         let (gdal_dataset_pixels_x, gdal_dataset_pixels_y) = dataset.raster_size();
         // check that the dataset pixel size is the same as the one we get from GDAL

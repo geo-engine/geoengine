@@ -72,6 +72,7 @@ where
 {
     cfg.service(
         web::scope("/dataset")
+            .app_data(web::JsonConfig::default().limit(32 * 1024 * 1024)) // Set Json payload limit to allow larger metadata if needed.
             .service(
                 web::resource("/suggest").route(web::post().to(suggest_meta_data_handler::<C>)),
             )
