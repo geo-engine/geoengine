@@ -4,6 +4,7 @@ import tailwindcss from '@tailwindcss/vite';
 import icon from 'astro-icon';
 import starlight from '@astrojs/starlight';
 import openApiOperatorsPlugin from './astro-openapi-plugin.ts';
+import starlightLinksValidator from 'starlight-links-validator';
 
 // https://astro.build/config
 export default defineConfig({
@@ -21,6 +22,7 @@ export default defineConfig({
             plotsOutputDir: './src/content/docs/docs/plots',
         }),
         starlight({
+            plugins: [starlightLinksValidator()],
             title: 'Geo Engine Docs',
             description: 'Documentation for the Geo Engine project.',
             logo: {

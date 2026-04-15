@@ -3,7 +3,7 @@ title: Datasets
 ---
 
 A dataset is a loadable unit in Geo Engine.
-It is a parameter of a source operator (e.g., a [`GdalSource`](../operators/gdalsource.md)) and identifies the data that is loaded.
+It is a parameter of a source operator (e.g., a [`GdalSource`](/docs/operators/gdalsource)) and identifies the data that is loaded.
 Geo Engine supports different types of data, reflected by a `DataId`, which refers to internal datasets and external data.
 
 ## Internal dataset

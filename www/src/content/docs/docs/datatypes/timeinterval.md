@@ -2,7 +2,7 @@
 title: Time Interval
 ---
 
-A time interval consists of two [`TimeInstance`s](./timeinstance.md).
+A time interval consists of two [`TimeInstance`s](/docs/datatypes/timeinstance).
 Please be aware, that the interval is defined in close-open semantics.
 This means, that the start time is inclusive and the end time of the interval is exclusive.
 In mathematical notation, the interval is defined as `[start, end)`.
