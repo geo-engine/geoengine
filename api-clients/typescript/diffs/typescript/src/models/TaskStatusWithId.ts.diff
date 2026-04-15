@@ -1,0 +1,13 @@
+--- typescript/src/models/TaskStatusWithId.ts
++++ typescript/src/models/TaskStatusWithId.ts
+@@ -26,7 +26,7 @@
+  * @export
+  * @interface TaskStatusWithId
+  */
+-export interface TaskStatusWithId extends TaskStatus {
++export type TaskStatusWithId = { taskId: string } & TaskStatus;
+
+export interface _TaskStatusWithId /* extends TaskStatus */ {
+     /**
+      * 
+      * @type {string}

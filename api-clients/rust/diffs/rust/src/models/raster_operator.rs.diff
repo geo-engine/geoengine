@@ -1,0 +1,11 @@
+--- rust/src/models/raster_operator.rs
++++ rust/src/models/raster_operator.rs
+@@ -13,7 +13,7 @@
+ 
+ /// RasterOperator : An operator that produces raster data.
+ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+-#[serde(tag = "type")]
++#[serde(untagged)]
+ pub enum RasterOperator {
+     #[serde(rename="BandFilter")]
+     BandFilter(Box<models::BandFilter>),

@@ -1,0 +1,168 @@
+# Api Client CLI
+
+mod common '../common.justfile'
+
+OPENAPI_GENERATOR_CLI := "npx @openapitools/openapi-generator-cli --openapitools openapitools.json"
+
+_default:
+    @just --list
+
+# Build all API clients by executing the build steps for each language.
+[group('build')]
+build: common::_clear \
+    _build-python-preprocess _build-rust-preprocess _build-typescript-preprocess \
+    _build_call \
+    _build-python-postprocess _build-rust-postprocess _build-typescript-postprocess
+
+_build_call generator="":
+    {{ OPENAPI_GENERATOR_CLI }} generate {{ if generator == "" { "" } else { "--generator-key " + generator } }}
+
+# Build the API clients for Python by generating code with the OpenAPI Generator and applying post-processing steps.
+[group('build')]
+build-python: common::_clear _build-python-preprocess (_build_call "python") _build-python-postprocess
+
+# Remove some directories because they are not be overwritten by the generator.
+_build-python-preprocess:
+    rm -rf \
+        python/geoengine_openapi_client \
+        python/.mypy_cache \
+        python/test \
+        python/diffs
+
+_build-python-postprocess:
+    .generation/post-process/python.py
+    rm -rf \
+        python/docs \
+        python/git_push.sh \
+        python/.travis.yml \
+        python/.gitlab-ci.yml \
+        python/.github
+
+# Build the API clients for TypeScript by generating code with the OpenAPI Generator and applying post-processing steps. Also install npm dependencies and set up .gitignore.
+[group('build')]
+build-typescript: common::_clear (_build_call "typescript") _build-typescript-postprocess
+
+# Remove some directories because they are not be overwritten by the generator.
+_build-typescript-preprocess:
+    rm -rf \
+        typescript/src \
+        typescript/dist \
+        typescript/node_modules \
+        typescript/diffs
+
+_build-typescript-postprocess:
+    .generation/post-process/typescript.py
+    echo "wwwroot/*.js" > typescript/.gitignore
+    echo "node_modules" > typescript/.gitignore
+    echo "typings" > typescript/.gitignore
+    cd typescript && npm install
+    rm \
+        typescript/.openapi-generator/FILES \
+        package-lock.json
+
+# Build the API clients for Rust by generating code with the OpenAPI Generator and applying post-processing steps.
+[group('build')]
+build-rust: common::_clear _build-rust-preprocess (_build_call "rust") _build-rust-postprocess
+
+_build-rust-preprocess:
+    rm -rf \
+        rust/diffs
+
+_build-rust-postprocess:
+    .generation/post-process/rust.py
+
+    rm -rf \
+        rust/git_push.sh \
+        rust/.travis.yml
+
+[group('config')]
+lint-openapi-spec: common::_clear
+    {{ OPENAPI_GENERATOR_CLI }} validate \
+        -i ../openapi.json \
+        --recommend
+
+# Generate the OpenAPI Generator configuration files from the config.ini.
+[group('config'), script("python3")]
+update-generator-configs:
+    import configparser
+    import json
+
+    config = configparser.ConfigParser()
+    config.optionxform = str  # do not convert keys to lowercase
+    config.read('.generation/config.ini')
+
+    with open('openapitools.json', 'r', encoding='utf-8') as f:
+        generator_config = json.load(f)
+
+    spaces = generator_config['spaces']
+
+    generators = generator_config['generator-cli']['generators']
+    for generator in ['typescript', 'python', 'rust']:
+        generators[generator]['gitHost'] = config['git']['host']
+        generators[generator]['gitUserId'] = config['git']['user']
+        generators[generator]['gitRepoId'] = config['git']['repo']
+
+    repository_url = f"https://{config['git']['host']}/{config['git']['user']}/{config['git']['repo']}"
+
+    generators['typescript']['additionalProperties']['npmVersion'] = config['general']['version']
+
+    generators['python']['additionalProperties']['packageVersion'] = config['general']['version']
+    generators['python']['additionalProperties']['packageUrl'] = repository_url
+
+    generators['rust']['additionalProperties']['packageVersion'] = config['general']['version']
+    generators['rust']['additionalProperties']['homePageUrl'] = config['general']['homepageUrl']
+    generators['rust']['additionalProperties']['repositoryUrl'] = repository_url
+
+    with open('openapitools.json', 'w', encoding='utf-8') as f:
+        json.dump(generator_config, f, indent=spaces)
+
+    print("Generated OpenAPI Generator configuration for TypeScript, Python, and Rust.")
+
+# Update the backend commit in the config.ini and increment the version.
+[group('config')]
+[arg("version", long="version", help="The version number to set in the config.ini.")]
+update-config version: (_update-config version) update-generator-configs lint-openapi-spec
+
+[script("python3")]
+_update-config version:
+    import configparser
+
+    INI_FILE = '.generation/config.ini'
+
+    config = configparser.ConfigParser()
+    config.optionxform = str  # do not convert keys to lowercase
+    config.read(INI_FILE)
+
+    config['general']['version'] = "{{ version }}"
+
+    with open(INI_FILE, 'w', encoding='utf-8') as f:
+        config.write(f)
+
+    print(f"Updated {INI_FILE} with version={config['general']['version']}.")
+
+[group('test')]
+test: common::_clear test-python test-rust test-typescript
+
+[group('test')]
+[working-directory("python")]
+test-python: common::_clear
+    #!/usr/bin/env bash
+    python3 -m venv .venv && source .venv/bin/activate || source .venv/bin/activate
+    
+    python -m pip install --upgrade pip
+    if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
+    
+    pytest
+
+[group('test')]
+[working-directory("rust")]
+test-rust: common::_clear
+    cargo build
+    cargo test
+
+[group('test')]
+[working-directory("typescript")]
+test-typescript: common::_clear
+    npm install
+    npm run build

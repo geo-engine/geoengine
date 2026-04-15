@@ -1,0 +1,18 @@
+--- rust/src/models/multiple_raster_or_single_vector_operator.rs
++++ rust/src/models/multiple_raster_or_single_vector_operator.rs
+@@ -16,13 +16,13 @@
+ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+ #[serde(untagged)]
+ pub enum MultipleRasterOrSingleVectorOperator {
+-    ArrayVecmodels::RasterOperator(Vec<models::RasterOperator>),
++    RasterOperator(Vec<models::RasterOperator>),
+     VectorOperator(Box<models::VectorOperator>),
+ }
+ 
+ impl Default for MultipleRasterOrSingleVectorOperator {
+     fn default() -> Self {
+-        Self::ArrayVecmodels::RasterOperator(Default::default())
++        Self::RasterOperator(Default::default())
+     }
+ }
+ /// 

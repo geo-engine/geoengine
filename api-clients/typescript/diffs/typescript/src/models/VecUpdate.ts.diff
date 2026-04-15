@@ -1,0 +1,11 @@
+--- typescript/src/models/VecUpdate.ts
++++ typescript/src/models/VecUpdate.ts
+@@ -65,7 +65,7 @@
+     if (typeof value !== 'object') {
+         return value;
+     }
+-    if (instanceOfPlot(value)) {
++    if (typeof value === 'object' && instanceOfPlot(value)) {
+         return PlotToJSON(value as Plot);
+     }
+     if (instanceOfProjectUpdateToken(value)) {

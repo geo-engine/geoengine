@@ -1,0 +1,42 @@
+
+# RasterVectorJoinParameters
+
+
+## Properties
+
+Name | Type
+------------ | -------------
+`featureAggregation` | [FeatureAggregationMethod](FeatureAggregationMethod.md)
+`featureAggregationIgnoreNoData` | boolean
+`names` | [ColumnNames](ColumnNames.md)
+`temporalAggregation` | [TemporalAggregationMethod](TemporalAggregationMethod.md)
+`temporalAggregationIgnoreNoData` | boolean
+
+## Example
+
+```typescript
+import type { RasterVectorJoinParameters } from '@geoengine/api-client'
+
+// TODO: Update the object below with actual values
+const example = {
+  "featureAggregation": null,
+  "featureAggregationIgnoreNoData": null,
+  "names": null,
+  "temporalAggregation": null,
+  "temporalAggregationIgnoreNoData": null,
+} satisfies RasterVectorJoinParameters
+
+console.log(example)
+
+// Convert the instance to a JSON string
+const exampleJSON: string = JSON.stringify(example)
+console.log(exampleJSON)
+
+// Parse the JSON string back to an object
+const exampleParsed = JSON.parse(exampleJSON) as RasterVectorJoinParameters
+console.log(exampleParsed)
+```
+
+[[Back to top]](#) [[Back to API list]](../README.md#api-endpoints) [[Back to Model list]](../README.md#models) [[Back to README]](../README.md)
+
+

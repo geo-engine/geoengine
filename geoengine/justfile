@@ -8,7 +8,7 @@ _default:
 generate-openapi-spec: common::_clear _generate-openapi-spec
 
 _generate-openapi-spec:
-    cargo run --bin geoengine-cli -- openapi > openapi.json
+    cargo run --bin geoengine-cli -- openapi > ../openapi.json
 
 # Run lints.
 [group("lint")]
@@ -41,6 +41,7 @@ build mode="":
 [group("install")]
 install:
     cargo install --locked cargo-llvm-cov
+    cargo install --locked cargo-edit
 
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]

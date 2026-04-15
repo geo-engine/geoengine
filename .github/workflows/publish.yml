@@ -1,0 +1,110 @@
+# This workflows builds the libraries and publishes them on PyPI, npm, and crates.io.
+
+name: Build & Publish
+
+on:
+  workflow_run:
+    workflows: [Test]
+    types: [completed]
+    branches: [main]
+
+jobs:
+  python:
+    name: Publish Python Package
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.10"] # use lowest supported Python version
+
+    defaults:
+      run:
+        working-directory: api-client/python
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/geoengine-api-client
+
+    permissions:
+      contents: read
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
+      - name: Build a binary wheel and a source tarball
+        run: |
+          pip install --upgrade build
+          python3 -m build
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: python/dist/ # does not use `run.working-directory`
+
+  typescript:
+    name: Publish TypeScript Package
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        node-version: [20.19.x] # use lowest supported Node version
+
+    defaults:
+      run:
+        working-directory: api-client/typescript
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+          registry-url: "https://registry.npmjs.org"
+      - name: Install dependencies
+        run: npm install
+      - name: Build
+        run: npm run build
+      - name: Publish
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+  rust:
+    name: Publish Rust Package
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        rust-version: ["1.80.0"] # use lowest supported Rust version
+
+    defaults:
+      run:
+        working-directory: api-client/rust
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Rust ${{ matrix.rust-version }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ matrix.rust-version }}
+      - name: Install dependencies
+        run: cargo fetch
+      - name: Publish
+        run: cargo publish --token ${{ secrets.CARGO_TOKEN }}

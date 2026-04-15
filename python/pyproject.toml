@@ -1,6 +1,6 @@
 [project]
 name = "geoengine"
-version = "0.8.0"
+version = "0.9.0"
 authors = [{ name = "Geo Engine GmbH", email = "info@geoengine.de" }]
 description = "A package for easy access to Geo Engine instances"
 classifiers = [

@@ -1,0 +1,14 @@
+--- typescript/src/models/RasterOperator.ts
++++ typescript/src/models/RasterOperator.ts
+@@ -147,3 +147,11 @@
+     }
+ }
+ 
++
++/**
++* Check if a given object implements the RasterOperator interface.
++*/
++export function instanceOfRasterOperator(value: object): value is RasterOperator {
++    return instanceOfExpression(value)
++        || instanceOfGdalSource(value);
++}

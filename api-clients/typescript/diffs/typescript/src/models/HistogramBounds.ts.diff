@@ -1,0 +1,11 @@
+--- typescript/src/models/HistogramBounds.ts
++++ typescript/src/models/HistogramBounds.ts
+@@ -66,7 +66,7 @@
+         return value;
+     }
+     if (instanceOfData(value)) {
+-        return DataToJSON(value as Data);
++        return DataToJSON(value as unknown as Data);
+     }
+     if (instanceOfHistogramBoundsValues(value)) {
+         return HistogramBoundsValuesToJSON(value as HistogramBoundsValues);

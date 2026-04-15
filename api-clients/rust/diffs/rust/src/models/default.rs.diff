@@ -1,0 +1,11 @@
+--- rust/src/models/default.rs
++++ rust/src/models/default.rs
+@@ -31,7 +31,7 @@
+     Default,
+ }
+ 
+-impl Default for Type {
++impl std::default::Default for Type {
+     fn default() -> Type {
+         Self::Default
+     }
