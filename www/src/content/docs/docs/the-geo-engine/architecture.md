@@ -1,11 +1,6 @@
 ---
-title: The Geo Engine
+title: Architecture
 ---
-
-Geo Engine is a cloud-ready geospatial data processing platform.
-Here, we give an overview of its architecture and describe the main components.
-
-## Architecture
 
 <!--
 Take from Google Slide…

@@ -15,7 +15,11 @@ export default defineConfig({
 
     integrations: [
         icon(),
-        openApiOperatorsPlugin({input: '../openapi.json', outputDir: './src/content/docs/docs/'}),
+        openApiOperatorsPlugin({
+            input: '../openapi.json',
+            operatorsOutputDir: './src/content/docs/docs/operators',
+            plotsOutputDir: './src/content/docs/docs/plots',
+        }),
         starlight({
             title: 'Geo Engine Docs',
             description: 'Documentation for the Geo Engine project.',

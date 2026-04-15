@@ -20,18 +20,18 @@ If the `buckets` parameter is set to `squareRootChoiceRule`, the operator estima
 
 ## Parameters
 
-| Name          | Type             | Description                                                                                           | Examples        |
-| ------------- | ---------------- | ----------------------------------------------------------------------------------------------------- | --------------- |
-| attributeName | string           | Name of the (numeric) vector attribute or raster band to compute the histogram on.                    | `"temperature"` |
-| bounds        | HistogramBounds  | If `data`, it computes the bounds of the underlying data. If `values`, one can specify custom bounds. |                 |
-| buckets       | HistogramBuckets | The number of buckets. The value can be specified or calculated.                                      |                 |
-| interactive   | boolean          | Flag, if the histogram should have user interactions for a range selection. It is `false` by default. | `true`          |
+| Name        | Type             | Description                                                                                                                  | Examples        |
+| ----------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| bounds      | HistogramBounds  | If `data`, it computes the bounds of the underlying data.<br>If `{ "min": ..., "max": ... }`, one can specify custom bounds. |                 |
+| buckets     | HistogramBuckets | The number of buckets. The value can be specified or calculated.                                                             |                 |
+| columnName  | string           | Name of the (numeric) vector attribute or raster band to compute the histogram on.                                           | `"temperature"` |
+| interactive | boolean          | Flag, if the histogram should have user interactions for a range selection. It is `false` by default.                        | `true`          |
 
 ## Sources
 
 | Name   | Type                         | Description                                                         |
 | ------ | ---------------------------- | ------------------------------------------------------------------- |
-| source | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
+| vector | SingleRasterOrVectorOperator | It is either a set of `RasterOperator` or a single `VectorOperator` |
 
 ## Examples
 
