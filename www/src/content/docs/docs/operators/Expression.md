@@ -27,19 +27,19 @@ Finally, the value `NODATA` can be used to output NO DATA.
 
 Users can think of this implicit function signature for, e.g., two inputs:
 
-```Rust
+```rust
 fn (A: f64, B: f64) -> f64
 ```
 
 As a start, expressions contain algebraic operations and mathematical functions.
 
-```Rust
+```rust
 (A + B) / 2
 ```
 
 In addition, branches can be used to check for conditions.
 
-```Rust
+```rust
 if A IS NODATA {
     B
 } else {
@@ -49,7 +49,7 @@ if A IS NODATA {
 
 Function calls can be used to access utility functions.
 
-```Rust
+```rust
 max(A, 0)
 ```
 
@@ -69,7 +69,7 @@ Currently, the following functions are available:
 
 To generate more complex expressions, it is possible to have variable assignments.
 
-```Rust
+```rust
 let mean = (A + B) / 2;
 let coefficient = 0.357;
 mean * coefficient
