@@ -1,0 +1,25 @@
+---
+import '../styles/global.css';
+
+import Header from '../components/Header.astro';
+import Footer from '../components/Footer.astro';
+---
+
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <link rel="icon" type="image/svg+xml" href="/favicon.png" />
+        <meta name="viewport" content="width=device-width" />
+        <meta name="generator" content={Astro.generator} />
+        <title>Geo Engine</title>
+    </head>
+    <body>
+        <Header />
+        <slot />
+        <Footer />
+    </body>
+    <!-- Preline UI -->
+    <script>
+        import 'preline/dist/preline.js';
+    </script>
+</html>

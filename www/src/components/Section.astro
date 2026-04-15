@@ -1,0 +1,59 @@
+---
+import blueBg from '../images/backgrounds/GeoEngine_Structure_midblue.svg';
+import greenBg from '../images/backgrounds/GeoEngine_Structure_lightgreen.svg';
+import lightblueBg from '../images/backgrounds/GeoEngine_Structure_lightblue.svg';
+import {NO_IMAGE_SET, optimizedBackgroundImage} from '../images/util';
+
+interface Props {
+    bg?: 'green' | 'blue' | 'lightblue' | 'beach';
+    box?: boolean;
+    id?: string;
+}
+
+const {bg, box = false, id} = Astro.props;
+
+let backgroundImage = NO_IMAGE_SET;
+if (bg == 'green') {
+    backgroundImage = await optimizedBackgroundImage(greenBg);
+} else if (bg == 'blue') {
+    backgroundImage = await optimizedBackgroundImage(blueBg);
+} else if (bg == 'lightblue') {
+    backgroundImage = await optimizedBackgroundImage(lightblueBg);
+}
+---
+
+<style
+    define:vars={{
+        smImageSrc: backgroundImage.sm.src,
+        mdImageSrc: backgroundImage.md.src,
+        lgImageSrc: backgroundImage.lg.src,
+        xlImageSrc: backgroundImage.xl.src,
+        originalImageSrc: backgroundImage.original.src,
+    }}
+>
+    section {
+        background-image: var(--originalImageSrc);
+
+        @media screen and (max-width: 1536px) {
+            background-image: var(--xlImageSrc);
+        }
+
+        @media screen and (max-width: 1280px) {
+            background-image: var(--lgImageSrc);
+        }
+
+        @media screen and (max-width: 1024px) {
+            background-image: var(--mdImageSrc);
+        }
+
+        @media screen and (max-width: 768px) {
+            background-image: var(--smImageSrc);
+        }
+    }
+</style>
+
+<section class="bg-cover bg-center bg-no-repeat py-16" id={id}>
+    <div class="mx-auto flex size-full max-w-6xl flex-col rounded-md p-8" class:list={[{'bg-white': box}]}>
+        <slot />
+    </div>
+</section>

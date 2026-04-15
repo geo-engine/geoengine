@@ -1,0 +1,29 @@
+mod common '../common.justfile'
+
+_default:
+    @just --list
+
+[group("install")]
+install: common::_clear
+    npm ci
+
+[group("install")]
+upgrade: common::_clear
+    npx @astrojs/upgrade
+    npm update
+
+[group("build")]
+build: common::_clear
+    npm run build
+
+[group("run")]
+run: common::_clear
+    npm run dev
+
+lint: common::_clear format
+    npm run eslint
+
+[arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
+[group("lint")]
+format write="false": common::_clear
+    npx prettier {{ if write == "true" { "--write" } else { "--check" } }} .

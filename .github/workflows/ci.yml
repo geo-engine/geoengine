@@ -106,7 +106,7 @@ jobs:
         uses: actions/checkout@v6
       - uses: extractions/setup-just@v3
       - name: Validate OpenAPI spec
-        run: just validate-openapi-spec
+        run: just lint-openapi-spec
 
   geoengine-build:
     name: "geoengine / build"
@@ -218,3 +218,23 @@ jobs:
         working-directory: python/geoengine
         env:
           COVERALLS_REPO_TOKEN: ${{ github.token }}
+  
+  www:
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+        - uses: extractions/setup-just@v3
+        - name: Install
+          run: just www install
+        - name: Check formatting and lints
+          run: just www lint
+        - name: Build
+          run: just www build
+        - name: Idempotency check
+          run: just check-no-changes-in-git-repo
