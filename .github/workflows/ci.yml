@@ -106,7 +106,7 @@ jobs:
         uses: actions/checkout@v6
       - uses: extractions/setup-just@v3
       - name: Validate OpenAPI spec
-        run: just validate-openapi-spec
+        run: just lint-openapi-spec
 
   geoengine-build:
     name: "geoengine / build"
@@ -236,3 +236,5 @@ jobs:
           run: just www lint
         - name: Build
           run: just www build
+        - name: Idempotency check
+          run: just check-no-changes-in-git-repo
