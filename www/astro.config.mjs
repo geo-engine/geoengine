@@ -5,6 +5,7 @@ import icon from 'astro-icon';
 import starlight from '@astrojs/starlight';
 import openApiOperatorsPlugin from './astro-openapi-plugin.ts';
 import starlightLinksValidator from 'starlight-links-validator';
+import pydocPlugin from './pydoc-plugin.ts';
 
 // https://astro.build/config
 export default defineConfig({
@@ -20,6 +21,9 @@ export default defineConfig({
             input: '../openapi.json',
             operatorsOutputDir: './src/content/docs/docs/operators',
             plotsOutputDir: './src/content/docs/docs/plots',
+        }),
+        pydocPlugin({
+            outputDir: './src/content/docs/docs/python',
         }),
         starlight({
             plugins: [starlightLinksValidator()],
@@ -61,6 +65,11 @@ export default defineConfig({
                     label: 'Plots',
                     autogenerate: {directory: 'docs/plots'},
                     collapsed: false,
+                },
+                {
+                    label: 'Python Library',
+                    autogenerate: {directory: 'docs/python'},
+                    collapsed: true,
                 },
             ],
         }),
