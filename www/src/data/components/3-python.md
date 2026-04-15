@@ -1,7 +1,7 @@
 ---
 title: Geo Engine Python Library
 subtitle: geoengine-python
-icon: ../../images/github-mark.svg
+icon: ../../images/logos/python.svg
 links:
     - title: GitHub
       url: https://github.com/geo-engine/geoengine/tree/main/python

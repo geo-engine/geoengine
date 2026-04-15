@@ -1,7 +1,7 @@
 ---
 title: Geo Engine UI
 subtitle: geoengine-ui
-icon: ../../images/github-mark.svg
+icon: ../../images/logos/angular.svg
 links:
     - title: GitHub
       url: https://github.com/geo-engine/geoengine/tree/main/ui

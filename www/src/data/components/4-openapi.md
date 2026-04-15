@@ -1,7 +1,7 @@
 ---
 title: Geo Engine API Client
 subtitle: api-client
-icon: ../../images/github-mark.svg
+icon: ../../images/logos/OpenAPI.svg
 links:
     - title: GitHub
       url: https://github.com/geo-engine/geoengine/tree/main/api-client

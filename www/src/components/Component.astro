@@ -11,7 +11,9 @@ const {title, subtitle} = Astro.props;
 <div
     class="group flex flex-col h-full bg-white border border-gray-200 shadow-2xs rounded-xl dark:bg-neutral-900 dark:border-neutral-700 dark:shadow-neutral-700/70"
 >
-    <div class="h-52 flex flex-col justify-center items-center bg-second-lightblue rounded-t-xl">
+    <div
+        class="h-52 flex flex-col justify-center items-center bg-second-lightblue rounded-t-xl [&_picture]:max-h-2/3 [&_img]:h-full [&_img]:w-full"
+    >
         <slot name="image" />
     </div>
     <div class="p-4 md:p-6">

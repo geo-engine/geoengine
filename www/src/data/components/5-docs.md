@@ -1,9 +1,9 @@
 ---
 title: Geo Engine Docs
 subtitle: docs
-icon: ../../images/GeoEngine_Bildmarke_Schutzraum.svg
+icon: ../../images/logos/astro.svg
 links:
-    - title: View Documentation
+    - title: View
       url: /docs
     - title: GitHub
       url: https://github.com/geo-engine/geoengine/tree/main/www
