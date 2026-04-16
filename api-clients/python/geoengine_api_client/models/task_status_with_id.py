@@ -73,17 +73,20 @@ class TaskStatusWithId(TaskStatus):
         )
         # set to None if info (nullable) is None
         # and model_fields_set contains the field
-        if self.info is None and "info" in self.model_fields_set:
+        # Note: fixed handling of actual_instance
+        if getattr(self.actual_instance, "info", None) is None and "info" in self.actual_instance.__fields_set__:
             _dict['info'] = None
 
         # set to None if clean_up (nullable) is None
         # and model_fields_set contains the field
-        if self.clean_up is None and "clean_up" in self.model_fields_set:
+        # Note: fixed handling of actual_instance
+        if getattr(self.actual_instance, "clean_up", None) is None and "clean_up" in self.actual_instance.__fields_set__:
             _dict['cleanUp'] = None
 
         # set to None if error (nullable) is None
         # and model_fields_set contains the field
-        if self.error is None and "error" in self.model_fields_set:
+        # Note: fixed handling of actual_instance
+        if getattr(self.actual_instance, "error", None) is None and "error" in self.actual_instance.__fields_set__:
             _dict['error'] = None
 
         return _dict
@@ -96,6 +99,13 @@ class TaskStatusWithId(TaskStatus):
 
         if not isinstance(obj, dict):
             return cls.model_validate(obj)
+
+        # Note: fixed handling of actual_instance
+        _obj = cls.model_validate({
+            "actual_instance": TaskStatus.from_dict(obj).actual_instance,
+            "task_id": obj.get("taskId")
+        })
+        return _obj
 
         _obj = cls.model_validate({
             "description": obj.get("description"),

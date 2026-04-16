@@ -7,10 +7,10 @@ from __future__ import annotations
 from enum import Enum
 from uuid import UUID
 
-import geoengine_openapi_client
-import geoengine_openapi_client.api
-import geoengine_openapi_client.models
-import geoengine_openapi_client.models.role
+import geoengine_api_client
+import geoengine_api_client.api
+import geoengine_api_client.models
+import geoengine_api_client.models.role
 
 from geoengine.auth import get_session
 from geoengine.error import GeoEngineException
@@ -73,7 +73,7 @@ class Role:
         self.name = role_name
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.models.role.Role) -> Role:
+    def from_response(cls, response: geoengine_api_client.models.role.Role) -> Role:
         """Parse a http response to an `RoleId`"""
 
         role_id = response.id
@@ -146,7 +146,7 @@ class PermissionListing:
         self.role = role
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.models.PermissionListing) -> PermissionListing:
+    def from_response(cls, response: geoengine_api_client.models.PermissionListing) -> PermissionListing:
         """Transforms a response PermissionListing to a PermissionListing"""
         return PermissionListing(
             permission=Permission.from_response(response.permission),
@@ -179,12 +179,12 @@ class Permission(str, Enum):
     READ = "Read"
     OWNER = "Owner"
 
-    def to_api_dict(self) -> geoengine_openapi_client.Permission:
+    def to_api_dict(self) -> geoengine_api_client.Permission:
         """Convert to a dict for the API"""
-        return geoengine_openapi_client.Permission(self.value)
+        return geoengine_api_client.Permission(self.value)
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.Permission) -> Permission:
+    def from_response(cls, response: geoengine_api_client.Permission) -> Permission:
         return Permission(response)
 
 
@@ -198,10 +198,10 @@ def add_permission(role: RoleId, resource: Resource, permission: Permission, tim
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        permissions_api = geoengine_openapi_client.PermissionsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        permissions_api = geoengine_api_client.PermissionsApi(api_client)
         permissions_api.add_permission_handler(
-            geoengine_openapi_client.PermissionRequest(
+            geoengine_api_client.PermissionRequest(
                 role_id=str(role),
                 resource=resource.to_api_dict(),
                 permission=permission.to_api_dict(),
@@ -215,10 +215,10 @@ def remove_permission(role: RoleId, resource: Resource, permission: Permission, 
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        permissions_api = geoengine_openapi_client.PermissionsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        permissions_api = geoengine_api_client.PermissionsApi(api_client)
         permissions_api.remove_permission_handler(
-            geoengine_openapi_client.PermissionRequest(
+            geoengine_api_client.PermissionRequest(
                 role_id=str(role),
                 resource=resource.to_api_dict(),
                 permission=permission.to_api_dict(),
@@ -232,8 +232,8 @@ def list_permissions(resource: Resource, timeout: int = 60, offset=0, limit=20) 
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        permission_api = geoengine_openapi_client.PermissionsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        permission_api = geoengine_api_client.PermissionsApi(api_client)
         res = permission_api.get_resource_permissions_handler(
             resource_id=str(resource.id),
             resource_type=resource.type,
@@ -250,9 +250,9 @@ def add_role(name: str, timeout: int = 60) -> RoleId:
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        user_api = geoengine_openapi_client.UserApi(api_client)
-        response = user_api.add_role_handler(geoengine_openapi_client.AddRole(name=name, _request_timeout=timeout))
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        user_api = geoengine_api_client.UserApi(api_client)
+        response = user_api.add_role_handler(geoengine_api_client.AddRole(name=name, _request_timeout=timeout))
 
     return RoleId(response.id)
 
@@ -262,8 +262,8 @@ def remove_role(role: RoleId, timeout: int = 60):
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        user_api = geoengine_openapi_client.UserApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        user_api = geoengine_api_client.UserApi(api_client)
         user_api.remove_role_handler(role.to_dict(), _request_timeout=timeout)
 
 
@@ -272,8 +272,8 @@ def assign_role(role: RoleId, user: UserId, timeout: int = 60):
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        user_api = geoengine_openapi_client.UserApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        user_api = geoengine_api_client.UserApi(api_client)
         user_api.assign_role_handler(user.to_dict(), role.to_dict(), _request_timeout=timeout)
 
 
@@ -282,6 +282,6 @@ def revoke_role(role: RoleId, user: UserId, timeout: int = 60):
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        user_api = geoengine_openapi_client.UserApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        user_api = geoengine_api_client.UserApi(api_client)
         user_api.revoke_role_handler(user.to_dict(), role.to_dict(), _request_timeout=timeout)

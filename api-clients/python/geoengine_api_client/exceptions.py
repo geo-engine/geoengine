@@ -163,6 +163,12 @@ class ApiException(OpenApiException):
 
     def __str__(self):
         """Custom error messages for exception"""
+
+        # Note: changed message formatting
+        import json
+        parsed_body = json.loads(self.body)
+        return f'{parsed_body["error"]}: {parsed_body["message"]}'
+
         error_message = "({0})\n"\
                         "Reason: {1}\n".format(self.status, self.reason)
         if self.headers:

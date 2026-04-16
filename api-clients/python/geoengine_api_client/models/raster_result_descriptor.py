@@ -96,4 +96,20 @@ class RasterResultDescriptor(BaseModel):
     def from_dict(cls, obj: Dict[str, Any]) -> Optional[Self]:
         """Create an instance of RasterResultDescriptor from a dict"""
 
+        # Note: fixed <https://github.com/OpenAPITools/openapi-generator/issues/19926>
+        if obj is None:
+            return None
+
+        if not isinstance(obj, dict):
+            return cls.model_validate(obj)
+
+        _obj = cls.model_validate({
+            "bands": [RasterBandDescriptor.from_dict(_item) for _item in obj["bands"]] if obj.get("bands") is not None else None,
+            "spatialGrid": SpatialGridDescriptor.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None,
+            "dataType": obj.get("dataType"),
+            "spatialReference": obj.get("spatialReference"),
+            "time": TimeDescriptor.from_dict(obj["time"]) if obj.get("time") is not None else None,
+        })
+        return _obj
+
 

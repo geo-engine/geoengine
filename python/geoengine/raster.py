@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections.abc import AsyncIterator
 from typing import cast
 
-import geoengine_openapi_client
+import geoengine_api_client
 import numpy as np
 import pyarrow as pa
 import xarray as xr
@@ -206,7 +206,7 @@ class RasterTile2D:
     def from_ge_record_batch(record_batch: pa.RecordBatch) -> RasterTile2D:
         """Create a RasterTile2D from an Arrow record batch recieved from the Geo Engine"""
         metadata = record_batch.schema.metadata
-        inner = geoengine_openapi_client.GeoTransform.from_json(metadata[b"geoTransform"])
+        inner = geoengine_api_client.GeoTransform.from_json(metadata[b"geoTransform"])
         assert inner is not None, "Failed to parse geoTransform"
         geo_transform = gety.GeoTransform.from_response(inner)
         x_size = int(metadata[b"xSize"])
@@ -215,7 +215,7 @@ class RasterTile2D:
         # We know from the backend that there is only one array a.k.a. one column
         arrow_array = record_batch.column(0)
 
-        inner_time = geoengine_openapi_client.TimeInterval.from_json(metadata[b"time"])
+        inner_time = geoengine_api_client.TimeInterval.from_json(metadata[b"time"])
         assert inner_time is not None, "Failed to parse time"
         time = gety.TimeInterval.from_response(inner_time)
 

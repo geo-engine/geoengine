@@ -57,6 +57,7 @@ increase-version-number: common::_clear
 
 _increase-version-number version: (api-clients::update-config version)
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.version" "{{ version }}"
+    pipx run toml-cli set --toml-path "python/pyproject.toml" "project.dependencies[0]" "geoengine-api-client == {{ version }}"
 
 # Check if there are uncommitted changes in the git repository. If there are, print an error message and exit with a non-zero status code. Otherwise, print a success message.
 [group('CI')]

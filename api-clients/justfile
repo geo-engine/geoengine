@@ -24,7 +24,7 @@ build-python: common::_clear _build-python-preprocess (_build_call "python") _bu
 # Remove some directories because they are not be overwritten by the generator.
 _build-python-preprocess:
     rm -rf \
-        python/geoengine_openapi_client \
+        python/geoengine_api_client \
         python/.mypy_cache \
         python/test \
         python/diffs

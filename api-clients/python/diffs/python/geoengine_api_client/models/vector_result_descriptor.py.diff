@@ -1,0 +1,31 @@
+--- python/geoengine_api_client/models/vector_result_descriptor.py
++++ python/geoengine_api_client/models/vector_result_descriptor.py
+@@ -104,6 +104,6 @@
+ 
+     @classmethod
+     def from_dict(cls, obj: Dict[str, Any]) -> Optional[Self]:
+-        """Create an instance of VectorResultDescriptor from a dict"""
++        """Create an instance of VectorResultDescriptor from a dict"""
+
+        # Note: fixed <https://github.com/OpenAPITools/openapi-generator/issues/19926>
+        if obj is None:
+            return None
+
+        if not isinstance(obj, dict):
+            return cls.model_validate(obj)
+
+        _obj = cls.model_validate({
+            "bbox": BoundingBox2D.from_dict(obj["bbox"]) if obj.get("bbox") is not None else None,
+            "columns": dict(
+                (_k, VectorColumnInfo.from_dict(_v))
+                for _k, _v in obj["columns"].items()
+            )
+            if obj.get("columns") is not None
+            else None,
+            "dataType": obj.get("dataType"),
+            "spatialReference": obj.get("spatialReference"),
+            "time": TimeInterval.from_dict(obj["time"]) if obj.get("time") is not None else None,
+        })
+        return _obj
+ 
+ 

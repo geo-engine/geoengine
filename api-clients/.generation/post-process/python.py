@@ -34,7 +34,7 @@ def main():
     """Main function to perform file modifications."""
     modify_files(
         file_modifications(),
-        Path("python/geoengine_openapi_client"),
+        Path("python/geoengine_api_client"),
         Path("python/diffs"),
     )
 
@@ -77,7 +77,7 @@ def api_client_py(file_contents: list[str]) -> Generator[str, None, None]:
         if dedented_line.startswith("self.user_agent = "):
             line = indent(
                 dedent(f"""\
-            self.user_agent = 'geoengine/openapi-client/python/{version()}'
+            self.user_agent = 'geoengine/api-client/python/{version()}'
             """),
                 2 * INDENT,
             )

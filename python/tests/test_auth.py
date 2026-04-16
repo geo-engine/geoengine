@@ -4,7 +4,7 @@ import os
 import unittest
 from datetime import datetime
 
-import geoengine_openapi_client
+import geoengine_api_client
 
 import geoengine as ge
 from geoengine.error import GeoEngineException
@@ -127,7 +127,7 @@ class AuthTests(unittest.TestCase):
         with UrllibMocker() as m:
             m.post(
                 "http://mock-instance/anonymous",
-                request_headers={"User-Agent": f"geoengine-python/{geoengine_openapi_client.__version__}"},
+                request_headers={"User-Agent": f"geoengine-python/{geoengine_api_client.__version__}"},
                 json={
                     "id": "e327d9c3-a4f3-4bd7-a5e1-30b26cae8064",
                     "user": None,

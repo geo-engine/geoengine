@@ -1,0 +1,17 @@
+--- python/geoengine_api_client/exceptions.py
++++ python/geoengine_api_client/exceptions.py
+@@ -162,7 +162,7 @@
+         raise ApiException(http_resp=http_resp, body=body, data=data)
+ 
+     def __str__(self):
+-        """Custom error messages for exception"""
++        """Custom error messages for exception"""
+
+        # Note: changed message formatting
+        import json
+        parsed_body = json.loads(self.body)
+        return f'{parsed_body["error"]}: {parsed_body["message"]}'
+
+         error_message = "({0})\n"\
+                         "Reason: {1}\n".format(self.status, self.reason)
+         if self.headers:

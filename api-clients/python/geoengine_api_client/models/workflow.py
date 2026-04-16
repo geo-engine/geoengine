@@ -62,12 +62,12 @@ class Workflow(BaseModel):
         if not isinstance(v, TypedOperator):
             error_messages.append(f"Error! Input type `{type(v)}` is not `TypedOperator`")
         else:
-            match += 1
+            return v
         # validate data type: LegacyTypedOperator
         if not isinstance(v, LegacyTypedOperator):
             error_messages.append(f"Error! Input type `{type(v)}` is not `LegacyTypedOperator`")
         else:
-            match += 1
+            return v
         if match > 1:
             # more than 1 match
             raise ValueError("Multiple matches found when setting `actual_instance` in Workflow with oneOf schemas: LegacyTypedOperator, TypedOperator. Details: " + ", ".join(error_messages))
@@ -91,13 +91,13 @@ class Workflow(BaseModel):
         # deserialize data into TypedOperator
         try:
             instance.actual_instance = TypedOperator.from_json(json_str)
-            match += 1
+            return instance
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
         # deserialize data into LegacyTypedOperator
         try:
             instance.actual_instance = LegacyTypedOperator.from_json(json_str)
-            match += 1
+            return instance
         except (ValidationError, ValueError) as e:
             error_messages.append(str(e))
 

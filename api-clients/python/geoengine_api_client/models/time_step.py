@@ -78,4 +78,17 @@ class TimeStep(BaseModel):
     def from_dict(cls, obj: Dict[str, Any]) -> Optional[Self]:
         """Create an instance of TimeStep from a dict"""
 
+        # Note: fixed handling of TimeGranularity enum
+        if obj is None:
+            return None
+
+        if not isinstance(obj, dict):
+            return cls.model_validate(obj)
+
+        _obj = cls.model_validate({
+            "granularity": TimeGranularity(obj["granularity"]) if obj.get("granularity") is not None else None,
+            "step": obj.get("step"),
+        })
+        return _obj
+
 

@@ -1,4 +1,4 @@
-# geoengine-openapi-client - Code Generation
+# Geo Engine API Client – Code Generation
 
 Code for auto-generating API clients for Geo Engine
 

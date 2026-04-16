@@ -11,7 +11,7 @@ from enum import auto
 from io import StringIO
 from typing import Any, Generic, Literal, TypeVar, cast
 
-import geoengine_openapi_client
+import geoengine_api_client
 from strenum import LowercaseStrEnum
 
 from geoengine.auth import get_session
@@ -166,12 +166,12 @@ class LayerCollection:
         self.items = items
 
     @classmethod
-    def from_response(cls, response_pages: list[geoengine_openapi_client.LayerCollection]) -> LayerCollection:
+    def from_response(cls, response_pages: list[geoengine_api_client.LayerCollection]) -> LayerCollection:
         """Parse an HTTP JSON response to an `LayerCollection`"""
 
         assert len(response_pages) > 0, "No response pages"
 
-        def parse_listing(response: geoengine_openapi_client.CollectionItem) -> Listing:
+        def parse_listing(response: geoengine_api_client.CollectionItem) -> Listing:
             inner = response.actual_instance
             if inner is None:
                 raise AssertionError("Invalid listing type")
@@ -179,7 +179,7 @@ class LayerCollection:
             item_type = LayerCollectionListingType(inner.type)
 
             if item_type is LayerCollectionListingType.LAYER:
-                layer_id_response = cast(geoengine_openapi_client.ProviderLayerId, inner.id)
+                layer_id_response = cast(geoengine_api_client.ProviderLayerId, inner.id)
                 return LayerListing(
                     listing_id=LayerId(layer_id_response.layer_id),
                     provider_id=LayerProviderId(layer_id_response.provider_id),
@@ -188,7 +188,7 @@ class LayerCollection:
                 )
 
             if item_type is LayerCollectionListingType.COLLECTION:
-                collection_id_response = cast(geoengine_openapi_client.ProviderLayerCollectionId, inner.id)
+                collection_id_response = cast(geoengine_api_client.ProviderLayerCollectionId, inner.id)
                 return LayerCollectionListing(
                     listing_id=LayerCollectionId(collection_id_response.collection_id),
                     provider_id=LayerProviderId(collection_id_response.provider_id),
@@ -450,18 +450,18 @@ class LayerCollection:
         session = get_session()
 
         if search_type not in [
-            geoengine_openapi_client.SearchType.FULLTEXT,
-            geoengine_openapi_client.SearchType.PREFIX,
+            geoengine_api_client.SearchType.FULLTEXT,
+            geoengine_api_client.SearchType.PREFIX,
         ]:
             raise ValueError(f"Invalid search type {search_type}")
 
-        with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-            layers_api = geoengine_openapi_client.LayersApi(api_client)
+        with geoengine_api_client.ApiClient(session.configuration) as api_client:
+            layers_api = geoengine_api_client.LayersApi(api_client)
             layer_collection_response = layers_api.search_handler(
                 provider=self.provider_id,
                 collection=str(self.collection_id),
                 search_string=search_string,
-                search_type=geoengine_openapi_client.SearchType(search_type),
+                search_type=geoengine_api_client.SearchType(search_type),
                 offset=offset,
                 limit=limit,
                 _request_timeout=timeout,
@@ -472,7 +472,7 @@ class LayerCollection:
             inner = item.actual_instance
             if inner is None:
                 continue
-            if isinstance(inner, geoengine_openapi_client.LayerCollectionListing):
+            if isinstance(inner, geoengine_api_client.LayerCollectionListing):
                 listings.append(
                     LayerCollectionListing(
                         listing_id=LayerCollectionId(inner.id.collection_id),
@@ -481,7 +481,7 @@ class LayerCollection:
                         description=inner.description,
                     )
                 )
-            elif isinstance(inner, geoengine_openapi_client.LayerListing):
+            elif isinstance(inner, geoengine_api_client.LayerListing):
                 listings.append(
                     LayerListing(
                         listing_id=LayerId(inner.id.layer_id),
@@ -597,7 +597,7 @@ class Layer:
         self.metadata = metadata
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.Layer) -> Layer:
+    def from_response(cls, response: geoengine_api_client.Layer) -> Layer:
         """Parse an HTTP JSON response to an `Layer`"""
         symbology = None
         if response.symbology is not None:
@@ -669,18 +669,18 @@ class Layer:
         """
         session = get_session()
 
-        with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-            layers_api = geoengine_openapi_client.LayersApi(api_client)
+        with geoengine_api_client.ApiClient(session.configuration) as api_client:
+            layers_api = geoengine_api_client.LayersApi(api_client)
             response = layers_api.layer_to_dataset(self.provider_id, str(self.layer_id), _request_timeout=timeout)
 
         return Task(TaskId.from_response(response))
 
-    def to_api_dict(self) -> geoengine_openapi_client.Layer:
+    def to_api_dict(self) -> geoengine_api_client.Layer:
         """Convert to a dictionary that can be serialized to JSON"""
-        return geoengine_openapi_client.Layer(
+        return geoengine_api_client.Layer(
             name=self.name,
             description=self.description,
-            id=geoengine_openapi_client.ProviderLayerId(
+            id=geoengine_api_client.ProviderLayerId(
                 layer_id=str(self.layer_id),
                 provider_id=str(self.provider_id),
             ),
@@ -696,8 +696,8 @@ class Layer:
         """
         session = get_session()
 
-        with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-            layers_api = geoengine_openapi_client.LayersApi(api_client)
+        with geoengine_api_client.ApiClient(session.configuration) as api_client:
+            layers_api = geoengine_api_client.LayersApi(api_client)
             response = layers_api.layer_to_workflow_id_handler(
                 self.provider_id, self.layer_id, _request_timeout=timeout
             )
@@ -725,12 +725,12 @@ def layer_collection(
     session = get_session()
 
     page_limit = 20
-    pages: list[geoengine_openapi_client.LayerCollection] = []
+    pages: list[geoengine_api_client.LayerCollection] = []
 
     offset = 0
     while True:
-        with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-            layers_api = geoengine_openapi_client.LayersApi(api_client)
+        with geoengine_api_client.ApiClient(session.configuration) as api_client:
+            layers_api = geoengine_api_client.LayersApi(api_client)
 
             if layer_collection_id is None:
                 page = layers_api.list_root_collections_handler(offset, page_limit, _request_timeout=timeout)
@@ -758,8 +758,8 @@ def layer(layer_id: LayerId, layer_provider_id: LayerProviderId = LAYER_DB_PROVI
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        layers_api = geoengine_openapi_client.LayersApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        layers_api = geoengine_api_client.LayersApi(api_client)
         response = layers_api.layer_handler(layer_provider_id, str(layer_id), _request_timeout=timeout)
 
     return Layer.from_response(response)
@@ -770,8 +770,8 @@ def _delete_layer_from_collection(collection_id: LayerCollectionId, layer_id: La
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        layers_api = geoengine_openapi_client.LayersApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        layers_api = geoengine_api_client.LayersApi(api_client)
         layers_api.remove_layer_from_collection(collection_id, layer_id, _request_timeout=timeout)
 
 
@@ -782,8 +782,8 @@ def _delete_layer_collection_from_collection(
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        layers_api = geoengine_openapi_client.LayersApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        layers_api = geoengine_api_client.LayersApi(api_client)
         layers_api.remove_collection_from_collection(parent_id, collection_id, _request_timeout=timeout)
 
 
@@ -792,8 +792,8 @@ def _delete_layer_collection(collection_id: LayerCollectionId, timeout: int = 60
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        layers_api = geoengine_openapi_client.LayersApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        layers_api = geoengine_api_client.LayersApi(api_client)
         layers_api.remove_collection(collection_id, _request_timeout=timeout)
 
 
@@ -804,11 +804,11 @@ def _add_layer_collection_to_collection(
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        layers_api = geoengine_openapi_client.LayersApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        layers_api = geoengine_api_client.LayersApi(api_client)
         response = layers_api.add_collection(
             parent_collection_id,
-            geoengine_openapi_client.AddLayerCollection(
+            geoengine_api_client.AddLayerCollection(
                 name=name,
                 description=description,
             ),
@@ -825,8 +825,8 @@ def _add_existing_layer_collection_to_collection(
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        layers_api = geoengine_openapi_client.LayersApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        layers_api = geoengine_api_client.LayersApi(api_client)
         layers_api.add_existing_collection_to_collection(parent_collection_id, collection_id, _request_timeout=timeout)
 
 
@@ -849,14 +849,14 @@ def _add_layer_to_collection(
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        layers_api = geoengine_openapi_client.LayersApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        layers_api = geoengine_api_client.LayersApi(api_client)
         response = layers_api.add_layer(
             collection_id,
-            geoengine_openapi_client.AddLayer(
+            geoengine_api_client.AddLayer(
                 name=name,
                 description=description,
-                workflow=geoengine_openapi_client.Workflow.from_dict(workflow),
+                workflow=geoengine_api_client.Workflow.from_dict(workflow),
                 symbology=symbology_dict,
             ),
             _request_timeout=timeout,
@@ -870,6 +870,6 @@ def _add_existing_layer_to_collection(layer_id: LayerId, collection_id: LayerCol
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        layers_api = geoengine_openapi_client.LayersApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        layers_api = geoengine_api_client.LayersApi(api_client)
         layers_api.add_existing_layer_to_collection(collection_id, layer_id, _request_timeout=timeout)

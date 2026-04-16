@@ -176,7 +176,7 @@ class PlotTests(unittest.TestCase):
                 "type": "Plot",
                 "operator": {
                     "type": "Histogram",
-                    "params": {"bounds": "data", "buckets": 20},
+                    "params": {"bounds": "data", "buckets": {"type": "number", "value": 20}},
                     "sources": {
                         "source": {
                             "type": "GdalSource",

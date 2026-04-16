@@ -95,4 +95,18 @@ class PlotResultDescriptor(BaseModel):
     def from_dict(cls, obj: Dict[str, Any]) -> Optional[Self]:
         """Create an instance of PlotResultDescriptor from a dict"""
 
+        # Note: fixed <https://github.com/OpenAPITools/openapi-generator/issues/19926>
+        if obj is None:
+            return None
+
+        if not isinstance(obj, dict):
+            return cls.model_validate(obj)
+
+        _obj = cls.model_validate({
+            "bbox": BoundingBox2D.from_dict(obj["bbox"]) if obj.get("bbox") is not None else None,
+            "spatialReference": obj.get("spatialReference"),
+            "time": TimeInterval.from_dict(obj["time"]) if obj.get("time") is not None else None,
+        })
+        return _obj
+
 

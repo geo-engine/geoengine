@@ -101,7 +101,7 @@ def runtime_ts(file_contents: list[str]) -> Generator[str, None, None]:
             line = dedent(f"""\
             export const DefaultConfig = new Configuration({{
                 headers: {{
-                    'User-Agent': 'geoengine/openapi-client/typescript/{version()}'
+                    'User-Agent': 'geoengine/api-client/typescript/{version()}'
                 }}
             }});
             """)

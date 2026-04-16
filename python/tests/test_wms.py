@@ -3,7 +3,7 @@
 import unittest
 from datetime import datetime
 
-import geoengine_openapi_client
+import geoengine_api_client
 import numpy as np
 from PIL import Image
 
@@ -130,12 +130,12 @@ class WmsTests(unittest.TestCase):
                     symbology=None,
                     provenance=None,
                 ),
-                meta_data=geoengine_openapi_client.MetaDataDefinition(
-                    geoengine_openapi_client.GdalMetaDataStatic.from_dict(
+                meta_data=geoengine_api_client.MetaDataDefinition(
+                    geoengine_api_client.GdalMetaDataStatic.from_dict(
                         {
                             "type": "GdalStatic",
                             "time": None,
-                            "params": geoengine_openapi_client.GdalDatasetParameters.from_dict(
+                            "params": geoengine_api_client.GdalDatasetParameters.from_dict(
                                 {
                                     "filePath": "does_not_exist",
                                     "rasterbandChannel": 1,
@@ -146,7 +146,7 @@ class WmsTests(unittest.TestCase):
                                     },
                                     "width": 3600,
                                     "height": 1800,
-                                    "fileNotFoundHandling": geoengine_openapi_client.FileNotFoundHandling.ERROR,  # !!!
+                                    "fileNotFoundHandling": geoengine_api_client.FileNotFoundHandling.ERROR,  # !!!
                                     "noDataValue": None,
                                     "propertiesMapping": None,
                                     "gdalOpenOptions": None,
@@ -167,7 +167,7 @@ class WmsTests(unittest.TestCase):
                                             top_left_idx=ge.GridIdx2D(0, 0), bottom_right_idx=ge.GridIdx2D(1800, 3600)
                                         ),
                                     ),
-                                    descriptor=geoengine_openapi_client.SpatialGridDescriptorState.SOURCE,
+                                    descriptor=geoengine_api_client.SpatialGridDescriptorState.SOURCE,
                                 ),
                                 time=ge.TimeDescriptor(dimension=ge.IrregularTimeDimension(), bounds=None),
                             )
