@@ -73,7 +73,7 @@ pub struct StacImport {
     #[arg(long, default_value = "sentinel-2-l2a")]
     stac_collection: String,
 
-    // import limit
+    // import limit (page size)
     #[arg(long, default_value = None)]
     limit: Option<usize>,
 
@@ -134,6 +134,11 @@ pub struct StacImport {
     /// Filter datasets by EPSG codes (only create and insert tiles for these EPSG codes)
     #[clap(long, value_parser, num_args = 0.., value_delimiter = ' ')]
     epsgs: Vec<u32>,
+
+    /// feature/item property to use as z-index for tiles (if not provided, z-index will be set to 0 or computed from item properties in a hardcoded way)
+    /// must be date time property
+    #[arg(long, default_value = "updated")]
+    z_index_property_name: Option<String>,
     // /// Parent layer collection ID
     // #[arg(long, default_value_t = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID)]
     // parent_layer_collection_id: Uuid,
@@ -193,10 +198,10 @@ impl StacImporter {
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
         if self.params.verbose {
-            println!("Scanned collection, found bands for data type and resolution:");
+            println!("[INFO] Scanned collection, found bands for data type and resolution:");
             for (partial_dataset_key, bands) in &self.bands {
                 println!(
-                    "  {:?}, {}: {}",
+                    "[INFO]  {:?}, {}: {}",
                     partial_dataset_key.data_type,
                     partial_dataset_key.resolution,
                     bands
@@ -228,7 +233,7 @@ impl StacImporter {
         self.process_pages(pages).await?;
 
         if self.params.verbose {
-            println!("Dataset tiles added successfully");
+            println!("[INFO] Dataset tiles added successfully");
         }
 
         self.create_collections_and_layers().await?;
@@ -249,13 +254,13 @@ impl StacImporter {
                     return None;
                 }
 
-                println!("Fetching page: {state:?}");
+                println!("[DEBUG] Fetching page: {state:?}");
 
                 let start = Instant::now();
                 let result = query_item_collection(&client, &state).await;
                 let elapsed = start.elapsed();
 
-                println!("Page fetched in {:.2}s", elapsed.as_secs_f64());
+                println!("[DEBUG] Page fetched in {:.2}s", elapsed.as_secs_f64());
 
                 match result {
                     Ok((item_collection, new_state)) => {
@@ -267,13 +272,12 @@ impl StacImporter {
                     }
                     Err(e) => {
                         // TODO: abort or retry
-                        println!("Error fetching page: {e:#}");
+                        println!("[ERROR]Error fetching page: {e:#}");
                         Some((Err(e), (client, QueryState::Finished)))
                     }
                 }
             },
         );
-
         page_stream
             .map(|result| async move { result })
             .buffered(prefetch_buffer)
@@ -293,7 +297,11 @@ impl StacImporter {
             for (dataset_key, tiles) in &dataset_tiles {
                 let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
 
-                println!("Adding {} tiles to dataset {}", tiles.len(), dataset_name,);
+                println!(
+                    "[DEBUG] Adding {} tiles to dataset {}",
+                    tiles.len(),
+                    dataset_name,
+                );
 
                 let response = retry_with_backoff(
                     || async {
@@ -342,7 +350,7 @@ impl StacImporter {
             if let Err(err) = self.process_item(item, &mut dataset_tiles).await
                 && self.params.verbose
             {
-                println!("Skipping item {item_id}: {err:#}");
+                println!("[ERROR] Skipping item {item_id}: {err:#}");
             }
         }
 
@@ -354,6 +362,8 @@ impl StacImporter {
         item: stac::Item,
         dataset_tiles: &mut HashMap<DatasetKey, Vec<AddDatasetTile>>,
     ) -> Result<(), anyhow::Error> {
+        let stac_extension_versions = StacExtensionVersions::try_from(&item)?;
+
         let datetime = item
             .properties
             .datetime
@@ -369,15 +379,18 @@ impl StacImporter {
         let date_without_time: DateTime = date_without_time.into();
         let time: TimeInstance = date_without_time.into();
 
-        let epsg = item
-            .properties
-            .additional_fields
-            .get("proj:epsg")
-            .and_then(serde_json::Value::as_u64)
-            .context("Missing proj:epsg in item properties")? as u32;
+        // item-level epsg code (may be overwritten by asset)
+        let item_epsg_code = epsg_code_from_fields(
+            stac_extension_versions.projection,
+            &item.properties.additional_fields,
+        )?;
 
         // Filter by EPSG code if epsgs parameter is provided
-        if !self.params.epsgs.is_empty() && !self.params.epsgs.contains(&epsg) {
+        // TODO: also filter when epsg code is at asset and not item level
+        if let Some(epsg) = item_epsg_code
+            && !self.params.epsgs.is_empty()
+            && !self.params.epsgs.contains(&epsg)
+        {
             anyhow::bail!("EPSG {epsg} not in filter list");
         }
 
@@ -399,24 +412,85 @@ impl StacImporter {
         //     0
         // };
 
-        // TODO: make z-index computation configurable
-        let z_index = item
-            .properties
-            .updated
-            .ok_or(anyhow::anyhow!(
-                "Missing updated datetime in item properties"
-            ))
-            .and_then(|updated| {
-                chrono::DateTime::parse_from_rfc3339(&updated)
-                    .context("Failed to parse updated datetime")
-            })?
-            .timestamp_millis();
+        // note: we need special handling here because some fields are properly mappen by stac crate while others are only available in additional_fields
+        // TODO: properly handle all values mapped by stac crate
+        // TODO: support non-datetime properties for z-index
+        let z_index = match self.params.z_index_property_name.as_deref() {
+            Some("updated") => {
+                // use `updated` datetime as z-index, so that newer updates are on top of older ones
+                item.properties
+                    .updated
+                    .ok_or(anyhow::anyhow!(
+                        "Missing updated datetime in item properties"
+                    ))
+                    .and_then(|updated| {
+                        chrono::DateTime::parse_from_rfc3339(&updated)
+                            .context("Failed to parse updated datetime")
+                    })?
+                    .timestamp_millis()
+            }
+            Some(property) => item
+                .properties
+                .additional_fields
+                .get(property)
+                .ok_or(anyhow::anyhow!(
+                    "Missing z index property '{property}' in item additional fields"
+                ))
+                .and_then(|v| {
+                    v.as_str().ok_or(anyhow::anyhow!(
+                        "Z index property '{property}' is not a string"
+                    ))
+                })
+                .and_then(|updated| {
+                    chrono::DateTime::parse_from_rfc3339(&updated)
+                        .context(format!("Failed to parse '{property}' datetime"))
+                })?
+                .timestamp_millis(),
+            _ => 0,
+        };
 
         for (asset_key, asset) in &item.assets {
-            match self
-                .process_item_asset(asset_key, asset, epsg, time, z_index)
-                .await
+            if asset.r#type
+                != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
+                && asset.r#type != Some("image/jp2".to_string())
             {
+                println!(
+                    "[DEBUG] skipping {asset_key}: unsupported asset type: {:?}",
+                    asset.r#type
+                );
+                continue;
+            }
+
+            let tiles = match (&item.version, stac_extension_versions) {
+                (
+                    &stac::Version::v1_0_0,
+                    StacExtensionVersions {
+                        projection: StacExtensionMajorVersion::V1,
+                        raster: StacExtensionMajorVersion::V1,
+                        eo: StacExtensionMajorVersion::V1,
+                    },
+                ) => {
+                    self.process_item_asset_v1_0_0(asset_key, asset, item_epsg_code, time, z_index)
+                        .await
+                }
+                (
+                    &stac::Version::v1_1_0,
+                    StacExtensionVersions {
+                        projection: StacExtensionMajorVersion::V2,
+                        raster: StacExtensionMajorVersion::V2,
+                        eo: StacExtensionMajorVersion::V2,
+                    },
+                ) => {
+                    self.process_item_asset_v1_1_0(asset_key, asset, item_epsg_code, time, z_index)
+                        .await
+                }
+                _ => Err(anyhow::anyhow!(
+                    "Unsupported STAC version or extension versions: {:?}, {stac_extension_versions:?}",
+                    item.version
+                )),
+            };
+
+            match tiles {
                 Ok(tiles) => {
                     for (dataset_key, tile) in tiles {
                         dataset_tiles.entry(dataset_key).or_default().push(tile);
@@ -424,7 +498,10 @@ impl StacImporter {
                 }
                 Err(err) => {
                     if self.params.verbose {
-                        println!("Skipping asset {asset_key} of item {}: {err:#}", item.id);
+                        println!(
+                            "[ERROR] Skipping asset {asset_key} of item {}: {err:#}",
+                            item.id
+                        );
                     }
                 }
             }
@@ -433,24 +510,18 @@ impl StacImporter {
         Ok(())
     }
 
-    async fn process_item_asset(
+    async fn process_item_asset_v1_0_0(
         &mut self,
         asset_key: &str,
         asset: &Asset,
-        epsg: u32,
+        epsg: Option<u32>,
         time: TimeInstance,
         z_index: i64,
     ) -> Result<Vec<(DatasetKey, AddDatasetTile)>, anyhow::Error> {
-        if asset.r#type
-            != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
-        {
-            anyhow::bail!("non-geotiff asset");
-        }
-
         let geo_transform = geo_transform_from_fields(&asset.additional_fields)
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
 
-        let data_type = if let Ok(data_type) = data_type_from_asset(asset) {
+        let data_type = if let Ok(data_type) = data_type_from_asset(stac::Version::v1_0_0, asset) {
             data_type
         } else if self.params.missing_bands_handling
             && asset
@@ -463,6 +534,10 @@ impl StacImporter {
         } else {
             anyhow::bail!("Failed to determine data type from asset");
         };
+
+        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V1, &asset.additional_fields)
+            .unwrap_or(epsg)
+            .ok_or(anyhow::anyhow!("Failed to determine EPSG code from asset"))?;
 
         let dataset_key = DatasetKey {
             epsg,
@@ -526,15 +601,96 @@ impl StacImporter {
             time,
             geo_transform,
             dataset_bands,
-            prefix: &prefix,
             z_index,
         };
 
         let mut tiles = Vec::new();
         for (band_idx, eo_band) in eo_bands.iter().enumerate() {
             let tile = processor
-                .process_band(band_idx, eo_band)
+                .process_band_v1_0_0(band_idx, &prefix, eo_band)
                 .context(format!("Failed to process band {}", eo_band.name))?;
+            tiles.push((dataset_key.clone(), tile));
+        }
+
+        Ok(tiles)
+    }
+
+    async fn process_item_asset_v1_1_0(
+        &mut self,
+        asset_key: &str,
+        asset: &Asset,
+        epsg: Option<u32>,
+        time: TimeInstance,
+        z_index: i64,
+    ) -> Result<Vec<(DatasetKey, AddDatasetTile)>, anyhow::Error> {
+        let geo_transform = geo_transform_from_fields(&asset.additional_fields)
+            .ok_or(anyhow::anyhow!("missing proj:transform"))?;
+
+        let data_type = if let Ok(data_type) = data_type_from_asset(stac::Version::v1_1_0, asset) {
+            data_type
+        } else if self.params.missing_bands_handling
+            && asset
+                .roles
+                .iter()
+                .any(|roles| roles.contains(&"visual".to_string()))
+        {
+            // if no data type can be determined but asset has role visual, assume u8 data type with one band per visual asset
+            RasterDataType::U8
+        } else {
+            anyhow::bail!("Failed to determine data type from asset");
+        };
+
+        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V2, &asset.additional_fields)
+            .unwrap_or(epsg)
+            .ok_or(anyhow::anyhow!("Failed to determine EPSG code from asset"))?;
+
+        let dataset_key = DatasetKey {
+            epsg,
+            data_type,
+            resolution: geo_transform.x_pixel_size().into(),
+        };
+
+        if !self.known_datasets.contains(&dataset_key) {
+            let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
+            let dataset_exists = self
+                .dataset_exists(&dataset_name)
+                .await
+                .with_context(|| format!("failed to check dataset existence for {dataset_name}"))?;
+
+            if !dataset_exists {
+                self.create_dataset(&dataset_key, geo_transform)
+                    .await
+                    .context(format!("failed to create dataset {dataset_key:?}"))?;
+                self.created_datasets.insert(dataset_key.clone());
+            }
+
+            self.known_datasets.insert(dataset_key.clone());
+        }
+
+        let asset_bands =
+            band_names_from_asset_v1_1_0(asset_key, &asset, self.params.missing_bands_handling)?;
+
+        let dataset_bands = self
+            .bands
+            .get(&PartialDatasetKey {
+                data_type: dataset_key.data_type,
+                resolution: dataset_key.resolution,
+            })
+            .ok_or(anyhow::anyhow!("unknown dataset key: {dataset_key:?}"))?;
+
+        let processor = AssetBandProcessor {
+            asset,
+            time,
+            geo_transform,
+            dataset_bands,
+            z_index,
+        };
+
+        let mut tiles = Vec::new();
+        for (band_idx, band_name) in asset_bands.iter().enumerate() {
+            let tile = processor
+                .process_band_v1_1_0(band_idx, band_name)
+                .context(format!("Failed to process band {}", band_name))?;
             tiles.push((dataset_key.clone(), tile));
         }
 
@@ -901,7 +1057,7 @@ impl StacImporter {
 
         if self.params.verbose {
             println!(
-                "Created layer collection '{}' with id {}",
+                "[DEBUG] Created layer collection '{}' with id {}",
                 name, response.id.0
             );
         }
@@ -1010,7 +1166,7 @@ impl StacImporter {
         self.share_layer(&response.id).await?;
 
         if self.params.verbose {
-            println!("Created layer '{layer_name}' in collection {collection_id}");
+            println!("[DEBUG] Created layer '{layer_name}' in collection {collection_id}");
         }
 
         Ok(response.id)
@@ -1038,7 +1194,10 @@ impl StacImporter {
         .context("Failed to add existing layer to collection")?;
 
         if self.params.verbose {
-            println!("Added layer {} to collection {}", layer_id.0, collection_id);
+            println!(
+                "[DEBUG] Added layer {} to collection {}",
+                layer_id.0, collection_id
+            );
         }
 
         Ok(())
@@ -1203,6 +1362,24 @@ impl StacImporter {
     }
 }
 
+fn epsg_code_from_fields(
+    proj_extension_version: StacExtensionMajorVersion,
+    fields: &serde_json::Map<String, serde_json::Value>,
+) -> Result<Option<u32>, anyhow::Error> {
+    Ok(match proj_extension_version {
+        StacExtensionMajorVersion::V1 => fields
+            .get("proj:epsg")
+            .and_then(serde_json::Value::as_u64)
+            .map(|code| code as u32),
+        StacExtensionMajorVersion::V2 => fields
+            .get("proj:code")
+            .and_then(|v| v.as_str())
+            .and_then(|s| s.strip_prefix("EPSG:"))
+            .map(|code| code.parse::<u32>().context("Invalid EPSG code"))
+            .transpose()?,
+    })
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Attribute {
     DataType,
@@ -1265,21 +1442,23 @@ struct AssetBandProcessor<'a> {
     time: TimeInstance,
     geo_transform: GeoTransform,
     dataset_bands: &'a [RasterBandDescriptor],
-    prefix: &'a str,
     z_index: i64,
 }
 
 impl AssetBandProcessor<'_> {
-    fn process_band(&self, band_idx: usize, eo_band: &EoBand) -> anyhow::Result<AddDatasetTile> {
-        let band_name = format!("{}{}", self.prefix, eo_band.name);
+    fn process_band_v1_0_0(
+        &self,
+        band_idx: usize,
+        prefix: &str,
+        eo_band: &EoBand,
+    ) -> anyhow::Result<AddDatasetTile> {
+        let band_name = format!("{}{}", prefix, eo_band.name);
 
         let band_index = self
             .dataset_bands
             .iter()
             .position(|b| b.name == band_name.as_str())
             .ok_or(anyhow::anyhow!("unknown band: {band_name}"))?;
-
-        let tile_file = self.asset.href.clone();
 
         let proj_shape = self
             .asset
@@ -1316,6 +1495,7 @@ impl AssetBandProcessor<'_> {
         //     self.date, self.asset_key, self.asset.href
         // );
 
+        // TODO: in case of s3: add or reference credentials
         let tile = AddDatasetTile {
             time: TimeInterval::new(self.time, self.time + i64::from(24 * 60 * 60 * 1000)) // TODO: make time validity configurable
                 .context("Failed to create time interval")?
@@ -1324,7 +1504,7 @@ impl AssetBandProcessor<'_> {
             band: band_index as u32,
             z_index: self.z_index,
             params: GdalDatasetParameters {
-                file_path: format!("/vsicurl/{tile_file}").into(),
+                file_path: gdal_file_path(self.asset)?.into(),
                 rasterband_channel: band_idx + 1, // gdal channels are 1-based
                 geo_transform: self.geo_transform.into(),
                 width,
@@ -1339,6 +1519,88 @@ impl AssetBandProcessor<'_> {
         };
 
         Ok(tile)
+    }
+
+    fn process_band_v1_1_0(
+        &self,
+        band_idx: usize,
+        band_name: &str,
+    ) -> anyhow::Result<AddDatasetTile> {
+        let band_index = self
+            .dataset_bands
+            .iter()
+            .position(|b| b.name == band_name)
+            .ok_or(anyhow::anyhow!("unknown band: {band_name}"))?;
+
+        let proj_shape = self
+            .asset
+            .additional_fields
+            .get("proj:shape")
+            .ok_or(anyhow::anyhow!("missing proj:shape"))?;
+
+        let proj_shape = proj_shape
+            .as_array()
+            .ok_or(anyhow::anyhow!("proj:shape is not an array"))?;
+
+        let (height, width) = (
+            proj_shape[0]
+                .as_u64()
+                .ok_or(anyhow::anyhow!("proj:shape[0] is not a u64"))? as usize,
+            proj_shape[1]
+                .as_u64()
+                .ok_or(anyhow::anyhow!("proj:shape[1] is not a u64"))? as usize,
+        );
+
+        let grid_bounds = geoengine_datatypes::raster::GridBoundingBox2D::new(
+            GridIdx2D { x_idx: 0, y_idx: 0 },
+            GridIdx2D {
+                x_idx: (width - 1) as isize,
+                y_idx: (height - 1) as isize,
+            },
+        )
+        .context("Failed to create grid bounds from proj:shape")?;
+
+        let spatial_partition = self.geo_transform.grid_to_spatial_bounds(&grid_bounds);
+
+        // println!(
+        //     "Importing tile: date: {}, band: {}, href: {}",
+        //     self.date, self.asset_key, self.asset.href
+        // );
+
+        // TODO: in case of s3: add or reference credentials
+        let tile = AddDatasetTile {
+            time: TimeInterval::new(self.time, self.time + i64::from(24 * 60 * 60 * 1000)) // TODO: make time validity configurable
+                .context("Failed to create time interval")?
+                .into(),
+            spatial_partition: spatial_partition.into(),
+            band: band_index as u32,
+            z_index: self.z_index,
+            params: GdalDatasetParameters {
+                file_path: gdal_file_path(self.asset)?.into(),
+                rasterband_channel: band_idx + 1, // gdal channels are 1-based
+                geo_transform: self.geo_transform.into(),
+                width,
+                height,
+                file_not_found_handling: crate::api::model::operators::FileNotFoundHandling::Error,
+                no_data_value: None,
+                properties_mapping: None,
+                gdal_open_options: None,
+                gdal_config_options: None,
+                allow_alphaband_as_mask: false,
+            },
+        };
+
+        Ok(tile)
+    }
+}
+
+fn gdal_file_path(asset: &Asset) -> anyhow::Result<String> {
+    if asset.href.starts_with("http") {
+        Ok(format!("/vsicurl/{}", asset.href))
+    } else if let Some(s3_url) = asset.href.strip_prefix("s3://") {
+        Ok(format!("/vsis3/{}", s3_url))
+    } else {
+        anyhow::bail!("Unsupported asset href format for GDAL: {}", asset.href);
     }
 }
 
@@ -1533,34 +1795,81 @@ async fn scan_collection(
     // create datasets by grouping items by (epsg, data_type, resolution/grid)
     // because datasets must have uniform epsg, data_type, resolution
 
+    let stac_extension_versions = StacExtensionVersions::try_from(&collection)?;
+
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
     for (asset_key, asset) in &collection.item_assets {
-        if let Err(err) = scan_item_asset(
-            asset_key,
-            asset,
-            &mut dataset_bands,
-            params.missing_bands_handling,
-        )
-        .context(format!("Failed to scan item asset {asset_key}"))
-            && params.verbose
+        if asset.r#type
+            != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
+            && asset.r#type != Some("image/jp2".to_string())
         {
-            println!("Skipping asset {asset_key}: {err:#}");
+            println!(
+                "[DEBUG] Skipping asset {asset_key} with unsupported media type: {:?}",
+                asset.r#type
+            );
+            continue;
         }
+
+        let asset_bands = match (&collection.version, stac_extension_versions) {
+            (
+                &stac::Version::v1_0_0,
+                StacExtensionVersions {
+                    projection: StacExtensionMajorVersion::V1,
+                    raster: StacExtensionMajorVersion::V1,
+                    eo: StacExtensionMajorVersion::V1,
+                },
+            ) => scan_item_asset_v1_0_0(asset_key, asset, params.missing_bands_handling),
+            (
+                &stac::Version::v1_1_0,
+                StacExtensionVersions {
+                    projection: StacExtensionMajorVersion::V2,
+                    raster: StacExtensionMajorVersion::V2,
+                    eo: StacExtensionMajorVersion::V2,
+                },
+            ) => scan_item_asset_v1_1_0(asset_key, asset, params.missing_bands_handling),
+            _ => Err(anyhow::anyhow!(
+                "Unsupported STAC version or extension versions: {:?}, {stac_extension_versions:?}",
+                collection.version
+            )),
+        };
+
+        match asset_bands {
+            Ok(Some(asset_bands)) => {
+                for (partial_key, band_descriptors) in asset_bands {
+                    // merge asset bands into dataset bands
+                    let existing_bands = dataset_bands.entry(partial_key).or_default();
+
+                    for descriptor in band_descriptors {
+                        if existing_bands
+                            .iter()
+                            .find(|b| b.name == descriptor.name)
+                            .is_none()
+                        {
+                            existing_bands.push(descriptor);
+                        }
+                    }
+                }
+            }
+            Err(err) => {
+                println!("[ERROR] Skipping asset {asset_key}: {err:#}");
+            }
+            _ => {}
+        }
+    }
+
+    for (_partial_key, bands) in &mut dataset_bands {
+        bands.sort_by(|a: &RasterBandDescriptor, b| a.name.cmp(&b.name));
     }
     Ok(dataset_bands)
 }
 
-fn scan_item_asset(
+fn scan_item_asset_v1_0_0(
     asset_key: &str,
     asset: &stac::ItemAsset,
-    dataset_bands: &mut HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
     missing_bands_handling: bool,
-) -> anyhow::Result<()> {
-    if asset.r#type != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
-    {
-        anyhow::bail!("Skipping non-geotiff asset: {asset_key}");
-    }
+) -> anyhow::Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>> {
+    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
     let raster_bands: anyhow::Result<Vec<stac_extensions::raster::Band>> = asset
         .additional_fields
@@ -1605,14 +1914,14 @@ fn scan_item_asset(
 
         let geo_transform = geo_transform_from_fields(&asset.additional_fields)
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
-        let resoution = geo_transform.x_pixel_size().into();
+        let resolution = geo_transform.x_pixel_size().into();
 
         let band_name = format!("{}{}", prefix, eo_band.name);
 
         dataset_bands
                 .entry(PartialDatasetKey {
                     data_type: raster_data_type,
-                    resolution: resoution,
+                    resolution,
                 })
                 .or_default()
                 .push(RasterBandDescriptor {
@@ -1622,7 +1931,139 @@ fn scan_item_asset(
                 });
     }
 
-    Ok(())
+    Ok(Some(dataset_bands))
+}
+
+fn scan_item_asset_v1_1_0(
+    asset_key: &str,
+    asset: &stac::ItemAsset,
+    missing_bands_handling: bool,
+) -> anyhow::Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>> {
+    let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
+
+    // in STAC 1.1.0 the `data_type` is now common metadata
+    let data_type = asset
+        .additional_fields
+        .get("data_type")
+        .ok_or(anyhow::anyhow!(
+            "Missing data_type in asset additional fields"
+        ))?
+        .as_str()
+        .ok_or(anyhow::anyhow!("data_type is not a string"))?;
+
+    let data_type = raster_data_type_from_stac_data_type_str(data_type)
+        .context(format!("Unsupported data_type: {}", data_type))?;
+
+    // in STAC 1.1.0 `raster:bands` and `eo:bands` are merged into common metadata `bands`
+    let band_names = band_names_from_asset_fields_v1_1_0(
+        asset_key,
+        &asset.additional_fields,
+        missing_bands_handling,
+    )?;
+
+    let resolution = asset
+        .additional_fields
+        .get("gsd")
+        .ok_or(anyhow::anyhow!("missing attribute `gsd`"))?
+        .as_f64()
+        .ok_or(anyhow::anyhow!("attribute `gsd` is not a number"))?;
+
+    for band_name in band_names {
+        dataset_bands
+            .entry(PartialDatasetKey {
+                data_type,
+                resolution: resolution.into(),
+            })
+            .or_default()
+            .push(RasterBandDescriptor {
+                name: band_name.to_string(),
+                // TODO: unit from raster_band.unit
+                measurement: Measurement::Unitless(UnitlessMeasurement { r#type: crate::api::model::datatypes::UnitlessMeasurementTypeTag::UnitlessMeasurementTypeTag }),
+            });
+    }
+
+    Ok(Some(dataset_bands))
+}
+
+fn band_names_from_asset_fields_v1_1_0(
+    asset_key: &str,
+    asset_fields: &serde_json::Map<String, serde_json::Value>,
+    missing_bands_handling: bool,
+) -> anyhow::Result<Vec<String>> {
+    let band_names = asset_fields
+        .get("bands")
+        .and_then(serde_json::Value::as_array);
+
+    if let Some(bands) = band_names {
+        if bands.is_empty() {
+            if missing_bands_handling {
+                // fallback, if asset has empty `bands`, assume single band asset and take asset key as band name
+                println!("[DEBUG] Asset has empty bands array, using asset key as band name");
+                return Ok(vec![asset_key.to_string()]);
+            }
+
+            anyhow::bail!("Asset has empty bands array");
+        }
+
+        let prefix = if bands.len() > 1 {
+            format!("{asset_key}_",)
+        } else {
+            String::new()
+        };
+
+        let mut names = Vec::new();
+        for band in bands {
+            let name =
+                band.get("name")
+                    .and_then(serde_json::Value::as_str)
+                    .ok_or(anyhow::anyhow!(
+                        "Band is missing name or name is not a string"
+                    ))?;
+            names.push(format!("{prefix}{name}"));
+        }
+        return Ok(names);
+    };
+
+    if missing_bands_handling {
+        // fallback, if `bands` is missing, assume single band asset and take asset key as band name
+        return Ok(vec![asset_key.to_string()]);
+    }
+
+    anyhow::bail!("Missing bands for asset");
+}
+
+fn band_names_from_asset_v1_1_0(
+    asset_key: &str,
+    asset: &stac::Asset,
+    missing_bands_handling: bool,
+) -> anyhow::Result<Vec<String>> {
+    let bands = &asset.bands;
+
+    if bands.is_empty() {
+        if missing_bands_handling {
+            // fallback, if asset has empty `bands`, assume single band asset and take asset key as band name
+            println!("[DEBUG] Asset has empty bands array, using asset key as band name");
+            return Ok(vec![asset_key.to_string()]);
+        }
+
+        anyhow::bail!("Asset has empty bands array");
+    }
+
+    let prefix = if bands.len() > 1 {
+        format!("{asset_key}_",)
+    } else {
+        String::new()
+    };
+
+    let mut names = Vec::new();
+    for band in bands {
+        if let Some(band_name) = &band.name {
+            names.push(format!("{}{}", prefix, band_name));
+        } else {
+            anyhow::bail!("[ERROR] Band is missing name");
+        }
+    }
+    Ok(names)
 }
 
 fn handle_missing_bands(
@@ -1731,17 +2172,35 @@ fn geo_transform_from_fields(
     Some(geo_transform)
 }
 
-fn data_type_from_asset(asset: &Asset) -> anyhow::Result<RasterDataType> {
-    let data_type_str = asset
-        .additional_fields
-        .get("raster:bands")
-        .and_then(|v| v.as_array())
-        .and_then(|bands| bands.first())
-        .and_then(|band| band.get("data_type"))
-        .and_then(|v| v.as_str())
-        .ok_or(anyhow::anyhow!("Missing data_type in raster:bands[0]"))?;
+fn data_type_from_asset(
+    stac_version: stac::Version,
+    asset: &Asset,
+) -> anyhow::Result<RasterDataType> {
+    match stac_version {
+        stac::Version::v1_0_0 => {
+            let data_type_str = asset
+                .additional_fields
+                .get("raster:bands")
+                .and_then(|v| v.as_array())
+                .and_then(|bands| bands.first())
+                .and_then(|band| band.get("data_type"))
+                .and_then(|v| v.as_str())
+                .ok_or(anyhow::anyhow!("Missing data_type in raster:bands[0]"))?;
 
-    raster_data_type_from_stac_data_type_str(data_type_str)
+            raster_data_type_from_stac_data_type_str(data_type_str)
+        }
+        stac::Version::v1_1_0 => {
+            let data_type = asset
+                .data_type
+                .as_ref()
+                .ok_or(anyhow::anyhow!("Missing data_type in asset"))?;
+
+            raster_data_type_from_stac_data_type(&data_type)
+        }
+        _ => {
+            anyhow::bail!("Unsupported STAC version: {stac_version}");
+        }
+    }
 }
 
 fn raster_data_type_from_stac_data_type_str(data_type_str: &str) -> anyhow::Result<RasterDataType> {
@@ -1830,12 +2289,12 @@ where
             Err(err) => {
                 attempt += 1;
                 if attempt >= MAX_RETRIES {
-                    println!("{operation_name} failed after {MAX_RETRIES} attempts: {err}",);
+                    println!("[ERROR] {operation_name} failed after {MAX_RETRIES} attempts: {err}",);
                     return Err(err);
                 }
                 let delay = Duration::from_millis(INITIAL_RETRY_DELAY_MS * 2_u64.pow(attempt - 1));
                 println!(
-                    "{operation_name} failed (attempt {attempt}/{MAX_RETRIES}): {err}. Retrying in {delay:?}...",
+                    "[WARN] {operation_name} failed (attempt {attempt}/{MAX_RETRIES}): {err}. Retrying in {delay:?}...",
                 );
                 tokio::time::sleep(delay).await;
             }
@@ -1843,8 +2302,91 @@ where
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+
+enum StacExtensionMajorVersion {
+    V1,
+    V2,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct StacExtensionVersions {
+    projection: StacExtensionMajorVersion,
+    raster: StacExtensionMajorVersion,
+    eo: StacExtensionMajorVersion,
+}
+
+fn parse_stac_extension_versions(extensions: &[String]) -> anyhow::Result<StacExtensionVersions> {
+    let mut projection = None;
+    let mut raster = None;
+    let mut eo = None;
+
+    for extension in ["projection", "raster", "eo"] {
+        if let Some(ext_str) = extensions.iter().find(|ext| {
+            ext.starts_with(&format!("https://stac-extensions.github.io/{}", extension))
+        }) {
+            let version =
+                stac_extension_version_from_str(ext_str, extension).with_context(|| {
+                    format!("Failed to parse version for {extension} extension {ext_str}")
+                })?;
+            match extension {
+                "projection" => projection = Some(version),
+                "raster" => raster = Some(version),
+                "eo" => eo = Some(version),
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    Ok(StacExtensionVersions {
+        projection: projection.ok_or(anyhow::anyhow!("Missing projection extension"))?,
+        raster: raster.ok_or(anyhow::anyhow!("Missing raster extension"))?,
+        eo: eo.ok_or(anyhow::anyhow!("Missing eo extension"))?,
+    })
+}
+
+impl TryFrom<&stac::Collection> for StacExtensionVersions {
+    type Error = anyhow::Error;
+
+    fn try_from(collection: &stac::Collection) -> Result<Self, Self::Error> {
+        parse_stac_extension_versions(&collection.extensions)
+    }
+}
+
+impl TryFrom<&stac::Item> for StacExtensionVersions {
+    type Error = anyhow::Error;
+
+    fn try_from(item: &stac::Item) -> Result<Self, Self::Error> {
+        parse_stac_extension_versions(&item.extensions)
+    }
+}
+
+fn stac_extension_version_from_str(
+    extension_str: &str,
+    extension_name: &str,
+) -> anyhow::Result<StacExtensionMajorVersion> {
+    let version_str = extension_str
+        .strip_prefix(&format!(
+            "https://stac-extensions.github.io/{}/v",
+            extension_name
+        ))
+        .and_then(|rem| rem.strip_suffix("/schema.json"))
+        .ok_or_else(|| anyhow::anyhow!("Unknown version for extension {}", extension_name))?;
+
+    match version_str.split('.').next() {
+        Some("1") => Ok(StacExtensionMajorVersion::V1),
+        Some("2") => Ok(StacExtensionMajorVersion::V2),
+        _ => Err(anyhow::anyhow!(
+            "Unknown version '{}' for extension {}",
+            version_str,
+            extension_name
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    use super::*;
 
     #[test]
     fn it_parses_raster_bands() {
@@ -1862,5 +2404,19 @@ mod tests {
 
         let _raster_bands: Vec<stac_extensions::raster::Band> =
             serde_json::from_str(json).expect("Failed to parse raster bands");
+    }
+
+    #[test]
+    fn it_parses_extension_versions_from_collection() {
+        let collection_json =
+            include_str!("../../../test_data/stac_responses/collections/code-de.json");
+        let collection: stac::Collection =
+            serde_json::from_str(collection_json).expect("collection fixture should parse");
+
+        let versions = StacExtensionVersions::try_from(&collection).expect("versions should parse");
+
+        assert_eq!(versions.projection, StacExtensionMajorVersion::V2);
+        assert_eq!(versions.raster, StacExtensionMajorVersion::V2);
+        assert_eq!(versions.eo, StacExtensionMajorVersion::V2);
     }
 }
