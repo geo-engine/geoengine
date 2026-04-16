@@ -314,3 +314,20 @@ jobs:
         run: just api-clients build
       - name: Check for changes in git repo
         run: just check-no-changes-in-git-repo
+
+  repository-lint:
+    name: "repository / lint"
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
+      - name: Check for formatting issues
+        run: just format-justfiles
+      - name: Check for version mismatches
+        run: just lint-version-numbers

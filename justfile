@@ -42,6 +42,9 @@ format-justfiles write="false": common::_clear
 build: backend::build backend::generate-openapi-spec api-clients::build python::build
 
 VERSION_CMD := "cargo metadata --manifest-path geoengine/Cargo.toml --format-version=1 --no-deps | jq -r '.packages[0].version'"
+PYTHON_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.version"'
+PYTHON_DEP_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.dependencies[0]" | sed -E "s/.*==\s*//"'
+API_CLIENT_VERSION_CMD := "python -c \"import configparser;cp=configparser.ConfigParser();cp.read('api-clients/.generation/config.ini');print(cp['general']['version'])\""
 
 # Increases the version number for Geo Engine and then updates api-clients, Python, UI, etc. accordingly.
 increase-version-number: common::_clear
@@ -57,6 +60,13 @@ increase-version-number: common::_clear
 _increase-version-number version: (api-clients::update-config version)
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.version" "{{ version }}"
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.dependencies[0]" "geoengine-api-client == {{ version }}"
+
+[group("lint")]
+lint-version-numbers: common::_clear
+    @echo "Checking if version numbers are consistent across the project ({{ shell(VERSION_CMD) }})…"
+    @{{ if shell(VERSION_CMD) == shell(PYTHON_VERSION_CMD) { 'echo "Python library version is consistent."' } else { error("Python library has wrong version (" + shell(PYTHON_VERSION_CMD) + ").") } }}
+    @{{ if shell(VERSION_CMD) == shell(PYTHON_DEP_VERSION_CMD) { 'echo "Python library dependency is consistent."' } else { error("Python library dependency has wrong version (" + shell(PYTHON_DEP_VERSION_CMD) + ").") } }}
+    @{{ if shell(VERSION_CMD) == shell(API_CLIENT_VERSION_CMD) { 'echo "API client version is consistent."' } else { error("API client has wrong version (" + shell(API_CLIENT_VERSION_CMD) + ").") } }}
 
 # Check if there are uncommitted changes in the git repository. If there are, print an error message and exit with a non-zero status code. Otherwise, print a success message.
 [group('CI')]
