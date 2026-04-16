@@ -1,0 +1,24 @@
+:host {
+    display: block;
+    padding: 1rem;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+mat-card {
+    margin-bottom: 1rem;
+}
+
+mat-card-content {
+    margin-top: 1rem;
+}
+
+mat-card-actions :not(:last-child) {
+    margin-right: 1rem;
+}
+
+mat-form-field {
+    width: 100%;
+}

@@ -1,0 +1,62 @@
+:host .cdk-virtual-scroll-content-wrapper {
+    width: 100%;
+    height: 100%;
+}
+
+mat-spinner {
+    margin: 0.5rem auto;
+}
+
+mat-list-item {
+    h4,
+    p {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    mat-icon {
+        color: black;
+        margin-top: 1.5rem !important;
+        margin-right: 1rem;
+    }
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.selected {
+    background-color: var(--geoengine-primary-color);
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.bottom {
+    flex-grow: 1;
+}
+
+.flex-container {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+.add-dataset {
+    height: 3rem;
+    width: 3rem;
+    margin-top: 0.25rem;
+    margin-right: 0.25rem;
+
+    mat-icon {
+        margin: 0;
+    }
+}
+
+.browseButton {
+    margin: 1rem;
+}

@@ -1,0 +1,38 @@
+$icon-size: 1.25rem;
+
+table {
+    width: 100%;
+    font-size: 0.75rem;
+
+    tbody {
+        tr {
+            min-height: $icon-size;
+
+            td {
+                padding: 0.125rem;
+            }
+        }
+    }
+}
+
+.gradient {
+    width: $icon-size;
+    border: #000 solid 1px;
+}
+
+.classes {
+    width: 0; // only use width of icons
+    vertical-align: center;
+}
+
+.icon {
+    margin-bottom: 1px !important;
+    margin-top: 1px !important;
+    height: $icon-size !important;
+    width: $icon-size !important;
+    border: #000 solid 1px;
+}
+
+.measurement {
+    padding-bottom: 0.5rem;
+}

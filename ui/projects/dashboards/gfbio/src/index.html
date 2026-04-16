@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>VAT: Visualization, Analysis and Transformation System</title>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    </head>
+    <body>
+        <geoengine-root>
+            <style type="text/css">
+                body {
+                    margin: 0;
+                    padding: 0;
+                    color: whitesmoke;
+                    text-shadow:
+                        0 1px 3px rgba(0, 0, 0, 0.12),
+                        0 1px 2px rgba(0, 0, 0, 0.24);
+                    background: #335aa3;
+                }
+
+                h1 {
+                    text-align: center;
+                    height: 20vh;
+                    line-height: 20vh;
+                    margin: 30vh 0 0 0;
+                }
+
+                h1 span {
+                    --logo-ratio: calc(3202.6741 / 512);
+                    --logo-width: 50vh;
+                    background: url('assets/vat_logo_white.svg') right no-repeat;
+                    background-size: calc(var(--logo-width) - 1px) calc(var(--logo-width) / var(--logo-ratio) - 1px);
+                    height: calc((var(--logo-width) / var(--logo-ratio)) - 1px);
+                    width: calc(var(--logo-width) - 1px);
+                    display: inline-block;
+                    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.24));
+                }
+
+                div {
+                    text-align: center;
+                    font-size: 20vh;
+                    height: 20vh;
+                    line-height: 20vh;
+                    margin: 0 0 30vh 0;
+                }
+
+                @keyframes blink {
+                    0% {
+                        opacity: 0.2;
+                    }
+                    20% {
+                        opacity: 1;
+                    }
+                    100% {
+                        opacity: 0.2;
+                    }
+                }
+
+                .dots span {
+                    animation-name: blink;
+                    animation-duration: 1.4s;
+                    animation-iteration-count: infinite;
+                    animation-fill-mode: both;
+                }
+
+                .dots span:nth-child(2) {
+                    animation-delay: 0.2s;
+                }
+
+                .dots span:nth-child(3) {
+                    animation-delay: 0.4s;
+                }
+            </style>
+            <h1><span class="logo"></span></h1>
+            <div class="dots">
+                <span>&middot;</span>
+                <span>&middot;</span>
+                <span>&middot;</span>
+            </div>
+        </geoengine-root>
+    </body>
+</html>

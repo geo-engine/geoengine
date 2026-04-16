@@ -1,0 +1,207 @@
+{
+    "version": 8,
+    "name": "t-rex",
+    "metadata": {"mapbox:autocomposite": false, "maputnik:renderer": "mbgljs"},
+    "sources": {
+        "ne": {"type": "vector", "url": "http://127.0.0.1:6767/ne.json"}
+    },
+    "glyphs": "http://127.0.0.1:6767/fonts/{fontstack}/{range}.pbf",
+    "layers": [
+        {
+            "id": "background",
+            "type": "background",
+            "source": "ne",
+            "paint": {"background-color": "rgba(255, 255, 255, 1)"}
+        },
+        {
+            "id": "ocean",
+            "source": "ne",
+            "source-layer": "ocean",
+            "type": "fill",
+            "paint": {
+                "fill-color": "rgba(158, 189, 255, 1)"
+            }
+        },
+        {
+            "id": "land",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "land",
+            "paint": {
+                "fill-color": "rgba(147, 165, 201, 1)"
+            }
+        },
+        {
+            "id": "continent-europe",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "geography_regions_polys",
+            "filter": ["all", ["in", "name", "EUROPE", "//BRITISH ISLES", "Corse"]],
+            "paint": {
+                "fill-color": "rgba(225, 230, 240, 1)"
+            }
+        },
+        {
+            "id": "countries-europe-plus",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "countries",
+            "filter": ["all", ["in", "name", "United Kingdom", "Ireland", "Italy", "Spain"]],
+            "paint": {
+                "fill-color": "rgba(225, 230, 240, 1)"
+            }
+        },
+        {
+            "id": "countries-europe-plus-plus",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "admin_1_states_provinces",
+            "filter": ["all", ["in", "name", "Isle of Man"]],
+            "paint": {
+                "fill-color": "rgba(225, 230, 240, 1)"
+            }
+        },
+        {
+            "id": "lakes",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "lakes",
+            "paint": {
+                "fill-color": "rgba(158, 189, 255, 1)"
+            }
+        },
+        {
+            "id": "lakes_north_america",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "lakes_north_america",
+            "paint": {
+                "fill-color": "rgba(158, 189, 255, 1)"
+            }
+        },
+        {
+            "id": "lakes_europe",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "lakes_europe",
+            "paint": {
+                "fill-color": "rgba(158, 189, 255, 1)"
+            }
+        },
+        {
+            "id": "glaciated_areas",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "glaciated_areas",
+            "paint": {
+                "fill-color": "rgba(255, 255, 255, 1)"
+            }
+        },
+        {
+            "id": "urban_areas",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "urban_areas",
+            "paint": {
+                "fill-color": "rgba(221, 204, 170, 1)"
+            }
+        },
+        {
+            "id": "rivers_lake_centerlines_scale_rank",
+            "type": "line",
+            "source": "ne",
+            "source-layer": "rivers_lake_centerlines_scale_rank",
+            "paint": {
+                "line-color": "rgba(164, 192, 218, 1)",
+                "line-width": ["*", 5, ["get", "strokeweig"]]
+            }
+        },
+        {
+            "id": "rivers_north_america",
+            "type": "line",
+            "source": "ne",
+            "source-layer": "rivers_north_america",
+            "paint": {
+                "line-color": "rgba(164, 192, 218, 1)",
+                "line-width": ["*", 5, ["get", "strokeweig"]]
+            }
+        },
+        {
+            "id": "rivers_europe",
+            "type": "line",
+            "source": "ne",
+            "source-layer": "rivers_europe",
+            "paint": {
+                "line-color": "rgba(164, 192, 218, 1)",
+                "line-width": ["*", 5, ["get", "strokeweig"]]
+            }
+        },
+        {
+            "id": "boundary_lines_land",
+            "type": "line",
+            "source": "ne",
+            "source-layer": "boundary_lines_land",
+            "paint": {
+                "line-color": "rgba(175, 183, 208, 1)",
+                "line-width": 1.5
+            }
+        },
+        {
+            "id": "admin_1_lines",
+            "type": "line",
+            "source": "ne",
+            "source-layer": "admin_1_lines",
+            "paint": {
+                "line-dasharray": [4, 2],
+                "line-color": "rgba(175, 183, 208, 1)",
+                "line-width": 0.5
+            }
+        },
+        {
+            "id": "minor_islands",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "minor_islands",
+            "paint": {
+                "fill-color": "rgba(207, 207, 207, 1)"
+            }
+        },
+        {
+            "id": "playas",
+            "type": "fill",
+            "source": "ne",
+            "source-layer": "playas",
+            "min_zoom": 5,
+            "paint": {
+                "fill-color": "rgba(207, 207, 207, 1)"
+            }
+        },
+        {
+            "id": "playas_outlines",
+            "type": "line",
+            "source": "ne",
+            "source-layer": "playas",
+            "minzoom": 5,
+            "paint": {
+                "line-color": "rgba(0, 0, 0, 1)",
+                "line-dasharray": [1, 1],
+                "line-width": {
+                    "stops": [
+                        [5, 0.7],
+                        [10, 1.5]
+                    ]
+                }
+            }
+        },
+        {
+            "id": "reefs",
+            "type": "line",
+            "source": "ne",
+            "source-layer": "reefs",
+            "paint": {
+                "line-color": "rgba(123, 182, 220, 1)",
+                "line-width": 0.5
+            }
+        }
+    ]
+}

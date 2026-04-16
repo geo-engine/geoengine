@@ -1,0 +1,17 @@
+img.logo {
+    height: 2.25rem;
+    width: auto;
+}
+
+h1 {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    align-content: flex-start;
+    gap: 1rem;
+    padding: 1rem 0 0 1rem;
+
+    div {
+        margin-top: 0.2rem;
+    }
+}

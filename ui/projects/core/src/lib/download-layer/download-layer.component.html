@@ -1,0 +1,118 @@
+<geoengine-sidenav-header>Download {{ layer().layerType === 'raster' ? 'Raster' : 'Vector' }} Layer</geoengine-sidenav-header>
+
+<form [formGroup]="form" fxLayout="column" id="container">
+    <div class="specification" fxFlex>
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Area</mat-card-title>
+                <mat-card-subtitle>Specify a rectangular region for the download</mat-card-subtitle>
+            </mat-card-header>
+
+            <mat-card-content>
+                <div fxLayout="row wrap" fxLayoutGap="1rem">
+                    <div fxLayout="row wrap" fxLayoutGap="1rem">
+                        <mat-form-field appearance="fill">
+                            <mat-label>min X</mat-label>
+                            <input matInput type="number" formControlName="bboxMinX" (input)="setEditedExtent()" />
+                        </mat-form-field>
+
+                        <mat-form-field appearance="fill">
+                            <mat-label>max X</mat-label>
+                            <input matInput type="number" formControlName="bboxMaxX" (input)="setEditedExtent()" />
+                        </mat-form-field>
+                    </div>
+                    <div fxLayout="row wrap" fxLayoutGap="1rem">
+                        <mat-form-field appearance="fill">
+                            <mat-label>min Y</mat-label>
+                            <input matInput type="number" formControlName="bboxMinY" (input)="setEditedExtent()" />
+                        </mat-form-field>
+
+                        <mat-form-field appearance="fill">
+                            <mat-label>max Y</mat-label>
+                            <input matInput type="number" formControlName="bboxMaxY" (input)="setEditedExtent()" />
+                        </mat-form-field>
+                    </div>
+                </div>
+
+                <button mat-raised-button color="accent" (click)="selectBox()" [disabled]="isSelectingBox">Select region on the map</button>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Time</mat-card-title>
+                <mat-card-subtitle>Specify a time selection for the download</mat-card-subtitle>
+            </mat-card-header>
+
+            <mat-card-content>
+                <geoengine-time-interval-input
+                    [allowRanges]="config.TIME.ALLOW_RANGES"
+                    formControlName="timeInterval"
+                    (input)="setEditedTime()"
+                ></geoengine-time-interval-input>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Resolution</mat-card-title>
+                <mat-card-subtitle>Specify a resolution for the download</mat-card-subtitle>
+            </mat-card-header>
+
+            <mat-card-content>
+                @if (layer().layerType === 'raster') {
+                    <mat-form-field appearance="fill">
+                        <mat-label>Input resolution</mat-label>
+                        <mat-select formControlName="inputResolution">
+                            <mat-option value="source"> Source resolution </mat-option>
+                            <mat-option value="value"> Value </mat-option>
+                        </mat-select>
+                    </mat-form-field>
+                }
+
+                @if (form.get('inputResolution')?.value === 'value') {
+                    <div fxLayout="row">
+                        @if (layer().layerType === 'vector') {
+                            <mat-form-field appearance="fill">
+                                <mat-label>Input resolution</mat-label>
+                                <input matInput type="number" formControlName="inputResolutionX" (input)="setEditedResolution()" />
+                                @if (
+                                    form.controls.inputResolutionX.errors?.required || form.controls.inputResolutionX.errors?.valueNotLarger
+                                ) {
+                                    <mat-hint class="error"> The resolution must be a positive number. </mat-hint>
+                                }
+                            </mat-form-field>
+                        }
+                        @if (layer().layerType === 'raster') {
+                            <div>
+                                <mat-form-field appearance="fill">
+                                    <mat-label>Input resolution (x)</mat-label>
+                                    <input matInput type="number" formControlName="inputResolutionX" (input)="setEditedResolution()" />
+                                    @if (
+                                        form.controls.inputResolutionX.errors?.required ||
+                                        form.controls.inputResolutionX.errors?.valueNotLarger
+                                    ) {
+                                        <mat-hint class="error"> The x resolution must be a positive number. </mat-hint>
+                                    }
+                                </mat-form-field>
+                                <mat-form-field appearance="fill">
+                                    <mat-label>Input resolution (y)</mat-label>
+                                    <input matInput type="number" formControlName="inputResolutionY" (input)="setEditedResolution()" />
+                                    @if (
+                                        form.controls.inputResolutionY.errors?.required ||
+                                        form.controls.inputResolutionY.errors?.valueNotLarger
+                                    ) {
+                                        <mat-hint class="error"> The y resolution must be a positive number. </mat-hint>
+                                    }
+                                </mat-form-field>
+                            </div>
+                        }
+                    </div>
+                }
+            </mat-card-content>
+        </mat-card>
+    </div>
+    <div class="actions">
+        <button type="submit" mat-raised-button color="primary" [disabled]="form.invalid" (click)="download()">Download</button>
+    </div>
+</form>

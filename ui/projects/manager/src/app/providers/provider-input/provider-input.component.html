@@ -1,0 +1,33 @@
+<mat-tab-group #tabs (selectedTabChange)="onTabChange($event)">
+    @if (providerType() !== ProviderType.OTHER) {
+        <mat-tab label="Form">
+            @switch (providerType()) {
+                @case (ProviderType.ARUNA) {
+                    <geoengine-manager-aruna-editor-form
+                        [createNew]="createNew()"
+                        [provider]="provider()"
+                        [visible]="!jsonInputVisible"
+                        [readonly]="readonly()"
+                        (changed)="setChangedFormDefinition($event)"
+                    />
+                }
+                @case (ProviderType.WildLIVE) {
+                    <geoengine-manager-wildlive-editor-form
+                        [isNew]="createNew()"
+                        [ngModel]="provider()"
+                        (ngModelChange)="setChangedFormDefinition($event)"
+                        [disabled]="readonly()"
+                    />
+                }
+            }
+        </mat-tab>
+    }
+    <mat-tab label="JSON">
+        <geoengine-manager-provider-json-input
+            [provider]="provider()"
+            [readonly]="readonly()"
+            (changed)="setChangedJSONDefinition($event)"
+            [visible]="jsonInputVisible"
+        />
+    </mat-tab>
+</mat-tab-group>

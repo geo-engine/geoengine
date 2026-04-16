@@ -1,0 +1,62 @@
+<geoengine-sidenav-header>Workspace Settings</geoengine-sidenav-header>
+<mat-nav-list>
+    <h3 matSubheader>Storage</h3>
+    <!-- AUTOSAVE -->
+    <mat-list-item disabled>
+        <mat-icon matListItemIcon color="default">save</mat-icon>
+        <h4 matListItemTitle>Save</h4>
+        <p matListItemLine><em>autosave</em></p>
+    </mat-list-item>
+    <!-- SAVE AS -->
+    <mat-list-item *geoengineIfLoggedIn (click)="loadSaveAsDialog()">
+        <mat-icon matListItemIcon color="default">folder</mat-icon>
+        <h4 matListItemTitle>Save As</h4>
+        <p matListItemLine>Save project under a different name</p>
+    </mat-list-item>
+    <mat-list-item *geoengineIfGuest disabled>
+        <mat-icon matListItemIcon color="default">folder</mat-icon>
+        <h4 matListItemTitle>Save As</h4>
+        <p matListItemLine>Please log in to use the full functionality</p>
+    </mat-list-item>
+    <!-- LOAD -->
+    <mat-list-item *geoengineIfLoggedIn (click)="loadChangeProjectDialog()">
+        <mat-icon matListItemIcon color="default">folder_open</mat-icon>
+        <h4 matListItemTitle>Load</h4>
+        <p matListItemLine>Load another project</p>
+    </mat-list-item>
+    <mat-list-item *geoengineIfGuest disabled>
+        <mat-icon matListItemIcon color="default">folder_open</mat-icon>
+        <h4 matListItemTitle>Load</h4>
+        <p matListItemLine>Please log in to use the full functionality</p>
+    </mat-list-item>
+    <!-- -->
+    <h3 matSubheader>Project</h3>
+    <!-- NEW PROJECT -->
+    <mat-list-item *geoengineIfLoggedIn (click)="loadNewProjectDialog()">
+        <mat-icon matListItemIcon color="default">create_new_folder</mat-icon>
+        <h4 matListItemTitle>New</h4>
+        <p matListItemLine>Create a new project</p>
+    </mat-list-item>
+    <mat-list-item *geoengineIfGuest disabled>
+        <mat-icon matListItemIcon color="default">create_new_folder</mat-icon>
+        <h4 matListItemTitle>New</h4>
+        <p matListItemLine>Please log in to use the full functionality</p>
+    </mat-list-item>
+    <!-- SPATIAL REFERENCE -->
+    <mat-list-item (click)="loadSpatialReferenceDialog()">
+        <mat-icon matListItemIcon color="default">map</mat-icon>
+        <h4 matListItemTitle>Spatial Reference</h4>
+        <p matListItemLine>Change the current spatial reference</p>
+    </mat-list-item>
+    <!-- BASEMAP -->
+    <mat-list-item (click)="loadBasemapDialog()">
+        <mat-icon matListItemIcon color="default">map-outline</mat-icon>
+        <h4 matListItemTitle>Basemap</h4>
+        <p matListItemLine>Select a basemap</p>
+    </mat-list-item>
+    <mat-list-item (click)="loadNotificationsDialog()">
+        <mat-icon matListItemIcon color="default">notifications</mat-icon>
+        <h4 matListItemTitle>Notifications</h4>
+        <p matListItemLine>Show all notifications</p>
+    </mat-list-item>
+</mat-nav-list>

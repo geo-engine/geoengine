@@ -1,5 +1,14 @@
 version: 2
 
+multi-ecosystem-groups:
+  patch-updates:
+    schedule:
+      interval: "weekly"
+      day: "sunday" # to be checked before Monday
+    # This filter ensures only patches are bundled across all linked ecosystems
+    update-types:
+      - "patch"
+
 updates:
   - package-ecosystem: "cargo"
     # Look for `Cargo.toml` and `lock` files in the `root` directory
@@ -8,6 +17,16 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    groups:
+      minor-and-major:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "major"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "patch-updates"
 
   - package-ecosystem: "pip"
     directory: "/python"
@@ -15,6 +34,16 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    groups:
+      minor-and-major:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "major"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "patch-updates"
 
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
@@ -24,4 +53,31 @@ updates:
     schedule:
       interval: "weekly"
       day: "sunday" # to be checked before Monday
+    groups:
+      minor-and-major:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "major"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "patch-updates"
 
+  - package-ecosystem: "npm"
+    # Look for `package.json` and `lock` files in the `root` directory
+    directory: "/ui"
+    # Check the `crates.io` for updates every day (weekdays)
+    schedule:
+      interval: "weekly"
+      day: "sunday" # to be checked before Monday
+    groups:
+      minor-and-major:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "major"
+    patterns:
+      - "*"
+    multi-ecosystem-group: "patch-updates"

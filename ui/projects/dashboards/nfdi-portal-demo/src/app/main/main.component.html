@@ -1,0 +1,50 @@
+<div class="sidenav mat-elevation-z4">
+    <mat-toolbar color="primary" class="mat-elevation-z1">
+        <mat-toolbar-row>
+            <div fxFlex></div>
+            <a href="https://www.nfdi4biodiversity.org"><img src="assets/logos/nfdi4biodiversity.png" alt="NFDI4BioDiversity" /></a>
+            <p class="mat-headline-6">Portaldemonstrator</p>
+            <div fxFlex></div>
+        </mat-toolbar-row>
+    </mat-toolbar>
+    <ng-template [cdkPortalOutlet]="datasetPortal"></ng-template>
+</div>
+
+<div id="top-float-buttons">
+    <geoengine-zoom-handles (zoomIn)="map.zoomIn()" (zoomOut)="map.zoomOut()" class="mat-elevation-z4"></geoengine-zoom-handles>
+</div>
+
+@if (dataSelectionService.rasterLayer | async; as rasterLayer) {
+    <geoengine-legend [layer]="rasterLayer"></geoengine-legend>
+}
+
+<div class="mid-container" [style.height.px]="windowHeight$ | async">
+    <geoengine-map-container #map [grid]="false">
+        @if (userService.getSessionTokenStream() | async; as sessionToken) {
+            @for (layer of layersReverse$ | async; track idFromLayer($index, layer)) {
+                @if (layer.layerType === 'vector') {
+                    <geoengine-ol-vector-layer
+                        [layerId]="layer.id"
+                        [workflow]="layer.workflowId"
+                        [symbology]="$any(layer.symbology)"
+                        [isVisible]="layer.isVisible"
+                        (mapRedraw)="map.layerForcesRedraw()"
+                    ></geoengine-ol-vector-layer>
+                }
+                @if (layer.layerType === 'raster') {
+                    <geoengine-ol-raster-layer
+                        [layerId]="layer.id"
+                        [workflow]="layer.workflowId"
+                        [symbology]="$any(layer.symbology)"
+                        [isVisible]="layer.isVisible"
+                        [sessionToken]="sessionToken"
+                        (mapRedraw)="map.layerForcesRedraw()"
+                    ></geoengine-ol-raster-layer>
+                }
+            }
+        }
+    </geoengine-map-container>
+</div>
+
+<!-- TODO: fix layout service to work without sidenav -->
+<mat-sidenav></mat-sidenav>

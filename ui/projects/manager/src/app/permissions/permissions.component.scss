@@ -1,0 +1,50 @@
+cdk-virtual-scroll-viewport {
+    height: 100%;
+}
+
+:host .cdk-virtual-scroll-content-wrapper {
+    width: 100%;
+}
+
+mat-spinner {
+    margin: 0.5rem auto;
+}
+
+mat-list-item {
+    h4,
+    p {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    mat-icon {
+        color: black;
+        margin-top: 1.5rem !important;
+        margin-right: 1rem;
+    }
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.container {
+    display: flex;
+    height: 100%;
+}
+
+.selected {
+    background-color: var(--geoengine-primary-color);
+}
+
+.flex-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.add-permission {
+    width: 100%;
+    margin-top: 0.5rem;
+}

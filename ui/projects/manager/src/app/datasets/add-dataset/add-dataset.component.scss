@@ -1,0 +1,43 @@
+mat-form-field {
+    width: 100%;
+}
+
+mat-card {
+    margin: 1rem 1rem 0rem 1rem;
+}
+
+mat-card-content {
+    margin-top: 1rem;
+}
+
+.flex-container {
+    display: flex;
+    gap: 0.5rem;
+    justify-content: space-between;
+}
+
+mat-button-toggle-group {
+    margin-bottom: 1rem;
+}
+
+.actions {
+    text-align: right;
+    height: 3rem;
+    padding: 1rem;
+
+    button {
+        margin: 0.5rem;
+    }
+}
+
+.container {
+    overflow: auto;
+    height: 100%;
+}
+
+textarea {
+    width: 100%;
+    height: 20rem;
+    overflow: auto;
+    resize: none;
+}

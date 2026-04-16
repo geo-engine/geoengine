@@ -1,0 +1,61 @@
+:host {
+    height: 100%;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+mat-card {
+    margin: 1rem 1rem 0rem 1rem;
+}
+
+mat-card-content {
+    margin-top: 1rem;
+}
+
+mat-button-toggle-group {
+    margin-bottom: 1rem;
+}
+
+#container {
+    display: block;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+
+    .specification {
+        overflow-y: auto;
+    }
+
+    .actions {
+        text-align: right;
+        padding: 1rem;
+    }
+}
+
+form {
+    height: 100%;
+}
+
+.button-container {
+    display: flex;
+    gap: 2rem;
+    height: 100%;
+}
+
+.fixed-height-button {
+    height: 100%;
+    flex-grow: 1;
+}
+
+.button-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.icon {
+    transform: scale(2);
+    margin-bottom: 2rem;
+}

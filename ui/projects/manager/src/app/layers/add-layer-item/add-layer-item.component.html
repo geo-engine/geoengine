@@ -1,0 +1,80 @@
+<h2 mat-dialog-title>Add Item to Collection</h2>
+
+@switch (childType()) {
+    @case (ChildType.Undefined) {
+        <div class="button-container">
+            <button mat-button (click)="childType.set(ChildType.New)" class="fixed-height-button">
+                <div class="button-content"><mat-icon class="icon">add</mat-icon>Add New Item</div>
+            </button>
+            <button mat-button (click)="childType.set(ChildType.Existing)" class="fixed-height-button">
+                <div class="button-content"><mat-icon class="icon">list</mat-icon>Select Existing Item</div>
+            </button>
+        </div>
+    }
+    @case (ChildType.Existing) {
+        <geoengine-layer-collection-navigation
+            [showLayerToggle]="false"
+            [collectionNavigation]="CollectionNavigation.Button"
+            [collectionId]="rootCollectionId"
+            (selectLayer)="addExistingLayer($event)"
+            (selectCollection)="addExistingCollection($event)"
+        ></geoengine-layer-collection-navigation>
+    }
+    @case (ChildType.New) {
+        <form [formGroup]="form">
+            <div id="container" fxLayout="column">
+                <div class="specification" fxFlex>
+                    <mat-card>
+                        <mat-card-header>
+                            <mat-card-title>Basic Information</mat-card-title>
+                        </mat-card-header>
+
+                        <mat-card-content>
+                            <mat-button-toggle-group
+                                id="item-type"
+                                [multiple]="false"
+                                formControlName="itemType"
+                                (ngModelChange)="updateItemType()"
+                            >
+                                <mat-button-toggle [value]="ItemType.Collection">Collection</mat-button-toggle>
+                                <mat-button-toggle [value]="ItemType.Layer">Layer</mat-button-toggle>
+                            </mat-button-toggle-group>
+
+                            <div>
+                                <mat-form-field appearance="fill">
+                                    <mat-label>Name</mat-label>
+                                    <input matInput type="text" formControlName="name" />
+                                </mat-form-field>
+                                <mat-form-field appearance="fill">
+                                    <mat-label>Description</mat-label>
+                                    <input matInput type="text" formControlName="description" />
+                                </mat-form-field>
+                            </div>
+                        </mat-card-content>
+                    </mat-card>
+
+                    @if (form.controls.itemType.value === ItemType.Layer) {
+                        <mat-card>
+                            <mat-card-header>
+                                <mat-card-title>Workflow</mat-card-title>
+                            </mat-card-header>
+                            <mat-card-content>
+                                <geoengine-code-editor formControlName="workflow" language="JSON"></geoengine-code-editor>
+                                @if (form.controls.workflow.errors?.invalidJson) {
+                                    <mat-error> The workflow is not a valid JSON object. </mat-error>
+                                }
+                                @if (form.controls.workflow.errors?.required) {
+                                    <mat-error> The workflow must not be empty </mat-error>
+                                }
+                            </mat-card-content>
+                        </mat-card>
+                    }
+                </div>
+
+                <div class="actions">
+                    <button mat-raised-button color="primary" [disabled]="form.invalid" (click)="createItem()">Create</button>
+                </div>
+            </div>
+        </form>
+    }
+}

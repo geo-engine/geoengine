@@ -314,3 +314,74 @@ jobs:
         run: just api-clients build
       - name: Check for changes in git repo
         run: just check-no-changes-in-git-repo
+
+  ui-build:
+    name: "ui / build"
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    strategy:
+      matrix:
+        app:
+          - gis
+          - manager
+          - dashboards/gfbio
+          - dashboards/data-atlas
+          - dashboards/nfdi-portal-demo
+          - dashboards/ebv-analyzer
+          - dashboards/ecometrics
+          - dashboards/esg-indicator-service
+    
+    steps:
+      - uses: actions/checkout@v5
+      - uses: extractions/setup-just@v3
+      - name: Install Dependencies
+        run: just ui install
+      - name: Build app ${{ matrix.app }}
+        run: just ui build ${{ matrix.app }}
+        env:
+          CI: true
+  
+  ui-test:
+    name: "ui / test"
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: extractions/setup-just@v3
+      - name: Install Dependencies
+        run: just ui install --with-deps
+      - run: just ui test --ci
+        env:
+          CI: true
+
+  ui-lint:
+    name: "ui / lint"
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - uses: extractions/setup-just@v3
+      - name: Install Dependencies
+        run: just ui install
+      - name: Code Format Check with Prettier
+        run: just ui format
+      - name: Build common & core
+        run: |
+          just ui build common
+          just ui build core
+      - name: Check with Linter
+        run: just ui lint

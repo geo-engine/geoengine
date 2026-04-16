@@ -1,0 +1,12 @@
+{
+    "name": "@geoengine/core",
+    "version": "0.2.11",
+    "repository": {
+        "type": "git",
+        "url": "git://github.com/geoengine/geoengine-ui.git"
+    },
+    "publishConfig": {
+        "registry": "https://npm.pkg.github.com/"
+    },
+    "peerDependencies": {}
+}

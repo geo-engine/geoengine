@@ -1,0 +1,41 @@
+<form [formGroup]="registrationForm" (ngSubmit)="register()">
+    <div class="container" fxLayout="column" fxLayoutAlign="space-around">
+        <mat-card appearance="outlined" class="login">
+            <mat-card-header>
+                <img [src]="config.BRANDING.LOGO_URL" class="logo" />
+                <mat-card-subtitle>Create a new account for this Geo Engine instance</mat-card-subtitle>
+            </mat-card-header>
+
+            <mat-card-content>
+                @switch (loading$ | async) {
+                    @case (false) {
+                        <mat-form-field>
+                            <input matInput type="text" placeholder="Name" formControlName="name" />
+                        </mat-form-field>
+                        <mat-form-field>
+                            <input matInput type="text" placeholder="E-Mail" formControlName="email" />
+                        </mat-form-field>
+                        <mat-form-field>
+                            <input matInput type="password" placeholder="Password" formControlName="password" #password />
+                            @if (password.value.length < PASSWORD_MIN_LENGTH) {
+                                <mat-hint align="end"> Minimum {{ PASSWORD_MIN_LENGTH }} characters</mat-hint>
+                            }
+                        </mat-form-field>
+                        @if (registrationError$ | async; as errorMsg) {
+                            <p class="error">{{ errorMsg }}</p>
+                        }
+                    }
+                    @case (true) {
+                        <mat-spinner></mat-spinner>
+                    }
+                }
+            </mat-card-content>
+            @if (notLoading$ | async) {
+                <mat-card-actions fxLayout="row" fxLayoutGap="1rem" fxLayoutAlign="space-between center">
+                    <button mat-raised-button type="submit" [disabled]="formIsInvalid$ | async" color="primary">Register</button>
+                    <a routerLink="/signin">Login</a>
+                </mat-card-actions>
+            }
+        </mat-card>
+    </div>
+</form>

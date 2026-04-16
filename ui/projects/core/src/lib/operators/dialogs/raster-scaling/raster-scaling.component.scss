@@ -1,0 +1,41 @@
+form {
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.custom-unit {
+    margin-bottom: 1rem;
+}
+
+mat-error {
+    margin-bottom: 1rem;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+.block {
+    .keyOrConstant {
+        margin: 0;
+        padding-top: 0 !important;
+        padding-bottom: 0 !important;
+    }
+}
+
+.scaleModeHint {
+    font-size: 0.8rem;
+    padding-bottom: 1rem;
+    .scaleType {
+        font-weight: bold;
+    }
+
+    .scaleFormula {
+        font-style: italic;
+    }
+}

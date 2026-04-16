@@ -1,0 +1,112 @@
+<geoengine-sidenav-header>Rasterization</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="$event.preventDefault(); add()">
+    <geoengine-operator-dialog-container [loading]="loading$ | async | valueDefault: false">
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/rasterization.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/rasterization.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <div formGroupName="rasterization">
+                <mat-tab-group
+                    color="primary"
+                    disablePagination
+                    [selectedIndex]="selected.value"
+                    (selectedIndexChange)="selected.setValue($event)"
+                >
+                    <mat-tab label="Grid">
+                        <ng-container *ngTemplateOutlet="gridTemplate"></ng-container>
+                    </mat-tab>
+                    <mat-tab label="Density">
+                        <ng-container *ngTemplateOutlet="densityTemplate"></ng-container>
+                    </mat-tab>
+                </mat-tab-group>
+
+                <ng-template #gridTemplate>
+                    <label id="radio-group-label" class="labelRadioGroup">Size mode:</label>
+                    <mat-radio-group color="primary" formControlName="gridSizeMode" aria-labelledby="radio-group-label">
+                        <mat-radio-button value="fixed">Fixed</mat-radio-button>
+                        <mat-radio-button value="relative">Relative</mat-radio-button>
+                    </mat-radio-group>
+                    <div formGroupName="resolution" class="groupInRow">
+                        <mat-form-field appearance="fill">
+                            <mat-label>Resolution (x)</mat-label>
+                            <input matInput type="number" formControlName="resX" />
+                            @if (form.getError('valueNotLarger', 'rasterization.resolution.resX'); as error) {
+                                <mat-hint class="error"> The value must be greater than zero. </mat-hint>
+                            }
+                        </mat-form-field>
+                        <mat-form-field appearance="fill">
+                            <mat-label>Resolution (y)</mat-label>
+                            <input matInput type="number" formControlName="resY" />
+                            @if (form.getError('valueNotLarger', 'rasterization.resolution.resY'); as error) {
+                                <mat-hint class="error"> The value must be greater than zero. </mat-hint>
+                            }
+                        </mat-form-field>
+                    </div>
+                    <div formGroupName="origin" class="groupInRow">
+                        <mat-form-field appearance="fill">
+                            <mat-label>Origin (x)</mat-label>
+                            <input matInput type="number" formControlName="originX" />
+                        </mat-form-field>
+                        <mat-form-field appearance="fill">
+                            <mat-label>Origin (y)</mat-label>
+                            <input matInput type="number" formControlName="originY" />
+                        </mat-form-field>
+                    </div>
+                </ng-template>
+                <ng-template #densityTemplate>
+                    @if (selected.value === 1) {
+                        <div class="groupInRow">
+                            <mat-form-field appearance="fill" class="densityContainer">
+                                <mat-label>Cutoff</mat-label>
+                                <input matInput type="number" formControlName="cutoff" />
+                                @if (form.getError('valueNotInRange', 'rasterization.cutoff'); as error) {
+                                    <mat-hint class="error"> The value must be in [0, 1). </mat-hint>
+                                }
+                            </mat-form-field>
+                            <mat-form-field appearance="fill" class="densityContainer">
+                                <mat-label>Stddev</mat-label>
+                                <input matInput type="number" formControlName="stddev" />
+                                @if (form.getError('valueNotLarger', 'rasterization.stddev'); as error) {
+                                    <mat-hint class="error"> The value must be greater than zero. </mat-hint>
+                                }
+                            </mat-form-field>
+                        </div>
+                    }
+                </ng-template>
+            </div>
+        </ng-container>
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name formControlName="name">
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+            <geoengine-symbology-creator
+                #symbologyCreator
+                [enableCopyInputSymbology]="false"
+                [opacity]="0.8"
+                [colorMapName]="'inferno'"
+            ></geoengine-symbology-creator>
+        </ng-container>
+        <ng-container actions>
+            <button
+                type="submit"
+                mat-raised-button
+                color="primary"
+                [disabled]="form.invalid || symbologyCreator.form.invalid || (loading$ | async)"
+            >
+                Create
+            </button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

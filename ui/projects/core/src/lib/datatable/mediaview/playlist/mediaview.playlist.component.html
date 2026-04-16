@@ -1,0 +1,16 @@
+<mat-nav-list>
+    <h4 mat-header class="playlisttitle" color="primary">Files</h4>
+    @for (url of tracks(); track url; let i = $index) {
+        <mat-list-item class="mat-list-item-word-wrap" (click)="goToMedia(i)">
+            @if (currentTrack() === i) {
+                <mat-icon mat-list-icon color="primary">radio_button_checked</mat-icon>
+            }
+            @if (currentTrack() !== i) {
+                <mat-icon mat-list-icon color="primary">radio_button_unchecked</mat-icon>
+            }
+            <p mat-line [class.playing]="currentTrack() === i" matTooltip="{{ url }}">
+                {{ url }}
+            </p>
+        </mat-list-item>
+    }
+</mat-nav-list>

@@ -1,0 +1,11 @@
+<geoengine-dialog-header>Rename the Current Layer</geoengine-dialog-header>
+<form [formGroup]="form" (ngSubmit)="$event.preventDefault(); save()">
+    <mat-dialog-content>
+        <mat-form-field>
+            <input matInput type="text" placeholder="Name" formControlName="layerName" />
+        </mat-form-field>
+    </mat-dialog-content>
+    <mat-dialog-actions align="end">
+        <button mat-raised-button type="submit" color="primary" [disabled]="form.invalid">Save</button>
+    </mat-dialog-actions>
+</form>

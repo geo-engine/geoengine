@@ -1,0 +1,159 @@
+@if (layer(); as layer) {
+    <div class="container">
+        <form [formGroup]="form">
+            <mat-card class="top">
+                <mat-card-header>
+                    <mat-card-title>Layer Details</mat-card-title>
+                </mat-card-header>
+
+                <mat-card-content>
+                    <mat-form-field appearance="fill">
+                        <mat-label>Name</mat-label>
+                        <input matInput type="text" formControlName="name" />
+                    </mat-form-field>
+
+                    <mat-form-field appearance="fill">
+                        <mat-label>Description</mat-label>
+                        <textarea matInput formControlName="description"></textarea>
+                    </mat-form-field>
+
+                    <geoengine-code-editor [formControl]="form.controls['workflow']" language="JSON"></geoengine-code-editor>
+                </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+                <mat-card-header>
+                    <mat-card-title>Properties</mat-card-title>
+                </mat-card-header>
+
+                <mat-card-content>
+                    @for (control of form.controls.properties.controls; track control; let i = $index) {
+                        <div formArrayName="properties">
+                            <div [formGroupName]="i">
+                                <div class="flex-container">
+                                    <mat-form-field appearance="fill">
+                                        <mat-label>Property Key</mat-label>
+                                        <input matInput type="text" formControlName="0" />
+                                    </mat-form-field>
+                                    <mat-form-field appearance="fill">
+                                        <mat-label>Property Value</mat-label>
+                                        <input matInput type="text" formControlName="1" />
+                                    </mat-form-field>
+                                    <button mat-icon-button (click)="removeProperty(i)"><mat-icon>delete</mat-icon></button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (form.controls.properties.controls.length === 0) {
+                        <div class="empty-placeholder">
+                            <i>No properties defined.</i>
+                        </div>
+                    }
+                    <button class="add-entry" mat-raised-button (click)="addProperty()">Add Property</button>
+                </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+                <mat-card-header>
+                    <mat-card-title>Metadata</mat-card-title>
+                </mat-card-header>
+
+                <mat-card-content>
+                    @for (control of form.controls.metadata.controls; track control; let i = $index) {
+                        <div formArrayName="metadata">
+                            <div [formGroupName]="i">
+                                <div class="flex-container">
+                                    <mat-form-field appearance="fill">
+                                        <mat-label>Property Key</mat-label>
+                                        <input matInput type="text" formControlName="0" />
+                                    </mat-form-field>
+                                    <mat-form-field appearance="fill">
+                                        <mat-label>Property Value</mat-label>
+                                        <input matInput type="text" formControlName="1" />
+                                    </mat-form-field>
+                                    <button mat-icon-button (click)="removeMetadata(i)"><mat-icon>delete</mat-icon></button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (form.controls.properties.controls.length === 0) {
+                        <div class="empty-placeholder">
+                            <i>No metadata defined.</i>
+                        </div>
+                    }
+                    <button class="add-entry" mat-raised-button (click)="addMetadata()">Add Metadata</button>
+                </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+                <mat-card-header>
+                    <mat-card-title>Symbology</mat-card-title>
+                </mat-card-header>
+
+                <mat-card-content>
+                    @if (rasterSymbologyWorkflow(); as rasterSymbologyWorkflow) {
+                        <geoengine-raster-symbology-editor
+                            [symbologyWorkflow]="rasterSymbologyWorkflow"
+                            (changedSymbology)="changeRasterSymbology($event)"
+                        ></geoengine-raster-symbology-editor>
+                    }
+
+                    @if (vectorSymbologyWorkflow(); as vectorSymbologyWorkflow) {
+                        <geoengine-vector-symbology-editor
+                            [symbologyWorkflow]="vectorSymbologyWorkflow"
+                            (changedSymbology)="changeVectorSymbology($event)"
+                        ></geoengine-vector-symbology-editor>
+                    }
+
+                    @if (!rasterSymbologyWorkflow() && !vectorSymbologyWorkflow()) {
+                        <div>This layer has no symbology yet and uses the default symbology.</div>
+                        <button mat-stroked-button class="symbologyButton" (click)="createSymbology(layer)">Create custom symbology</button>
+                    }
+                </mat-card-content>
+            </mat-card>
+
+            <div class="actions">
+                <button mat-raised-button color="primary" [disabled]="form.pristine || !form.valid" (click)="applyChanges()">Apply</button>
+            </div>
+        </form>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Result Descriptor</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                @if (resultDescriptor(); as resultDescriptor) {
+                    @if (resultDescriptor.type === 'raster') {
+                        <geoengine-manager-raster-result-descriptor
+                            [resultDescriptor]="resultDescriptor"
+                        ></geoengine-manager-raster-result-descriptor>
+                    }
+
+                    @if (resultDescriptor.type === 'vector') {
+                        <geoengine-manager-vector-result-descriptor
+                            [resultDescriptor]="resultDescriptor"
+                        ></geoengine-manager-vector-result-descriptor>
+                    }
+                }
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Permissions</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <geoengine-manager-permissions resourceType="layer" [resourceId]="layer.id.layerId"></geoengine-manager-permissions>
+            </mat-card-content>
+        </mat-card>
+
+        <div class="actions">
+            <button mat-raised-button (click)="deleteLayerFromParent()">Remove layer from parent</button>
+            <button mat-raised-button color="warn" (click)="deleteLayer()">Delete layer</button>
+        </div>
+    </div>
+}

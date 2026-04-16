@@ -1,0 +1,169 @@
+@if (dataset) {
+    <div class="container">
+        <mat-card class="top">
+            <mat-card-header>
+                <mat-card-title>Dataset Details</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <form [formGroup]="form">
+                    <div class="flex-container">
+                        <mat-form-field appearance="fill">
+                            <mat-label>Name</mat-label>
+                            <input matInput type="text" formControlName="name" />
+                        </mat-form-field>
+                        <mat-form-field appearance="fill">
+                            <mat-label>Display Name</mat-label>
+                            <input matInput type="text" formControlName="displayName" />
+                        </mat-form-field>
+                    </div>
+                    <div class="flex-container">
+                        <mat-form-field appearance="fill">
+                            <mat-label>Layer Type</mat-label>
+                            <input matInput type="text" readonly formControlName="layerType" />
+                        </mat-form-field>
+                        <mat-form-field appearance="fill">
+                            <mat-label>Data Type</mat-label>
+                            <input matInput type="text" readonly formControlName="dataType" />
+                        </mat-form-field>
+                    </div>
+                    <mat-form-field appearance="fill">
+                        <mat-label>Dataset Description</mat-label>
+                        <textarea matInput formControlName="description"></textarea>
+                    </mat-form-field>
+                    <mat-form-field>
+                        <mat-label>Tags</mat-label>
+                        <mat-chip-grid #tagsGrid formControlName="tags">
+                            @for (column of form.controls.tags.value; track column) {
+                                <mat-chip-row (removed)="removeTag(column)">
+                                    {{ column }}
+                                    <mat-icon matChipRemove>cancel</mat-icon>
+                                </mat-chip-row>
+                            }
+                            <input
+                                formControlName="newTag"
+                                placeholder="New tag..."
+                                [matChipInputFor]="tagsGrid"
+                                (matChipInputTokenEnd)="addTag()"
+                                (blur)="addTag()"
+                            />
+                            @if (tagInputControl.errors?.invalidTag) {
+                                <mat-error> Invalid tag. Space, / and ".." are not allowed. </mat-error>
+                            }
+                            @if (tagsControl.errors?.duplicate) {
+                                <mat-error>Duplicate tag.</mat-error>
+                            }
+                        </mat-chip-grid>
+                    </mat-form-field>
+                </form>
+
+                <div class="actions">
+                    <button mat-raised-button color="primary" [disabled]="form.pristine || !form.valid" (click)="applyChanges()">
+                        Apply
+                    </button>
+                </div>
+            </mat-card-content>
+        </mat-card>
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Provenance</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <geoengine-manager-provenance [provenance]="dataset.provenance | valueDefault: []"></geoengine-manager-provenance>
+                <div class="actions">
+                    <button
+                        mat-raised-button
+                        color="primary"
+                        [disabled]="!provenanceComponent() || provenanceComponent().form.pristine || provenanceComponent().form.invalid"
+                        (click)="saveProvenance()"
+                    >
+                        Apply
+                    </button>
+                </div></mat-card-content
+            ></mat-card
+        >
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Symbology</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                @if (rasterSymbology || vectorSymbology) {
+                    @if (datasetWorkflowId$ | async; as workflowId) {
+                        <geoengine-manager-symbology-editor
+                            [workflowId]="workflowId"
+                            [datasetName]="dataset.name"
+                            [rasterSymbology]="rasterSymbology"
+                            [vectorSymbology]="vectorSymbology"
+                        ></geoengine-manager-symbology-editor>
+                    }
+                } @else {
+                    <div>This dataset has no symbology yet and uses the default symbology.</div>
+                    <button mat-stroked-button class="symbologyButton" (click)="createSymbology(dataset)">Create custom symbology</button>
+                }
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Loading Information</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                @if (gdalMetaDataList) {
+                    <geoengine-manager-gdal-metadata-list [metaData]="gdalMetaDataList"></geoengine-manager-gdal-metadata-list>
+                } @else if (ogrMetaData) {
+                    <geoengine-ogr-dataset [metaData]="ogrMetaData"></geoengine-ogr-dataset>
+                } @else {
+                    <geoengine-code-editor
+                        [ngModel]="rawLoadingInfo"
+                        (ngModelChange)="updateLoadingInfo($event)"
+                        [ngModelOptions]="{standalone: true}"
+                        language="JSON"
+                    ></geoengine-code-editor>
+                }
+                <div class="actions">
+                    <button mat-raised-button color="primary" [disabled]="isSaveLoadingInfoDisabled()" (click)="saveLoadingInfo()">
+                        Apply
+                    </button>
+                </div>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Result Descriptor</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                @if (dataset.resultDescriptor.type === 'raster') {
+                    <geoengine-manager-raster-result-descriptor
+                        [resultDescriptor]="dataset.resultDescriptor"
+                    ></geoengine-manager-raster-result-descriptor>
+                }
+
+                @if (dataset.resultDescriptor.type === 'vector') {
+                    <geoengine-manager-vector-result-descriptor
+                        [resultDescriptor]="dataset.resultDescriptor"
+                    ></geoengine-manager-vector-result-descriptor>
+                }
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Permissions</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <geoengine-manager-permissions resourceType="dataset" [resourceId]="dataset.name"></geoengine-manager-permissions>
+            </mat-card-content>
+        </mat-card>
+
+        <div class="actions">
+            <button mat-raised-button color="warn" (click)="deleteDataset()">Delete dataset</button>
+        </div>
+    </div>
+}

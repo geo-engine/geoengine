@@ -1,0 +1,73 @@
+<div fxLayout="row wrap" fxLayoutGap="0.5rem" fxLayoutAlign="space-between baseline">
+    <mat-form-field fxFlex appearance="fill">
+        <mat-label>Year</mat-label>
+        <input
+            matInput
+            type="number"
+            maxLength="4"
+            [ngModel]="time.year()"
+            (ngModelChange)="update('year', $event)"
+            [disabled]="isDisabled()"
+        />
+    </mat-form-field>
+    <div>-</div>
+    <mat-form-field fxFlex appearance="fill">
+        <mat-label>Month</mat-label>
+        <input
+            matInput
+            type="number"
+            maxLength="2"
+            [ngModel]="time.month() + 1"
+            (ngModelChange)="update('month', $event - 1)"
+            [disabled]="isDisabled()"
+        />
+    </mat-form-field>
+    <div>-</div>
+    <mat-form-field fxFlex appearance="fill">
+        <mat-label>Day</mat-label>
+        <input
+            matInput
+            type="number"
+            maxLength="2"
+            [ngModel]="time.date()"
+            (ngModelChange)="updateDate($event)"
+            [disabled]="isDisabled()"
+        />
+    </mat-form-field>
+    <span fxFlex="0.5rem"></span>
+    <mat-form-field fxFlex appearance="fill">
+        <mat-label>Hour</mat-label>
+        <input
+            matInput
+            type="number"
+            maxLength="2"
+            [ngModel]="time.hour()"
+            (ngModelChange)="update('hour', $event)"
+            [disabled]="isDisabled()"
+        />
+    </mat-form-field>
+    <span>:</span>
+    <mat-form-field fxFlex appearance="fill">
+        <mat-label>Minute</mat-label>
+        <input
+            matInput
+            type="number"
+            maxLength="2"
+            [ngModel]="time.minute()"
+            (ngModelChange)="update('minute', $event)"
+            [disabled]="isDisabled()"
+        />
+    </mat-form-field>
+    <span>:</span>
+    <mat-form-field fxFlex appearance="fill">
+        <mat-label>Second</mat-label>
+        <input
+            matInput
+            type="number"
+            maxLength="2"
+            [ngModel]="time.second()"
+            (ngModelChange)="update('second', $event)"
+            [disabled]="isDisabled()"
+        />
+    </mat-form-field>
+</div>

@@ -1,0 +1,24 @@
+<geoengine-sidenav-header>Save As</geoengine-sidenav-header>
+@if ((created$ | async) === false) {
+    <p>Save the current project under a new name.</p>
+    <form [formGroup]="form" (ngSubmit)="$event.preventDefault(); save()">
+        <div fxLayout="row">
+            <mat-form-field fxFlex>
+                <input matInput type="text" placeholder="Project Name" formControlName="name" />
+                @if (form.controls.name.errors?.nameInUsage) {
+                    <mat-hint align="end" class="error"> The name is already in usage. </mat-hint>
+                }
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </mat-form-field>
+        </div>
+        <button mat-raised-button color="primary" type="submit" [disabled]="(form.statusChanges | async) !== 'VALID'">Save</button>
+    </form>
+}
+@if (created$ | async) {
+    <p class="finished">
+        Saved project name <em>{{ form.controls['name'].value }}</em
+        >.
+    </p>
+}

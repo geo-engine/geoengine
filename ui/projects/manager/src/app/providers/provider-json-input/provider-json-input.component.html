@@ -1,0 +1,4 @@
+<geoengine-code-editor language="JSON" [readonly]="readonly()" [formControl]="json" />
+@if (inputInvalid()) {
+    <mat-error>The JSON is not a valid provider definition</mat-error>
+}

@@ -1,0 +1,22 @@
+:host {
+    width: 100%;
+}
+
+.container {
+    display: flex;
+    height: 100%;
+    width: 100%;
+}
+
+.left {
+    flex: 0 0 25%;
+    border-right: 1px solid #ccc;
+}
+
+.no-dataset {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100%;
+    margin: 0 auto;
+}

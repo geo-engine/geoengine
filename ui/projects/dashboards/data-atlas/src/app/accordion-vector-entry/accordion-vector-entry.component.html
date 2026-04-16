@@ -1,0 +1,21 @@
+@for (layer of layers$ | async; track layer; let i = $index) {
+    <mat-card class="dataset">
+        <mat-card-header>
+            <mat-icon mat-card-avatar>{{ icon() }}</mat-icon>
+            <mat-card-title>{{ layer.name }}</mat-card-title>
+            <mat-card-subtitle>{{ layer.properties[0] ? layer.properties[0][1] : 'no author information available' }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+            <p class="description">{{ layer.description }}</p>
+            <button mat-stroked-button (click)="loadData(layer)" color="primary">Add to map</button>
+        </mat-card-content>
+    </mat-card>
+}
+
+@if ((layers$ | async | valueDefault: []).length === 0) {
+    <mat-card>
+        <mat-card-content>
+            <p class="empty"><em>no datasets available</em></p>
+        </mat-card-content>
+    </mat-card>
+}

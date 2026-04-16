@@ -1,0 +1,90 @@
+@if (collection(); as collection) {
+    <div class="container">
+        <form [formGroup]="form">
+            <mat-card class="top">
+                <mat-card-header>
+                    <mat-card-title>Layer Collection Details</mat-card-title>
+                </mat-card-header>
+
+                <mat-card-content>
+                    <mat-form-field appearance="fill">
+                        <mat-label>Name</mat-label>
+                        <input matInput type="text" formControlName="name" />
+                    </mat-form-field>
+
+                    <mat-form-field appearance="fill">
+                        <mat-label>Description</mat-label>
+                        <textarea matInput formControlName="description"></textarea>
+                    </mat-form-field>
+                </mat-card-content>
+            </mat-card>
+
+            <mat-card>
+                <mat-card-header>
+                    <mat-card-title>Properties</mat-card-title>
+                </mat-card-header>
+
+                <mat-card-content>
+                    @for (control of form.controls.properties.controls; track control; let i = $index) {
+                        <div formArrayName="properties">
+                            <div [formGroupName]="i">
+                                <div class="flex-container">
+                                    <mat-form-field appearance="fill">
+                                        <mat-label>Property Key</mat-label>
+                                        <input matInput type="text" formControlName="0" />
+                                    </mat-form-field>
+                                    <mat-form-field appearance="fill">
+                                        <mat-label>Property Value</mat-label>
+                                        <input matInput type="text" formControlName="1" />
+                                    </mat-form-field>
+                                    <button mat-icon-button (click)="removeProperty(i)"><mat-icon>delete</mat-icon></button>
+                                </div>
+                            </div>
+                        </div>
+                    }
+
+                    @if (form.controls.properties.controls.length === 0) {
+                        <div class="empty-placeholder">
+                            <i>No properties defined.</i>
+                        </div>
+                    }
+                    <button class="add-entry" mat-raised-button (click)="addProperty()">Add Property</button>
+                </mat-card-content>
+            </mat-card>
+
+            <div class="actions">
+                <button mat-raised-button color="primary" [disabled]="form.pristine || !form.valid" (click)="applyChanges()">Apply</button>
+            </div>
+        </form>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Collection Items (Children)</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <geoengine-manager-layer-collection-child-list
+                    [collectionId]="collection.id"
+                ></geoengine-manager-layer-collection-child-list>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Permissions</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <geoengine-manager-permissions
+                    resourceType="layerCollection"
+                    [resourceId]="collection.id.collectionId"
+                ></geoengine-manager-permissions>
+            </mat-card-content>
+        </mat-card>
+
+        <div class="actions">
+            <button mat-raised-button (click)="deleteCollectionFromParent()">Remove Collection from parent</button>
+            <button mat-raised-button color="warn" (click)="deleteCollection()">Delete Collection</button>
+        </div>
+    </div>
+}

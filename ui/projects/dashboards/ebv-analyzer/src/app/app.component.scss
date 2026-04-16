@@ -1,0 +1,98 @@
+$sidenav-width: 33vw;
+
+.sidenav {
+    position: absolute;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: $sidenav-width;
+
+    z-index: 5;
+
+    background-color: var(--geoengine-background-color);
+
+    overflow: auto;
+
+    mat-toolbar img {
+        height: 50%;
+        margin: 0 auto;
+    }
+
+    mat-expansion-panel-header {
+        mat-panel-title {
+            flex: 1;
+        }
+
+        mat-panel-description {
+            flex: 0;
+        }
+    }
+}
+
+#top-float-buttons {
+    position: fixed;
+    z-index: 3;
+    left: 0;
+    right: $sidenav-width;
+    top: 1rem;
+    text-align: center;
+}
+
+geoengine-zoom-handles,
+geoengine-time-step-selector {
+    display: inline-block;
+    background-color: rgba(255, 255, 255, 0.87);
+    border-radius: 2px;
+}
+
+geoengine-zoom-handles {
+    position: absolute;
+    right: 1rem;
+}
+
+#back-button {
+    position: absolute;
+    left: 1rem;
+
+    img {
+        height: 1rem;
+        vertical-align: text-top;
+        margin-left: 0.25rem;
+    }
+}
+
+geoengine-legend {
+    z-index: 4;
+    position: absolute;
+    bottom: 1rem;
+    right: calc($sidenav-width + 1rem);
+    background-color: rgba(255, 255, 255, 0.87);
+}
+
+.mid-container {
+    z-index: 0;
+    position: absolute;
+    right: $sidenav-width;
+    width: calc(100% - $sidenav-width);
+}
+
+mat-sidenav {
+    width: $sidenav-width;
+}
+
+.loading-indicator {
+    position: absolute;
+    left: 0;
+    right: $sidenav-width;
+    bottom: 0;
+    z-index: 2;
+    height: 0.5rem;
+}
+
+:host ::ng-deep .mat-sidenav-content {
+    overflow: hidden;
+}
+
+.mat-sidenav {
+    border: none;
+}

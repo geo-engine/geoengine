@@ -1,0 +1,40 @@
+.container {
+    width: 100%;
+
+    span {
+        padding-right: 1rem;
+    }
+}
+
+.padded {
+    padding: 0.85rem;
+    margin: 0 0.2rem;
+}
+
+/* TODO(mdc-migration): The following rule targets internal classes of slider that may no longer apply for the MDC version. */
+/* TODO(mdc-migration): The following rule targets internal classes of slider that may no longer apply for the MDC version. */
+mat-slider {
+    width: 100%;
+    margin: 0 1rem;
+
+    &.cdk-focused ::ng-deep {
+        /* TODO(mdc-migration): The following rule targets internal classes of slider that may no longer apply for the MDC version. */
+        .mat-slider-thumb-label {
+            transform: translate(0, 48px) rotate(225deg) !important;
+            border-radius: 50% 50% 0 !important;
+            background-color: var(--geoengine-accent-color) !important;
+        }
+        /* TODO(mdc-migration): The following rule targets internal classes of slider that may no longer apply for the MDC version. */
+        .mat-slider-thumb {
+            transform: scale(0) !important;
+            background-color: var(--geoengine-accent-color) !important;
+        }
+        /* TODO(mdc-migration): The following rule targets internal classes of slider that may no longer apply for the MDC version. */
+        .mat-slider-thumb-label-text {
+            opacity: 1 !important;
+            transform: rotate(135deg) !important;
+            background-color: var(--geoengine-accent-color);
+            border-radius: 20%;
+        }
+    }
+}

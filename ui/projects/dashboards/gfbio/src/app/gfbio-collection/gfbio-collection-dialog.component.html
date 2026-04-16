@@ -1,0 +1,84 @@
+<geoengine-dialog-header>VAT - The Visualization, Analysis and Transformation System</geoengine-dialog-header>
+<mat-dialog-content>
+    <h2>GFBio Collection Import</h2>
+    <p>Here is a summary of the imported datasets from your collection:</p>
+
+    <div class="entry-container">
+        <mat-table #table [dataSource]="collection.items">
+            <ng-container matColumnDef="select">
+                <th mat-header-cell *matHeaderCellDef class="selectColumn">
+                    <mat-checkbox
+                        (change)="$event ? toggleAllRows() : null"
+                        [checked]="selection.hasValue() && isAllSelected()"
+                        [indeterminate]="selection.hasValue() && !isAllSelected()"
+                    >
+                    </mat-checkbox>
+                </th>
+
+                <td mat-cell *matCellDef="let element">
+                    <mat-checkbox
+                        (click)="$event.stopPropagation()"
+                        (change)="toggleSelection(element)"
+                        [checked]="selection.isSelected(element)"
+                    >
+                    </mat-checkbox>
+                </td>
+            </ng-container>
+
+            <ng-container matColumnDef="type">
+                <th mat-header-cell *matHeaderCellDef>Type</th>
+                <td mat-cell *matCellDef="let element">
+                    @switch (layerIsUnit(element)) {
+                        @case (true) {
+                            <span>Unit</span>
+                        }
+                        @case (false) {
+                            <span>Dataset</span>
+                        }
+                    }
+                </td>
+            </ng-container>
+
+            <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef>Name</th>
+                <td mat-cell *matCellDef="let element">
+                    {{ element.name }}
+                </td>
+            </ng-container>
+
+            <ng-container matColumnDef="status">
+                <th mat-header-cell *matHeaderCellDef>Status</th>
+                <td mat-cell *matCellDef="let element">
+                    <span class="{{ layerStatus(element) }}">{{ layerStatus(element) }}</span>
+                </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="['select', 'type', 'name', 'status']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['select', 'type', 'name', 'status']"></tr>
+        </mat-table>
+    </div>
+    <div class="actions">
+        <button
+            [disabled]="(projectHasLayers$ | async) === false || (okLayersInCollection$ | async) === false || (addingLayers$ | async)"
+            mat-raised-button
+            color="primary"
+            (click)="replaceLayers()"
+        >
+            Replace Layers
+        </button>
+        <button
+            mat-raised-button
+            color="primary"
+            [disabled]="(okLayersInCollection$ | async) === false || (addingLayers$ | async)"
+            (click)="appendLayers()"
+        >
+            Add Layers
+        </button>
+    </div>
+
+    <ng-container>
+        @if (addingLayers$ | async) {
+            <mat-progress-bar mode="query"></mat-progress-bar>
+        }
+    </ng-container>
+</mat-dialog-content>

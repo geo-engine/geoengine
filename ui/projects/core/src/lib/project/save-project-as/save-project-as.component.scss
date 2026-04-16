@@ -1,0 +1,22 @@
+:host {
+    display: block;
+    padding: 1rem;
+}
+
+p {
+    text-align: justify;
+    margin-bottom: 2rem;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+button {
+    margin-top: 1rem;
+    width: 100%;
+}
+
+p.finished {
+    text-align: center;
+}

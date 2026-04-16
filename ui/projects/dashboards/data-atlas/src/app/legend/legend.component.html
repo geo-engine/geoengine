@@ -1,0 +1,11 @@
+@if (!!layer()) {
+    <div class="legend-container mat-elevation-z4" fxLayout="column" fxLayoutAlign="space-between start" fxLayoutGap="0.5rem">
+        <span style="padding-left: 4px">Legend</span>
+        @if (asRasterLayer; as rasterLayer) {
+            <geoengine-raster-legend [layer]="rasterLayer" style="padding-left: 8px"> </geoengine-raster-legend>
+        }
+        @if (asVectorLayer; as vectorLayer) {
+            <geoengine-vector-legend [layer]="vectorLayer" style="padding-left: 8px"> </geoengine-vector-legend>
+        }
+    </div>
+}

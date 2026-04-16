@@ -1,0 +1,15 @@
+<ng-container>
+    <span class="pair">
+        <span class="label">Session token</span>
+        <span class="value"
+            >{{ session?.sessionToken }}
+            <button class="clipboard-button" mat-icon-button (click)="copySessionTokenToClipboard()">
+                <mat-icon>content_copy</mat-icon>
+            </button></span
+        >
+    </span>
+    <span class="pair">
+        <span class="label">Valid until</span>
+        <span class="value">{{ session?.validUntil?.toISOString() }} </span>
+    </span>
+</ng-container>

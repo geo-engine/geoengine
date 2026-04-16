@@ -1,0 +1,88 @@
+<form [formGroup]="form">
+    @if (dataPath) {
+        <div>
+            @if (dataPath) {
+                <div class="flex-container">
+                    <mat-form-field appearance="fill">
+                        <mat-label>Path to probe file, relative to upload or volume (optional)</mat-label>
+                        <input matInput type="text" [(ngModel)]="mainFile" [ngModelOptions]="{standalone: true}" />
+                    </mat-form-field>
+                    <button mat-raised-button class="analyze" (click)="suggest()">Analyze file and suggest properties</button>
+                </div>
+            }
+            <mat-divider></mat-divider>
+        </div>
+    }
+
+    <div formGroupName="rasterResultDescriptor">
+        <mat-form-field appearance="fill">
+            <mat-label>Output Data Type</mat-label>
+            <mat-select formControlName="dataType">
+                @for (dataType of RasterDataTypes; track dataType) {
+                    <mat-option [value]="dataType">
+                        {{ dataType }}
+                    </mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="fill">
+            <mat-label>Spatial Reference</mat-label>
+            <input matInput type="text" formControlName="spatialReference" />
+        </mat-form-field>
+
+        <mat-form-field appearance="fill">
+            <mat-label>Band Name</mat-label>
+            <input matInput type="text" formControlName="bandName" />
+        </mat-form-field>
+    </div>
+
+    <div class="container">
+        <mat-nav-list class="left">
+            @for (control of form.controls.timeSlices.controls; track control; let i = $index) {
+                <mat-list-item (click)="selectTimeSlice(i)" [class.selected]="selectedTimeSlice === i">
+                    <h4 matListItemTitle>
+                        {{ getTime(i) }}
+                    </h4>
+                    <p matListItemLine>{{ control.controls.gdalParameters.value.filePath }}</p>
+                </mat-list-item>
+            }
+            @if (form.controls.timeSlices.errors?.overlappingTimeInterval) {
+                <mat-error>Time slices must not overlap.</mat-error>
+            }
+            @if (form.controls.timeSlices.controls.length === 0) {
+                <div class="empty-placeholder">
+                    <i>No time slices defined.</i>
+                </div>
+            }
+            <button class="add-entry" mat-raised-button (click)="addTimeSlicePlaceholder()">Add Time Slice</button>
+            @if (form.controls.timeSlices.controls.length > 0) {
+                <button class="add-entry" mat-raised-button (click)="removeTimeSlice()">Remove selected time slice</button>
+            }
+        </mat-nav-list>
+
+        @if (form.controls.timeSlices.controls.at(selectedTimeSlice); as selectedTimeSliceGroup) {
+            <div class="time-slice" [formGroup]="selectedTimeSliceGroup">
+                <geoengine-time-interval-input [formControl]="selectedTimeSliceGroup.controls.time"></geoengine-time-interval-input>
+
+                <mat-divider></mat-divider>
+
+                <geoengine-manager-gdal-dataset-parameters
+                    [form]="selectedTimeSliceGroup.controls.gdalParameters"
+                    [dataPath]="dataPath"
+                ></geoengine-manager-gdal-dataset-parameters>
+
+                <mat-divider id="gdal-params-divider"></mat-divider>
+
+                <div class="cachettl">
+                    <mat-form-field appearance="fill">
+                        <mat-label>CacheTTL (number of seconds the raster may be cached)</mat-label>
+                        <input matInput type="number" [formControl]="selectedTimeSliceGroup.controls.cacheTtl" />
+                    </mat-form-field>
+                </div>
+            </div>
+        } @else {
+            <div class="no-dataset">Please select a time slice</div>
+        }
+    </div>
+</form>

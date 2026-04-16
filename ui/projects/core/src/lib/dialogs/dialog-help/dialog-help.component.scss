@@ -1,0 +1,22 @@
+:host {
+    padding: 1rem;
+}
+
+mat-panel-title {
+    align-items: center;
+}
+
+mat-icon {
+    flex-grow: 0;
+}
+
+.help-content ::ng-deep {
+    div,
+    p {
+        text-align: justify;
+    }
+}
+
+.small_caps {
+    font-variant: small-caps;
+}

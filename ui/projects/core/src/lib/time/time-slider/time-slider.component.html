@@ -1,0 +1,16 @@
+<div #timeline id="timeline" class="visualization"></div>
+<div fxLayout="row" fxLayoutGap="0.5rem" fxLayoutAlign="space-between baseline" appearance="fill">
+    <button mat-raised-button (click)="centerTimeline()">Center</button>
+    <mat-select
+        placeholder="Timescale"
+        [(ngModel)]="selectedScale"
+        [(value)]="selectedScale"
+        (selectionChange)="changeScale(selectedScale)"
+    >
+        @for (scale of timeScale; track scale) {
+            <mat-option [value]="scale.value">
+                {{ scale.text }}
+            </mat-option>
+        }
+    </mat-select>
+</div>

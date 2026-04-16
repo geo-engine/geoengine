@@ -1,0 +1,137 @@
+.detail {
+    overflow-y: auto;
+}
+
+$general-width: 200px;
+$general-header-height: 48px;
+$general-margin: 5px;
+$operator-height: 136px;
+$operator-border-height: 1px;
+
+.graph {
+    background-color: #f5f5f5;
+    height: 50px;
+    width: 50px;
+}
+
+/* node header */
+:host .graph ::ng-deep .label .header {
+    width: $general-width - (2 * $general-margin);
+    padding: $general-margin;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: RobotoDraft, Roboto, 'Helvetica Neue', sans-serif;
+}
+
+/* operator header */
+:host .graph ::ng-deep .operator .label .header {
+    height: $general-header-height - (2 * $general-margin) - $general-header-height;
+    line-height: $general-header-height - (2 * $general-margin) - $operator-border-height;
+    color: rgba(0, 0, 0, 0.87);
+    border-bottom: $operator-border-height solid rgba(0, 0, 0, 0.12);
+}
+
+/* layer header */
+:host .graph ::ng-deep .layer .label .header {
+    height: $general-header-height - (2 * $general-margin);
+    line-height: $general-header-height - (2 * $general-margin);
+    background-color: #3f51b5;
+    color: rgba(255, 255, 255, 0.87059);
+}
+
+/* layer header accent */
+:host .graph ::ng-deep .layer.accent .label .header {
+    background-color: #e91e63 !important;
+}
+
+/* operator header icon */
+:host .graph ::ng-deep .label .header .icon {
+    display: block;
+    float: left;
+    width: $general-header-height - (2 * $general-margin) - $operator-border-height;
+    height: $general-header-height - (2 * $general-margin) - $operator-border-height;
+    margin-right: $general-margin;
+    border-radius: $general-margin;
+}
+
+/* operator parameter content */
+:host .graph ::ng-deep .label .parameters {
+    width: $general-width - (2 * $general-margin);
+    height: $operator-height - $general-header-height - (2 * $general-margin);
+    padding: $general-margin;
+    overflow: hidden;
+}
+
+/* operator parameter content table */
+:host .graph ::ng-deep .label .parameters table {
+    width: $general-width - (2 * $general-margin);
+    table-layout: fixed;
+}
+
+:host .graph ::ng-deep .label .parameters .key,
+:host .graph ::ng-deep .label .parameters .value {
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+:host .graph ::ng-deep .label .parameters .key {
+    width: 33%;
+}
+
+:host .graph ::ng-deep .label .parameters .value {
+    width: 67%;
+}
+
+/* node box */
+:host .graph ::ng-deep .node rect {
+    stroke: rgba(0, 0, 0, 0.12);
+    fill: #fff;
+    stroke-width: 1.5px;
+}
+
+/* node box shadow */
+:host .graph ::ng-deep .label > g > foreignObject > div {
+    box-shadow:
+        0 3px 5px -1px rgba(0, 0, 0, 0.2),
+        0px 5px 8px 0px rgba(0, 0, 0, 0.14),
+        0px 1px 14px 0px rgba(0, 0, 0, 0.12);
+}
+
+/* pointer */
+:host .graph ::ng-deep .operator .label > g > foreignObject > div {
+    cursor: pointer;
+}
+
+/* highlight */
+:host .graph ::ng-deep .highlight rect {
+    stroke: #3f51b5 !important;
+}
+
+/* edge */
+:host .graph ::ng-deep .edgePath path {
+    stroke: #333;
+    stroke-width: 1.5px;
+}
+
+/* edge to layer */
+:host .graph ::ng-deep .layer-edge path {
+    stroke-dasharray: 5, 5;
+}
+
+::ng-deep .mat-mdc-list .mat-mdc-list-item .mat-line {
+    word-wrap: break-word;
+    white-space: pre-wrap;
+}
+
+::ng-deep .mat-mdc-list .mat-mdc-list-item {
+    height: initial !important;
+}
+
+::ng-deep .mat-mdc-list .mat-mdc-list-item code {
+    font-size: smaller !important;
+}
+
+mat-spinner.loading {
+    position: absolute;
+}

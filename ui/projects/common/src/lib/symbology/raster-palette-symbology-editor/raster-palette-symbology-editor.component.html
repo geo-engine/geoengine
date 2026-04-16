@@ -1,0 +1,44 @@
+<mat-card>
+    <mat-card-header>
+        <mat-card-title-group>
+            <mat-card-title>Palette Layer Properties</mat-card-title>
+            <mat-card-subtitle>Palette properties</mat-card-subtitle>
+            <mat-icon class="icon">map</mat-icon>
+        </mat-card-title-group>
+    </mat-card-header>
+    <mat-card-content>
+        <div>
+            <geoengine-color-attribute-input
+                [ngModel]="getNoDataColor()"
+                (ngModelChange)="updateNoDataColor($event)"
+                attributePlaceholder=""
+                [readonlyAttribute]="true"
+            >
+            </geoengine-color-attribute-input>
+            <geoengine-color-attribute-input
+                [ngModel]="getDefaultColor()"
+                (ngModelChange)="updateDefaultColor($event)"
+                attributePlaceholder=""
+                [readonlyAttribute]="true"
+            >
+            </geoengine-color-attribute-input>
+        </div>
+    </mat-card-content>
+</mat-card>
+
+<mat-card>
+    <mat-card-header>
+        <mat-card-title-group>
+            <mat-card-title>Color table</mat-card-title>
+            <mat-card-subtitle>Specify individual colors</mat-card-subtitle>
+            <mat-icon class="icon">color_lens</mat-icon>
+        </mat-card-title-group>
+    </mat-card-header>
+    <mat-card-content>
+        <geoengine-color-table-editor
+            [colorTable]="colorTable"
+            (colorTableChanged)="updateColorTable($event)"
+            [measurement]="measurement()"
+        ></geoengine-color-table-editor>
+    </mat-card-content>
+</mat-card>

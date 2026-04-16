@@ -1,0 +1,24 @@
+<mat-form-field appearance="fill">
+    <mat-label>Country</mat-label>
+    <mat-select (valueChange)="selectCountry($event)">
+        <mat-option>
+            <ngx-mat-select-search
+                [formControl]="geoengineAutocompleteSelect.filterFormControl"
+                geoengineAutocompleteSelect
+                [geoengineAutocompleteSelectAllValues]="countries"
+                [geoengineAutocompleteSelectSearchPredicate]="countryPredicate"
+                #geoengineAutocompleteSelect="geoengineAutocompleteSelect"
+            ></ngx-mat-select-search>
+        </mat-option>
+        @for (country of geoengineAutocompleteSelect.filteredValues | async; track country) {
+            <mat-option [value]="country">{{ country }}</mat-option>
+        }
+    </mat-select>
+</mat-form-field>
+<button mat-stroked-button id="compute-plot" [disabled]="cannotComputePlot$ | async" (click)="computePlot()">Compute Plot</button>
+@if ((plotData | async) !== undefined) {
+    <geoengine-vega-viewer [chartData]="plotData | async"></geoengine-vega-viewer>
+}
+@if (plotLoading | async) {
+    <mat-spinner></mat-spinner>
+}

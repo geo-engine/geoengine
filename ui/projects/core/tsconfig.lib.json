@@ -1,0 +1,19 @@
+{
+    "extends": "../../tsconfig.json",
+    "compilerOptions": {
+        "outDir": "../../out-tsc/lib",
+        "declarationMap": true,
+        "declaration": true,
+        "inlineSources": true,
+        "types": ["@types/hammerjs"],
+        "paths": {
+            "@geoengine/common": ["dist/common"]
+        }
+    },
+    "angularCompilerOptions": {
+        "skipTemplateCodegen": true,
+        "strictMetadataEmit": true,
+        "enableResourceInlining": true
+    },
+    "exclude": ["src/test.ts", "**/*.spec.ts"]
+}

@@ -1,0 +1,124 @@
+<mat-sidenav-container hasBackdrop="false" fullscreen>
+    <div class="sidenav mat-elevation-z4">
+        <mat-toolbar color="primary"><img src="assets/logos/terra-nova-white.png" alt="TerraNova" /></mat-toolbar>
+        <mat-accordion displayMode="flat">
+            @for (collection of topLevelCollections$ | async; track collection; let i = $index) {
+                <mat-expansion-panel class="mat-elevation-z0">
+                    <mat-expansion-panel-header>
+                        <mat-panel-title>{{ collection.name }}</mat-panel-title>
+                        <mat-panel-description>
+                            <mat-icon>{{ icon(collection.name) }}</mat-icon>
+                        </mat-panel-description>
+                    </mat-expansion-panel-header>
+                    <mat-tab-group dynamicHeight>
+                        @if (collection.raster) {
+                            <mat-tab label="Raster">
+                                <geoengine-accordion-entry
+                                    [collection]="collection.raster.id"
+                                    [otherCollection]="collection.otherRaster?.id"
+                                    [icon]="icon(collection.name)"
+                                ></geoengine-accordion-entry>
+                            </mat-tab>
+                        }
+                        @if (collection.vector) {
+                            <mat-tab label="Vector">
+                                <geoengine-accordion-vector-entry
+                                    [collection]="collection.vector.id"
+                                    [icon]="icon(collection.name)"
+                                ></geoengine-accordion-vector-entry>
+                            </mat-tab>
+                        }
+                    </mat-tab-group>
+                </mat-expansion-panel>
+            }
+
+            <mat-expansion-panel expanded="true" class="mat-elevation-z0">
+                <mat-expansion-panel-header>
+                    <mat-panel-title>About</mat-panel-title>
+                    <mat-panel-description>
+                        <mat-icon>info</mat-icon>
+                    </mat-panel-description>
+                </mat-expansion-panel-header>
+
+                <ng-template matExpansionPanelContent><geoengine-about></geoengine-about></ng-template>
+            </mat-expansion-panel>
+        </mat-accordion>
+    </div>
+
+    <div id="bottom-float-buttons">
+        @if (isSymbologyButtonVisible | async) {
+            <button mat-raised-button class="show" class="symbology-btn" (click)="editSymbology()">
+                <mat-icon>palette</mat-icon>
+            </button>
+        }
+
+        <geoengine-time-step-selector
+            class="mat-elevation-z4"
+            [timeSteps]="dataSelectionService.timeSteps | async | valueDefault: undefined"
+            [timeFormat]="dataSelectionService.timeFormat | async | stringSanitizer"
+        ></geoengine-time-step-selector>
+
+        <geoengine-zoom-handles (zoomIn)="map.zoomIn()" (zoomOut)="map.zoomOut()" class="mat-elevation-z4"></geoengine-zoom-handles>
+    </div>
+    @if ((analysisVisible$ | async) === false && (dataSelectionService.hasSelectedLayer | async)) {
+        <button mat-flat-button id="analysisButton" class="mat-elevation-z4" (click)="showAnalysis()">
+            <mat-icon svgIcon="cogs"></mat-icon>
+            Analysis
+        </button>
+    }
+
+    @if (analysisVisible$ | async) {
+        <mat-card appearance="outlined" id="analysisCard">
+            @if (dataSelectionService.rasterLayer | async; as rasterLayer) {
+                <geoengine-analysis></geoengine-analysis>
+            }
+            @if (dataSelectionService.vectorLayer | async; as vectorLayer) {
+                <geoengine-data-point></geoengine-data-point>
+            }
+        </mat-card>
+    }
+
+    <!-- Will be one of them -->
+    @if (dataSelectionService.rasterLayer | async; as rasterLayer) {
+        <geoengine-legend [layer]="rasterLayer"></geoengine-legend>
+    }
+    @if (dataSelectionService.vectorLayer | async; as vectorLayer) {
+        <geoengine-legend [layer]="vectorLayer"></geoengine-legend>
+    }
+
+    <div class="mid-container" [style.height.px]="windowHeight$ | async">
+        <geoengine-map-container #map [grid]="false">
+            @if (userService.getSessionTokenStream() | async; as sessionToken) {
+                @for (layer of layersReverse$ | async; track idFromLayer($index, layer)) {
+                    @if (layer.layerType === 'vector') {
+                        <geoengine-ol-vector-layer
+                            [layerId]="layer.id"
+                            [workflow]="layer.workflowId"
+                            [symbology]="$any(layer.symbology)"
+                            [isVisible]="layer.isVisible"
+                            (mapRedraw)="map.layerForcesRedraw()"
+                        ></geoengine-ol-vector-layer>
+                    }
+                    @if (layer.layerType === 'raster') {
+                        <geoengine-ol-raster-layer
+                            [layerId]="layer.id"
+                            [workflow]="layer.workflowId"
+                            [symbology]="$any(layer.symbology)"
+                            [isVisible]="layer.isVisible"
+                            [sessionToken]="sessionToken"
+                            (mapRedraw)="map.layerForcesRedraw()"
+                        ></geoengine-ol-raster-layer>
+                    }
+                }
+            }
+        </geoengine-map-container>
+    </div>
+
+    <mat-sidenav position="start" mode="over">
+        <geoengine-sidenav-container></geoengine-sidenav-container>
+    </mat-sidenav>
+</mat-sidenav-container>
+
+@if ((dataSelectionService.rasterLayerLoading | async) || (dataSelectionService.vectorLayerLoading | async)) {
+    <mat-progress-bar class="loading-indicator" mode="query"></mat-progress-bar>
+}

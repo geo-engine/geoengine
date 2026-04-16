@@ -1,0 +1,33 @@
+:host {
+    height: 100%;
+}
+
+.container {
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+
+    display: flex;
+    flex-direction: column;
+
+    .specification {
+        flex: 1 1 0%;
+
+        overflow-y: auto;
+
+        padding: 0rem 1rem 1rem 1rem;
+    }
+
+    .actions {
+        text-align: right;
+        padding: 1rem;
+
+        button {
+            margin-left: 0.5rem;
+        }
+    }
+}
+
+geoengine-raster-symbology-editor {
+    display: block;
+}

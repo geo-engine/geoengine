@@ -1,0 +1,84 @@
+<geoengine-sidenav-header>Histogram</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="$event.preventDefault(); add()" fxLayout="column">
+    <geoengine-operator-dialog-container>
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/plots/histogram.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/plots/histogram.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <mat-form-field>
+                <mat-select placeholder="Attribute" formControlName="attribute">
+                    @for (attribute of attributes$ | async; track attribute) {
+                        <mat-option [value]="attribute">{{ attribute }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+            <mat-form-field>
+                <mat-select placeholder="Range Type" formControlName="rangeType">
+                    <mat-option [value]="'custom'">Custom</mat-option>
+                    <mat-option [value]="'data'">Data</mat-option>
+                </mat-select>
+            </mat-form-field>
+            @if (form.controls.rangeType.value === 'custom') {
+                <div fxLayout="row" formGroupName="range">
+                    <mat-form-field fxFlex>
+                        <input matInput type="number" placeholder="Min" formControlName="min" />
+                        @if (form.controls.range.errors?.noFilter) {
+                            <mat-hint class="error"> Please specify the value. </mat-hint>
+                        }
+                    </mat-form-field>
+                    <div fxFlex="1rem"></div>
+                    <mat-form-field fxFlex>
+                        <input matInput type="number" placeholder="Max" formControlName="max" />
+                        @if (form.controls.range.errors?.minOverMax) {
+                            <mat-hint class="error"> The maximum must be greater or equal to the minimum. </mat-hint>
+                        }
+                        @if (form.controls.range.errors?.noFilter) {
+                            <mat-hint class="error"> Please specify the value. </mat-hint>
+                        }
+                    </mat-form-field>
+                </div>
+            }
+            <mat-checkbox type="checkbox" formControlName="autoBuckets"> Choose number of buckets automatically </mat-checkbox>
+            @if ((form.controls.autoBuckets.valueChanges | async) === false) {
+                <div fxLayout="row">
+                    <mat-form-field fxFlex>
+                        <input matInput type="number" placeholder="Number of Buckets" formControlName="numberOfBuckets" />
+                        @if (form.controls.numberOfBuckets.errors?.min || form.controls.numberOfBuckets.errors?.max) {
+                            <mat-hint class="error">
+                                The number of buckets must be between {{ minNumberOfBuckets }} and {{ maxNumberOfBuckets }}.
+                            </mat-hint>
+                        }
+                        @if (form.controls.numberOfBuckets.errors?.required) {
+                            <mat-hint class="error"> The number of buckets is required. </mat-hint>
+                        }
+                    </mat-form-field>
+                </div>
+            }
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="'Histogram of ' + (form.controls.layer.valueChanges | async)?.name"
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="(form.statusChanges | async) !== 'VALID'">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

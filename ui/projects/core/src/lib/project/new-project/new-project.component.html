@@ -1,0 +1,32 @@
+<geoengine-sidenav-header>New Project</geoengine-sidenav-header>
+@if ((created$ | async) === false) {
+    <p>Create a new, blank project.</p>
+    <form [formGroup]="form" (ngSubmit)="$event.preventDefault(); create()">
+        <div fxLayout="row">
+            <mat-form-field fxFlex>
+                <input matInput type="text" placeholder="Project Name" formControlName="name" />
+                @if (form.controls.name.errors?.nameInUsage) {
+                    <mat-hint class="error">The name is already in usage. </mat-hint>
+                }
+            </mat-form-field>
+        </div>
+        <div fxLayout="row">
+            <mat-form-field fxFlex>
+                <mat-select placeholder="Spatial Reference" formControlName="spatialReference">
+                    @for (spatialReference of spatialReferenceOptions; track spatialReference) {
+                        <mat-option [value]="spatialReference.spatialReference">
+                            {{ spatialReference.name }}
+                        </mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+        </div>
+        <button mat-raised-button color="primary" type="submit" [disabled]="(form.statusChanges | async) !== 'VALID'">Create</button>
+    </form>
+}
+@if (created$ | async) {
+    <p class="finished">
+        Created project <em>{{ form.controls['name'].value }}</em> and switched to it. <br /><br />
+        You are ready to go!
+    </p>
+}

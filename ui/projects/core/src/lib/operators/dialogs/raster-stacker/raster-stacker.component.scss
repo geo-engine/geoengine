@@ -1,0 +1,31 @@
+form {
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+div {
+    padding-bottom: 0.5rem;
+    padding-top: 1rem;
+}
+
+#rename-type {
+    display: flex;
+    flex-wrap: wrap;
+
+    mat-button-toggle {
+        flex: 1;
+    }
+}
+
+mat-button-toggle-group {
+    margin-bottom: 1rem;
+}

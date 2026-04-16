@@ -1,0 +1,35 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+
+    .header {
+        display: flex;
+        gap: 1rem;
+        padding: 0.5rem;
+        align-items: baseline;
+
+        mat-form-field {
+            flex: 1;
+        }
+    }
+
+    .table-container {
+        overflow: auto;
+        width: 100%;
+        flex: 1;
+    }
+
+    mat-paginator {
+        margin: 0 1rem;
+    }
+}
+
+mat-spinner {
+    margin: 1rem auto;
+}
+
+.empty {
+    text-align: center;
+    font-style: italic;
+}

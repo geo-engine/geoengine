@@ -1,0 +1,13 @@
+<form [formGroup]="loginForm" (ngSubmit)="login()">
+    <p>Please log in</p>
+    <mat-form-field>
+        <input matInput type="text" placeholder="E-Mail" formControlName="email" />
+    </mat-form-field>
+    <mat-form-field>
+        <input matInput type="password" placeholder="Password" formControlName="password" />
+    </mat-form-field>
+    @if (invalidCredentials$ | async) {
+        <p class="error">Invalid Credentials</p>
+    }
+    <button mat-raised-button type="submit" [disabled]="(loginForm.statusChanges | async) !== 'VALID'" color="primary">Login</button>
+</form>

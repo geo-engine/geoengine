@@ -1,0 +1,17 @@
+:host {
+    display: block;
+    padding: 1rem;
+}
+
+mat-form-field,
+button {
+    width: 100% !important;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+button {
+    margin-top: 1rem;
+}

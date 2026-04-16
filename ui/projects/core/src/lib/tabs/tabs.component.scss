@@ -1,0 +1,76 @@
+:host {
+    display: block;
+    position: relative;
+    z-index: 1;
+
+    min-height: 3rem;
+    @media (max-width: 600px) and (orientation: portrait) {
+        min-height: 2.5rem;
+    }
+    @media (max-width: 960px) and (orientation: landscape) {
+        min-height: 2rem;
+    }
+}
+
+.toggle {
+    position: absolute;
+    z-index: 1;
+    padding: 0;
+    min-width: 3rem;
+    width: 3rem;
+    height: calc(3rem + 1px);
+
+    border-bottom: 1px solid rgba(0, 0, 0, 0.12);
+
+    @media (max-width: 600px) and (orientation: portrait) {
+        min-width: 2.5rem;
+        width: 2.5rem;
+        height: calc(2.5rem + 1px);
+    }
+    @media (max-width: 960px) and (orientation: landscape) {
+        min-width: 2rem;
+        width: 2rem;
+        height: calc(2rem + 1px);
+    }
+}
+
+:host ::ng-deep .mat-mdc-tab-header {
+    height: 3rem;
+
+    margin-left: 3rem;
+    @media (max-width: 600px) and (orientation: portrait) {
+        margin-left: 2.5rem;
+    }
+    @media (max-width: 960px) and (orientation: landscape) {
+        margin-left: 2rem;
+    }
+}
+
+@media (max-width: 960px) and (orientation: landscape) {
+    ::ng-deep .mat-mdc-tab-header {
+        height: 2rem;
+    }
+    ::ng-deep .mat-tab-label {
+        line-height: 2rem;
+    }
+}
+@media (max-width: 600px) and (orientation: portrait) {
+    ::ng-deep .mat-mdc-tab-header {
+        height: 2.5rem;
+    }
+    ::ng-deep .mat-tab-label {
+        line-height: 2.5rem;
+    }
+}
+
+.tab-link {
+    span {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .close-button {
+        margin-left: 1rem;
+    }
+}

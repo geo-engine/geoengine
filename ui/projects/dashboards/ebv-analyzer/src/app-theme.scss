@@ -1,0 +1,102 @@
+@use '@angular/material' as mat;
+
+// Material Base Styles
+// TODO(v15): As of v15 mat.legacy-core no longer includes default typography styles.
+//  The following line adds:
+//    1. Default typography styles for all components
+//    2. Styles for typography hierarchy classes (e.g. .mat-headline-1)
+//  If you specify typography styles for the components you use elsewhere, you should delete this line.
+//  If you don't need the default component typographies but still want the hierarchy styles,
+//  you can delete this line and instead use:
+//    `@include mat.legacy-typography-hierarchy(mat.define-typography-config());`
+@include mat.all-component-typographies();
+@include mat.elevation-classes();
+@include mat.app-background();
+
+// Define Colors
+$geobon-green: (
+    50: #e0f1ef,
+    100: #b3ddd8,
+    200: #80c6be,
+    300: #4dafa4,
+    400: #269d91,
+    500: #008c7d,
+    600: #008475,
+    700: #00796a,
+    800: #006f60,
+    900: #005c4d,
+    A100: #8dffe9,
+    A200: #5affde,
+    A400: #27ffd4,
+    A700: #0effcf,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #ffffff,
+        500: #ffffff,
+        600: #ffffff,
+        700: #ffffff,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+$geobon-blue: (
+    50: #eef5f6,
+    100: #d4e6e9,
+    200: #b7d5da,
+    300: #9ac4cb,
+    400: #84b7bf,
+    500: #6eaab4,
+    600: #66a3ad,
+    700: #5b99a4,
+    800: #51909c,
+    900: #3f7f8c,
+    A100: #e0faff,
+    A200: #adf1ff,
+    A400: #7ae8ff,
+    A700: #61e3ff,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #000000,
+        700: #000000,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+// Define App Theme
+$geoengine-primary: mat.m2-define-palette($geobon-green);
+$geoengine-accent: mat.m2-define-palette($geobon-blue, A200, A100, A400);
+$geoengine-warn: mat.m2-define-palette(mat.$m2-red-palette);
+
+// Create the theme object
+$geoengine-theme: mat.m2-define-light-theme(
+    (
+        color: (
+            primary: $geoengine-primary,
+            accent: $geoengine-accent,
+            warn: $geoengine-warn,
+        ),
+        typography: mat.m2-define-typography-config(),
+        density: 0,
+    )
+);
+
+// Apply Angular Material Mixin to Color Theme
+@include mat.all-component-themes($geoengine-theme);

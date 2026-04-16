@@ -1,0 +1,81 @@
+<form>
+    <mat-form-field appearance="fill">
+        <mat-label>Data Type</mat-label>
+        <input matInput type="text" readonly [value]="resultDescriptor().dataType" />
+    </mat-form-field>
+
+    <mat-form-field appearance="fill">
+        <mat-label>Spatial Reference</mat-label>
+        <input matInput type="text" readonly [value]="resultDescriptor().spatialReference" />
+    </mat-form-field>
+
+    @if (resultDescriptor().bbox; as bbox) {
+        <div class="flex-container">
+            <mat-form-field>
+                <mat-label>Min X</mat-label>
+                <input matInput type="text" readonly [value]="bbox.lowerLeftCoordinate.x" />
+            </mat-form-field>
+
+            <mat-form-field>
+                <mat-label>Min Y</mat-label>
+                <input matInput type="text" readonly [value]="bbox.lowerLeftCoordinate.y" />
+            </mat-form-field>
+
+            <mat-form-field>
+                <mat-label>Max X</mat-label>
+                <input matInput type="text" readonly [value]="bbox.upperRightCoordinate.x" />
+            </mat-form-field>
+
+            <mat-form-field>
+                <mat-label>Max Y</mat-label>
+                <input matInput type="text" readonly [value]="bbox.upperRightCoordinate.y" />
+            </mat-form-field>
+        </div>
+    }
+
+    @if (resultDescriptor().time; as time) {
+        <div class="flex-container">
+            <mat-form-field>
+                <mat-label>Time Start</mat-label>
+                <input matInput type="text" readonly [value]="convertUnixToIso(time.start)" />
+            </mat-form-field>
+            <mat-form-field>
+                <mat-label>Time End</mat-label>
+                <input matInput type="text" readonly [value]="convertUnixToIso(time.end)" />
+            </mat-form-field>
+        </div>
+    }
+
+    @if (columnsDataSource.length) {
+        <table mat-table [dataSource]="columnsDataSource">
+            <ng-container matColumnDef="name">
+                <th mat-header-cell *matHeaderCellDef>Column Name</th>
+                <td mat-cell *matCellDef="let band">{{ band.name }}</td>
+            </ng-container>
+            <ng-container matColumnDef="dataType">
+                <th mat-header-cell *matHeaderCellDef>DataType</th>
+                <td mat-cell *matCellDef="let band">{{ band.dataType }}</td>
+            </ng-container>
+            <ng-container matColumnDef="measurement">
+                <th mat-header-cell *matHeaderCellDef>Measurement</th>
+                <td mat-cell *matCellDef="let band">
+                    @if (band.measurement.type === 'classification') {
+                        {{ band.measurement.measurement }}
+                        <!-- TODO classes -->
+                    }
+                    @if (band.measurement.type === 'continuous') {
+                        {{ band.measurement.measurement }}
+                        <!-- TODO unit -->
+                    }
+                    @if (band.measurement.type === 'unitless') {
+                        Unitless
+                    }
+                </td></ng-container
+            >
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+    } @else {
+        <i>No columns available</i>
+    }
+</form>

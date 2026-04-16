@@ -1,0 +1,78 @@
+<geoengine-sidenav-header>Time Shift</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container [loading]="loading$ | async | valueDefault: false">
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/timeshift.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="source"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/timeshift.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <mat-form-field>
+                <mat-label>Time Shift Type</mat-label>
+                <mat-select formControlName="type" (valueChange)="changeShiftType($event)">
+                    <mat-option [value]="'relative'">Relative</mat-option>
+                    <mat-option [value]="'absolute'">Absolute</mat-option>
+                </mat-select>
+            </mat-form-field>
+
+            @if (form.controls.type.value === 'relative') {
+                <mat-form-field>
+                    <mat-label>Time Granularity</mat-label>
+                    <mat-select formControlName="granularity">
+                        @for (granularity of timeGranularityOptions; track granularity) {
+                            <mat-option [value]="granularity">{{ granularity }}</mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+                <mat-form-field>
+                    <mat-label>Step Size</mat-label>
+                    <input matInput type="number" step="1" formControlName="value" />
+                    @if (form.controls.value.errors?.valueIsZero) {
+                        <mat-hint align="end" class="error"> The step size must not be zero. </mat-hint>
+                    }
+                    @if (form.controls.value.errors?.pattern) {
+                        <mat-hint align="end" class="error"> The step size must be an integer. </mat-hint>
+                    }
+                </mat-form-field>
+            }
+
+            @if (form.controls.type.value === 'absolute') {
+                <ng-container formGroupName="timeInterval">
+                    <h5>Start</h5>
+                    <geoengine-time-input formControlName="start"></geoengine-time-input>
+                    <h5>End</h5>
+                    <mat-slide-toggle #timeAsPoint formControlName="timeAsPoint">same as start</mat-slide-toggle>
+                    <geoengine-time-input [isDisabled]="timeAsPoint.checked" formControlName="end"></geoengine-time-input>
+                    @if (form.controls.timeInterval.errors?.valid) {
+                        <mat-hint align="end" class="error"> The start must be before the end. </mat-hint>
+                    }
+                </ng-container>
+            }
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="'Time Shift of ' + (form.controls.source.valueChanges | async)?.name"
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="(disallowSubmit | async) || (loading$ | async)">
+                Create
+            </button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

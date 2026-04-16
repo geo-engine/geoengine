@@ -1,0 +1,137 @@
+$sidenav-default-width: 33vw;
+$sidenav-min-width: 24rem;
+$sidenav-width: max($sidenav-default-width, $sidenav-min-width);
+
+.sidenav {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: $sidenav-width;
+
+    z-index: 5;
+
+    background-color: var(--geoengine-background-color);
+
+    overflow: auto;
+
+    mat-toolbar img {
+        max-width: 60%;
+        max-height: 90%;
+        height: auto;
+        width: auto;
+        margin: 0 auto;
+    }
+
+    mat-expansion-panel-header {
+        mat-panel-title {
+            flex: 1;
+        }
+
+        mat-panel-description {
+            flex: 0;
+        }
+    }
+
+    mat-expansion-panel {
+        border-bottom: 2px solid var(--geoengine-background-hover-color);
+    }
+}
+
+#bottom-float-buttons {
+    position: fixed;
+    z-index: 3;
+    left: $sidenav-width;
+    right: 0;
+    top: 1rem;
+    text-align: center;
+}
+
+.symbology-btn {
+    position: absolute;
+    left: 1rem;
+}
+
+geoengine-zoom-handles,
+geoengine-time-step-selector {
+    display: inline-block;
+    background-color: rgba(255, 255, 255, 0.87);
+    border-radius: 2px;
+}
+
+geoengine-zoom-handles {
+    position: absolute;
+    right: 1rem;
+}
+
+button#analysisButton {
+    z-index: 3;
+    position: fixed;
+    bottom: 1rem;
+    left: calc($sidenav-width + 1rem);
+
+    mat-icon {
+        margin-right: 1rem;
+        height: 2.5rem;
+    }
+}
+
+mat-card#analysisCard {
+    z-index: 3;
+    position: fixed;
+    bottom: 1rem;
+    left: calc($sidenav-width + 1rem);
+}
+
+geoengine-legend {
+    z-index: 4;
+    position: absolute;
+    bottom: 1rem;
+    right: 1rem;
+    background-color: rgba(255, 255, 255, 0.87);
+}
+
+.mid-container {
+    z-index: 0;
+    position: relative;
+    left: $sidenav-width;
+    width: calc(100% - $sidenav-width);
+}
+
+mat-sidenav {
+    width: $sidenav-width;
+}
+
+mat-card-content .striped {
+    &:nth-of-type(odd) {
+        background-color: var(--geoengine-background-hover-color);
+    }
+
+    p {
+        padding: 1rem;
+
+        span {
+            display: block;
+            color: var(--geoengine-foreground-secondary-text-color);
+            margin-bottom: 0.5rem;
+        }
+    }
+}
+
+p.empty {
+    color: var(--geoengine-foreground-secondary-text-color);
+}
+
+.loading-indicator {
+    position: absolute;
+    left: 0;
+    right: $sidenav-width;
+    bottom: 0;
+    z-index: 2;
+    height: 0.5rem;
+}
+
+geoengine-data-point {
+    max-width: 30vw;
+    max-height: 30vh;
+}

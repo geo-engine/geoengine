@@ -1,0 +1,18 @@
+@if (allowRanges()) {
+    <h3 class="mat-subtitle-1">Start</h3>
+}
+
+<form [formGroup]="form">
+    <geoengine-time-input formControlName="start"></geoengine-time-input>
+
+    @if (allowRanges()) {
+        <h3 class="mat-subtitle-1" fxLayout="row" fxLayoutAlign="space-between center">
+            End
+            <mat-slide-toggle #timeAsPoint formControlName="timeAsPoint" class="mat-body-1">same as start</mat-slide-toggle>
+        </h3>
+        <geoengine-time-input formControlName="end" [isDisabled]="timeAsPoint.checked"></geoengine-time-input>
+        @if (form.invalid) {
+            <span class="error">Start must be before End.</span>
+        }
+    }
+</form>

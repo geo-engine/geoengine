@@ -1,0 +1,39 @@
+form {
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+mat-radio-group {
+    margin-bottom: 1rem;
+}
+
+section:not(:last-child) {
+    margin-bottom: 1rem;
+}
+
+#name-type {
+    display: flex;
+    flex-wrap: wrap;
+
+    mat-button-toggle {
+        flex: 1;
+    }
+}
+
+mat-button-toggle-group {
+    margin-bottom: 1rem;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.name-error {
+    margin-top: 0;
+    margin-bottom: 2rem;
+}

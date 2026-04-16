@@ -1,0 +1,16 @@
+<h3>The EBV Data Portal is supported by</h3>
+<mat-grid-list cols="4" [rowHeight]="rowHeight | async | stringSanitizer: '1:1'" gutterSize="2rem">
+    <mat-grid-tile [colspan]="colSpan | async"
+        ><a href="https://e-shape.eu" target="_blank"> <img src="assets/logos/e_shape.png" alt="e-shape" /> </a
+    ></mat-grid-tile>
+    <mat-grid-tile [colspan]="colSpan | async"
+        ><a href="https://www.idiv.de" target="_blank"> <img src="assets/logos/idiv.png" alt="iDiv" /> </a
+    ></mat-grid-tile>
+    <mat-grid-tile [colspan]="colSpan | async"
+        ><a href="https://www.geoengine.de" target="_blank"> <img src="assets/geoengine.svg" alt="Geo Engine" /> </a
+    ></mat-grid-tile>
+    <mat-grid-tile [colspan]="colSpan | async"
+        ><a href="https://www.uni-halle.de" target="_blank">
+            <img src="assets/logos/mlu.png" alt="Martin Luther University of Halle-Wittenberg" /> </a
+    ></mat-grid-tile>
+</mat-grid-list>

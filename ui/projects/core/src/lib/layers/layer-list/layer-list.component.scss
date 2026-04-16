@@ -1,0 +1,102 @@
+.container {
+    max-height: inherit;
+    height: inherit;
+    border-right: solid 1px rgba(245, 245, 245, 0.32);
+    width: 16vw;
+    min-width: 200px;
+}
+
+.layer-list {
+    max-height: inherit;
+    overflow-y: auto;
+    overflow-x: hidden;
+    max-width: 100%;
+    min-height: 0;
+    display: block;
+}
+
+.layer-list-box {
+    font-size: 14px;
+    padding: 0;
+    min-height: 3rem;
+    max-width: 100%;
+    border-bottom: solid 1px #ccc;
+    color: rgba(0, 0, 0, 0.87);
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: space-between;
+    box-sizing: border-box;
+    background-color: var(--geoengine-background-color, white);
+}
+
+.add-first-layer-spinner {
+    margin: 0.25rem auto;
+}
+
+.cdk-drag-preview {
+    box-sizing: border-box;
+    border-radius: 4px;
+    box-shadow:
+        0 5px 5px -3px rgba(0, 0, 0, 0.2),
+        0 8px 10px 1px rgba(0, 0, 0, 0.14),
+        0 3px 14px 2px rgba(0, 0, 0, 0.12);
+}
+
+.layer-list-element-custom-placeholder {
+    background-color: #ccc;
+    border: dotted 3px #999;
+    min-height: 40px;
+    transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.cdk-drag-animating {
+    transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.layer-list-box:last-child {
+    border: none;
+}
+
+.layer-list.cdk-drop-list-dragging .layer-list-box:not(.cdk-drag-placeholder) {
+    transition: transform 250ms cubic-bezier(0, 0, 0.2, 1);
+}
+
+.no-layer {
+    width: 100%;
+    margin-top: 0.375rem;
+}
+
+.grabbable {
+    cursor: grab;
+}
+
+/* (Optional) Apply a "closed-hand" cursor during drag operation. */
+.grabbable:active {
+    cursor: grabbing;
+}
+
+.small {
+    font-size: 0.8rem;
+}
+
+.mat-toolbar {
+    padding: 0 !important;
+}
+
+mat-toolbar div:first-child,
+button {
+    width: 40px;
+}
+
+mat-toolbar ::ng-deep mat-toolbar-row:first-child {
+    display: none !important;
+}
+
+.lineThrough {
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' version='1.1' preserveAspectRatio='none' viewBox='0 0 20 20'><line x1='5%' y1='95%' x2='95%' y2='5%' style='stroke:rgba(0, 0, 0, 0.87); stroke-width: 2px;'/></svg>")
+        no-repeat center center;
+    background-size:
+        100% 100%,
+        auto;
+}

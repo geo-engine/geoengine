@@ -1,0 +1,41 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+h2 {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-left: 0;
+    padding-right: 0;
+    font-size: 1.5rem;
+}
+
+button {
+    min-width: 36px;
+    width: 36px;
+    padding: 0;
+}
+
+.mat-toolbar {
+    border-left: 1px solid rgba(245, 245, 245, 0.32);
+}
+
+div,
+mat-toolbar {
+    width: 33vw;
+    height: 64px;
+    @media (max-width: 600px) {
+        height: 56px;
+    }
+}
+
+div {
+    overflow: auto;
+}
+
+.search-form {
+    width: 100%;
+}

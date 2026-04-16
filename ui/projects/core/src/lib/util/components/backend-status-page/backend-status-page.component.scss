@@ -1,0 +1,16 @@
+.container {
+    overflow: hidden; // prevents margin breaking
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background: var(--geoengine-primary-color);
+}
+
+.error {
+    color: var(--geoengine-warn-color);
+}
+
+mat-card-actions button:not(:last-child) {
+    margin-right: 1rem;
+}

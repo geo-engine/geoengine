@@ -1,0 +1,40 @@
+form {
+    padding: 1rem;
+}
+
+mat-form-field {
+    width: 100% !important;
+}
+
+mat-checkbox {
+    display: block;
+    margin-bottom: 1rem;
+}
+
+mat-spinner {
+    width: 25%;
+    height: auto;
+    margin: 1rem auto;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+.container {
+    margin: 1rem;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+button {
+    margin-top: 1rem;
+    width: 100%;
+}
+
+.label {
+    color: var(--geoengine-foreground-secondary-text-color, grey);
+    margin-right: 1rem;
+}

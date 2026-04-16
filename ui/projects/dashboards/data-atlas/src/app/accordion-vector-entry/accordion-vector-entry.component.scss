@@ -1,0 +1,20 @@
+mat-card.dataset {
+    margin: 1rem 0;
+
+    button {
+        margin-bottom: 0.5rem;
+        margin-right: 0.5rem;
+        max-width: 100%;
+
+        ::ng-deep .mat-button-wrapper {
+            overflow: hidden;
+            display: block;
+            text-overflow: ellipsis;
+        }
+    }
+}
+
+.description {
+    white-space: pre-line;
+    text-align: justify;
+}

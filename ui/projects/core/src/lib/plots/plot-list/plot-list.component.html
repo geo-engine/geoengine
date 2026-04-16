@@ -1,0 +1,18 @@
+<geoengine-sidenav-header>Plots</geoengine-sidenav-header>
+@if ((projectService.getPlotStream() | async)?.length === 0) {
+    <p class="no-plots">
+        no plots available
+        <br />
+        <button mat-button (click)="goToOperatorsTab()">⇢ go to operators tab to create a plot ⇢</button>
+    </p>
+}
+@for (plot of projectService.getPlotStream() | async; track idOfPlot($index, plot)) {
+    <geoengine-plot-list-entry
+        [plot]="plot"
+        [plotData]="projectService.getPlotDataStream(plot) | async"
+        [plotError]="projectService.getPlotErrorStream(plot) | async | valueDefault: undefined"
+        [plotStatus]="projectService.getPlotDataStatusStream(plot) | async | valueDefault: defaultLoadingState"
+        [width]="cardWidth$ | async | numberSanitizer"
+    >
+    </geoengine-plot-list-entry>
+}

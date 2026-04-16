@@ -1,0 +1,60 @@
+<mat-sidenav-container hasBackdrop="false" fullscreen>
+    <div class="sidenav mat-elevation-z4">
+        <mat-toolbar color="primary"><img src="assets/logos/geobon-logo.svg" alt="EBV Analyzer" /></mat-toolbar>
+        <ng-template [cdkPortalOutlet]="datasetPortal"></ng-template>
+    </div>
+
+    <div id="top-float-buttons">
+        <a mat-flat-button color="primary" id="back-button" class="mat-elevation-z4" href="https://portal.geobon.org/datasets">
+            <mat-icon>keyboard_return</mat-icon>
+            Discover more
+            <img src="assets/geo-bon-white-round.png" />
+        </a>
+        <geoengine-time-step-selector
+            class="mat-elevation-z4"
+            [timeSteps]="dataSelectionService.timeSteps | async | valueDefault: []"
+            [timeFormat]="dataSelectionService.timeFormat | async | stringSanitizer"
+        ></geoengine-time-step-selector>
+        <geoengine-zoom-handles (zoomIn)="map.zoomIn()" (zoomOut)="map.zoomOut()" class="mat-elevation-z4"></geoengine-zoom-handles>
+    </div>
+
+    @if (dataSelectionService.rasterLayer | async; as rasterLayer) {
+        <geoengine-legend [layer]="rasterLayer"></geoengine-legend>
+    }
+
+    <div class="mid-container" [style.height.px]="windowHeight$ | async">
+        <geoengine-map-container #map [grid]="false">
+            @if (userService.getSessionTokenStream() | async; as sessionToken) {
+                @for (layer of layersReverse$ | async; track idFromLayer($index, layer)) {
+                    @if (layer.layerType === 'vector') {
+                        <geoengine-ol-vector-layer
+                            [layerId]="layer.id"
+                            [workflow]="layer.workflowId"
+                            [symbology]="$any(layer.symbology)"
+                            [isVisible]="layer.isVisible"
+                            (mapRedraw)="map.layerForcesRedraw()"
+                        ></geoengine-ol-vector-layer>
+                    }
+                    @if (layer.layerType === 'raster') {
+                        <geoengine-ol-raster-layer
+                            [layerId]="layer.id"
+                            [workflow]="layer.workflowId"
+                            [symbology]="$any(layer.symbology)"
+                            [isVisible]="layer.isVisible"
+                            [sessionToken]="sessionToken"
+                            (mapRedraw)="map.layerForcesRedraw()"
+                        ></geoengine-ol-raster-layer>
+                    }
+                }
+            }
+        </geoengine-map-container>
+    </div>
+
+    <mat-sidenav position="end" mode="over">
+        <geoengine-sidenav-container></geoengine-sidenav-container>
+    </mat-sidenav>
+</mat-sidenav-container>
+
+@if (dataSelectionService.rasterLayerLoading | async) {
+    <mat-progress-bar class="loading-indicator" mode="query"></mat-progress-bar>
+}

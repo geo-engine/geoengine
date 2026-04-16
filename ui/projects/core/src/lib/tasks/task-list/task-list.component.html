@@ -1,0 +1,105 @@
+<geoengine-sidenav-header>Tasks</geoengine-sidenav-header>
+<div class="header">
+    <mat-form-field subscriptSizing="dynamic">
+        <mat-label>Status filter</mat-label>
+        <mat-select [(value)]="filter" (valueChange)="setFilter($event)">
+            <mat-option><em>No Filter</em></mat-option>
+            @for (taskStatus of taskStatusOptions; track taskStatus) {
+                <mat-option [value]="taskStatus">
+                    {{ taskStatus | titlecase }}
+                </mat-option>
+            }
+        </mat-select>
+    </mat-form-field>
+    <button mat-mini-fab (click)="refreshPage()">
+        <mat-icon>refresh</mat-icon>
+    </button>
+</div>
+<div class="table-container">
+    @if (isLoading) {
+        <mat-spinner></mat-spinner>
+    }
+    @if (!isLoading && !tasks.length) {
+        <p class="empty">no tasks available</p>
+    }
+    @if (!isLoading && tasks.length) {
+        <table mat-table [dataSource]="tasks">
+            <ng-container matColumnDef="status">
+                <th mat-header-cell *matHeaderCellDef>Status</th>
+                <td mat-cell *matCellDef="let row">{{ row.status }}</td>
+            </ng-container>
+            <ng-container matColumnDef="info">
+                <th mat-header-cell *matHeaderCellDef>Info</th>
+                <td mat-cell *matCellDef="let row">
+                    @if (row.info) {
+                        <pre>{{ row.info | json }}</pre>
+                    }
+                    @if (row.error) {
+                        <pre>{{ row.error | json }}</pre>
+                    }
+                </td>
+            </ng-container>
+            <ng-container matColumnDef="timeStarted">
+                <th mat-header-cell *matHeaderCellDef>Started</th>
+                <td mat-cell *matCellDef="let row">
+                    @if (row.timeStarted) {
+                        {{ localTime(row.timeStarted) }}
+                    }
+                    @if (!row.timeStarted) {
+                        -
+                    }
+                </td>
+            </ng-container>
+            <ng-container matColumnDef="time">
+                <th mat-header-cell *matHeaderCellDef>Time</th>
+                <td mat-cell *matCellDef="let row">
+                    @if (row.estimatedTimeRemaining) {
+                        {{ row.estimatedTimeRemaining }} ({{ row.pctComplete }})
+                    }
+                    @if (row.timeTotal) {
+                        {{ row.timeTotal }}
+                    }
+                    @if (!row.estimatedTimeRemaining && !row.timeTotal) {
+                        -
+                    }
+                </td>
+            </ng-container>
+            <ng-container matColumnDef="cleanUp">
+                <th mat-header-cell *matHeaderCellDef>Clean-up</th>
+                <td mat-cell *matCellDef="let row">
+                    @if (row.cleanUp) {
+                        @if (!row.cleanUp.info && !row.cleanUp.error) {
+                            <span>{{ row.cleanUp.status }}</span>
+                        }
+                        @if (row.cleanUp.info) {
+                            <span [matTooltip]="row.cleanUp.info | json">{{ row.cleanUp.status }}</span>
+                        }
+                        @if (row.cleanUp.error) {
+                            <span [matTooltip]="row.cleanUp.error">{{ row.cleanUp.status }}</span>
+                        }
+                    }
+                    @if (!row.cleanUp) {
+                        -
+                    }
+                </td>
+            </ng-container>
+            <ng-container matColumnDef="actions">
+                <th mat-header-cell *matHeaderCellDef>Actions</th>
+                <td mat-cell *matCellDef="let row">
+                    @if (row.status === 'running') {
+                        <button mat-flat-button color="accent" (click)="abortTask(row.taskId)">
+                            <mat-icon>block</mat-icon>
+                            abort
+                        </button>
+                    }
+                    @if (row.status !== 'running') {
+                        -
+                    }
+                </td>
+            </ng-container>
+            <tr mat-header-row *matHeaderRowDef="displayedColumns; sticky: true"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+        </table>
+    }
+</div>
+<mat-paginator [pageSize]="pageSize"> </mat-paginator>

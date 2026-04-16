@@ -1,0 +1,19 @@
+:host {
+    display: block;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.icon-continer {
+    text-align: center;
+
+    mat-icon {
+        vertical-align: middle;
+    }
+}
+
+mat-card {
+    margin-bottom: 1rem;
+}

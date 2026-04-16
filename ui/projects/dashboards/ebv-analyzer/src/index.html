@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>EBV Analyzer</title>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    </head>
+    <body>
+        <geoengine-root>
+            <style type="text/css">
+                :root {
+                    --top-logo-height: 12vh;
+                    --logo-bar-height: calc(9.4vh + 2vh);
+                    --logo-margin: 5vh;
+                    --center-height: calc(var(--logo-bar-height) + 2 * var(--logo-margin));
+                    --loading-bar-height: 20vh;
+                    --top-bottom-margin: calc((100vh - var(--top-logo-height) - var(--center-height) - var(--loading-bar-height)) / 2);
+                }
+
+                body {
+                    margin: 0;
+                    padding: 0;
+                    color: whitesmoke;
+                    text-shadow:
+                        0 1px 3px rgba(0, 0, 0, 0.12),
+                        0 1px 2px rgba(0, 0, 0, 0.24);
+                    background: #00796a;
+                }
+
+                h1 {
+                    text-align: center;
+                    font-family: Roboto, 'Helvetica Neue', sans-serif;
+                    font-size: var(--top-logo-height);
+                    font-weight: 500;
+                    height: var(--top-logo-height);
+                    line-height: var(--top-logo-height);
+                    margin: var(--top-bottom-margin) 0 0 0;
+                }
+
+                h1 span {
+                    background: url('assets/vat_logo.svg') right no-repeat;
+                    background-size: 18vh 18vh;
+                    height: calc(18vh - 1px);
+                    width: calc(18vh - 1px);
+                    border: 1px solid whitesmoke;
+                    border-radius: 18vh;
+                    display: inline-block;
+                    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.24));
+                }
+
+                h2 {
+                    --logo-inner-height: calc(var(--logo-bar-height) - 2vh);
+
+                    text-align: center;
+                    min-height: calc(var(--logo-bar-height));
+                    margin: var(--logo-margin) 0 var(--logo-margin) 0;
+                    padding-top: 1vh;
+                    box-sizing: border-box;
+
+                    background: white;
+                    filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.12)) drop-shadow(0 1px 2px rgba(0, 0, 0, 0.24));
+                }
+
+                h2 .logo {
+                    height: calc(var(--logo-inner-height) - 1px);
+                    background-size: contain;
+                    display: inline-block;
+                }
+
+                .logo-geoengine {
+                    background: url('assets/geoengine.svg') center no-repeat;
+                    width: calc((400 / 143) * var(--logo-inner-height) - 1px);
+                }
+
+                .logo-geobon {
+                    background: white url('assets/logos/GEOBON-color.png') center no-repeat;
+                    width: calc((500 / 106) * 0.5 * var(--logo-inner-height) - 1px);
+                }
+
+                .logo-eshape {
+                    background: white url('assets/logos/e_shape.png') center no-repeat;
+                    width: calc((500 / 596) * 0.95 * var(--logo-inner-height) - 1px);
+                }
+
+                .logo-mlu {
+                    background: white url('assets/logos/mlu.png') center no-repeat;
+                    width: calc((400 / 270) * 0.95 * var(--logo-inner-height) - 1px);
+                }
+
+                .logo-idiv {
+                    background: white url('assets/logos/idiv.png') center no-repeat;
+                    width: calc((400 / 270) * 0.95 * var(--logo-inner-height) - 1px);
+                }
+
+                .logo-margin {
+                    margin: 0 1rem;
+                }
+
+                div.dots {
+                    text-align: center;
+                    font-size: var(--loading-bar-height);
+                    height: var(--loading-bar-height);
+                    line-height: var(--loading-bar-height);
+                }
+
+                @keyframes blink {
+                    0% {
+                        opacity: 0.2;
+                    }
+                    20% {
+                        opacity: 1;
+                    }
+                    100% {
+                        opacity: 0.2;
+                    }
+                }
+
+                .dots span {
+                    animation-name: blink;
+                    animation-duration: 1.4s;
+                    animation-iteration-count: infinite;
+                    animation-fill-mode: both;
+                }
+
+                .dots span:nth-child(2) {
+                    animation-delay: 0.2s;
+                }
+
+                .dots span:nth-child(3) {
+                    animation-delay: 0.4s;
+                }
+            </style>
+            <h1>EBV Analyzer</h1>
+            <h2>
+                <span class="logo logo-geobon"></span>
+                <span class="logo logo-idiv"></span>
+                <span class="logo logo-eshape"></span>
+                <span class="logo logo-mlu"></span>
+                <span class="logo logo-geoengine"></span>
+            </h2>
+            <div class="dots">
+                <span>&middot;</span>
+                <span>&middot;</span>
+                <span>&middot;</span>
+            </div>
+        </geoengine-root>
+    </body>
+</html>

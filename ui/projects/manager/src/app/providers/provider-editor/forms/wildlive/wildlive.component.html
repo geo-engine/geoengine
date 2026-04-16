@@ -1,0 +1,50 @@
+<mat-card>
+    <mat-card-content [formGroup]="form">
+        @if (isNew()) {
+            <geoengine-manager-id-input formControlName="id" />
+        }
+        <mat-form-field>
+            <mat-label>Name</mat-label>
+            <input matInput formControlName="name" [errorStateMatcher]="errorStateMatcher" />
+        </mat-form-field>
+        <mat-form-field>
+            <mat-label>Description</mat-label>
+            <textarea matInput cdkTextareaAutosize formControlName="description"></textarea>
+        </mat-form-field>
+        @if (form.get('auth')) {
+            <div formGroupName="auth">
+                <mat-form-field>
+                    <mat-label>User</mat-label>
+                    <input matInput formControlName="user" [errorStateMatcher]="errorStateMatcher" />
+                </mat-form-field>
+                <mat-form-field>
+                    <mat-label>Refresh Token</mat-label>
+                    <input matInput type="password" formControlName="refreshToken" [errorStateMatcher]="errorStateMatcher" />
+                </mat-form-field>
+                <mat-form-field>
+                    <mat-label>Expiry Date</mat-label>
+                    <input matInput formControlName="expiryDate" [errorStateMatcher]="errorStateMatcher" />
+                </mat-form-field>
+            </div>
+        } @else {
+            <p [class]="{disabled: form.disabled}">No authentication set.</p>
+        }
+        <button mat-raised-button (click)="connectToWildlivePortal()" [disabled]="form.disabled">
+            @if (form.get('auth')) {
+                Refresh Wildlive Portal Login
+            } @else {
+                Login to Wildlive Portal
+            }
+        </button>
+        <mat-form-field>
+            <mat-label>Listing priority</mat-label>
+            <input matInput formControlName="priority" [errorStateMatcher]="errorStateMatcher" />
+            @if (form.controls.priority.hasError('outOfRange')) {
+                <mat-error>Priority must be between -32768 and 32767</mat-error>
+            }
+            @if (form.controls.priority.hasError('notInteger')) {
+                <mat-error>Priority must be a number</mat-error>
+            }
+        </mat-form-field>
+    </mat-card-content>
+</mat-card>

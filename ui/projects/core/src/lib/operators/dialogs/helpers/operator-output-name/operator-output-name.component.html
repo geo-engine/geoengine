@@ -1,0 +1,15 @@
+<mat-form-field>
+    <mat-label>Layer Name</mat-label>
+    <input
+        matInput
+        type="text"
+        placeholder="Output {{ type() }} Name"
+        [ngModel]="name()"
+        (ngModelChange)="name.set($event)"
+        minLength="1"
+        (blur)="onBlur()"
+        required
+    />
+    <ng-content select="mat-hint"></ng-content>
+    <ng-content select="mat-error"></ng-content>
+</mat-form-field>
