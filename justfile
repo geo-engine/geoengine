@@ -2,6 +2,7 @@ mod api-clients
 mod backend 'geoengine'
 mod common 'common.justfile'
 mod python
+mod www
 
 _default:
     @just --list --list-submodules
@@ -10,33 +11,31 @@ _default:
 [group("install")]
 install: backend::install python::install
 
+# Call lint for all submodules.
+[group("lint")]
+lint: lint-justfiles lint-openapi-spec backend::lint python::lint www::lint
+
 # Validate OpenAPI spec.
 [group("lint")]
 lint-openapi-spec: api-clients::lint-openapi-spec
 
-# Call lint for all submodules.
-[group("lint")]
-lint: lint-justfiles lint-openapi-spec backend::lint python::lint
-
 # Check if justfiles are formatted correctly.
 [group("lint")]
-lint-justfiles:
-    just --fmt --check --unstable --justfile justfile
-    just --fmt --check --unstable --justfile common.justfile
-    just --fmt --check --unstable --justfile geoengine/justfile
-    just --fmt --check --unstable --justfile python/justfile
+lint-justfiles: format-justfiles
 
-# Call format for all submodules.
-[group("format")]
-format: format-justfiles
+# Check the format for all submodules. Format them with `--write`.
+[arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
+[group("lint")]
+format write="false": (format-justfiles write) (www::format write)
 
-# Format justfiles.
-[group("format")]
-format-justfiles:
-    just --fmt --unstable --justfile justfile
-    just --fmt --unstable --justfile common.justfile
-    just --fmt --unstable --justfile geoengine/justfile
-    just --fmt --unstable --justfile python/justfile
+# Check if justfiles are formatted correctly. Format them with `--write`.
+[arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
+[group("lint")]
+format-justfiles write="false": common::_clear
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile common.justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile geoengine/justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile python/justfile
 
 # Build all submodules.
 [group("build")]

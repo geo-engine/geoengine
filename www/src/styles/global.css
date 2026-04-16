@@ -1,0 +1,19 @@
+@import 'tailwindcss';
+@import '@fontsource/poppins';
+
+@theme {
+    --color-white: #fff;
+    --color-black: #000;
+    --color-main-lightgreen: #d7e4a5;
+    --color-main-green: #3fab39;
+    --color-second-lightblue: #92d2e3;
+    --color-second-midblue: #0088bc;
+    --color-second-darkblue: #0f4493;
+    --color-second-torquise: #0e8e89;
+
+    --font-sans: 'Poppins', sans-serif;
+    --font-serif: var(--font-sans);
+}
+
+/* disable dark theme */
+@custom-variant dark (&:where(.dark, .dark *));

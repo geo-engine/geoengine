@@ -1,0 +1,12 @@
+loaders:
+    - type: python
+      search_path: ['../python/geoengine']
+processors:
+    - type: filter
+      skip_empty_modules: true
+    - type: smart
+    - type: crossref
+renderer:
+    type: docusaurus
+    docs_base_path: src/content/docs/docs/
+    relative_output_path: python

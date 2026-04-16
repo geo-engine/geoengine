@@ -1,0 +1,9 @@
+# Ignore dependencies
+node_modules/
+
+# Ignore all SVG files
+**/*.svg
+
+# Ignore build outputs (optional but recommended)
+dist/
+build/

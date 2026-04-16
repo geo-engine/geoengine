@@ -203,6 +203,27 @@ jobs:
         working-directory: python/geoengine
         env:
           COVERALLS_REPO_TOKEN: ${{ github.token }}
+  
+  www:
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    steps:
+        - name: Checkout code
+          uses: actions/checkout@v4
+        - uses: extractions/setup-just@v3
+        - name: Install
+          run: just www install
+        - name: Check formatting and lints
+          run: just www lint
+        - name: Build
+          run: just www build
+        - name: Idempotency check
+          run: just check-no-changes-in-git-repo
+
 
   api-client-python:
     name: "api-client / python"

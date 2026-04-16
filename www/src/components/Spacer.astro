@@ -1,0 +1,24 @@
+---
+import {getImage} from 'astro:assets';
+import greenBg from '../images/GeoEngine_Structureelement_GeoEngine_Structure_lightgreen.png';
+
+interface Props {
+    bg?: 'green';
+}
+
+const {bg} = Astro.props;
+
+let backgroundImage = 'none';
+if (bg == 'green') {
+    const optimizedGreenBg = await getImage({src: greenBg});
+    backgroundImage = `url(${optimizedGreenBg.src})`;
+}
+---
+
+<style define:vars={{backgroundImage}}>
+    div {
+        background-image: var(--backgroundImage);
+    }
+</style>
+
+<div class="h-[2rem] md:h-[8rem]"></div>
