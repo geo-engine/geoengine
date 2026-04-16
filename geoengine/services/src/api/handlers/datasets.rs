@@ -278,6 +278,11 @@ fn validate_tile(
         .file_path
         .to_string_lossy()
         .starts_with("/vsicurl")
+        || tile
+            .params
+            .file_path
+            .to_string_lossy()
+            .starts_with("/vsis3")
     {
         // do not validate remote files
         // TODO: add flag to do this?
