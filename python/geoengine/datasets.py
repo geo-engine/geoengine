@@ -12,9 +12,9 @@ from pathlib import Path
 from typing import Literal, NamedTuple
 from uuid import UUID
 
-import geoengine_openapi_client
-import geoengine_openapi_client.exceptions
-import geoengine_openapi_client.models
+import geoengine_api_client
+import geoengine_api_client.exceptions
+import geoengine_api_client.models
 import geopandas as gpd
 import numpy as np
 from attr import dataclass
@@ -43,15 +43,15 @@ class UnixTimeStampType(Enum):
     EPOCHSECONDS = "epochSeconds"
     EPOCHMILLISECONDS = "epochMilliseconds"
 
-    def to_api_enum(self) -> geoengine_openapi_client.UnixTimeStampType:
-        return geoengine_openapi_client.UnixTimeStampType(self.value)
+    def to_api_enum(self) -> geoengine_api_client.UnixTimeStampType:
+        return geoengine_api_client.UnixTimeStampType(self.value)
 
 
 class OgrSourceTimeFormat:
     """Base class for OGR time formats"""
 
     @abstractmethod
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceTimeFormat:
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceTimeFormat:
         pass
 
     @classmethod
@@ -73,9 +73,9 @@ class UnixTimeStampOgrSourceTimeFormat(OgrSourceTimeFormat):
 
     timestampType: UnixTimeStampType
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceTimeFormat:
-        return geoengine_openapi_client.OgrSourceTimeFormat(
-            geoengine_openapi_client.OgrSourceTimeFormatUnixTimeStamp(
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceTimeFormat:
+        return geoengine_api_client.OgrSourceTimeFormat(
+            geoengine_api_client.OgrSourceTimeFormatUnixTimeStamp(
                 format="unixTimeStamp",
                 timestamp_type=self.timestampType.to_api_enum(),
             )
@@ -86,10 +86,8 @@ class UnixTimeStampOgrSourceTimeFormat(OgrSourceTimeFormat):
 class AutoOgrSourceTimeFormat(OgrSourceTimeFormat):
     """An auto detection OGR time format"""
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceTimeFormat:
-        return geoengine_openapi_client.OgrSourceTimeFormat(
-            geoengine_openapi_client.OgrSourceTimeFormatAuto(format="auto")
-        )
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceTimeFormat:
+        return geoengine_api_client.OgrSourceTimeFormat(geoengine_api_client.OgrSourceTimeFormatAuto(format="auto"))
 
 
 @dataclass
@@ -98,9 +96,9 @@ class CustomOgrSourceTimeFormat(OgrSourceTimeFormat):
 
     custom_format: str
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceTimeFormat:
-        return geoengine_openapi_client.OgrSourceTimeFormat(
-            geoengine_openapi_client.OgrSourceTimeFormatCustom(format="custom", custom_format=self.custom_format)
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceTimeFormat:
+        return geoengine_api_client.OgrSourceTimeFormat(
+            geoengine_api_client.OgrSourceTimeFormatCustom(format="custom", custom_format=self.custom_format)
         )
 
 
@@ -108,7 +106,7 @@ class OgrSourceDuration:
     """Base class for the duration part of a OGR time format"""
 
     @abstractmethod
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDurationSpec:
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDurationSpec:
         pass
 
     @classmethod
@@ -135,9 +133,9 @@ class ValueOgrSourceDurationSpec(OgrSourceDuration):
     def __init__(self, step: TimeStep):
         self.step = step
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDurationSpec:
-        return geoengine_openapi_client.OgrSourceDurationSpec(
-            geoengine_openapi_client.OgrSourceDurationSpecValue(
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDurationSpec:
+        return geoengine_api_client.OgrSourceDurationSpec(
+            geoengine_api_client.OgrSourceDurationSpecValue(
                 type="value",
                 step=self.step.step,
                 granularity=self.step.granularity.to_api_enum(),
@@ -148,9 +146,9 @@ class ValueOgrSourceDurationSpec(OgrSourceDuration):
 class ZeroOgrSourceDurationSpec(OgrSourceDuration):
     """An instant, i.e. no duration"""
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDurationSpec:
-        return geoengine_openapi_client.OgrSourceDurationSpec(
-            geoengine_openapi_client.OgrSourceDurationSpecZero(
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDurationSpec:
+        return geoengine_api_client.OgrSourceDurationSpec(
+            geoengine_api_client.OgrSourceDurationSpecZero(
                 type="zero",
             )
         )
@@ -159,9 +157,9 @@ class ZeroOgrSourceDurationSpec(OgrSourceDuration):
 class InfiniteOgrSourceDurationSpec(OgrSourceDuration):
     """An open-ended time duration"""
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDurationSpec:
-        return geoengine_openapi_client.OgrSourceDurationSpec(
-            geoengine_openapi_client.OgrSourceDurationSpecInfinite(
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDurationSpec:
+        return geoengine_api_client.OgrSourceDurationSpec(
+            geoengine_api_client.OgrSourceDurationSpecInfinite(
                 type="infinite",
             )
         )
@@ -171,7 +169,7 @@ class OgrSourceDatasetTimeType:
     """A time type specification for OGR dataset definitions"""
 
     @abstractmethod
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDatasetTimeType:
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDatasetTimeType:
         pass
 
     @classmethod
@@ -204,9 +202,9 @@ class OgrSourceDatasetTimeType:
 class NoneOgrSourceDatasetTimeType(OgrSourceDatasetTimeType):
     """Specify no time information"""
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDatasetTimeType:
-        return geoengine_openapi_client.OgrSourceDatasetTimeType(
-            geoengine_openapi_client.OgrSourceDatasetTimeTypeNone(
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDatasetTimeType:
+        return geoengine_api_client.OgrSourceDatasetTimeType(
+            geoengine_api_client.OgrSourceDatasetTimeTypeNone(
                 type="none",
             )
         )
@@ -220,9 +218,9 @@ class StartOgrSourceDatasetTimeType(OgrSourceDatasetTimeType):
     start_format: OgrSourceTimeFormat
     duration: OgrSourceDuration
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDatasetTimeType:
-        return geoengine_openapi_client.OgrSourceDatasetTimeType(
-            geoengine_openapi_client.OgrSourceDatasetTimeTypeStart(
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDatasetTimeType:
+        return geoengine_api_client.OgrSourceDatasetTimeType(
+            geoengine_api_client.OgrSourceDatasetTimeTypeStart(
                 type="start",
                 start_field=self.start_field,
                 start_format=self.start_format.to_api_dict(),
@@ -240,9 +238,9 @@ class StartEndOgrSourceDatasetTimeType(OgrSourceDatasetTimeType):
     end_field: str
     end_format: OgrSourceTimeFormat
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDatasetTimeType:
-        return geoengine_openapi_client.OgrSourceDatasetTimeType(
-            geoengine_openapi_client.OgrSourceDatasetTimeTypeStartEnd(
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDatasetTimeType:
+        return geoengine_api_client.OgrSourceDatasetTimeType(
+            geoengine_api_client.OgrSourceDatasetTimeTypeStartEnd(
                 type="startEnd",
                 start_field=self.start_field,
                 start_format=self.start_format.to_api_dict(),
@@ -260,9 +258,9 @@ class StartDurationOgrSourceDatasetTimeType(OgrSourceDatasetTimeType):
     start_format: OgrSourceTimeFormat
     duration_field: str
 
-    def to_api_dict(self) -> geoengine_openapi_client.OgrSourceDatasetTimeType:
-        return geoengine_openapi_client.OgrSourceDatasetTimeType(
-            geoengine_openapi_client.OgrSourceDatasetTimeTypeStartDuration(
+    def to_api_dict(self) -> geoengine_api_client.OgrSourceDatasetTimeType:
+        return geoengine_api_client.OgrSourceDatasetTimeType(
+            geoengine_api_client.OgrSourceDatasetTimeTypeStartDuration(
                 type="startDuration",
                 start_field=self.start_field,
                 start_format=self.start_format.to_api_dict(),
@@ -277,8 +275,8 @@ class OgrOnError(Enum):
     IGNORE = "ignore"
     ABORT = "abort"
 
-    def to_api_enum(self) -> geoengine_openapi_client.OgrSourceErrorSpec:
-        return geoengine_openapi_client.OgrSourceErrorSpec(self.value)
+    def to_api_enum(self) -> geoengine_api_client.OgrSourceErrorSpec:
+        return geoengine_api_client.OgrSourceErrorSpec(self.value)
 
 
 class AddDatasetProperties:
@@ -310,9 +308,9 @@ class AddDatasetProperties:
         self.symbology = symbology
         self.provenance = provenance
 
-    def to_api_dict(self) -> geoengine_openapi_client.AddDataset:
+    def to_api_dict(self) -> geoengine_api_client.AddDataset:
         """Converts the properties to a dictionary"""
-        return geoengine_openapi_client.AddDataset(
+        return geoengine_api_client.AddDataset(
             name=str(self.name) if self.name is not None else None,
             display_name=self.display_name,
             description=self.description,
@@ -412,13 +410,13 @@ def upload_dataframe(
 
     with (
         tempfile.TemporaryDirectory() as temp_dir,
-        geoengine_openapi_client.ApiClient(session.configuration) as api_client,
+        geoengine_api_client.ApiClient(session.configuration) as api_client,
     ):
         json_file_name = Path(temp_dir) / "geo.json"
         with open(json_file_name, "w", encoding="utf8") as json_file:
             json_file.write(df_json)
 
-        uploads_api = geoengine_openapi_client.UploadsApi(api_client)
+        uploads_api = geoengine_api_client.UploadsApi(api_client)
         response = uploads_api.upload_handler([str(json_file_name)], _request_timeout=timeout)
 
     upload_id = UploadId.from_response(response)
@@ -444,27 +442,27 @@ def upload_dataframe(
         .to_api_dict()
         .actual_instance
     )
-    if not isinstance(result_descriptor, geoengine_openapi_client.TypedVectorResultDescriptor):
+    if not isinstance(result_descriptor, geoengine_api_client.TypedVectorResultDescriptor):
         raise TypeError("Expected TypedVectorResultDescriptor")
 
-    create = geoengine_openapi_client.CreateDataset(
-        data_path=geoengine_openapi_client.DataPath(geoengine_openapi_client.DataPathOneOf1(upload=str(upload_id))),
-        definition=geoengine_openapi_client.DatasetDefinition(
+    create = geoengine_api_client.CreateDataset(
+        data_path=geoengine_api_client.DataPath(geoengine_api_client.DataPathUpload(upload=str(upload_id))),
+        definition=geoengine_api_client.DatasetDefinition(
             properties=AddDatasetProperties(
                 display_name=display_name,
                 name=name,
                 description="Upload from Python",
                 source_operator="OgrSource",
             ).to_api_dict(),
-            meta_data=geoengine_openapi_client.MetaDataDefinition(
-                geoengine_openapi_client.OgrMetaData(
+            meta_data=geoengine_api_client.MetaDataDefinition(
+                geoengine_api_client.OgrMetaData(
                     type="OgrMetaData",
-                    loading_info=geoengine_openapi_client.OgrSourceDataset(
+                    loading_info=geoengine_api_client.OgrSourceDataset(
                         file_name="geo.json",
                         layer_name="geo",
                         data_type=vector_type.to_api_enum(),
                         time=time.to_api_dict(),
-                        columns=geoengine_openapi_client.OgrSourceColumnSpec(
+                        columns=geoengine_api_client.OgrSourceColumnSpec(
                             y="",
                             x="",
                             float=floats,
@@ -473,7 +471,7 @@ def upload_dataframe(
                         ),
                         on_error=on_error.to_api_enum(),
                     ),
-                    result_descriptor=geoengine_openapi_client.VectorResultDescriptor.from_dict(
+                    result_descriptor=geoengine_api_client.VectorResultDescriptor.from_dict(
                         result_descriptor.to_dict()
                     ),
                 )
@@ -481,8 +479,8 @@ def upload_dataframe(
         ),
     )
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        datasets_api = geoengine_openapi_client.DatasetsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
         response2 = datasets_api.create_dataset_handler(create, _request_timeout=timeout)
 
     return DatasetName.from_response(response2)
@@ -519,12 +517,12 @@ class Volume:
     path: str | None
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.Volume) -> Volume:
+    def from_response(cls, response: geoengine_api_client.Volume) -> Volume:
         """Parse a http response to an `Volume`"""
         return Volume(response.name, response.path)
 
-    def to_api_dict(self) -> geoengine_openapi_client.Volume:
-        return geoengine_openapi_client.Volume(name=self.name, path=self.path)
+    def to_api_dict(self) -> geoengine_api_client.Volume:
+        return geoengine_api_client.Volume(name=self.name, path=self.path)
 
 
 def volumes(timeout: int = 60) -> list[Volume]:
@@ -532,8 +530,8 @@ def volumes(timeout: int = 60) -> list[Volume]:
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        datasets_api = geoengine_openapi_client.DatasetsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
         response = datasets_api.list_volumes_handler(_request_timeout=timeout)
 
     return [Volume.from_response(v) for v in response]
@@ -556,27 +554,25 @@ def volume_by_name(volume_name: str, timeout: int = 60) -> Volume | None:
 def add_dataset(
     data_store: Volume | UploadId,
     properties: AddDatasetProperties,
-    meta_data: geoengine_openapi_client.MetaDataDefinition,
+    meta_data: geoengine_api_client.MetaDataDefinition,
     timeout: int = 60,
 ) -> DatasetName:
     """Adds a dataset to the Geo Engine"""
 
     if isinstance(data_store, Volume):
-        dataset_path = geoengine_openapi_client.DataPath(geoengine_openapi_client.DataPathOneOf(volume=data_store.name))
+        dataset_path = geoengine_api_client.DataPath(geoengine_api_client.DataPathVolume(volume=data_store.name))
     else:
-        dataset_path = geoengine_openapi_client.DataPath(
-            geoengine_openapi_client.DataPathOneOf1(upload=str(data_store))
-        )
+        dataset_path = geoengine_api_client.DataPath(geoengine_api_client.DataPathUpload(upload=str(data_store)))
 
-    create = geoengine_openapi_client.CreateDataset(
+    create = geoengine_api_client.CreateDataset(
         data_path=dataset_path,
-        definition=geoengine_openapi_client.DatasetDefinition(properties=properties.to_api_dict(), meta_data=meta_data),
+        definition=geoengine_api_client.DatasetDefinition(properties=properties.to_api_dict(), meta_data=meta_data),
     )
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        datasets_api = geoengine_openapi_client.DatasetsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
         response = datasets_api.create_dataset_handler(create, _request_timeout=timeout)
 
     return DatasetName.from_response(response)
@@ -585,7 +581,7 @@ def add_dataset(
 def add_or_replace_dataset_with_permissions(
     data_store: Volume | UploadId,
     properties: AddDatasetProperties,
-    meta_data: geoengine_openapi_client.MetaDataDefinition,
+    meta_data: geoengine_api_client.MetaDataDefinition,
     permission_tuples: list[tuple[RoleId, Permission]] | None = None,
     replace_existing=False,
     timeout: int = 60,
@@ -625,8 +621,8 @@ def delete_dataset(dataset_name: DatasetName, timeout: int = 60) -> None:
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        datasets_api = geoengine_openapi_client.DatasetsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
         datasets_api.delete_dataset_handler(str(dataset_name), _request_timeout=timeout)
 
 
@@ -641,17 +637,17 @@ def list_datasets_page(
     order: DatasetListOrder = DatasetListOrder.NAME_ASC,
     name_filter: str | None = None,
     timeout: int = 60,
-) -> list[geoengine_openapi_client.DatasetListing]:
+) -> list[geoengine_api_client.DatasetListing]:
     """List datasets"""
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        datasets_api = geoengine_openapi_client.DatasetsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
         response = datasets_api.list_datasets_handler(
             offset=offset,
             limit=limit,
-            order=geoengine_openapi_client.OrderBy(order.value),
+            order=geoengine_api_client.OrderBy(order.value),
             filter=name_filter,
             _request_timeout=timeout,
         )
@@ -665,7 +661,7 @@ def list_datasets(
     order: DatasetListOrder = DatasetListOrder.NAME_ASC,
     name_filter: str | None = None,
     timeout: int = 60,
-) -> Iterator[geoengine_openapi_client.DatasetListing]:
+) -> Iterator[geoengine_api_client.DatasetListing]:
     """List datasets"""
 
     page_size = 20
@@ -693,7 +689,7 @@ def list_datasets(
 
 def dataset_info_by_name(
     dataset_name: DatasetName | str, timeout: int = 60
-) -> geoengine_openapi_client.models.Dataset | None:
+) -> geoengine_api_client.models.Dataset | None:
     """Get dataset information."""
 
     if not isinstance(dataset_name, DatasetName):
@@ -701,12 +697,12 @@ def dataset_info_by_name(
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        datasets_api = geoengine_openapi_client.DatasetsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
         res = None
         try:
             res = datasets_api.get_dataset_handler(str(dataset_name), _request_timeout=timeout)
-        except geoengine_openapi_client.exceptions.BadRequestException as e:
+        except geoengine_api_client.exceptions.BadRequestException as e:
             e_body = e.body
             if isinstance(e_body, str) and "CannotLoadDataset" not in e_body:
                 raise e
@@ -715,7 +711,7 @@ def dataset_info_by_name(
 
 def dataset_metadata_by_name(
     dataset_name: DatasetName | str, timeout: int = 60
-) -> geoengine_openapi_client.models.MetaDataDefinition | None:
+) -> geoengine_api_client.models.MetaDataDefinition | None:
     """Get dataset information."""
 
     if not isinstance(dataset_name, DatasetName):
@@ -723,12 +719,12 @@ def dataset_metadata_by_name(
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
-        datasets_api = geoengine_openapi_client.DatasetsApi(api_client)
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
+        datasets_api = geoengine_api_client.DatasetsApi(api_client)
         res = None
         try:
             res = datasets_api.get_loading_info_handler(str(dataset_name), _request_timeout=timeout)
-        except geoengine_openapi_client.exceptions.BadRequestException as e:
+        except geoengine_api_client.exceptions.BadRequestException as e:
             e_body = e.body
             if isinstance(e_body, str) and "CannotLoadDataset" not in e_body:
                 raise e

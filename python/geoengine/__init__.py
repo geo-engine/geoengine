@@ -1,8 +1,8 @@
 """Entry point for Geo Engine Python Library"""
 
-import geoengine_openapi_client
-from geoengine_openapi_client import UsageSummaryGranularity
-from geoengine_openapi_client.exceptions import (
+import geoengine_api_client
+from geoengine_api_client import UsageSummaryGranularity
+from geoengine_api_client.exceptions import (
     ApiAttributeError,
     ApiException,
     ApiKeyError,
@@ -134,7 +134,7 @@ from .workflow import (
     workflow_by_id,
 )
 
-DEFAULT_USER_AGENT = f"geoengine-python/{geoengine_openapi_client.__version__}"
+DEFAULT_USER_AGENT = f"geoengine-python/{geoengine_api_client.__version__}"
 
 
 def default_user_agent(_name="python-requests"):

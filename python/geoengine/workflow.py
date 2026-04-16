@@ -16,7 +16,7 @@ from os import PathLike
 from typing import Any, TypedDict, cast
 from uuid import UUID
 
-import geoengine_openapi_client as geoc
+import geoengine_api_client as geoc
 import geopandas as gpd
 import numpy as np
 import pandas as pd

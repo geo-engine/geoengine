@@ -2,9 +2,9 @@
 
 import unittest
 
-import geoengine_openapi_client
-import geoengine_openapi_client.models
-import geoengine_openapi_client.models.spatial_grid_descriptor_state
+import geoengine_api_client
+import geoengine_api_client.models
+import geoengine_api_client.models.spatial_grid_descriptor_state
 
 import geoengine as ge
 from geoengine.permissions import REGISTERED_USER_ROLE_ID, Permission, PermissionListing, Role
@@ -54,7 +54,7 @@ class DatasetsTests(unittest.TestCase):
 
             volume = ge.volume_by_name("test_data")
 
-            gdal_params = geoengine_openapi_client.GdalDatasetParameters.from_dict(
+            gdal_params = geoengine_api_client.GdalDatasetParameters.from_dict(
                 {
                     "filePath": "raster/landcover/landcover.tif",
                     "rasterbandChannel": 1,
@@ -65,7 +65,7 @@ class DatasetsTests(unittest.TestCase):
                     },
                     "width": 3600,
                     "height": 1800,
-                    "fileNotFoundHandling": geoengine_openapi_client.FileNotFoundHandling.NODATA,
+                    "fileNotFoundHandling": geoengine_api_client.FileNotFoundHandling.NODATA,
                     "noDataValue": None,
                     "propertiesMapping": None,
                     "gdalOpenOptions": None,
@@ -108,12 +108,12 @@ class DatasetsTests(unittest.TestCase):
                             top_left_idx=ge.GridIdx2D(0, 0), bottom_right_idx=ge.GridIdx2D(1799, 3599)
                         ),
                     ),
-                    descriptor=geoengine_openapi_client.SpatialGridDescriptorState.SOURCE,
+                    descriptor=geoengine_api_client.SpatialGridDescriptorState.SOURCE,
                 ),
                 time=ge.TimeDescriptor(dimension=ge.IrregularTimeDimension(), bounds=None),
             )
 
-            meta_data = geoengine_openapi_client.GdalMetaDataStatic.from_dict(
+            meta_data = geoengine_api_client.GdalMetaDataStatic.from_dict(
                 {
                     "type": "GdalStatic",
                     "time": None,
@@ -153,7 +153,7 @@ class DatasetsTests(unittest.TestCase):
                 ],
             )
 
-            metadata_for_api = geoengine_openapi_client.MetaDataDefinition(
+            metadata_for_api = geoengine_api_client.MetaDataDefinition(
                 meta_data,
             )
 
@@ -187,7 +187,7 @@ class DatasetsTests(unittest.TestCase):
 
             volume = ge.volume_by_name("test_data")
 
-            gdal_params = geoengine_openapi_client.GdalDatasetParameters.from_dict(
+            gdal_params = geoengine_api_client.GdalDatasetParameters.from_dict(
                 {
                     "filePath": "raster/landcover/landcover.tif",
                     "rasterbandChannel": 1,
@@ -198,7 +198,7 @@ class DatasetsTests(unittest.TestCase):
                     },
                     "width": 3600,
                     "height": 1800,
-                    "fileNotFoundHandling": geoengine_openapi_client.FileNotFoundHandling.NODATA,
+                    "fileNotFoundHandling": geoengine_api_client.FileNotFoundHandling.NODATA,
                     "noDataValue": None,
                     "propertiesMapping": None,
                     "gdalOpenOptions": None,
@@ -241,12 +241,12 @@ class DatasetsTests(unittest.TestCase):
                             top_left_idx=ge.GridIdx2D(0, 0), bottom_right_idx=ge.GridIdx2D(1799, 3599)
                         ),
                     ),
-                    descriptor=geoengine_openapi_client.SpatialGridDescriptorState.SOURCE,
+                    descriptor=geoengine_api_client.SpatialGridDescriptorState.SOURCE,
                 ),
                 time=ge.TimeDescriptor(dimension=ge.IrregularTimeDimension(), bounds=None),
             )
 
-            meta_data = geoengine_openapi_client.GdalMetaDataStatic.from_dict(
+            meta_data = geoengine_api_client.GdalMetaDataStatic.from_dict(
                 {
                     "type": "GdalStatic",
                     "time": None,
@@ -283,7 +283,7 @@ class DatasetsTests(unittest.TestCase):
             dataset_name = ge.add_or_replace_dataset_with_permissions(
                 volume,
                 add_dataset_properties,
-                geoengine_openapi_client.MetaDataDefinition(
+                geoengine_api_client.MetaDataDefinition(
                     meta_data,
                 ),
                 permission_tuples=permisions,
@@ -331,7 +331,7 @@ class DatasetsTests(unittest.TestCase):
             dataset_name = ge.add_or_replace_dataset_with_permissions(
                 volume,
                 add_dataset_properties,
-                geoengine_openapi_client.MetaDataDefinition(
+                geoengine_api_client.MetaDataDefinition(
                     meta_data,
                 ),
                 permission_tuples=permisions,
@@ -373,7 +373,7 @@ class DatasetsTests(unittest.TestCase):
             dataset_name = ge.add_or_replace_dataset_with_permissions(
                 volume,
                 add_dataset_properties,
-                geoengine_openapi_client.MetaDataDefinition(
+                geoengine_api_client.MetaDataDefinition(
                     meta_data,
                 ),
                 permission_tuples=permisions,

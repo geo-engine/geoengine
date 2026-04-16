@@ -93,21 +93,6 @@ jobs:
       - name: SQLFluff
         run: just backend lint-sql
 
-  openapi:
-    name: OpenAPI Validation
-
-    runs-on: ubuntu-24.04
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v6
-      - uses: extractions/setup-just@v3
-      - name: Validate OpenAPI spec
-        run: just lint-openapi-spec
-
   geoengine-build:
     name: "geoengine / build"
 
@@ -238,3 +223,94 @@ jobs:
           run: just www build
         - name: Idempotency check
           run: just check-no-changes-in-git-repo
+
+
+  api-client-python:
+    name: "api-client / python"
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13", "3.14"]
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Generate OpenAPI spec
+        run: just api-clients test-python
+
+  api-client-typescript:
+    name: "api-client / typescript"
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    strategy:
+      matrix:
+        node-version: [20.19.x, 22.12.x, 24.0.x]
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
+      - name: Use Node.js ${{ matrix.node-version }}
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node-version }}
+      - name: Install and build
+        run: just api-clients test-typescript
+
+  api-client-rust:
+    name: "api-client / rust"
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v5
+      - uses: extractions/setup-just@v3
+      - uses: actions-rust-lang/setup-rust-toolchain@v1
+        with:
+          toolchain: stable
+      - name: Build and test
+        run: just api-clients test-rust
+
+  api-client-idempotency:
+    name: "api-client / rust"
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v6
+      - uses: extractions/setup-just@v3
+      - name: Install Java (OpenAPI Generator requires Java to run)
+        run: |
+          # deleted in devcontainer image, but required by java installer
+          mkdir -p /usr/share/man/man1
+          apt-get update
+          apt-get install -y openjdk-21-jre-headless
+      - name: Lint OpenAPI specification
+        run: just lint-openapi-spec
+      - name: Generate API clients
+        run: just api-clients build
+      - name: Check for changes in git repo
+        run: just check-no-changes-in-git-repo

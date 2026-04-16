@@ -8,7 +8,7 @@ import os
 from typing import ClassVar
 from uuid import UUID
 
-import geoengine_openapi_client
+import geoengine_api_client
 import urllib3
 from dotenv import load_dotenv
 from requests.auth import AuthBase
@@ -39,7 +39,7 @@ class Session:
     __valid_until: str | None = None
     __server_url: str
     __timeout: int = 60
-    __configuration: geoengine_openapi_client.Configuration
+    __configuration: geoengine_api_client.Configuration
 
     session: ClassVar[Session | None] = None
 
@@ -68,7 +68,7 @@ class Session:
         # Auto-generated SessionApi cannot handle dynamically differing return types (SimpleSession or UserSession).
         # Because of that requests must be send manually.
         http = urllib3.PoolManager()
-        user_agent = f"geoengine-python/{geoengine_openapi_client.__version__}"
+        user_agent = f"geoengine-python/{geoengine_api_client.__version__}"
 
         if credentials is not None:
             session = http.request(
@@ -123,7 +123,7 @@ class Session:
             self.__valid_until = session["validUntil"]
 
         self.__server_url = server_url
-        self.__configuration = geoengine_openapi_client.Configuration(host=server_url, access_token=session["id"])
+        self.__configuration = geoengine_api_client.Configuration(host=server_url, access_token=session["id"])
 
     def __repr__(self) -> str:
         """Display representation of a session"""
@@ -157,7 +157,7 @@ class Session:
         return self.__server_url
 
     @property
-    def configuration(self) -> geoengine_openapi_client.Configuration:
+    def configuration(self) -> geoengine_api_client.Configuration:
         """
         Return the current http configuration
         """
@@ -186,8 +186,8 @@ class Session:
         Logout the current session
         """
 
-        with geoengine_openapi_client.ApiClient(self.configuration) as api_client:
-            session_api = geoengine_openapi_client.SessionApi(api_client)
+        with geoengine_api_client.ApiClient(self.configuration) as api_client:
+            session_api = geoengine_api_client.SessionApi(api_client)
             session_api.logout_handler(_request_timeout=self.__timeout)
 
 

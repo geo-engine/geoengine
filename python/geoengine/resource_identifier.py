@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any, Literal, NewType
 from uuid import UUID
 
-import geoengine_openapi_client
+import geoengine_api_client
 
 LayerId = NewType("LayerId", str)
 LayerCollectionId = NewType("LayerCollectionId", str)
@@ -24,7 +24,7 @@ class MlModelName:
         self.__ml_model_name = ml_model_name
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.models.MlModelNameResponse) -> MlModelName:
+    def from_response(cls, response: geoengine_api_client.models.MlModelNameResponse) -> MlModelName:
         """Parse a http response to an `DatasetName`"""
         return MlModelName(response.ml_model_name)
 
@@ -41,8 +41,8 @@ class MlModelName:
 
         return self.__ml_model_name == other.__ml_model_name  # pylint: disable=protected-access
 
-    def to_api_dict(self) -> geoengine_openapi_client.models.MlModelNameResponse:
-        return geoengine_openapi_client.models.MlModelNameResponse(ml_model_name=str(self.__ml_model_name))
+    def to_api_dict(self) -> geoengine_api_client.models.MlModelNameResponse:
+        return geoengine_api_client.models.MlModelNameResponse(ml_model_name=str(self.__ml_model_name))
 
 
 class DatasetName:
@@ -54,7 +54,7 @@ class DatasetName:
         self.__dataset_name = dataset_name
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.DatasetNameResponse) -> DatasetName:
+    def from_response(cls, response: geoengine_api_client.DatasetNameResponse) -> DatasetName:
         """Parse a http response to an `DatasetName`"""
         return DatasetName(response.dataset_name)
 
@@ -71,8 +71,8 @@ class DatasetName:
 
         return self.__dataset_name == other.__dataset_name  # pylint: disable=protected-access
 
-    def to_api_dict(self) -> geoengine_openapi_client.DatasetNameResponse:
-        return geoengine_openapi_client.DatasetNameResponse(dataset_name=str(self.__dataset_name))
+    def to_api_dict(self) -> geoengine_api_client.DatasetNameResponse:
+        return geoengine_api_client.DatasetNameResponse(dataset_name=str(self.__dataset_name))
 
 
 class UploadId:
@@ -84,7 +84,7 @@ class UploadId:
         self.__upload_id = upload_id
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.IdResponse) -> UploadId:
+    def from_response(cls, response: geoengine_api_client.IdResponse) -> UploadId:
         """Parse a http response to an `UploadId`"""
         return UploadId(response.id)
 
@@ -101,9 +101,9 @@ class UploadId:
 
         return self.__upload_id == other.__upload_id  # pylint: disable=protected-access
 
-    def to_api_dict(self) -> geoengine_openapi_client.IdResponse:
+    def to_api_dict(self) -> geoengine_api_client.IdResponse:
         """Converts the upload id to a dict for the api"""
-        return geoengine_openapi_client.IdResponse(id=str(self.__upload_id))
+        return geoengine_api_client.IdResponse(id=str(self.__upload_id))
 
 
 class Resource:
@@ -145,38 +145,38 @@ class Resource:
             ml_model_name = str(ml_model_name)
         return Resource("mlModel", ml_model_name)
 
-    def to_api_dict(self) -> geoengine_openapi_client.Resource:
+    def to_api_dict(self) -> geoengine_api_client.Resource:
         """Convert to a dict for the API"""
         inner: Any = None
 
         if self.type == "layer":
-            inner = geoengine_openapi_client.LayerResource(type="layer", id=self.id)
+            inner = geoengine_api_client.LayerResource(type="layer", id=self.id)
         elif self.type == "layerCollection":
-            inner = geoengine_openapi_client.LayerCollectionResource(type="layerCollection", id=self.id)
+            inner = geoengine_api_client.LayerCollectionResource(type="layerCollection", id=self.id)
         elif self.type == "project":
-            inner = geoengine_openapi_client.ProjectResource(type="project", id=self.id)
+            inner = geoengine_api_client.ProjectResource(type="project", id=self.id)
         elif self.type == "dataset":
-            inner = geoengine_openapi_client.DatasetResource(type="dataset", id=self.id)
+            inner = geoengine_api_client.DatasetResource(type="dataset", id=self.id)
         elif self.type == "mlModel":
-            inner = geoengine_openapi_client.MlModelResource(type="mlModel", id=self.id)
+            inner = geoengine_api_client.MlModelResource(type="mlModel", id=self.id)
         else:
             raise KeyError(f"Unknown resource type: {self.type}")
 
-        return geoengine_openapi_client.Resource(inner)
+        return geoengine_api_client.Resource(inner)
 
     @classmethod
-    def from_response(cls, response: geoengine_openapi_client.Resource) -> Resource:
+    def from_response(cls, response: geoengine_api_client.Resource) -> Resource:
         """Convert to a dict for the API"""
         inner: Resource
-        if isinstance(response.actual_instance, geoengine_openapi_client.LayerResource):
+        if isinstance(response.actual_instance, geoengine_api_client.LayerResource):
             inner = Resource("layer", response.actual_instance.id)
-        elif isinstance(response.actual_instance, geoengine_openapi_client.LayerCollectionResource):
+        elif isinstance(response.actual_instance, geoengine_api_client.LayerCollectionResource):
             inner = Resource("layerCollection", response.actual_instance.id)
-        elif isinstance(response.actual_instance, geoengine_openapi_client.ProjectResource):
+        elif isinstance(response.actual_instance, geoengine_api_client.ProjectResource):
             inner = Resource("project", response.actual_instance.id)
-        elif isinstance(response.actual_instance, geoengine_openapi_client.DatasetResource):
+        elif isinstance(response.actual_instance, geoengine_api_client.DatasetResource):
             inner = Resource("dataset", response.actual_instance.id)
-        elif isinstance(response.actual_instance, geoengine_openapi_client.MlModelResource):
+        elif isinstance(response.actual_instance, geoengine_api_client.MlModelResource):
             inner = Resource("mlModel", response.actual_instance.id)
         else:
             raise KeyError(f"Unknown resource type from API: {response.actual_instance}")

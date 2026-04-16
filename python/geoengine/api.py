@@ -2,7 +2,7 @@
 
 from typing import TypedDict
 
-from geoengine_openapi_client.models import *  # pylint: disable=wildcard-import,unused-wildcard-import  # noqa: F403
+from geoengine_api_client.models import *  # pylint: disable=wildcard-import,unused-wildcard-import  # noqa: F403
 
 Rgba = tuple[int, int, int, int]
 

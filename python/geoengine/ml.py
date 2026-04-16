@@ -8,8 +8,8 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-import geoengine_openapi_client
-from geoengine_openapi_client.models import MlModel, MlModelMetadata, MlTensorShape3D, RasterDataType
+import geoengine_api_client
+from geoengine_api_client.models import MlModel, MlModelMetadata, MlTensorShape3D, RasterDataType
 from onnx import ModelProto, TensorProto, TypeProto
 from onnx.helper import tensor_dtype_to_string
 
@@ -45,19 +45,19 @@ def register_ml_model(
 
     session = get_session()
 
-    with geoengine_openapi_client.ApiClient(session.configuration) as api_client:
+    with geoengine_api_client.ApiClient(session.configuration) as api_client:
         with tempfile.TemporaryDirectory() as temp_dir:
             file_name = Path(temp_dir) / model_config.file_name
 
             with open(file_name, "wb") as file:
                 file.write(onnx_model.SerializeToString())
 
-            uploads_api = geoengine_openapi_client.UploadsApi(api_client)
+            uploads_api = geoengine_api_client.UploadsApi(api_client)
             response = uploads_api.upload_handler([str(file_name)], _request_timeout=upload_timeout)
 
         upload_id = UploadId.from_response(response)
 
-        ml_api = geoengine_openapi_client.MLApi(api_client)
+        ml_api = geoengine_api_client.MLApi(api_client)
 
         model = MlModel(
             name=model_config.name,

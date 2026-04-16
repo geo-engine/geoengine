@@ -1,0 +1,15 @@
+--- typescript/src/models/TypedOperator.ts
++++ typescript/src/models/TypedOperator.ts
+@@ -88,3 +88,12 @@
+     return {};
+ }
+ 
++
++/**
++* Check if a given object implements the TypedOperator interface.
++*/
++export function instanceOfTypedOperator(value: object): value is TypedOperator {
++    return instanceOfTypedPlotOperator(value)
++        || instanceOfTypedRasterOperator(value)
++        || instanceOfTypedVectorOperator(value);
++}

@@ -1,0 +1,11 @@
+--- rust/src/models/spatial_bounds_derive.rs
++++ rust/src/models/spatial_bounds_derive.rs
+@@ -13,7 +13,7 @@
+ 
+ /// SpatialBoundsDerive : Spatial bounds derivation options for the [`MockPointSource`].
+ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+-#[serde(tag = "type")]
++#[serde(untagged)]
+ pub enum SpatialBoundsDerive {
+     #[serde(rename="derive")]
+     Derive(Box<models::SpatialBoundsDeriveDerive>),

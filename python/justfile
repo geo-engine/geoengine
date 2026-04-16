@@ -41,6 +41,7 @@ install-venv python-version="": common::_clear
 [arg('module_resolution', pattern='|--resolution=lowest-direct')]
 [group("install")]
 install-dependencies features module_resolution="": common::_clear _venv-is-installed
+    {{ PIP }} install {{ module_resolution }} -e ../api-clients/python --config-settings editable_mode=compat
     {{ PIP }} install {{ module_resolution }} -e .[{{ features }}]
 
 # Check if Python code is formatted correctly, check for linting errors and type errors.
@@ -85,3 +86,7 @@ run-examples test-code-path="../geoengine" build-type="debug" coverage="": commo
     GEOENGINE_TEST_BUILD_TYPE={{ build-type }} \
     {{ if coverage == "" { "" } else { 'COVERAGE_COMMAND="' + coverage + '"' } }} \
     {{ PYTHON }} test_all_notebooks.py
+
+format-code: common::_clear _venv-is-installed
+    {{ PYTHON }} -m ruff format
+    {{ PYTHON }} -m ruff check --fix

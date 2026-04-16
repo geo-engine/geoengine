@@ -6,7 +6,7 @@ import unittest
 from datetime import datetime
 from uuid import UUID
 
-import geoengine_openapi_client
+import geoengine_api_client
 import geopandas as gpd
 import geopandas.testing  # pylint: disable=unused-import
 from numpy import nan
@@ -735,7 +735,7 @@ class WfsTests(unittest.TestCase):
                 },
                 request_headers={
                     "Authorization": "Bearer e327d9c3-a4f3-4bd7-a5e1-30b26cae8064",
-                    "User-Agent": f"geoengine/openapi-client/python/{geoengine_openapi_client.__version__}",
+                    "User-Agent": f"geoengine/openapi-client/python/{geoengine_api_client.__version__}",
                 },
             )
 

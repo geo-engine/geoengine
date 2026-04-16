@@ -1,0 +1,11 @@
+--- rust/src/models/vector_operator.rs
++++ rust/src/models/vector_operator.rs
+@@ -13,7 +13,7 @@
+ 
+ /// VectorOperator : An operator that produces vector data.
+ #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+-#[serde(tag = "type")]
++#[serde(untagged)]
+ pub enum VectorOperator {
+     #[serde(rename="MockPointSource")]
+     MockPointSource(Box<models::MockPointSource>),

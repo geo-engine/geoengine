@@ -8,7 +8,7 @@ from dataclasses import dataclass
 from enum import Enum
 from typing import Any, Literal, cast
 
-import geoengine_openapi_client
+import geoengine_api_client
 import numpy as np
 
 from geoengine.datasets import DatasetName
@@ -743,7 +743,7 @@ class Expression(RasterOperator):
 
         output_band = None
         if "outputBand" in operator_dict["params"] and operator_dict["params"]["outputBand"] is not None:
-            raster_band_descriptor = geoengine_openapi_client.RasterBandDescriptor.from_dict(
+            raster_band_descriptor = geoengine_api_client.RasterBandDescriptor.from_dict(
                 operator_dict["params"]["outputBand"]
             )
             if raster_band_descriptor is None:
@@ -893,7 +893,7 @@ class VectorExpression(VectorOperator):
         output_measurement = None
         if "outputMeasurement" in operator_dict["params"]:
             output_measurement = Measurement.from_response(
-                geoengine_openapi_client.Measurement.from_dict(operator_dict["params"]["outputMeasurement"])
+                geoengine_api_client.Measurement.from_dict(operator_dict["params"]["outputMeasurement"])
             )
 
         return VectorExpression(

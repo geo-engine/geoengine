@@ -3,7 +3,7 @@
 import unittest
 
 import numpy as np
-from geoengine_openapi_client.models import (
+from geoengine_api_client.models import (
     MlModelInputNoDataHandling,
     MlModelInputNoDataHandlingVariant,
     MlModelMetadata,

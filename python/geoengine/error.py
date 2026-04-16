@@ -6,7 +6,7 @@ import json
 import xml.etree.ElementTree as ET
 from typing import Any
 
-import geoengine_openapi_client
+import geoengine_api_client
 from requests import HTTPError, Response
 
 
@@ -18,10 +18,10 @@ class GeoEngineException(Exception):
     error: str
     message: str
 
-    def __init__(self, response: geoengine_openapi_client.ApiException | dict[str, str]) -> None:
+    def __init__(self, response: geoengine_api_client.ApiException | dict[str, str]) -> None:
         super().__init__()
 
-        if isinstance(response, geoengine_openapi_client.ApiException):
+        if isinstance(response, geoengine_api_client.ApiException):
             obj = json.loads(response.body) if response.body else {"error": "unknown", "message": "unknown"}
         else:
             obj = response
