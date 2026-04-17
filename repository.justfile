@@ -42,6 +42,7 @@ FORMAT_FIND_EXCLUDES := '\
     -not -path "./python/.venv/*" \
     -not -path "./target/*" \
     -not -path "./ui/.angular/*" \
+    -not -path "./openapi.json" `# generated file` \
     -not -path "./www/*" `# covered by www itself` \
     '
 
