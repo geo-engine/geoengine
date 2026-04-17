@@ -59,7 +59,7 @@ format-json write="false": common::_clear
     find . -type f -name "*.json" {{ FORMAT_FIND_EXCLUDES }} \
     | xargs npx prettier {{ if write != "true" { "--check" } else { "--write" } }}
 
-VERSION_CMD := "cargo metadata --manifest-path geoengine/Cargo.toml --format-version=1 --no-deps | jq -r '.packages[0].version'"
+VERSION_CMD := "cd geoengine && cargo metadata --manifest-path Cargo.toml --format-version=1 --no-deps | jq -r '.packages[0].version'"
 PYTHON_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.version"'
 PYTHON_DEP_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.dependencies[0]" | sed -E "s/.*==\s*//"'
 API_CLIENT_VERSION_CMD := "python -c \"import configparser;cp=configparser.ConfigParser();cp.read('api-clients/.generation/config.ini');print(cp['general']['version'])\""
