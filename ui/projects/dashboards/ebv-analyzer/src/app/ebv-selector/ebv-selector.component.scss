@@ -1,0 +1,88 @@
+.geobon-logo {
+    text-align: center;
+    margin: 0 auto;
+
+    @media (max-width: 1480px) {
+        flex: 1;
+    }
+
+    mat-icon {
+        vertical-align: baseline;
+        height: 1.5rem;
+        width: 100px;
+        margin-top: 0.75rem;
+        margin-left: 0;
+    }
+
+    .title {
+        font-family: 'Pacifico', cursive;
+    }
+
+    .subtitle {
+        font-size: 0.5rem;
+        position: absolute;
+        margin-top: -1.25rem;
+        margin-left: 0.5rem;
+    }
+}
+
+mat-toolbar {
+    height: 64px !important;
+}
+
+.container {
+    padding: 1rem;
+    overflow: auto;
+    height: calc(100% - 64px);
+    box-sizing: border-box;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+mat-spinner {
+    margin: 0 auto;
+}
+
+.label {
+    color: var(--geoengine-foreground-secondary-text-color);
+}
+
+.justify {
+    text-align: justify;
+}
+
+mat-divider {
+    margin: 1rem 0;
+}
+
+.spacer {
+    margin-top: 1rem;
+}
+
+.ebv-actions {
+    display: flex;
+    flex-direction: row;
+    gap: 1rem;
+
+    button.show {
+        flex: 1;
+    }
+
+    button > mat-icon {
+        margin: 0;
+    }
+}
+
+.pin-symbology {
+    margin: 1rem 0;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.pin-symbology-text {
+    color: var(--geoengine-foreground-secondary-text-color);
+    font-style: italic;
+    margin-right: 1rem;
+}

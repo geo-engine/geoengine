@@ -1,0 +1,22 @@
+# Artifacts
+dist
+docker-files
+node-modules
+
+# IDEs
+.vscode
+.idea
+
+# Misc
+custom_typings
+scripts
+
+# CI
+.github
+
+# Data
+*.geojson
+
+# Angular
+.angular/cache/
+**/browserslist

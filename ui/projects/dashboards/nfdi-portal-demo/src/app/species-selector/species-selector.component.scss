@@ -1,0 +1,63 @@
+:host {
+    overflow-y: auto;
+    overflow-x: hidden;
+    height: calc(100% - 128px);
+    display: block;
+}
+.container {
+    display: block;
+    margin: 1rem;
+}
+
+mat-toolbar {
+    height: 128px !important;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+mat-spinner {
+    margin: 0 auto;
+}
+
+mat-divider {
+    margin: 1rem 0;
+}
+
+.spacer {
+    padding-top: 1rem;
+}
+
+.species-info {
+    p.mat-caption {
+        color: var(--geoengine-foreground-secondary-text-color);
+    }
+
+    img {
+        width: 100%;
+    }
+
+    p.info-text {
+        text-align: justify;
+    }
+}
+
+.intensityToggle {
+    margin-top: 0.5rem;
+
+    p {
+        width: 100%;
+    }
+}
+
+.intensityLabel {
+    margin-top: 0.7rem;
+}
+
+.startEndYears {
+    color: var(--geoengine-foreground-secondary-text-color);
+    margin-top: -0.25rem;
+    margin-bottom: 0.5rem;
+    margin-right: 3rem;
+}

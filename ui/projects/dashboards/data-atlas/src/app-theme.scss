@@ -1,0 +1,135 @@
+@use '@angular/material' as mat;
+
+// Material Base Styles
+// TODO(v15): As of v15 mat.legacy-core no longer includes default typography styles.
+//  The following line adds:
+//    1. Default typography styles for all components
+//    2. Styles for typography hierarchy classes (e.g. .mat-headline-1)
+//  If you specify typography styles for the components you use elsewhere, you should delete this line.
+//  If you don't need the default component typographies but still want the hierarchy styles,
+//  you can delete this line and instead use:
+//    `@include mat.legacy-typography-hierarchy(mat.define-typography-config());`
+@include mat.all-component-typographies();
+@include mat.elevation-classes();
+@include mat.app-background();
+
+// Define Colors
+$terranova-green: (
+    50: #f3f8e7,
+    100: #e1edc2,
+    200: #cee19a,
+    300: #bad571,
+    400: #abcc52,
+    500: #9cc334,
+    600: #94bd2f,
+    700: #8ab527,
+    800: #80ae21,
+    900: #6ea115,
+    A100: #eeffd4,
+    A200: #daffa1,
+    A400: #c7ff6e,
+    A700: #bdff54,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #000000,
+        700: #000000,
+        800: #000000,
+        900: #000000,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+$terranova-blue: (
+    50: #e7f3f9,
+    100: #c3e1ef,
+    200: #9bcde5,
+    300: #72b8db,
+    400: #54a9d3,
+    500: #369acb,
+    600: #3092c6,
+    700: #2988be,
+    800: #227eb8,
+    900: #166cac,
+    A100: #dff0ff,
+    A200: #acd9ff,
+    A400: #79c2ff,
+    A700: #5fb7ff,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #ffffff,
+        700: #ffffff,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+$terranova-brown: (
+    50: #ece9e3,
+    100: #cfc8ba,
+    200: #afa48c,
+    300: #8f7f5e,
+    400: #77633c,
+    500: #5f4819,
+    600: #574116,
+    700: #4d3812,
+    800: #43300e,
+    900: #322108,
+    A100: #ffbc6c,
+    A200: #ffa539,
+    A400: #ff8e06,
+    A700: #eb8000,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #ffffff,
+        500: #ffffff,
+        600: #ffffff,
+        700: #ffffff,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+// Define App Theme
+$geoengine-primary: mat.m2-define-palette($terranova-blue);
+$geoengine-accent: mat.m2-define-palette($terranova-green, A200, A100, A400);
+$geoengine-warn: mat.m2-define-palette(mat.$m2-red-palette);
+
+// Create the theme object
+$geoengine-theme: mat.m2-define-light-theme(
+    (
+        color: (
+            primary: $geoengine-primary,
+            accent: $geoengine-accent,
+            warn: $geoengine-warn,
+        ),
+        typography: mat.m2-define-typography-config(),
+        density: 0,
+    )
+);
+
+// Apply Angular Material Mixin to Color Theme
+@include mat.all-component-themes($geoengine-theme);

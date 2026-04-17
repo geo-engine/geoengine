@@ -1,0 +1,25 @@
+<span>
+    @if (mediaUrls.length > 0) {
+        <button mat-icon-button (click)="openMediaviewDialog(0)">
+            @if (media === 'image') {
+                <mat-icon color="primary">image</mat-icon>
+            }
+            @if (media === 'audio') {
+                <mat-icon color="primary">music_video</mat-icon>
+            }
+            @if (media === 'video') {
+                <mat-icon color="primary">movie</mat-icon>
+            }
+            @if (media === 'media') {
+                <mat-icon color="primary">featured_play_list</mat-icon>
+            }
+            {{ mediaUrls.length }}
+            @if (mediaUrls.length === 1) {
+                {{ media }}
+            }
+            @if (mediaUrls.length !== 1) {
+                {{ media }}s
+            }
+        </button>
+    }
+</span>

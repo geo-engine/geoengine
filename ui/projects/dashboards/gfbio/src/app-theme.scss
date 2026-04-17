@@ -1,0 +1,139 @@
+@use '@angular/material' as mat;
+
+// Material Base Styles
+// TODO(v15): As of v15 mat.legacy-core no longer includes default typography styles.
+//  The following line adds:
+//    1. Default typography styles for all components
+//    2. Styles for typography hierarchy classes (e.g. .mat-headline-1)
+//  If you specify typography styles for the components you use elsewhere, you should delete this line.
+//  If you don't need the default component typographies but still want the hierarchy styles,
+//  you can delete this line and instead use:
+//    `@include mat.legacy-typography-hierarchy(mat.define-typography-config());`
+@include mat.all-component-typographies();
+@include mat.elevation-classes();
+@include mat.app-background();
+
+// Define Colors
+$gfbio-darkblue: (
+    50: #e7ebf4,
+    100: #c2cee3,
+    200: #99add1,
+    300: #708cbf,
+    400: #5273b1,
+    500: #335aa3,
+    600: #2e529b,
+    700: #274891,
+    800: #203f88,
+    900: #142e77,
+    A100: #adc0ff,
+    A200: #7a98ff,
+    A400: #4770ff,
+    A700: #2e5dff,
+    contrast: (
+        50: rgba(black, 0.87),
+        100: rgba(black, 0.87),
+        200: rgba(black, 0.87),
+        300: rgba(black, 0.87),
+        400: rgba(white, 0.87),
+        500: rgba(white, 0.87),
+        600: rgba(white, 0.87),
+        700: rgba(white, 0.87),
+        800: rgba(white, 0.87),
+        900: rgba(white, 0.87),
+        A100: rgba(black, 0.87),
+        A200: rgba(black, 0.87),
+        A400: rgba(white, 0.87),
+        A700: rgba(white, 0.87),
+    ),
+);
+
+$gfbio-lightblue: (
+    50: #e5f7fd,
+    100: #bfeafa,
+    200: #95ddf7,
+    300: #6acff4,
+    400: #4ac4f1,
+    500: #2abaef,
+    600: #25b3ed,
+    700: #1fabeb,
+    800: #19a3e8,
+    900: #0f94e4,
+    A100: #ffffff,
+    A200: #ddf1ff,
+    A400: #aadcff,
+    A700: #90d2ff,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #000000,
+        700: #000000,
+        800: #000000,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+$gfbio-green: (
+    50: #f0f6e9,
+    100: #d9e8c8,
+    200: #c0d9a4,
+    300: #a7c97f,
+    400: #94be63,
+    500: #81b248,
+    600: #79ab41,
+    700: #6ea238,
+    800: #649930,
+    900: #518a21,
+    A100: #dfffc7,
+    A200: #c2ff94,
+    A400: #a5ff61,
+    A700: #97ff47,
+    contrast: (
+        50: rgba(black, 0.87),
+        100: rgba(black, 0.87),
+        200: rgba(black, 0.87),
+        300: rgba(black, 0.87),
+        400: rgba(black, 0.87),
+        500: rgba(black, 0.87),
+        600: rgba(black, 0.87),
+        700: rgba(black, 0.87),
+        800: rgba(white, 0.87),
+        900: rgba(white, 0.87),
+        A100: rgba(black, 0.87),
+        A200: rgba(black, 0.87),
+        A400: rgba(black, 0.87),
+        A700: rgba(black, 0.87),
+    ),
+);
+
+// Define App Theme
+$geoengine-primary: mat.m2-define-palette($gfbio-darkblue);
+$geoengine-accent: mat.m2-define-palette($gfbio-green, A200, A100, A400);
+$geoengine-warn: mat.m2-define-palette(mat.$m2-red-palette);
+
+$geoengine-typography: mat.m2-define-typography-config(
+    $font-family: 'Poppins',
+);
+
+// Create the theme object
+$geoengine-theme: mat.m2-define-light-theme(
+    (
+        color: (
+            primary: $geoengine-primary,
+            accent: $geoengine-accent,
+            warn: $geoengine-warn,
+        ),
+        typography: $geoengine-typography,
+        density: 0,
+    )
+);
+
+// Apply Angular Material Mixin to Color Theme
+@include mat.all-component-themes($geoengine-theme);

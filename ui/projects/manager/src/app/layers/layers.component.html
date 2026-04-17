@@ -1,0 +1,54 @@
+<div class="container">
+    <div class="left">
+        @if (addedItem(); as item) {
+            <button mat-stroked-button class="browseButton" (click)="backToAllItems()">
+                <mat-icon>chevron_left</mat-icon>Back to all items
+            </button>
+            <mat-nav-list>
+                <mat-list-item class="selected">
+                    <h4 matListItemTitle>{{ item.name }}</h4>
+                    <p matListItemLine>{{ item.description }}</p>
+                </mat-list-item></mat-nav-list
+            >
+        }
+        <geoengine-layer-collection-navigation
+            [showLayerToggle]="false"
+            [highlightSelection]="true"
+            [collectionNavigation]="CollectionNavigation.Button"
+            [collectionId]="rootCollectionId"
+            (selectLayer)="selectLayer($event)"
+            (selectCollection)="selectCollection($event)"
+            (navigateCollection)="navigateToCollection($event)"
+            [class.hidden]="!!addedItem()"
+        ></geoengine-layer-collection-navigation>
+
+        <button class="add-item" mat-raised-button color="primary" (click)="addItem()" [class.hidden]="!!addedItem()">
+            <mat-icon>add</mat-icon>Add Item
+        </button>
+    </div>
+
+    @if (selectedItem(); as item) {
+        @switch (item.type) {
+            @case (ItemType.Collection) {
+                <geoengine-manager-layer-collection-editor
+                    [collectionListing]="item.collection"
+                    [parentCollection]="currentCollection()"
+                    (layerSelected)="selectLayer($event)"
+                    (collectionSelected)="selectCollection($event)"
+                    (collectionUpdated)="collectionUpdated()"
+                    (collectionDeleted)="itemDeleted()"
+                ></geoengine-manager-layer-collection-editor>
+            }
+            @case (ItemType.Layer) {
+                <geoengine-manager-layer-editor
+                    [layerListing]="item.layer"
+                    [parentCollection]="currentCollection()"
+                    (layerUpdated)="layerUpdated()"
+                    (layerDeleted)="itemDeleted()"
+                ></geoengine-manager-layer-editor>
+            }
+        }
+    } @else {
+        <div class="no-item">Please select a layer</div>
+    }
+</div>

@@ -1,0 +1,65 @@
+<geoengine-sidenav-header>Add Data</geoengine-sidenav-header>
+
+<mat-stepper orientation="vertical" linear #stepper>
+    <mat-step completed="false">
+        <ng-template matStepLabel>Upload files</ng-template>
+
+        <geoengine-drag-and-drop (selectFilesEvent)="selectedFiles = $event"></geoengine-drag-and-drop>
+
+        <div class="actions">
+            <button type="button" mat-raised-button color="primary" [disabled]="!selectedFiles?.length" (click)="upload()">Upload</button>
+        </div>
+        @if (progress$ | async; as progress) {
+            <mat-progress-bar mode="determinate" [value]="progress"></mat-progress-bar>
+        }
+    </mat-step>
+
+    <mat-step [stepControl]="formMetaData">
+        <ng-template matStepLabel>Specify meta data</ng-template>
+        <geoengine-ogr-dataset [uploadId]="uploadId"></geoengine-ogr-dataset>
+    </mat-step>
+
+    <mat-step [stepControl]="formNameDescription">
+        <form [formGroup]="formNameDescription" (ngSubmit)="submitCreate()">
+            <ng-template matStepLabel>Specify dataset name and description</ng-template>
+            <p>
+                <mat-form-field appearance="fill">
+                    <mat-label>Display Name</mat-label>
+                    <input matInput type="text" placeholder="New Dataset" formControlName="displayName" />
+                </mat-form-field>
+            </p>
+            <p>
+                <mat-form-field appearance="fill">
+                    <mat-label>Dataset Name</mat-label>
+                    <input matInput type="text" placeholder="data_set_name" formControlName="name" />
+                    @if (userNamePrefix !== '_') {
+                        <span matTextPrefix>{{ userNamePrefix }}:</span>
+                    }
+                </mat-form-field>
+            </p>
+            <p>
+                <mat-form-field appearance="fill">
+                    <mat-label>Dataset Description</mat-label>
+                    <textarea matInput formControlName="description"></textarea>
+                </mat-form-field>
+            </p>
+
+            <div class="actions">
+                <button
+                    type="submit"
+                    mat-raised-button
+                    color="primary"
+                    [disabled]="(formNameDescription.statusChanges | async) !== 'VALID'"
+                >
+                    Create
+                </button>
+            </div>
+        </form>
+    </mat-step>
+    <mat-step editable="false" completed="false">
+        <ng-template matStepLabel>Done</ng-template>
+        <div class="actions">
+            <button mat-raised-button color="primary" (click)="addToMap()">Add to map</button>
+        </div>
+    </mat-step>
+</mat-stepper>

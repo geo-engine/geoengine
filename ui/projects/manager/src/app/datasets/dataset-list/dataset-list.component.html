@@ -1,0 +1,35 @@
+<div class="container">
+    @if (addedDataset; as item) {
+        <button mat-stroked-button class="browseButton" (click)="backToAllDatasets()">
+            <mat-icon>chevron_left</mat-icon>Back to all datasets
+        </button>
+        <mat-nav-list>
+            <mat-list-item class="selected">
+                <h4 matListItemTitle>{{ item.displayName }} [{{ item.name }}]</h4>
+                <p matListItemLine>{{ item.description }}</p>
+            </mat-list-item></mat-nav-list
+        >
+    } @else {
+        <div class="flex-container">
+            <mat-form-field appearance="fill">
+                <mat-label>Filter by name</mat-label>
+                <input matInput type="text" [(ngModel)]="searchName" (input)="onSearchChange($event)" />
+            </mat-form-field>
+            <button mat-raised-button color="primary" class="add-dataset" (click)="addDataset()"><mat-icon>add</mat-icon></button>
+        </div>
+        <cdk-virtual-scroll-viewport class="bottom" [itemSize]="itemSizePx" (scrolledIndexChange)="onScrolledIndexChange($event)">
+            <mat-nav-list>
+                <ng-container *cdkVirtualFor="let item of source; trackBy: trackById">
+                    <mat-list-item [class.selected]="(selectedDataset$ | async) === item" (click)="select(item)">
+                        <h4 matListItemTitle>{{ item.displayName }} [{{ item.name }}]</h4>
+                        <p matListItemLine>{{ item.description }}</p>
+                    </mat-list-item>
+                </ng-container>
+            </mat-nav-list>
+
+            @if (source?.loading$ | async) {
+                <mat-spinner [diameter]="loadingSpinnerDiameterPx"></mat-spinner>
+            }
+        </cdk-virtual-scroll-viewport>
+    }
+</div>

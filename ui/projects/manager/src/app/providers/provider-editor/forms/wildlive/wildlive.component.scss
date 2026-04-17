@@ -1,0 +1,24 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+mat-card {
+    width: 100%;
+}
+
+p {
+    margin: 1rem 0.5rem;
+    &.disabled {
+        color: var(--geoengine-foreground-secondary-text-color);
+    }
+}
+
+button {
+    margin: 1rem 0.5rem;
+}

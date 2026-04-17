@@ -1,0 +1,23 @@
+<mat-card appearance="outlined" class="dropzone">
+    <input class="input-dropzone" type="file" #fileInput id="file" multiple (change)="selectFiles($any($event.target))" />
+    <h3>Drag and drop file here</h3>
+    <h3>or</h3>
+    <button class="browse-button" type="button" mat-raised-button color="primary" (click)="fileInput.click()">Browse for file</button>
+</mat-card>
+
+@if (selectedFiles?.length) {
+    <mat-card appearance="outlined" class="files-list">
+        @for (file of selectedFiles; track file) {
+            <mat-list dense>
+                <mat-list-item>
+                    <button class="deleteIcon" mat-icon-button matListItemMeta (click)="removeFile(file)">
+                        <mat-icon>delete</mat-icon>
+                    </button>
+                    <span matListItemTitle>{{ file.name }}</span>
+                    <span matListItemLine class="file-size">{{ formatBytes(file.size) }}</span>
+                </mat-list-item>
+                <mat-divider></mat-divider>
+            </mat-list>
+        }
+    </mat-card>
+}

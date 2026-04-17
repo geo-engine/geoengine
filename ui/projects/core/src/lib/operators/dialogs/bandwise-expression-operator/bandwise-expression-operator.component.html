@@ -1,0 +1,59 @@
+<geoengine-sidenav-header>Calculate Expression on Raster</geoengine-sidenav-header>
+
+@if (projectHasRasterLayers$ | async) {
+    <form [formGroup]="form" (ngSubmit)="add()">
+        <geoengine-operator-dialog-container [loading]="loading$ | async | valueDefault: false">
+            <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/bandwise-expression.html" target="_blank">
+                <mat-icon>help_center</mat-icon>
+            </a>
+            <ng-container operatorInput>
+                <geoengine-layer-selection [types]="RASTER_TYPE" formControlName="rasterLayer"></geoengine-layer-selection>
+            </ng-container>
+            <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/bandwise-expression.html" target="_blank">
+                <mat-icon>help_center</mat-icon>
+            </a>
+            <ng-container operatorParameters>
+                <p>Use <i>x</i> to refer to the current value of the pixel.</p>
+                <geoengine-code-editor formControlName="expression" language="Rust" header="fn(x):"></geoengine-code-editor>
+                @if (lastError$ | async; as lastError) {
+                    <p class="error">{{ lastError }}</p>
+                }
+                <mat-checkbox formControlName="mapNoData">Map No-Data with expression</mat-checkbox>
+                <mat-form-field>
+                    <mat-label>Output Data Type</mat-label>
+                    <mat-select formControlName="dataType">
+                        @for (dataType of outputDataTypes$ | async; track dataType[0].getCode()) {
+                            <mat-option [value]="dataType[0]"> {{ dataType[0] }} {{ dataType[1] }} </mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+            </ng-container>
+            <ng-container layerSpecification>
+                <geoengine-operator-output-name formControlName="name">
+                    @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                        <mat-error> The name must be non-empty. </mat-error>
+                    }
+                </geoengine-operator-output-name>
+                <geoengine-symbology-creator #symbologyCreator></geoengine-symbology-creator>
+            </ng-container>
+            <ng-container actions>
+                <button
+                    type="submit"
+                    mat-raised-button
+                    color="primary"
+                    [disabled]="form.invalid || symbologyCreator.form.invalid || (loading$ | async)"
+                >
+                    Create
+                </button>
+            </ng-container>
+        </geoengine-operator-dialog-container>
+    </form>
+} @else {
+    <p class="no-rasters">
+        no raster input available
+        <br />
+        @if (dataListConfig()) {
+            <button mat-button (click)="goToAddDataTab()">⇢ add some data ⇢</button>
+        }
+    </p>
+}

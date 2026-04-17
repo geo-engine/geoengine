@@ -1,0 +1,20 @@
+<geoengine-sidenav-header>Operators</geoengine-sidenav-header>
+<geoengine-sidenav-search (searchString)="searchString$.next($event)"></geoengine-sidenav-search>
+<mat-nav-list>
+    @for (group of operatorGroups$ | async; track group) {
+        <h3 matSubheader>{{ group.name }}</h3>
+        @for (operator of group.list; track operator) {
+            <mat-list-item (click)="load(operator.component, operator.config)">
+                <img matListItemIcon [src]="operator.type.ICON_URL" [alt]="operator.type.NAME" />
+                <h4
+                    matListItemTitle
+                    bind-innerHtml="operator.type.NAME | geoengineHighlightPipe: (searchString$ | async) | geoengineSafeHtml"
+                ></h4>
+                <p
+                    matListItemLine
+                    bind-innerHtml="operator.description | geoengineHighlightPipe: (searchString$ | async) | geoengineSafeHtml"
+                ></p>
+            </mat-list-item>
+        }
+    }
+</mat-nav-list>

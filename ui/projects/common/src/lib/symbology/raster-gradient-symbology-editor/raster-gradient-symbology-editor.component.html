@@ -1,0 +1,121 @@
+<mat-card>
+    <mat-card-header>
+        <mat-card-title-group>
+            <mat-card-title>Gradient Layer Properties</mat-card-title>
+            <mat-card-subtitle>Gradient properties</mat-card-subtitle>
+            <mat-icon class="icon">map</mat-icon>
+        </mat-card-title-group>
+    </mat-card-header>
+    <mat-card-content>
+        <div>
+            <geoengine-color-attribute-input
+                [ngModel]="getNoDataColor()"
+                (ngModelChange)="updateNoDataColor($event)"
+                attributePlaceholder=""
+                [readonlyAttribute]="true"
+            >
+            </geoengine-color-attribute-input>
+            <geoengine-color-attribute-input
+                [ngModel]="getUnderColor()"
+                (ngModelChange)="updateUnderColor($event)"
+                attributePlaceholder=""
+                [readonlyAttribute]="true"
+            >
+            </geoengine-color-attribute-input>
+            <geoengine-color-attribute-input
+                [ngModel]="getOverColor()"
+                (ngModelChange)="updateOverColor($event)"
+                attributePlaceholder=""
+                [readonlyAttribute]="true"
+            >
+            </geoengine-color-attribute-input>
+        </div>
+    </mat-card-content>
+
+    <div class="colorizer-preview" [style.background]="colorizer() | geoengineColorizerCssGradient: 90"></div>
+</mat-card>
+
+<mat-card>
+    <mat-card-header>
+        <mat-card-title-group>
+            <mat-card-title>Create Color Table</mat-card-title>
+            <mat-card-subtitle>Create a new color table</mat-card-subtitle>
+            <mat-icon class="icon">looks</mat-icon>
+        </mat-card-title-group>
+    </mat-card-header>
+    <mat-card-content>
+        <mat-tab-group>
+            <mat-tab label="Min/Max">
+                @if (queryParams()) {
+                    @if (histogramCreated === true) {
+                        <div class="histogram">
+                            @if (histogramData | async; as histogramData) {
+                                <geoengine-vega-viewer
+                                    [chartData]="histogramData"
+                                    (interactionChange)="updateBounds($any($event))"
+                                ></geoengine-vega-viewer>
+                            }
+                            @if (histogramLoading | async) {
+                                <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+                            }
+                        </div>
+                    }
+                    <div class="histogram-actions">
+                        <button mat-stroked-button (click)="updateHistogram()">
+                            @if (histogramCreated) {
+                                <!-- Only displayed before any histogram is created -->
+                                Update Histogram
+                            } @else {
+                                <!-- Only displayed after histogram is created -->
+                                Create Histogram
+                            }
+                        </button>
+                    </div>
+                }
+
+                <mat-divider></mat-divider>
+
+                <geoengine-color-map-selector
+                    (breakpointsChange)="updateBreakpoints($event)"
+                    [minValue]="layerMinValue"
+                    [maxValue]="layerMaxValue"
+                    [scale]="scale"
+                >
+                </geoengine-color-map-selector>
+
+                <mat-divider></mat-divider>
+
+                <button mat-stroked-button (click)="createColorTable()">Create color table</button>
+            </mat-tab>
+            @if (queryParams(); as queryParams) {
+                <mat-tab label="Percentiles">
+                    <geoengine-percentile-breakpoint-selector
+                        (breakpointsChange)="updateBreakpoints($event)"
+                        [band]="band()"
+                        [workflowId]="workflowId()"
+                        [queryParams]="queryParams"
+                    ></geoengine-percentile-breakpoint-selector>
+
+                    <div>
+                        <button mat-stroked-button (click)="createPercentilesColorTable()">Create color table</button>
+                    </div>
+                </mat-tab>
+            }
+        </mat-tab-group>
+    </mat-card-content>
+</mat-card>
+<mat-card>
+    <mat-card-header>
+        <mat-card-title-group>
+            <mat-card-title>Color Table</mat-card-title>
+            <mat-card-subtitle>Edit the color table</mat-card-subtitle>
+            <mat-icon class="icon">looks</mat-icon>
+        </mat-card-title-group>
+    </mat-card-header>
+    <mat-card-content>
+        <geoengine-color-table-editor
+            [colorTable]="colorTable"
+            (colorTableChanged)="updateColorTable($event)"
+        ></geoengine-color-table-editor>
+    </mat-card-content>
+</mat-card>

@@ -1,0 +1,11 @@
+<geoengine-sidenav-header>{{ repositoryName() }}</geoengine-sidenav-header>
+
+<cdk-virtual-scroll-viewport [itemSize]="itemSizePx" (scrolledIndexChange)="onScrolledIndexChange($event)">
+    <mat-nav-list>
+        <geoengine-dataset *cdkVirtualFor="let dataset of datasetSource; trackBy: trackById" [dataset]="dataset"></geoengine-dataset>
+    </mat-nav-list>
+
+    @if (datasetSource?.loading$ | async) {
+        <mat-spinner [diameter]="loadingSpinnerDiameterPx"></mat-spinner>
+    }
+</cdk-virtual-scroll-viewport>

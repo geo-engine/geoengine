@@ -1,0 +1,83 @@
+<geoengine-sidenav-header>Extract Raster Values and Add it to a Vector Layer</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="$event.preventDefault(); add()">
+    <geoengine-operator-dialog-container>
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/rastervectorjoin.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="allowedVectorTypes" formControlName="vectorLayer"></geoengine-layer-selection>
+            <geoengine-multi-layer-selection
+                [types]="allowedRasterTypes"
+                formControlName="rasterLayers"
+                [min]="minNumberOfRasterInputs"
+                [max]="maxNumberOfRasterInputs"
+            ></geoengine-multi-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/rastervectorjoin.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <p>Specify new column names:</p>
+            <mat-button-toggle-group
+                id="name-type"
+                [multiple]="false"
+                formControlName="columnNamesType"
+                (ngModelChange)="updateColumnNamesType()"
+            >
+                <mat-button-toggle [value]="ColumnNames.Default">Default</mat-button-toggle>
+                <mat-button-toggle [value]="ColumnNames.Suffix">Suffix</mat-button-toggle>
+                <mat-button-toggle [value]="ColumnNames.Names">Names</mat-button-toggle>
+            </mat-button-toggle-group>
+
+            @if (form.controls.columnNamesType.value !== ColumnNames.Default) {
+                <div formArrayName="columnNamesValues">
+                    @for (control of columnNameValues.controls; track control; let i = $index) {
+                        <mat-form-field>
+                            <mat-label>{{ columnNameHint(i) }} </mat-label>
+                            <input matInput type="text" [formControlName]="i" />
+                            @if (control.hasError('forbiddenValue')) {
+                                <mat-error>Conflict with existing column names</mat-error>
+                            }
+                        </mat-form-field>
+                    }
+                    @if (columnNameValues.hasError('duplicate')) {
+                        <mat-error class="name-error">Duplicate Name</mat-error>
+                    }
+                </div>
+            }
+            <section>
+                <label>Temporal Aggregation Method:</label>
+                <mat-radio-group formControlName="temporalAggregation" fxLayout="column">
+                    <mat-radio-button value="none">No aggregation</mat-radio-button>
+                    <mat-radio-button value="first">Use first value</mat-radio-button>
+                    <mat-radio-button value="mean">Average value</mat-radio-button>
+                </mat-radio-group>
+                <mat-checkbox formControlName="temporalAggregationIgnoreNodata">Ignore no data values</mat-checkbox>
+            </section>
+            <section>
+                <label>Feature Aggregation Method:</label>
+                <mat-radio-group formControlName="featureAggregation" fxLayout="column">
+                    <mat-radio-button value="first">Use first value</mat-radio-button>
+                    <mat-radio-button value="mean">Average value</mat-radio-button>
+                </mat-radio-group>
+                <mat-checkbox formControlName="featureAggregationIgnoreNodata">Ignore no data values</mat-checkbox>
+            </section>
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name formControlName="name">
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button mat-raised-button color="primary" type="submit" [disabled]="form.invalid">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

@@ -1,0 +1,268 @@
+@use '@angular/material' as mat;
+
+// Material Base Styles
+// TODO(v15): As of v15 mat.legacy-core no longer includes default typography styles.
+//  The following line adds:
+//    1. Default typography styles for all components
+//    2. Styles for typography hierarchy classes (e.g. .mat-headline-1)
+//  If you specify typography styles for the components you use elsewhere, you should delete this line.
+//  If you don't need the default component typographies but still want the hierarchy styles,
+//  you can delete this line and instead use:
+//    `@include mat.legacy-typography-hierarchy(mat.define-typography-config());`
+@include mat.all-component-typographies();
+@include mat.elevation-classes();
+@include mat.app-background();
+
+// Define Colors
+$gdo-red: (
+    50: #f7e5e2,
+    100: #ebbfb6,
+    200: #de9585,
+    300: #d16a54,
+    400: #c74a30,
+    500: #bd2a0b,
+    600: #b7250a,
+    700: #ae1f08,
+    800: #a61906,
+    900: #980f03,
+    A100: #ffc6c3,
+    A200: #ff9590,
+    A400: #ff645d,
+    A700: #ff4c44,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #ffffff,
+        500: #ffffff,
+        600: #ffffff,
+        700: #ffffff,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+$gdo-black: (
+    50: #e6e6e7,
+    100: #c1c2c2,
+    200: #989999,
+    300: #6f7070,
+    400: #505152,
+    500: #313233,
+    600: #2c2d2e,
+    700: #252627,
+    800: #1f1f20,
+    900: #131314,
+    A100: #6969f3,
+    A200: #3939ef,
+    A400: #0000f6,
+    A700: #0000dc,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #ffffff,
+        400: #ffffff,
+        500: #ffffff,
+        600: #ffffff,
+        700: #ffffff,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #ffffff,
+        A200: #ffffff,
+        A400: #ffffff,
+        A700: #ffffff,
+    ),
+);
+
+// Define Colors
+$gfbio-darkblue: (
+    50: #e7ebf4,
+    100: #c2cee3,
+    200: #99add1,
+    300: #708cbf,
+    400: #5273b1,
+    500: #335aa3,
+    600: #2e529b,
+    700: #274891,
+    800: #203f88,
+    900: #142e77,
+    A100: #adc0ff,
+    A200: #7a98ff,
+    A400: #4770ff,
+    A700: #2e5dff,
+    contrast: (
+        50: rgba(black, 0.87),
+        100: rgba(black, 0.87),
+        200: rgba(black, 0.87),
+        300: rgba(black, 0.87),
+        400: rgba(white, 0.87),
+        500: rgba(white, 0.87),
+        600: rgba(white, 0.87),
+        700: rgba(white, 0.87),
+        800: rgba(white, 0.87),
+        900: rgba(white, 0.87),
+        A100: rgba(black, 0.87),
+        A200: rgba(black, 0.87),
+        A400: rgba(white, 0.87),
+        A700: rgba(white, 0.87),
+    ),
+);
+
+$gfbio-green: (
+    50: #f0f6e9,
+    100: #d9e8c8,
+    200: #c0d9a4,
+    300: #a7c97f,
+    400: #94be63,
+    500: #81b248,
+    600: #79ab41,
+    700: #6ea238,
+    800: #649930,
+    900: #518a21,
+    A100: #dfffc7,
+    A200: #c2ff94,
+    A400: #a5ff61,
+    A700: #97ff47,
+    contrast: (
+        50: rgba(black, 0.87),
+        100: rgba(black, 0.87),
+        200: rgba(black, 0.87),
+        300: rgba(black, 0.87),
+        400: rgba(black, 0.87),
+        500: rgba(black, 0.87),
+        600: rgba(black, 0.87),
+        700: rgba(black, 0.87),
+        800: rgba(white, 0.87),
+        900: rgba(white, 0.87),
+        A100: rgba(black, 0.87),
+        A200: rgba(black, 0.87),
+        A400: rgba(black, 0.87),
+        A700: rgba(black, 0.87),
+    ),
+);
+
+$md-white: (
+    50: #ffffff,
+    100: #ffffff,
+    200: #ffffff,
+    300: #ffffff,
+    400: #ffffff,
+    500: #ffffff,
+    600: #ffffff,
+    700: #ffffff,
+    800: #ffffff,
+    900: #ffffff,
+    A100: #ffffff,
+    A200: #ffffff,
+    A400: #ffffff,
+    A700: #ffffff,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #000000,
+        700: #000000,
+        800: #000000,
+        900: #000000,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+$nfdi-green: (
+    50: #effee8,
+    100: #d7fdc6,
+    200: #bdfca1,
+    300: #a2fa7b,
+    400: #8ef95e,
+    500: #7af842,
+    600: #72f73c,
+    700: #67f633,
+    800: #5df52b,
+    900: #4af31d,
+    A100: #ffffff,
+    A200: #f7fff5,
+    A400: #cdffc2,
+    A700: #b8ffa8,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #000000,
+        700: #000000,
+        800: #000000,
+        900: #000000,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+$nfdi-cyan: (
+    50: #e0f8f8,
+    100: #b3eeef,
+    200: #80e2e4,
+    300: #4dd6d9,
+    400: #26ced0,
+    500: #00c5c8,
+    600: #00bfc2,
+    700: #00b8bb,
+    800: #00b0b4,
+    900: #00a3a7,
+    A100: #d1feff,
+    A200: #9efdff,
+    A400: #6bfbff,
+    A700: #52fbff,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #000000,
+        700: #000000,
+        800: #ffffff,
+        900: #ffffff,
+        A100: #000000,
+        A200: #000000,
+        A400: #000000,
+        A700: #000000,
+    ),
+);
+
+// Define App Theme
+$geoengine-primary: mat.m2-define-palette($md-white);
+$geoengine-accent: mat.m2-define-palette($nfdi-cyan);
+$geoengine-warn: mat.m2-define-palette(mat.$m2-red-palette);
+
+// Create the theme object
+$geoengine-theme: mat.m2-define-light-theme(
+    (
+        color: (
+            primary: $geoengine-primary,
+            accent: $geoengine-accent,
+            warn: $geoengine-warn,
+        ),
+        typography: mat.m2-define-typography-config(),
+        density: 0,
+    )
+);
+
+// Apply Angular Material Mixin to Color Theme
+@include mat.all-component-themes($geoengine-theme);

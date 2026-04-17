@@ -1,0 +1,15 @@
+.map-info {
+    z-index: 1;
+    display: block;
+    position: absolute;
+    margin-bottom: 0.5rem;
+    max-height: 62px;
+    left: 0.5rem;
+    background-color: var(--geoengine-background-color, white);
+    border: solid 1px #ccc;
+    font-size: 0.7rem;
+    padding: 0.5rem;
+    white-space: pre-line;
+    overflow: visible;
+    cursor: pointer;
+}

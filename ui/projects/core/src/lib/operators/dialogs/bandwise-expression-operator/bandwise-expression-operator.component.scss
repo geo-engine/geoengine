@@ -1,0 +1,22 @@
+form {
+    height: 100%;
+}
+
+geoengine-code-editor {
+    margin-bottom: 1rem;
+}
+
+mat-form-field,
+geoengine-symbology-creator {
+    width: 100%;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+.no-rasters {
+    color: var(--geoengine-foreground-secondary-text-color, grey);
+    margin-top: 50%;
+    text-align: center;
+}

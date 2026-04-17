@@ -1,0 +1,21 @@
+@if (rasterSymbologyWorkflow) {
+    <geoengine-raster-symbology-editor
+        [symbologyWorkflow]="rasterSymbologyWorkflow"
+        (changedSymbology)="changeRasterSymbology($event)"
+    ></geoengine-raster-symbology-editor>
+}
+
+@if (vectorSymbologyWorkflow) {
+    <geoengine-vector-symbology-editor
+        [symbologyWorkflow]="vectorSymbologyWorkflow"
+        (changedSymbology)="changeVectorSymbology($event)"
+    ></geoengine-vector-symbology-editor>
+}
+
+<div class="actions">
+    @if (rasterSymbologyWorkflow) {
+        <button mat-raised-button (click)="resetChanges()" [disabled]="!unappliedChanges">Reset</button>
+    }
+
+    <button mat-raised-button color="primary" (click)="applyChanges()" [disabled]="!unappliedChanges">Apply</button>
+</div>

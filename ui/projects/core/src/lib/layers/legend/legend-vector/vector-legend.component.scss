@@ -1,0 +1,25 @@
+:host {
+    padding-left: 1rem;
+    padding-bottom: 0.4rem;
+    margin: 0;
+}
+
+mat-icon {
+    margin-right: 0.25rem;
+}
+
+.heading {
+    font-size: 12px;
+    margin-top: 0.5rem;
+}
+.single-line {
+    font-size: 12px;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
+}
+.segment {
+    font-size: 12px;
+}
+.segment:last-child {
+    padding-bottom: 0.5rem;
+}

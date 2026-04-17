@@ -1,0 +1,16 @@
+@if (isError()) {
+    <div class="error">An error occurred during authentication.</div>
+} @else {
+    <div class="info">You have been redirected here after authentication. You can close this window.</div>
+}
+
+@if (isDebugMode) {
+    <table class="debug">
+        @for (param of params() | keyvalue; track param.key) {
+            <tr>
+                <td>{{ param.key }}</td>
+                <td>{{ param.value }}</td>
+            </tr>
+        }
+    </table>
+}

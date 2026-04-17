@@ -1,0 +1,120 @@
+@if (search.isSearching) {
+    <mat-form-field class="search" appearance="outline" subscriptSizing="dynamic">
+        <mat-icon matPrefix>search</mat-icon>
+        <input
+            matInput
+            #searchInput
+            type="text"
+            placeholder="Search in collection"
+            [ngModel]="search.searchString.value"
+            (ngModelChange)="search.searchString.next($event)"
+            [matAutocomplete]="searchAutocomplete"
+        />
+    </mat-form-field>
+    <mat-autocomplete #searchAutocomplete="matAutocomplete">
+        @for (option of search.autocompleteResults | async; track option) {
+            <mat-option [value]="option" (onSelectionChange)="search.searchString.next(option); search.toggleSearch()">{{
+                option
+            }}</mat-option>
+        }
+    </mat-autocomplete>
+
+    <button
+        mat-button
+        class="search-settings-btn small-btn"
+        matTooltip="Search Settings"
+        matTooltipPosition="below"
+        [matMenuTriggerFor]="searchSettingsMenu"
+        #searchSettingsMenuTrigger="matMenuTrigger"
+    >
+        <mat-icon>tune</mat-icon>
+    </button>
+
+    <mat-menu #searchSettingsMenu="matMenu">
+        <!-- Stopping the click event propagation hinders the menu to disappear once the toolbar was clicked. -->
+        <mat-toolbar class="options-toolbar" (click)="$event.stopPropagation()">
+            <span>Options</span>
+            <span class="spacer"></span>
+            <button
+                mat-button
+                class="options-close-btn small-btn"
+                matTooltip="Close"
+                matTooltipPosition="below"
+                (click)="searchSettingsMenuTrigger.closeMenu()"
+            >
+                <mat-icon>close</mat-icon>
+            </button>
+        </mat-toolbar>
+
+        <!-- Stopping the click event propagation hinders the menu to disappear once the select was clicked. -->
+        <mat-form-field class="menu-form" (click)="$event.stopPropagation()">
+            <mat-label>Search type</mat-label>
+            <mat-select [(value)]="search.searchSettings.searchType">
+                @if (search.searchCapabilities.searchTypes.fulltext) {
+                    <mat-option value="fulltext">Fulltext</mat-option>
+                }
+                @if (search.searchCapabilities.searchTypes.prefix) {
+                    <mat-option value="prefix">Prefix</mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+        <!-- TODO: insert filter selection if filters are actually used -->
+    </mat-menu>
+
+    <button mat-button class="exit-search-btn small-btn" matTooltip="Exit Search" matTooltipPosition="below" (click)="search.exitSearch()">
+        <mat-icon>close</mat-icon>
+    </button>
+} @else {
+    <button
+        mat-button
+        class="back-btn small-btn"
+        (click)="breadcrumbs.back()"
+        matTooltip="Navigate Back"
+        matTooltipPosition="below"
+        [disabled]="breadcrumbs.isBackDisabled"
+    >
+        <mat-icon>arrow_back</mat-icon>
+    </button>
+
+    <button
+        mat-button
+        class="forth-btn small-btn"
+        (click)="breadcrumbs.forward()"
+        matTooltip="Navigate Forward"
+        matTooltipPosition="below"
+        [disabled]="breadcrumbs.isForwardDisabled"
+    >
+        <mat-icon>arrow_forward</mat-icon>
+    </button>
+
+    <div #scrollElement class="breadcrumbs">
+        <button mat-stroked-button (click)="breadcrumbs.navigateToRoot()" class="root-btn small-btn"><mat-icon>layers</mat-icon></button>
+        @for (item of breadcrumbs.activeTrail; track $index) {
+            <mat-icon>chevron_right</mat-icon>
+            <button mat-stroked-button class="breadcrumb" (click)="breadcrumbs.onBreadCrumbClick($index)">
+                @if (item.type === 'collection') {
+                    {{ layerCollectionItem(item).name }}
+                } @else {
+                    "{{ layerCollectionSearch(item).searchString }}"
+                }
+            </button>
+        }
+    </div>
+}
+
+@if (search.hasSearchCapabilities) {
+    <button mat-button class="search-btn small-btn" matTooltip="Search" matTooltipPosition="below" (click)="search.toggleSearch()">
+        <mat-icon>search</mat-icon>
+    </button>
+}
+
+<geoengine-layer-collection-list
+    class="portal-outlet"
+    [showLayerToggle]="showLayerToggle()"
+    [highlightSelection]="highlightSelection()"
+    [collectionNavigation]="collectionNavigation()"
+    (navigateCollection)="navigateToCollection($event)"
+    (selectLayer)="selectLayer.emit($event)"
+    (selectCollection)="selectCollection.emit($event)"
+    [collection]="providerLayerCollectionIdOrSearch"
+></geoengine-layer-collection-list>

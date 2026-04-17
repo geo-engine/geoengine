@@ -1,0 +1,84 @@
+@use '@angular/material' as mat;
+
+// Material Base Styles
+@include mat.all-component-typographies();
+@include mat.elevation-classes();
+@include mat.app-background();
+
+// Define Colors
+$geoengine-main-green: (
+    50: #e7f5e7,
+    100: #c6e5c3,
+    200: #a1d49d,
+    300: #7ac476,
+    400: #5db858,
+    // main color
+    500: #3fab39,
+    600: #359c31,
+    700: #298a26,
+    800: #1c7a1b,
+    900: #005b04,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #ffffff,
+        700: #ffffff,
+        800: #ffffff,
+        900: #ffffff,
+    ),
+);
+
+$geoengine-mid-blue: (
+    50: #e1f5fa,
+    100: #b3e4f3,
+    200: #83d3eb,
+    300: #56c1e4,
+    400: #36b4e0,
+    500: #18a7dd,
+    600: #0e99cf,
+    // main color
+    700: #0087bc,
+    800: #0176a9,
+    900: #005687,
+    contrast: (
+        50: #000000,
+        100: #000000,
+        200: #000000,
+        300: #000000,
+        400: #000000,
+        500: #000000,
+        600: #000000,
+        700: #000000,
+        800: #ffffff,
+        900: #ffffff,
+    ),
+);
+
+// Define App Theme
+$geoengine-primary: mat.m2-define-palette($geoengine-main-green, 500, 300, 900);
+$geoengine-accent: mat.m2-define-palette($geoengine-mid-blue, 700, 300, 900);
+$geoengine-warn: mat.m2-define-palette(mat.$m2-red-palette);
+
+$geoengine-typography: mat.m2-define-typography-config(
+    $font-family: 'Poppins',
+);
+
+// Create the theme object
+$geoengine-theme: mat.m2-define-light-theme(
+    (
+        color: (
+            primary: $geoengine-primary,
+            accent: $geoengine-accent,
+            warn: $geoengine-warn,
+        ),
+        typography: $geoengine-typography,
+        density: 0,
+    )
+);
+
+// Apply Angular Material Mixin to Color Theme
+@include mat.all-component-themes($geoengine-theme);

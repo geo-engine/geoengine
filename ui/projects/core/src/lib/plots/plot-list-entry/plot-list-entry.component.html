@@ -1,0 +1,59 @@
+<mat-card appearance="outlined">
+    <mat-card-header>
+        @if (plotIcon(); as plotIcon) {
+            <img mat-card-avatar [src]="plotIcon" [alt]="plotData()?.outputFormat" />
+        }
+        <mat-card-title>{{ plot().name }}</mat-card-title>
+        <mat-card-subtitle>{{ plotData()?.plotType }}</mat-card-subtitle>
+    </mat-card-header>
+    @if (isLoading()) {
+        <mat-card-content>
+            <mat-spinner></mat-spinner>
+        </mat-card-content>
+    }
+    @if (isOk()) {
+        <mat-card-content>
+            @switch (plotData()?.outputFormat) {
+                @case ('ImagePng') {
+                    <img [src]="plotData()?.data" [alt]="plot().name" />
+                }
+                @case ('JsonPlain') {
+                    <pre>{{ plotData()?.data | json }}</pre>
+                }
+                @case ('JsonVega') {
+                    <geoengine-vega-viewer [chartData]="plotData()?.data" [width]="width()"></geoengine-vega-viewer>
+                }
+                @default {
+                    <pre>{{ plotData()?.data }}</pre>
+                }
+            }
+        </mat-card-content>
+    }
+    @if (isOk()) {
+        <mat-card-actions fxLayout="row">
+            <button mat-icon-button (click)="showFullscreen()">
+                <mat-icon>fullscreen</mat-icon>
+            </button>
+            <span fxFlex></span>
+            <button mat-icon-button (click)="removePlot()">
+                <mat-icon>delete</mat-icon>
+            </button>
+        </mat-card-actions>
+    }
+    @if (isError()) {
+        <mat-card-content>
+            <em>{{ plotError()?.message }}</em>
+        </mat-card-content>
+    }
+    @if (isError()) {
+        <mat-card-actions fxLayout="row">
+            <button mat-icon-button (click)="reloadPlot()" class="error">
+                <mat-icon>replay</mat-icon>
+            </button>
+            <span fxFlex></span>
+            <button mat-icon-button (click)="removePlot()">
+                <mat-icon>delete</mat-icon>
+            </button>
+        </mat-card-actions>
+    }
+</mat-card>

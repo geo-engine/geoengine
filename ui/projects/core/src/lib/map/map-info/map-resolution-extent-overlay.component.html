@@ -1,0 +1,19 @@
+@if (info() | async; as info) {
+    <div class="map-info mat-elevation-z3" [style.bottom.px]="bottom()" (click)="togglePrecision()">
+        <table>
+            <tr>
+                <td colspan="3">Resolution: {{ info[0] }} {{ info[1] }}/px</td>
+            </tr>
+            <tr>
+                <td>Min:</td>
+                <td>x: {{ info[2] }}</td>
+                <td>y: {{ info[3] }}</td>
+            </tr>
+            <tr>
+                <td>Max:</td>
+                <td>x: {{ info[4] }}</td>
+                <td>y: {{ info[5] }}</td>
+            </tr>
+        </table>
+    </div>
+}

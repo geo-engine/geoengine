@@ -1,0 +1,26 @@
+<div>
+    <h4>Select input {{ title() }}</h4>
+</div>
+@if (hasLayers()) {
+    <div class="layer-and-expand">
+        <mat-form-field>
+            <mat-select placeholder="Input" [ngModel]="selectedLayer()" (ngModelChange)="setSelectedLayer($event)" (onBlur)="onBlur()">
+                @for (layer of layers.value(); track layer.id) {
+                    <mat-option [value]="layer">{{ layer.name }}</mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+        <button type="button" mat-icon-button class="info" (click)="toggleExpand()">
+            @if (expanded()) {
+                <mat-icon>expand_less</mat-icon>
+            } @else {
+                <mat-icon>expand_more</mat-icon>
+            }
+        </button>
+    </div>
+    @if (expanded()) {
+        <geoengine-layer-collection-layer-details [layerMetadata]="metadata.value()"></geoengine-layer-collection-layer-details>
+    }
+} @else {
+    <p>No input layers available.</p>
+}

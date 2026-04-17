@@ -1,0 +1,92 @@
+.grid-container {
+    margin: 1rem;
+    display: grid;
+    grid-template-columns: repeat(1, 1fr);
+    gap: 1rem;
+}
+
+.landscape {
+    &.grid-container {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .analyze {
+        grid-column: span 2;
+    }
+
+    .inspect {
+        grid-column-start: 2;
+        grid-row-start: 1;
+        grid-row-end: 4;
+    }
+
+    .chart-container {
+        display: flex;
+    }
+}
+
+.inspect {
+    min-height: 50vh !important;
+}
+
+.dashboard-card {
+    min-height: 10rem;
+}
+
+.more-button {
+    position: absolute;
+    top: 5px;
+    right: 10px;
+}
+
+.dashboard-card-content {
+    text-align: left;
+}
+
+.map-container {
+    margin: 1rem;
+    height: calc(100% - 2rem);
+    width: calc(100% - 2rem);
+}
+
+mat-card-content {
+    height: 100%;
+}
+
+button {
+    margin: 1rem;
+}
+
+geoengine-legend {
+    z-index: 4;
+    position: absolute;
+    top: 5rem;
+    left: 2.5rem;
+    background-color: rgba(255, 255, 255, 0.87);
+}
+
+.chart-container {
+    display: block;
+    align-items: center;
+}
+
+.chart-container geoengine-vega-viewer {
+    margin-right: 5rem;
+    width: unset;
+}
+
+.chart-container p {
+    margin: 0;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+mat-spinner {
+    margin: 0 auto;
+}
+
+.center {
+    text-align: center;
+}

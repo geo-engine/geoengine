@@ -1,0 +1,15 @@
+@if (roleTable) {
+    <table mat-table [dataSource]="roleTable">
+        <ng-container matColumnDef="roleName">
+            <td mat-cell *matCellDef="let roleName">{{ roleName }}</td>
+        </ng-container>
+        <tr mat-row *matRowDef="let row; columns: displayedColumns"></tr>
+    </table>
+}
+<div [hidden]="(numberOfRoles | async)!.valueOf() <= 3">
+    <mat-paginator [pageSizeOptions]="[3, 5]"> </mat-paginator>
+</div>
+
+@if (!roleNames) {
+    <p>No roles available.</p>
+}

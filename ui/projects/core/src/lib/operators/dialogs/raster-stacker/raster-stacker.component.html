@@ -1,0 +1,100 @@
+<geoengine-sidenav-header>Raster Stacker</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container>
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/rasterstacker.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-multi-layer-selection
+                [types]="inputTypes"
+                formControlName="rasterLayers"
+                [min]="2"
+                [max]="8"
+            ></geoengine-multi-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/rasterstacker.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <p>Specify handling of band name collisions:</p>
+            <mat-button-toggle-group id="rename-type" [multiple]="false" formControlName="renameBands" (ngModelChange)="updateRenameType()">
+                <mat-button-toggle [value]="RenameBands.Default">Default</mat-button-toggle>
+                <mat-button-toggle [value]="RenameBands.Suffix">Suffix</mat-button-toggle>
+                <mat-button-toggle [value]="RenameBands.Rename">Rename</mat-button-toggle>
+            </mat-button-toggle-group>
+
+            @if (form.controls.renameBands.value !== RenameBands.Default) {
+                <div formArrayName="renameValues">
+                    @for (control of renameValues.controls; track $index; let i = $index) {
+                        <mat-form-field>
+                            <mat-label>{{ renameHint(i) }} </mat-label>
+                            <input matInput type="text" [formControlName]="i" />
+                        </mat-form-field>
+                    }
+                    @if (renameValues.hasError('duplicate')) {
+                        <mat-error>Duplicate Name</mat-error>
+                    }
+                </div>
+            }
+
+            <p>
+                If the input rasters have different <i>data types</i>, you must select one common data type the rasters are converted to
+                before stacking.
+            </p>
+            <mat-form-field>
+                <mat-label>Data Type</mat-label>
+                <mat-select formControlName="dataType">
+                    @for (dataType of outputDataTypes(); track $index) {
+                        <mat-option [value]="dataType[0]"> {{ dataType[0] }} {{ dataType[1] }} </mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+
+            @if (outputSpatialReferences().length > 1) {
+                <p>
+                    If the input rasters have different <i>spatial references</i>, you must select one common spatial reference the rasters
+                    are converted to before stacking.
+                </p>
+                <mat-form-field>
+                    <mat-label>Spatial Reference</mat-label>
+                    <mat-select formControlName="spatialReference">
+                        @for (spatialReference of outputSpatialReferences(); track $index) {
+                            <mat-option [value]="spatialReference[0]"> {{ spatialReference[0] }} {{ spatialReference[1] }} </mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+            }
+
+            @if (outputRegrids().length > 1) {
+                <p>
+                    If the input rasters have different <i>spatial grids</i>, you must select one common spatial grid the rasters are
+                    converted to before stacking.
+                </p>
+                <mat-form-field>
+                    <mat-label>Spatial Grid</mat-label>
+                    <mat-select formControlName="regrid">
+                        @for (regrid of outputRegrids(); track $index) {
+                            <mat-option [value]="regrid[0]"> {{ regridToString(regrid[0]) }} {{ regrid[1] }} </mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+            }
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name formControlName="name">
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="form.invalid || (loading$ | async)">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

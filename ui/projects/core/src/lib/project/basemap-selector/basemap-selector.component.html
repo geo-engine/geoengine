@@ -1,0 +1,25 @@
+<geoengine-sidenav-header>Select Basemap</geoengine-sidenav-header>
+
+<p>Here you can select a basemap for your project. The selected basemap will be used as the background layer in the map view.</p>
+
+<mat-form-field>
+    <mat-label>Basemap</mat-label>
+    <mat-select [value]="selectedBasemap()" (selectionChange)="selectBasemap($event.value)">
+        @for (basemap of basemaps | keyvalue; track basemap.key) {
+            <mat-option [value]="basemap.key">{{ basemap.key }}</mat-option>
+        }
+    </mat-select>
+</mat-form-field>
+
+<p>Available projections:</p>
+
+<ul>
+    @for (projection of projections(); track projection) {
+        <li>{{ projection }}</li>
+    }
+</ul>
+
+<p>
+    <em>Note:</em>
+    If you select a basemap that is not compatible with the current projection, the map will use a basic natural earth relief instead.
+</p>

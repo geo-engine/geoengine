@@ -1,0 +1,84 @@
+:host {
+    display: grid;
+    width: 100%;
+    height: calc(100% - 0.5rem);
+    padding-top: 0.5rem;
+
+    grid-template-rows: min-content auto;
+    grid-template-columns: 0.5rem auto min-content min-content min-content 0.5rem;
+    grid-template-areas:
+        'gap-left breadcrumbs back forth search gap-right'
+        'content content content content content content';
+}
+
+.back-btn {
+    grid-area: back;
+}
+
+.forth-btn {
+    grid-area: forth;
+}
+
+.search-btn {
+    grid-area: search;
+}
+
+.small-btn {
+    min-width: 1rem;
+    margin: 0;
+
+    align-self: center;
+
+    mat-icon {
+        margin: 0;
+    }
+}
+
+.breadcrumbs {
+    grid-area: breadcrumbs;
+
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+
+    padding-bottom: 0.25rem;
+
+    button {
+        display: inline-block;
+    }
+
+    mat-icon {
+        vertical-align: middle;
+    }
+}
+
+.search {
+    grid-area: breadcrumbs;
+}
+
+.exit-search-btn {
+    grid-area: back;
+}
+
+.search-settings-btn {
+    grid-area: forth;
+}
+
+.portal-outlet {
+    grid-area: content;
+}
+
+.options-toolbar {
+    margin-top: -0.5rem;
+    height: 2.5rem;
+}
+
+.menu-form {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 1rem 1rem 0 1rem;
+}
+
+.spacer {
+    flex: 1 1 auto;
+}

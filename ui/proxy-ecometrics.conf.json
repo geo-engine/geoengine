@@ -1,0 +1,8 @@
+{
+    "/api/**": {
+        "target": "https://zentrale.app.geoengine.io/",
+        "changeOrigin": true,
+        "secure": false,
+        "logLevel": "debug"
+    }
+}

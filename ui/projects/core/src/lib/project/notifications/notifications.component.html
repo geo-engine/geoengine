@@ -1,0 +1,32 @@
+<geoengine-sidenav-header>Notifications</geoengine-sidenav-header>
+@if (notifications.length === 0) {
+    <p class="no-notifications">no notifications available</p>
+}
+@if (notifications.length) {
+    <mat-card appearance="outlined">
+        <mat-list dense>
+            @for (notification of notifications; track notification; let isLast = $last) {
+                <mat-list-item>
+                    @if (notification.type) {
+                        <mat-icon matListItemIcon color="warn">error</mat-icon>
+                    }
+                    @if (!notification.type) {
+                        <mat-icon matListItemIcon>notifications</mat-icon>
+                    }
+                    <p>{{ notification.message }}</p>
+                    <button class="deleteIcon" mat-icon-button matListItemMeta (click)="removeCurrentNotification(notification)">
+                        <mat-icon>delete</mat-icon>
+                    </button>
+                </mat-list-item>
+                @if (!isLast) {
+                    <mat-divider></mat-divider>
+                }
+            }
+        </mat-list>
+    </mat-card>
+}
+<div class="actions">
+    @if (notifications.length) {
+        <button mat-raised-button (click)="removeAllNotifications()">Delete all notifications</button>
+    }
+</div>

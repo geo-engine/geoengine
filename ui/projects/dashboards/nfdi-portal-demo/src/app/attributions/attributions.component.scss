@@ -1,0 +1,19 @@
+:host {
+    text-align: center;
+}
+
+h3 {
+    color: var(--geoengine-foreground-secondary-text-color);
+}
+
+mat-grid-list {
+    margin: 0 1rem;
+}
+
+img {
+    max-width: 100%;
+}
+
+.colspan2 img {
+    width: 50%;
+}

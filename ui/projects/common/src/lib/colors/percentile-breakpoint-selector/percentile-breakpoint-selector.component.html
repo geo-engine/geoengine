@@ -1,0 +1,56 @@
+<div>
+    <form [formGroup]="form" (ngSubmit)="applyChanges()">
+        <mat-form-field>
+            <mat-label>Number of Percentiles</mat-label>
+            <input
+                matInput
+                type="number"
+                formControlName="numPercentiles"
+                min="2"
+                [max]="MAX_PERCENTILES + 2"
+                value="3"
+                (ngModelChange)="setNumPercentiles($event)"
+            />
+        </mat-form-field>
+
+        <div formArrayName="percentiles">
+            <mat-form-field>
+                <mat-label>MIN</mat-label>
+                <input matInput type="text" disabled="true" value="0.0" />
+            </mat-form-field>
+            @for (control of percentiles.controls; track control; let i = $index) {
+                <div>
+                    <mat-form-field>
+                        <mat-label>Percentile #{{ i + 1 }}</mat-label>
+                        <input matInput type="number" [formControlName]="i" />
+                    </mat-form-field>
+                </div>
+            }
+            <mat-form-field>
+                <mat-label>MAX</mat-label>
+                <input matInput type="text" disabled="true" value="1.0" />
+            </mat-form-field>
+        </div>
+
+        <mat-form-field>
+            <mat-label>Colormap name</mat-label>
+            <mat-select formControlName="colorMap">
+                @for (colorMap of colorMaps | keyvalue; track colorMap) {
+                    <mat-option class="options" [value]="colorMap.value">
+                        <div
+                            class="colorizer_option_preview"
+                            [style.background]="colorMap.value | geoengineRgbaTuplesCssGradient: 90"
+                        ></div>
+                        {{ colorMap.key }}
+                    </mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+
+        <mat-checkbox formControlName="colorMapReverseColors">Reverse colormap</mat-checkbox>
+
+        @if (statisticsLoading$ | async) {
+            <mat-progress-bar mode="indeterminate"></mat-progress-bar>
+        }
+    </form>
+</div>

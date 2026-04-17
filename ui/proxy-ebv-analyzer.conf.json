@@ -1,0 +1,12 @@
+{
+    "/api/**": {
+        "target": "https://ebv.app.geoengine.io/",
+        "changeOrigin": true,
+        "secure": false,
+        "logLevel": "debug"
+    },
+    "/mapcache/*": {
+        "target": "http://sng107.sng.uni-frankfurt.de/mapcache/",
+        "logLevel": "debug"
+    }
+}

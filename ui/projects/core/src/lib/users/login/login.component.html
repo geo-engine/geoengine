@@ -1,0 +1,38 @@
+@switch (formStatus()) {
+    @case (FormStatus.LoggedOut) {
+        <geoengine-sidenav-header>Login</geoengine-sidenav-header>
+        <form (ngSubmit)="login()">
+            <mat-form-field>
+                <input matInput type="text" placeholder="E-Mail" [formField]="loginForm.email" />
+            </mat-form-field>
+            <mat-form-field>
+                <input matInput type="password" placeholder="Password" [formField]="loginForm.password" />
+            </mat-form-field>
+            @if (invalidCredentials()) {
+                <p class="error">Invalid Credentials</p>
+            }
+            <button mat-raised-button type="submit" [disabled]="!loginForm().valid" color="primary">Login</button>
+        </form>
+    }
+    @case (FormStatus.Loading) {
+        <mat-spinner></mat-spinner>
+    }
+    @case (FormStatus.LoggedIn) {
+        <geoengine-sidenav-header>User Info</geoengine-sidenav-header>
+        <div fxLayout="row" class="container">
+            <div class="label">
+                <p>E-Mail</p>
+                <p>Real Name</p>
+            </div>
+            @if (user(); as user) {
+                <div>
+                    <p>{{ user.email }}</p>
+                    <p>{{ user.realName }}</p>
+                </div>
+            }
+        </div>
+        <div fxLayout="row" class="container">
+            <button mat-raised-button (click)="$event.preventDefault(); logout()" fxFlex color="primary">Logout</button>
+        </div>
+    }
+}

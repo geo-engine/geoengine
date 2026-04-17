@@ -1,0 +1,28 @@
+form {
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+mat-form-field {
+    width: 100%;
+    margin: 1rem 0;
+}
+
+.attributeRow {
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.attributeRow mat-form-field {
+    margin: 0;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+div {
+    padding-bottom: 0.5rem;
+    padding-top: 1rem;
+}

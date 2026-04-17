@@ -1,0 +1,25 @@
+@if (hasTimeRepresentation()) {
+    <div class="container">
+        <button
+            mat-icon-button
+            (click)="timeBackwards()"
+            matTooltip="Backwards {{ timeStepDuration().durationAmount }} {{ timeStepDuration().durationUnit }}"
+        >
+            <mat-icon>navigate_before</mat-icon>
+        </button>
+        <button
+            class="text-btn"
+            mat-button
+            (click)="openTimeConfig()"
+            [innerHtml]="timeRepresentation() | geoengineSafeHtml"
+            matTooltip="Time Configuration"
+        ></button>
+        <button
+            mat-icon-button
+            (click)="timeForward()"
+            matTooltip="Forward {{ timeStepDuration().durationAmount }} {{ timeStepDuration().durationUnit }}"
+        >
+            <mat-icon>navigate_next</mat-icon>
+        </button>
+    </div>
+}

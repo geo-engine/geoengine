@@ -1,0 +1,8 @@
+{
+    "/api/**": {
+        "target": "https://trustee.app.geoengine.io/",
+        "changeOrigin": true,
+        "secure": false,
+        "logLevel": "debug"
+    }
+}

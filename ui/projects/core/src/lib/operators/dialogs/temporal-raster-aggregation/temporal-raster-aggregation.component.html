@@ -1,0 +1,94 @@
+<geoengine-sidenav-header>Temporal Raster Aggregation</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container [loading]="loading$ | async | valueDefault: false">
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/temporalrasteraggregation.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/temporalrasteraggregation.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <mat-form-field>
+                <mat-label>Aggregation Type</mat-label>
+                <mat-select formControlName="aggregation">
+                    @for (aggregation of aggregations | keyvalue; track aggregation.key) {
+                        <mat-option [value]="aggregation.key">{{ aggregation.value }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+
+            @if (form.controls.aggregation.value === 'percentileEstimate') {
+                <mat-form-field>
+                    <mat-label>Percentile</mat-label>
+                    <input matInput type="number" formControlName="percentile" />
+                    @if (form.controls.percentile.errors?.required || form.controls.percentile.errors?.valueNotInRange) {
+                        <mat-hint align="end" class="error">Percentile must be in the range (0, 1).</mat-hint>
+                    }
+                </mat-form-field>
+            }
+
+            <mat-form-field>
+                <mat-label>Output Data Type</mat-label>
+                <mat-select formControlName="dataType" placeholder="Same as input {{ inputDataTypeDisplay$ | async }}">
+                    <mat-option [value]="undefined">Same as input {{ inputDataTypeDisplay$ | async }}</mat-option>
+                    @for (dataType of rasterDataTypes; track dataType) {
+                        <mat-option [value]="dataType">
+                            {{ dataType }}
+                        </mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+
+            <mat-form-field>
+                <mat-label>Time Granularity</mat-label>
+                <mat-select formControlName="granularity">
+                    @for (granularity of timeGranularityOptions; track granularity) {
+                        <mat-option [value]="granularity">{{ granularity }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+
+            <mat-form-field>
+                <mat-label>Window Size</mat-label>
+                <input matInput type="number" formControlName="windowSize" />
+            </mat-form-field>
+
+            <div>
+                <mat-checkbox formControlName="windowReferenceChecked"
+                    >Specify a custom point in time for the aggregation window</mat-checkbox
+                >
+                @if ((form.controls.windowReferenceChecked.valueChanges | async) === true) {
+                    <geoengine-time-input formControlName="windowReference"></geoengine-time-input>
+                }
+            </div>
+
+            <mat-checkbox formControlName="ignoreNoData">Ignore No Data</mat-checkbox>
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="'Temporal Aggregation of ' + (form.controls.layer.valueChanges | async)?.name"
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+
+            <geoengine-symbology-creator #symbologyCreator></geoengine-symbology-creator>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="(disallowSubmit | async) || (loading$ | async)">
+                Create
+            </button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

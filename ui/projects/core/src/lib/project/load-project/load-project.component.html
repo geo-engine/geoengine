@@ -1,0 +1,17 @@
+<geoengine-sidenav-header>Load Project</geoengine-sidenav-header>
+<form [formGroup]="form" (ngSubmit)="$event.preventDefault(); load()" fxLayout="column">
+    @if ((loading$ | async) === false) {
+        <mat-radio-group formControlName="projectId" fxFlex>
+            @for (projectListing of projects$ | async; track projectListing) {
+                <mat-radio-button [value]="projectListing.id">
+                    {{ projectListing.name }}
+                    {{ projectListing.id === currentProjectId ? ' (current)' : '' }}
+                </mat-radio-button>
+            }
+        </mat-radio-group>
+    }
+    <button mat-raised-button color="primary" type="submit" [disabled]="(form.statusChanges | async) !== 'VALID'">Load</button>
+</form>
+@if (loading$ | async) {
+    <mat-progress-spinner mode="indeterminate"></mat-progress-spinner>
+}

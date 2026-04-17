@@ -1,0 +1,44 @@
+table {
+    width: 100%;
+    font-size: 0.8em;
+}
+
+mat-divider {
+    padding-bottom: 1rem;
+}
+
+td:first-child,
+td:last-child {
+    width: 1%;
+    white-space: nowrap;
+}
+
+mat-slider {
+    min-width: unset;
+    width: 100%;
+}
+
+.component_container {
+    width: 100%;
+    padding-top: 5px;
+}
+
+.colorizer_preview {
+    min-height: 20px;
+    border: #000 solid 1px;
+}
+
+.options {
+    display: block;
+    padding-right: 1rem;
+}
+
+.colorizer_option_preview {
+    min-height: 20px;
+    border: #000 solid 1px;
+}
+
+.fill_width {
+    width: 100%;
+    padding: 0 1rem;
+}

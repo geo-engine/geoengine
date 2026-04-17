@@ -1,0 +1,99 @@
+cdk-virtual-scroll-viewport {
+    height: 100%;
+}
+
+:host ::ng-deep .cdk-virtual-scroll-content-wrapper {
+    width: 100%;
+}
+
+mat-spinner {
+    margin: 0.5rem auto;
+}
+
+mat-list-item {
+    h4,
+    p {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+
+    mat-icon {
+        color: black;
+        margin-top: 1.5rem !important;
+        margin-right: 1rem;
+    }
+}
+
+.collection-with-button-navigation {
+    height: 4.5rem;
+    width: 100%;
+
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    .click {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+
+        padding: 0 1rem;
+        cursor: pointer;
+        box-sizing: border-box;
+        height: inherit;
+        width: inherit;
+
+        overflow: hidden;
+
+        &:hover {
+            background-color: var(--geoengine-background-hover-color);
+        }
+    }
+
+    .button {
+        box-sizing: border-box;
+        margin: 0 0.5rem;
+    }
+
+    .icon {
+        flex-shrink: 0;
+
+        width: 1.5rem;
+        height: 1.5rem;
+        font-size: 1.5rem;
+        box-sizing: content-box;
+        border-radius: 50%;
+    }
+
+    .text {
+        box-sizing: border-box;
+        overflow: hidden;
+        padding: 0;
+        padding-left: 1rem;
+
+        .text-line {
+            margin: 0;
+            padding: 0;
+            font-weight: normal;
+            white-space: nowrap;
+            overflow: hidden;
+            display: block;
+            box-sizing: border-box;
+
+            text-overflow: ellipsis;
+        }
+
+        :nth-child(n + 2) {
+            font-size: 0.875rem;
+        }
+    }
+
+    .secondary-text {
+        color: var(--geoengine-foreground-secondary-text-color);
+    }
+}
+
+.selected {
+    background-color: var(--geoengine-primary-color);
+}

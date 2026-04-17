@@ -1,0 +1,43 @@
+<geoengine-sidenav-header>Temporal Raster Mean Plot</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container>
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/plots/meanrasterpixelvaluesovertime.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/plots/meanrasterpixelvaluesovertime.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <mat-form-field>
+                <mat-select placeholder="Time Tick Position" formControlName="timePosition">
+                    @for (timePosition of timePositionOptions; track timePosition) {
+                        <mat-option [value]="timePosition.value">{{ timePosition.label }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+            <mat-checkbox color="primary" formControlName="area">Fill area under curve</mat-checkbox>
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="'Temporal Raster Mean Plot of ' + (form.controls.layer.valueChanges | async)?.name"
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="disallowSubmit | async">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

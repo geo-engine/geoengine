@@ -1,0 +1,26 @@
+.flex-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+mat-button-toggle-group {
+    margin-bottom: 1rem;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.class-button {
+    margin-top: 0.5rem;
+}
+
+#measurement-type {
+    display: flex;
+    flex-wrap: wrap;
+
+    mat-button-toggle {
+        flex: 1;
+    }
+}

@@ -1,0 +1,73 @@
+:host {
+    min-width: 200px;
+    width: 100%;
+}
+
+.container {
+    max-height: inherit;
+    height: inherit;
+}
+
+.layer-list-item-text {
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+    padding-top: calc(1rem / 3);
+}
+
+.list-element-inner-container {
+    width: 100%;
+}
+
+.only-large {
+    @media (max-width: 1480px) {
+        display: none;
+    }
+}
+
+.grabbable {
+    cursor: grab;
+}
+
+/* (Optional) Apply a "closed-hand" cursor during drag operation. */
+.grabbable:active {
+    cursor: grabbing;
+}
+
+.small {
+    font-size: 0.8rem;
+}
+
+.mat-toolbar {
+    padding: 0 !important;
+}
+
+mat-toolbar ::ng-deep mat-toolbar-row:first-child {
+    display: none !important;
+}
+
+mat-progress-bar {
+    width: 100% !important;
+    height: 1px !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+.active-layer {
+    background-color: var(--geoengine-faded-accent-color, grey);
+}
+
+.lineThrough {
+    background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' version='1.1' preserveAspectRatio='none' viewBox='0 0 20 20'><line x1='5%' y1='95%' x2='95%' y2='5%' style='stroke:rgba(0, 0, 0, 0.87); stroke-width: 2px;'/></svg>")
+        no-repeat center center;
+    background-size:
+        100% 100%,
+        auto;
+}
+
+geoengine-raster-legend {
+    padding-top: 0.25rem;
+    padding-left: 0.5rem;
+    padding-right: 0;
+    padding-bottom: 0.5rem;
+}

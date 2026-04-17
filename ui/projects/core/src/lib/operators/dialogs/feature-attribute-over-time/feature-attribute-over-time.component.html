@@ -1,0 +1,56 @@
+<geoengine-sidenav-header>Feature Attribute over Time Plot</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container>
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/plots/featureattributevaluesoverTime.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a
+            mat-icon-button
+            operatorParametersIcon
+            href="https://docs.geoengine.io/plots/featureattributevaluesoverTime.html"
+            target="_blank"
+        >
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            @if (attributes$ | async; as attributes) {
+                <mat-form-field appearance="fill">
+                    <mat-select placeholder="Id Attribute" formControlName="idAttribute">
+                        @for (attribute of attributes.id; track attribute) {
+                            <mat-option [value]="attribute">{{ attribute }}</mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+                <mat-form-field appearance="fill">
+                    <mat-select placeholder="Value Attribute" formControlName="valueAttribute">
+                        @for (attribute of attributes.value; track attribute) {
+                            <mat-option [value]="attribute">{{ attribute }}</mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+            }
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="'Feature Attribute Plot of ' + (form.controls.layer.valueChanges | async)?.name"
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="(form.statusChanges | async) !== 'VALID'">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

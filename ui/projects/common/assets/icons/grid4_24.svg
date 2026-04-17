@@ -1,0 +1,18 @@
+<svg width="24px" height="24px" xmlns="http://www.w3.org/2000/svg">
+  <rect stroke="#000000" height="5" width="5" y="2" x="2" fill="#7f7f7f" id="1_1"/>
+  <rect stroke="#000000" height="5" width="5" y="2" x="7" fill="#bfbfbf" id="1_2"/>
+  <rect stroke="#000000" height="5" width="5" y="2" x="12" fill="#7f7f7f" id="1_3"/>
+  <rect stroke="#000000" height="5" width="5" y="2" x="17" fill="#bfbfbf" id="1_4"/>
+  <rect stroke="#000000" height="5" width="5" y="7" x="2" fill="#bfbfbf" id="2_1"/>
+  <rect stroke="#000000" height="5" width="5" y="7" x="7" fill="#7f7f7f" id="2_2"/>
+  <rect stroke="#000000" height="5" width="5" y="7" x="12" fill="#bfbfbf" id="2_3"/>
+  <rect stroke="#000000" height="5" width="5" y="7" x="17" fill="#7f7f7f" id="2_4"/>
+  <rect stroke="#000000" height="5" width="5" y="12" x="2" fill="#7f7f7f" id="3_1"/>
+  <rect stroke="#000000" height="5" width="5" y="12" x="7" fill="#bfbfbf" id="3_2"/>
+  <rect stroke="#000000" height="5" width="5" y="12" x="12" fill="#7f7f7f" id="3_3"/>
+  <rect stroke="#000000" height="5" width="5" y="12" x="17" fill="#bfbfbf" id="3_4"/>
+  <rect stroke="#000000" height="5" width="5" y="17" x="2" fill="#bfbfbf" id="4_1"/>
+  <rect stroke="#000000" height="5" width="5" y="17" x="7" fill="#7f7f7f" id="4_2"/>
+  <rect stroke="#000000" height="5" width="5" y="17" x="12" fill="#bfbfbf" id="4_3"/>
+  <rect stroke="#000000" height="5" width="5" y="17" x="17" fill="#7f7f7f" id="4_4"/>
+</svg>

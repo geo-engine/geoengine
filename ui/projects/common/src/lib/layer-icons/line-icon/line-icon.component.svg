@@ -1,0 +1,10 @@
+<svg width="100%" height="100%" viewBox="0,0,24,24" xmlns="http://www.w3.org/2000/svg">
+    <path
+        [style.stroke-width]="iconStyle().strokeWidth"
+        [style.stroke-dasharray]="[]"
+        [style.stroke]="iconStyle().strokeRGBA.rgbaCssString()"
+        fill="none"
+        id="line"
+        d="m2,2l20,14l-16,6"
+    />
+</svg>

@@ -1,0 +1,16 @@
+<cdk-virtual-scroll-viewport itemSize="80" class="tabs-viewport">
+    <div *cdkVirtualFor="let colorAttribute of colorAttributes(); let i = index" class="grid-container">
+        <geoengine-color-attribute-input
+            class="grid-colorpicker"
+            [ngModel]="colorAttribute"
+            (ngModelChange)="updateColorAt(i, $event)"
+            [colorAttributeHinter]="colorHints()"
+        ></geoengine-color-attribute-input>
+        <button mat-icon-button (click)="removeColorAt(i)" class="grid-removebutton"><mat-icon>remove</mat-icon></button>
+        @if (isNoNumber(i)) {
+            <div class="grid-errormsg">Value must be a number!</div>
+        }
+    </div>
+</cdk-virtual-scroll-viewport>
+<br />
+<button mat-icon-button (click)="appendColor()"><mat-icon>add</mat-icon></button>

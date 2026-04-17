@@ -1,0 +1,36 @@
+<geoengine-dialog-header>{{ title }}</geoengine-dialog-header>
+<div fxLayout="row">
+    @if (loading$ | async) {
+        <mat-spinner
+            class="loading"
+            [diameter]="loaderDiameter$ | async"
+            [style.left]="loaderLeft$ | async"
+            [style.top]="loaderLeft$ | async"
+        ></mat-spinner>
+    }
+    <svg #svg class="graph" [style.width.px]="svgWidth$ | async" [style.height.px]="svgHeight$ | async">
+        <g #g></g>
+    </svg>
+    <div [style.max-height.px]="svgHeight$ | async" fxFlex class="detail">
+        <geoengine-dialog-section-heading>Operator Type</geoengine-dialog-section-heading>
+        @if (selectedOperator$ | async) {
+            <mat-list fxLayout="row">
+                <mat-list-item fxFlex="grow">
+                    <img mat-list-avatar [src]="selectedOperatorIcon$ | async" [alt]="(selectedOperator$ | async)?.type" />
+                    <h4 mat-line>{{ (selectedOperator$ | async)?.type }}</h4>
+                    <p mat-line>{{ layer.layerType }}</p>
+                </mat-list-item>
+            </mat-list>
+        }
+        <geoengine-dialog-section-heading>Parameters</geoengine-dialog-section-heading>
+        <mat-list>
+            @for (parameter of parameters$ | async; track parameter) {
+                <h3 mat-subheader>{{ parameter.key }}</h3>
+                <mat-list-item>
+                    <code mat-line [matTooltip]="parameter.value">{{ parameter.value }}</code>
+                </mat-list-item>
+                <mat-divider></mat-divider>
+            }
+        </mat-list>
+    </div>
+</div>

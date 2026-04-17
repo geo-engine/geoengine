@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+    <head>
+        <meta charset="utf-8" />
+        <title>Geo Engine Manager</title>
+
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <link rel="icon" type="image/x-icon" href="favicon.ico" />
+    </head>
+    <body>
+        <geoengine-root>
+            <style type="text/css">
+                body {
+                    margin: 0;
+                    padding: 0;
+                    color: whitesmoke;
+                    text-shadow:
+                        0 1px 3px rgba(245, 245, 245, 0.12),
+                        0 1px 2px rgba(245, 245, 245, 0.24);
+                    background: #303030;
+                    overflow: hidden;
+                }
+                @media (prefers-color-scheme: light) {
+                    body {
+                        background: #ccc;
+                    }
+                }
+                img.center-image {
+                    --center-image-width: 15vw;
+                    position: absolute;
+                    width: var(--center-image-width);
+                    height: var(--center-image-width);
+                    left: calc(50% - var(--center-image-width) / 2);
+                    top: calc(50% - var(--center-image-width) / 2);
+                    opacity: 0.87;
+                }
+                .loader {
+                    --loader-width: 30vw;
+                    width: var(--loader-width);
+                    height: var(--loader-width);
+                    border-radius: 50%;
+                    display: inline-block;
+                    border-top: 4px solid rgba(245, 245, 245, 1);
+                    border-right: 4px solid transparent;
+                    box-sizing: border-box;
+                    animation: rotation 1s linear infinite;
+
+                    position: absolute;
+                    left: calc(50% - var(--loader-width) / 2);
+                    top: calc(50% - var(--loader-width) / 2);
+                }
+                .loader::after {
+                    content: '';
+                    box-sizing: border-box;
+                    position: absolute;
+                    left: 0;
+                    top: 0;
+                    width: var(--loader-width);
+                    height: var(--loader-width);
+                    border-radius: 50%;
+                    border-left: 4px solid rgba(245, 245, 245, 0.12);
+                    border-bottom: 4px solid transparent;
+                    animation: rotation 0.5s linear infinite reverse;
+                }
+                @media (prefers-color-scheme: light) {
+                    .loader::after {
+                        border-left-color: rgba(245, 245, 245, 0.5);
+                    }
+                }
+                @keyframes rotation {
+                    0% {
+                        transform: rotate(0deg);
+                    }
+                    100% {
+                        transform: rotate(360deg);
+                    }
+                }
+            </style>
+            <img src="assets/geoengine-favicon-white.svg" class="center-image" alt="Geo Engine" />
+            <span class="loader"></span>
+        </geoengine-root>
+    </body>
+</html>

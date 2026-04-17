@@ -1,0 +1,15 @@
+@if (tableData$ | async; as tableData) {
+    @if (tableData.length > 0) {
+        <table>
+            @for (row of tableData; track row) {
+                <tr>
+                    <th>{{ row.key }}</th>
+                    <td>{{ row.value }}</td>
+                </tr>
+            }
+        </table>
+    } @else {
+        <p>No data available</p>
+        <p>Click on a point on the map to see the data</p>
+    }
+}

@@ -1,0 +1,82 @@
+<div class="component_container">
+    <form [formGroup]="form" (ngSubmit)="applyChanges()" fxLayout="column">
+        <div
+            formGroupName="bounds"
+            class="flex-container"
+            fxLayout="row"
+            fxLayoutAlign="space-between center"
+            fxLayout.xs="column"
+            fxLayoutAlign.xs="start"
+        >
+            <mat-form-field class="flex-item" fxFlex>
+                <mat-label>Min</mat-label>
+                <input matInput type="number" step="any" placeholder="Min" formControlName="min" />
+                @if (form.controls.bounds.errors?.noFilter) {
+                    <mat-hint [ngClass]="{'mat-error': true, 'mat-hint': false}"> Specify a minimum and a maximum. </mat-hint>
+                }
+                @if ($any(form.controls.bounds).controls.min.errors?.valueNotLarger) {
+                    <mat-hint [ngClass]="{'mat-error': true, 'mat-hint': false}"> Must be positive for logarithmic gradient. </mat-hint>
+                }
+            </mat-form-field>
+            <mat-form-field class="flex-item" fxFlex>
+                <mat-label>Max</mat-label>
+                <input matInput type="number" step="any" placeholder="Max" formControlName="max" />
+                @if (form.controls.bounds.errors?.minOverMax) {
+                    <mat-hint [ngClass]="{'mat-error': true, 'mat-hint': false}">
+                        The maximum must be greater or equal to the minimum.
+                    </mat-hint>
+                }
+            </mat-form-field>
+        </div>
+
+        <mat-form-field>
+            <mat-label>Colormap name</mat-label>
+            <mat-select formControlName="colorMap">
+                @for (colorMap of colorMaps | keyvalue; track colorMap) {
+                    <mat-option class="options" [value]="colorMap.value">
+                        <div
+                            class="colorizer_option_preview"
+                            [style.background]="colorMap.value | geoengineRgbaTuplesCssGradient: 90"
+                        ></div>
+                        {{ colorMap.key }}
+                    </mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+
+        <mat-checkbox formControlName="colorMapReverseColors">Reverse colormap</mat-checkbox>
+
+        <div>
+            <table>
+                <tr>
+                    <td><span>Color steps</span></td>
+                    <td class="fill_width">
+                        <mat-slider [min]="2" [max]="maxColormapSteps()" [step]="1" [discrete]="true">
+                            <input matSliderThumb formControlName="colorMapSteps" />
+                        </mat-slider>
+                    </td>
+                    <td>{{ form.controls.colorMapSteps.value }}</td>
+                </tr>
+                <tr>
+                    <td><span>Preview</span></td>
+                    <td class="fill_width">
+                        @if (!breakpoints) {
+                            <span> invalid configuration </span>
+                        }
+                        @if (!!breakpoints) {
+                            <div
+                                class="colorizer_preview fill_width"
+                                [style.background]="breakpoints | geoengineColorBreakpointsCssGradient: 90"
+                            ></div>
+                        }
+                    </td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- TODO: This will be instantiated to populate the color table -->
+        <!-- <mat-action-row>
+    <button type="submit" mat-raised-button color="primary" [disabled]="form.invalid">Create color table</button>
+  </mat-action-row> -->
+    </form>
+</div>

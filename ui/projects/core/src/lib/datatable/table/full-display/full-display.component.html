@@ -1,0 +1,21 @@
+<geoengine-dialog-header>Full coordinates</geoengine-dialog-header>
+<mat-dialog-content>
+    <cdk-virtual-scroll-viewport itemSize="50" class="coordinates-viewport">
+        <br />
+        <table>
+            <thead>
+                <th>X</th>
+                <th>Y</th>
+            </thead>
+            <tr *cdkVirtualFor="let x of xCoords; index as i" class="coordinate-item">
+                <td>{{ x }}</td>
+                <td>{{ yCoords[i] }}</td>
+            </tr>
+        </table>
+    </cdk-virtual-scroll-viewport>
+</mat-dialog-content>
+<mat-dialog-actions>
+    <button mat-button mat-dialog-close>Close</button>
+    <button mat-button (click)="copyAsGeoJson()">Copy as GeoJSON</button>
+    <button mat-button (click)="copyAsWkt()">Copy as WKT</button>
+</mat-dialog-actions>

@@ -1,0 +1,14 @@
+@if (displayTimeSlider()) {
+    <div class="container mat-typography" fxLayout="row" fxLayoutAlign="space-between center">
+        <mat-slider [min]="min" [max]="max" [step]="step" showTickMarks discrete [displayWith]="thumbLabelDisplay()">
+            <input matSliderThumb (ngModelChange)="setTime($event)" [(ngModel)]="currentTimeIndex" />
+        </mat-slider>
+        <span>{{ currentTimeFormatted | async }}</span>
+    </div>
+}
+
+@if (!displayTimeSlider()) {
+    <div class="padded mat-typography">
+        <span>{{ currentTimeFormatted | async }}</span>
+    </div>
+}
