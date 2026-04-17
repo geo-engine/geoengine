@@ -27,3 +27,5 @@ lint: common::_clear format
 [group("lint")]
 format write="false": common::_clear
     npx prettier {{ if write == "true" { "--write" } else { "--check" } }} .
+
+test:

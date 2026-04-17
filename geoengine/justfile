@@ -3,23 +3,26 @@ mod common '../common.justfile'
 _default:
     @just --list
 
+# Install dependencies such as llvm-cov.
+[group("install")]
+install:
+    cargo install --locked cargo-llvm-cov
+    cargo install --locked cargo-edit
+
 # Generate OpenAPI specification as JSON file. The file is generated in the current directory.
 [group("build")]
-generate-openapi-spec: common::_clear _generate-openapi-spec
-
-_generate-openapi-spec:
+generate-openapi-spec: common::_clear
     cargo run --bin geoengine-cli -- openapi > ../openapi.json
+    npx prettier --write ../openapi.json
 
 # Run lints.
 [group("lint")]
 lint: common::_clear lint-rustfmt lint-clippy lint-sql
 
-_lint-clippy:
-    cargo clippy --all-features --all-targets
-
 # Run clippy for all features and all targets.
 [group("lint")]
-lint-clippy: common::_clear _lint-clippy
+lint-clippy: common::_clear
+    cargo clippy --all-features --all-targets
 
 # Run rustfmt
 [group("lint")]
@@ -37,12 +40,6 @@ lint-sql: common::_clear
 build mode="":
     cargo build --locked {{ mode }} --verbose
 
-# Install dependencies such as llvm-cov.
-[group("install")]
-install:
-    cargo install --locked cargo-llvm-cov
-    cargo install --locked cargo-edit
-
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]
 test-coverage output_path="lcov.info":
@@ -53,10 +50,6 @@ test-coverage output_path="lcov.info":
     	--profile ci \
     	--lcov \
     	--output-path {{ output_path }}
-
-# Run all local CI checks in the current environment.
-[group("ci")]
-ci: common::_clear install lint test build
 
 # Run the application.
 [group("run")]
