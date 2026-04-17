@@ -51,7 +51,7 @@ Create a role with name and id
 ```python
 @classmethod
 def from_response(cls,
-                  response: geoengine_openapi_client.models.role.Role) -> Role
+                  response: geoengine_api_client.models.role.Role) -> Role
 ```
 
 Parse a http response to an `RoleId`
@@ -118,7 +118,7 @@ Create a PermissionListing
 ```python
 @classmethod
 def from_response(
-    cls, response: geoengine_openapi_client.models.PermissionListing
+    cls, response: geoengine_api_client.models.PermissionListing
 ) -> PermissionListing
 ```
 
@@ -143,7 +143,7 @@ A permission
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.Permission
+def to_api_dict() -> geoengine_api_client.Permission
 ```
 
 Convert to a dict for the API

@@ -1,4 +1,5 @@
 mod api-clients
+mod ci 'ci.justfile'
 mod backend 'geoengine'
 mod common 'common.justfile'
 mod python
@@ -78,15 +79,3 @@ lint-version-numbers: common::_clear
     @{{ if shell(VERSION_CMD) == shell(PYTHON_VERSION_CMD) { 'echo "Python library version is consistent."' } else { error("Python library has wrong version (" + shell(PYTHON_VERSION_CMD) + ").") } }}
     @{{ if shell(VERSION_CMD) == shell(PYTHON_DEP_VERSION_CMD) { 'echo "Python library dependency is consistent."' } else { error("Python library dependency has wrong version (" + shell(PYTHON_DEP_VERSION_CMD) + ").") } }}
     @{{ if shell(VERSION_CMD) == shell(API_CLIENT_VERSION_CMD) { 'echo "API client version is consistent."' } else { error("API client has wrong version (" + shell(API_CLIENT_VERSION_CMD) + ").") } }}
-
-# Check if there are uncommitted changes in the git repository. If there are, print an error message and exit with a non-zero status code. Otherwise, print a success message.
-[group('CI')]
-check-no-changes-in-git-repo:
-    #!/usr/bin/env bash
-    if [ -n "$(git status --porcelain)" ]; then
-      echo "Error: Uncommitted changes found in git repository."
-      git status --porcelain
-      exit 1
-    else
-      echo "No uncommitted changes found in git repository."
-    fi

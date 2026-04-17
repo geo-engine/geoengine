@@ -66,7 +66,7 @@ class BoundingBox2D(SpatialBounds)
 ```python
 @staticmethod
 def from_response(
-        response: geoengine_openapi_client.BoundingBox2D) -> BoundingBox2D
+        response: geoengine_api_client.BoundingBox2D) -> BoundingBox2D
 ```
 
 create a `BoundingBox2D` from an API response
@@ -84,7 +84,7 @@ A 2D spatial partition.
 ```python
 @staticmethod
 def from_response(
-    response: geoengine_openapi_client.SpatialPartition2D
+        response: geoengine_api_client.SpatialPartition2D
 ) -> SpatialPartition2D
 ```
 
@@ -138,8 +138,7 @@ Return the time instance or interval as a string representation
 ```python
 @staticmethod
 def from_response(
-        response: geoengine_openapi_client.models.TimeInterval
-) -> TimeInterval
+        response: geoengine_api_client.models.TimeInterval) -> TimeInterval
 ```
 
 create a `TimeInterval` from an API response
@@ -147,7 +146,7 @@ create a `TimeInterval` from an API response
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.TimeInterval
+def to_api_dict() -> geoengine_api_client.TimeInterval
 ```
 
 create a openapi `TimeInterval` from self
@@ -379,7 +378,7 @@ Initialize a new `ResultDescriptor` object
 ```python
 @staticmethod
 def from_response(
-    response: geoengine_openapi_client.TypedResultDescriptor
+        response: geoengine_api_client.TypedResultDescriptor
 ) -> ResultDescriptor
 ```
 
@@ -455,7 +454,7 @@ Initialize a vector result descriptor
 ```python
 @staticmethod
 def from_response_vector(
-    response: geoengine_openapi_client.TypedVectorResultDescriptor
+    response: geoengine_api_client.TypedVectorResultDescriptor
 ) -> VectorResultDescriptor
 ```
 
@@ -508,7 +507,7 @@ Display representation of the vector result descriptor
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.TypedResultDescriptor
+def to_api_dict() -> geoengine_api_client.TypedResultDescriptor
 ```
 
 Convert the vector result descriptor to a dictionary
@@ -533,7 +532,7 @@ Create a new `VectorColumnDataType` from a string
 #### to_api_enum
 
 ```python
-def to_api_enum() -> geoengine_openapi_client.FeatureDataType
+def to_api_enum() -> geoengine_api_client.FeatureDataType
 ```
 
 Convert to an API enum
@@ -552,8 +551,7 @@ Vector column information
 ```python
 @staticmethod
 def from_response(
-        response: geoengine_openapi_client.VectorColumnInfo
-) -> VectorColumnInfo
+        response: geoengine_api_client.VectorColumnInfo) -> VectorColumnInfo
 ```
 
 Create a new `VectorColumnInfo` from a JSON response
@@ -561,7 +559,7 @@ Create a new `VectorColumnInfo` from a JSON response
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.VectorColumnInfo
+def to_api_dict() -> geoengine_api_client.VectorColumnInfo
 ```
 
 Convert to a dictionary
@@ -580,7 +578,7 @@ A raster band descriptor
 ```python
 @classmethod
 def from_response(
-    cls, response: geoengine_openapi_client.RasterBandDescriptor
+    cls, response: geoengine_api_client.RasterBandDescriptor
 ) -> RasterBandDescriptor
 ```
 
@@ -607,8 +605,7 @@ A grid index
 
 ```python
 @classmethod
-def from_response(cls,
-                  response: geoengine_openapi_client.GridIdx2D) -> GridIdx2D
+def from_response(cls, response: geoengine_api_client.GridIdx2D) -> GridIdx2D
 ```
 
 Parse an http response to a `GridIdx2D` object
@@ -627,8 +624,8 @@ A grid boundingbox where lower right is inclusive index
 ```python
 @classmethod
 def from_response(
-        cls, response: geoengine_openapi_client.GridBoundingBox2D
-) -> GridBoundingBox2D
+        cls,
+        response: geoengine_api_client.GridBoundingBox2D) -> GridBoundingBox2D
 ```
 
 Parse an http response to a `GridBoundingBox2D` object
@@ -655,7 +652,7 @@ A grid boundingbox where lower right is inclusive index
 ```python
 @classmethod
 def from_response(
-    cls, response: geoengine_openapi_client.SpatialGridDefinition
+    cls, response: geoengine_api_client.SpatialGridDefinition
 ) -> SpatialGridDefinition
 ```
 
@@ -683,7 +680,7 @@ A grid boundingbox where lower right is inclusive index
 ```python
 @classmethod
 def from_response(
-    cls, response: geoengine_openapi_client.SpatialGridDescriptor
+    cls, response: geoengine_api_client.SpatialGridDescriptor
 ) -> SpatialGridDescriptor
 ```
 
@@ -740,7 +737,7 @@ Convert to a literal
 ```python
 @staticmethod
 def from_api_enum(
-        data_type: geoengine_openapi_client.RasterDataType) -> RasterDataType
+        data_type: geoengine_api_client.RasterDataType) -> RasterDataType
 ```
 
 Create a new `RasterDataType` from an API enum
@@ -748,7 +745,7 @@ Create a new `RasterDataType` from an API enum
 #### to_api_enum
 
 ```python
-def to_api_enum() -> geoengine_openapi_client.RasterDataType
+def to_api_enum() -> geoengine_api_client.RasterDataType
 ```
 
 Convert to an API enum
@@ -774,7 +771,7 @@ A time dimension
 ```python
 @classmethod
 def from_response(
-    cls, response: geoengine_openapi_client.TimeDimension
+    cls, response: geoengine_api_client.TimeDimension
 ) -> RegularTimeDimension | IrregularTimeDimension
 ```
 
@@ -799,7 +796,7 @@ Initialize a new `RegularTimeDimension`
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.TimeDimension
+def to_api_dict() -> geoengine_api_client.TimeDimension
 ```
 
 Convert the regular time dimension to a dictionary
@@ -809,8 +806,8 @@ Convert the regular time dimension to a dictionary
 ```python
 @classmethod
 def from_response(
-        cls, response: geoengine_openapi_client.TimeDimension
-) -> RegularTimeDimension
+        cls,
+        response: geoengine_api_client.TimeDimension) -> RegularTimeDimension
 ```
 
 Parse a regular time dimension from an http response
@@ -826,7 +823,7 @@ The irregular time dimension
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.TimeDimension
+def to_api_dict() -> geoengine_api_client.TimeDimension
 ```
 
 Convert the irregular time dimension to a dictionary
@@ -860,7 +857,7 @@ Initialize a new `TimeDescriptor`
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.TimeDescriptor
+def to_api_dict() -> geoengine_api_client.TimeDescriptor
 ```
 
 Convert the time descriptor to a dictionary
@@ -870,7 +867,7 @@ Convert the time descriptor to a dictionary
 ```python
 @staticmethod
 def from_response(
-        response: geoengine_openapi_client.TimeDescriptor) -> TimeDescriptor
+        response: geoengine_api_client.TimeDescriptor) -> TimeDescriptor
 ```
 
 Parse a time descriptor from an http response
@@ -901,7 +898,7 @@ Initialize a new `RasterResultDescriptor`
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.TypedResultDescriptor
+def to_api_dict() -> geoengine_api_client.TypedResultDescriptor
 ```
 
 Convert the raster result descriptor to a dictionary
@@ -911,7 +908,7 @@ Convert the raster result descriptor to a dictionary
 ```python
 @staticmethod
 def from_response_raster(
-    response: geoengine_openapi_client.TypedRasterResultDescriptor
+    response: geoengine_api_client.TypedRasterResultDescriptor
 ) -> RasterResultDescriptor
 ```
 
@@ -965,7 +962,7 @@ Display representation of the plot result descriptor
 ```python
 @staticmethod
 def from_response_plot(
-    response: geoengine_openapi_client.TypedPlotResultDescriptor
+    response: geoengine_api_client.TypedPlotResultDescriptor
 ) -> PlotResultDescriptor
 ```
 
@@ -983,7 +980,7 @@ Return the spatial reference
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.TypedResultDescriptor
+def to_api_dict() -> geoengine_api_client.TypedResultDescriptor
 ```
 
 Convert the plot result descriptor to a dictionary
@@ -1021,7 +1018,7 @@ Resolve vector data type from literal
 ```python
 @staticmethod
 def from_api_enum(
-        data_type: geoengine_openapi_client.VectorDataType) -> VectorDataType
+        data_type: geoengine_api_client.VectorDataType) -> VectorDataType
 ```
 
 Resolve vector data type from API enum
@@ -1064,8 +1061,7 @@ Initialize a new `TimeStep` object
 
 ```python
 @classmethod
-def from_response(cls,
-                  response: geoengine_openapi_client.TimeStep) -> TimeStep
+def from_response(cls, response: geoengine_api_client.TimeStep) -> TimeStep
 ```
 
 Parse an http response to a `TimeStep` object
@@ -1084,7 +1080,7 @@ Provenance information as triplet of citation, license and uri
 ```python
 @classmethod
 def from_response(cls,
-                  response: geoengine_openapi_client.Provenance) -> Provenance
+                  response: geoengine_api_client.Provenance) -> Provenance
 ```
 
 Parse an http response to a `Provenance` object
@@ -1104,7 +1100,7 @@ Provenance of a dataset
 @classmethod
 def from_response(
         cls,
-        response: geoengine_openapi_client.ProvenanceEntry) -> ProvenanceEntry
+        response: geoengine_api_client.ProvenanceEntry) -> ProvenanceEntry
 ```
 
 Parse an http response to a `ProvenanceEntry` object
@@ -1121,7 +1117,7 @@ Base class for symbology
 
 ```python
 @staticmethod
-def from_response(response: geoengine_openapi_client.Symbology) -> Symbology
+def from_response(response: geoengine_api_client.Symbology) -> Symbology
 ```
 
 Parse an http response to a `Symbology` object
@@ -1148,7 +1144,7 @@ Base class for raster colorizer
 @classmethod
 def from_response(
         cls,
-        response: geoengine_openapi_client.RasterColorizer) -> RasterColorizer
+        response: geoengine_api_client.RasterColorizer) -> RasterColorizer
 ```
 
 Parse an http response to a `RasterColorizer` object
@@ -1190,7 +1186,7 @@ Initialize a new `RasterSymbology`
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.Symbology
+def to_api_dict() -> geoengine_api_client.Symbology
 ```
 
 Convert the raster symbology to a dictionary
@@ -1200,7 +1196,7 @@ Convert the raster symbology to a dictionary
 ```python
 @staticmethod
 def from_response_raster(
-        response: geoengine_openapi_client.RasterSymbology) -> RasterSymbology
+        response: geoengine_api_client.RasterSymbology) -> RasterSymbology
 ```
 
 Parse an http response to a `RasterSymbology` object
@@ -1225,7 +1221,7 @@ Base class for data ids
 
 ```python
 @classmethod
-def from_response(cls, response: geoengine_openapi_client.DataId) -> DataId
+def from_response(cls, response: geoengine_api_client.DataId) -> DataId
 ```
 
 Parse an http response to a `DataId` object
@@ -1243,8 +1239,7 @@ An internal data id
 ```python
 @classmethod
 def from_response_internal(
-        cls,
-        response: geoengine_openapi_client.InternalDataId) -> InternalDataId
+        cls, response: geoengine_api_client.InternalDataId) -> InternalDataId
 ```
 
 Parse an http response to a `InternalDataId` object
@@ -1278,8 +1273,7 @@ An external data id
 ```python
 @classmethod
 def from_response_external(
-        cls,
-        response: geoengine_openapi_client.ExternalDataId) -> ExternalDataId
+        cls, response: geoengine_api_client.ExternalDataId) -> ExternalDataId
 ```
 
 Parse an http response to a `ExternalDataId` object
@@ -1312,8 +1306,7 @@ Base class for measurements
 
 ```python
 @staticmethod
-def from_response(
-        response: geoengine_openapi_client.Measurement) -> Measurement
+def from_response(response: geoengine_api_client.Measurement) -> Measurement
 ```
 
 Parse a result descriptor from an http response
@@ -1363,7 +1356,7 @@ Initialize a new `ContiuousMeasurement`
 ```python
 @staticmethod
 def from_response_continuous(
-    response: geoengine_openapi_client.ContinuousMeasurement
+    response: geoengine_api_client.ContinuousMeasurement
 ) -> ContinuousMeasurement
 ```
 
@@ -1406,7 +1399,7 @@ Initialize a new `ClassificationMeasurement`
 ```python
 @staticmethod
 def from_response_classification(
-    response: geoengine_openapi_client.ClassificationMeasurement
+    response: geoengine_api_client.ClassificationMeasurement
 ) -> ClassificationMeasurement
 ```
 
@@ -1457,8 +1450,8 @@ Initialize a new `GeoTransform`
 
 ```python
 @classmethod
-def from_response(
-        cls, response: geoengine_openapi_client.GeoTransform) -> GeoTransform
+def from_response(cls,
+                  response: geoengine_api_client.GeoTransform) -> GeoTransform
 ```
 
 Parse a geotransform from an HTTP JSON response

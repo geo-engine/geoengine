@@ -58,7 +58,7 @@ _build-typescript-postprocess:
     cd typescript && npm install
     rm \
         typescript/.openapi-generator/FILES \
-        package-lock.json
+        typescript/package-lock.json
 
 # Build the API clients for Rust by generating code with the OpenAPI Generator and applying post-processing steps.
 [group('build')]

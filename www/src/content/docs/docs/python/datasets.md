@@ -207,7 +207,7 @@ Creates a new `AddDatasetProperties` object
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.AddDataset
+def to_api_dict() -> geoengine_api_client.AddDataset
 ```
 
 Converts the properties to a dictionary
@@ -304,7 +304,7 @@ A volume
 
 ```python
 @classmethod
-def from_response(cls, response: geoengine_openapi_client.Volume) -> Volume
+def from_response(cls, response: geoengine_api_client.Volume) -> Volume
 ```
 
 Parse a http response to an `Volume`
@@ -330,7 +330,7 @@ Returns a volume with the specified name or None if none exists
 ```python
 def add_dataset(data_store: Volume | UploadId,
                 properties: AddDatasetProperties,
-                meta_data: geoengine_openapi_client.MetaDataDefinition,
+                meta_data: geoengine_api_client.MetaDataDefinition,
                 timeout: int = 60) -> DatasetName
 ```
 
@@ -342,7 +342,7 @@ Adds a dataset to the Geo Engine
 def add_or_replace_dataset_with_permissions(
         data_store: Volume | UploadId,
         properties: AddDatasetProperties,
-        meta_data: geoengine_openapi_client.MetaDataDefinition,
+        meta_data: geoengine_api_client.MetaDataDefinition,
         permission_tuples: list[tuple[RoleId, Permission]] | None = None,
         replace_existing=False,
         timeout: int = 60) -> DatasetName
@@ -367,7 +367,7 @@ def list_datasets_page(
         limit: int = 20,
         order: DatasetListOrder = DatasetListOrder.NAME_ASC,
         name_filter: str | None = None,
-        timeout: int = 60) -> list[geoengine_openapi_client.DatasetListing]
+        timeout: int = 60) -> list[geoengine_api_client.DatasetListing]
 ```
 
 List datasets
@@ -380,8 +380,7 @@ def list_datasets(
         limit: int = 200,
         order: DatasetListOrder = DatasetListOrder.NAME_ASC,
         name_filter: str | None = None,
-        timeout: int = 60
-) -> Iterator[geoengine_openapi_client.DatasetListing]
+        timeout: int = 60) -> Iterator[geoengine_api_client.DatasetListing]
 ```
 
 List datasets
@@ -391,7 +390,7 @@ List datasets
 ```python
 def dataset_info_by_name(
         dataset_name: DatasetName | str,
-        timeout: int = 60) -> geoengine_openapi_client.models.Dataset | None
+        timeout: int = 60) -> geoengine_api_client.models.Dataset | None
 ```
 
 Get dataset information.
@@ -402,7 +401,7 @@ Get dataset information.
 def dataset_metadata_by_name(
     dataset_name: DatasetName | str,
     timeout: int = 60
-) -> geoengine_openapi_client.models.MetaDataDefinition | None
+) -> geoengine_api_client.models.MetaDataDefinition | None
 ```
 
 Get dataset information.

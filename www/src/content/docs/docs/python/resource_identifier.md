@@ -18,7 +18,7 @@ A wrapper for an MlModel name
 ```python
 @classmethod
 def from_response(
-    cls, response: geoengine_openapi_client.models.MlModelNameResponse
+        cls, response: geoengine_api_client.models.MlModelNameResponse
 ) -> MlModelName
 ```
 
@@ -46,7 +46,7 @@ A wrapper for a dataset name
 @classmethod
 def from_response(
         cls,
-        response: geoengine_openapi_client.DatasetNameResponse) -> DatasetName
+        response: geoengine_api_client.DatasetNameResponse) -> DatasetName
 ```
 
 Parse a http response to an `DatasetName`
@@ -71,8 +71,7 @@ A wrapper for an upload id
 
 ```python
 @classmethod
-def from_response(cls,
-                  response: geoengine_openapi_client.IdResponse) -> UploadId
+def from_response(cls, response: geoengine_api_client.IdResponse) -> UploadId
 ```
 
 Parse a http response to an `UploadId`
@@ -88,7 +87,7 @@ Checks if two upload ids are equal
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.IdResponse
+def to_api_dict() -> geoengine_api_client.IdResponse
 ```
 
 Converts the upload id to a dict for the api
@@ -151,7 +150,7 @@ Create a resource from an ml model name
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.Resource
+def to_api_dict() -> geoengine_api_client.Resource
 ```
 
 Convert to a dict for the API
@@ -160,8 +159,7 @@ Convert to a dict for the API
 
 ```python
 @classmethod
-def from_response(cls,
-                  response: geoengine_openapi_client.Resource) -> Resource
+def from_response(cls, response: geoengine_api_client.Resource) -> Resource
 ```
 
 Convert to a dict for the API
