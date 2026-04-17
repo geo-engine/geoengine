@@ -309,7 +309,7 @@ jobs:
           apt-get update
           apt-get install -y openjdk-21-jre-headless
       - name: Lint OpenAPI specification
-        run: just lint-openapi-spec
+        run: just api-clients lint-openapi-spec
       - name: Generate API clients
         run: just api-clients build
       - name: Check for changes in git repo
