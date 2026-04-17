@@ -63,7 +63,7 @@ format-json write="false": common::_clear
 VERSION_CMD := "cd geoengine && cargo metadata --manifest-path Cargo.toml --format-version=1 --no-deps | jq -r '.packages[0].version'"
 PYTHON_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.version"'
 PYTHON_DEP_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.dependencies[0]" | sed -E "s/.*==\s*//"'
-API_CLIENT_VERSION_CMD := "python -c \"import configparser;cp=configparser.ConfigParser();cp.read('api-clients/.generation/config.ini');print(cp['general']['version'])\""
+API_CLIENT_VERSION_CMD := "python3 -c \"import configparser;cp=configparser.ConfigParser();cp.read('api-clients/.generation/config.ini');print(cp['general']['version'])\""
 
 # Increases the version number for Geo Engine and then updates api-clients, Python, UI, etc. accordingly.
 increase-version-number: common::_clear
