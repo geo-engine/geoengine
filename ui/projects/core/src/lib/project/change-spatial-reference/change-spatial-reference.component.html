@@ -1,0 +1,13 @@
+<geoengine-sidenav-header>Change Projection</geoengine-sidenav-header>
+<p>
+    Change the projection of the current project. Note, that this projection only has an impact on the final result. Geo Engine processes
+    all intermediate steps with as few re-projections as necessary.
+</p>
+<mat-form-field>
+    <mat-select placeholder="Projection" [ngModel]="spatialReference" (ngModelChange)="setSpatialReference($event)">
+        <!-- TODO: get available spatial references from server -->
+        @for (projection of SpatialReferences; track projection) {
+            <mat-option [value]="projection">{{ projection.name }}</mat-option>
+        }
+    </mat-select>
+</mat-form-field>

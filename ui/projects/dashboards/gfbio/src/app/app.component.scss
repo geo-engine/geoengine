@@ -1,0 +1,85 @@
+mat-sidenav-container {
+    top: 4rem !important;
+
+    z-index: 0; // put the map behind the toolbar
+}
+
+mat-toolbar.navbar {
+    padding: 0;
+    position: relative;
+    z-index: 1;
+
+    height: 4rem;
+
+    geoengine-layer-list-menu {
+        width: 3rem;
+    }
+
+    .space {
+        flex: 1;
+    }
+
+    .divider {
+        height: 2rem;
+        border-right: 1px solid var(--geoengine-divider-color);
+    }
+}
+
+.logo {
+    padding: 1rem;
+    width: auto;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+geoengine-layer-list {
+    position: absolute;
+    z-index: 2;
+    left: 0.5rem;
+    top: 0.5rem;
+    border-bottom-right-radius: 2px;
+
+    ::ng-deep svg {
+        border: none;
+        border-radius: unset;
+    }
+}
+
+.mat-sidenav {
+    border: none;
+}
+
+.back-button {
+    z-index: 2;
+
+    background-color: #335aa3;
+
+    margin: 0 1rem;
+
+    span {
+        margin: 0 0.5rem;
+    }
+
+    mat-icon {
+        color: white;
+    }
+
+    img {
+        height: 1.8rem;
+        vertical-align: middle;
+        filter: brightness(600%);
+    }
+}
+
+:host ::ng-deep .mat-sidenav-content {
+    overflow: hidden;
+}
+
+.top-container {
+    z-index: 1;
+}
+
+.mid-container {
+    z-index: 0;
+    position: relative;
+}

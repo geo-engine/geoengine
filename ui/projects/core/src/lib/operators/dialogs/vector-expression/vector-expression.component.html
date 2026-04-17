@@ -1,0 +1,145 @@
+<geoengine-sidenav-header>Vector expression</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container [loading]="loading$ | async | valueDefault: false">
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/vectorexpression.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="allowedLayerTypes" formControlName="source"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/vectorexpression.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <div>
+                <geoengine-dialog-section-heading
+                    title="Geometry input"
+                    subtitle="Info about the geometry."
+                ></geoengine-dialog-section-heading>
+
+                <mat-form-field>
+                    <mat-label>Input geometry variable</mat-label>
+                    <input matInput formControlName="geometryColumnName" />
+                    <mat-hint>Type: {{ inputGeometryType | async }}</mat-hint>
+                </mat-form-field>
+            </div>
+
+            <div formArrayName="inputColumns">
+                <div fxLayout="row">
+                    <geoengine-dialog-section-heading
+                        title="Attribute selection"
+                        subtitle="Please select the attributes."
+                    ></geoengine-dialog-section-heading>
+                    <div fxFlex fxLayout="row" fxLayoutAlign="end">
+                        <button type="button" (click)="addColumn()" mat-button color="primary" [disabled]="addColumnDisabled">
+                            <mat-icon>add_circle_outline</mat-icon>
+                        </button>
+                    </div>
+                </div>
+
+                @for (column of columnNames.controls; track i; let i = $index) {
+                    <div fxLayout="column" class="attributeRow">
+                        <div class="attributeRow" fxLayout="row" fxFlex>
+                            <mat-form-field>
+                                <mat-select placeholder="Attribute" [formControl]="column">
+                                    <!-- we need to provide the current value because it
+                  won't be in `availableAttributes$` anymore -->
+                                    @if (column.value !== null) {
+                                        <mat-option [value]="column.value">{{ column.value }}</mat-option>
+                                    }
+                                    @for (attribute of availableAttributes$ | async; track attribute) {
+                                        <mat-option [value]="attribute.name"
+                                            >{{ attribute.name }} <em>({{ attribute.datatype }})</em></mat-option
+                                        >
+                                    }
+                                </mat-select>
+                                @if (column.value !== null) {
+                                    <mat-hint>Type: {{ typeOfColumn(column.value) | async }}</mat-hint>
+                                }
+                            </mat-form-field>
+                            <button type="button" (click)="removeColumn(i)" mat-button color="primary">
+                                <mat-icon>remove_circle_outline</mat-icon>
+                            </button>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div>
+                <geoengine-dialog-section-heading
+                    title="Specify output"
+                    subtitle="Select attributes here."
+                ></geoengine-dialog-section-heading>
+
+                <mat-radio-group formControlName="outputColumnType">
+                    <mat-radio-button value="column">I want to add a new number column</mat-radio-button>
+                    <mat-radio-button value="geometry">I want to replace the geometries</mat-radio-button>
+                </mat-radio-group>
+
+                @switch (outputColumnType.value) {
+                    @case ('column') {
+                        <mat-form-field>
+                            <mat-label>Output column name</mat-label>
+                            <input matInput formControlName="outputColumnName" />
+
+                            @if (outputColumnName.errors?.duplicateName) {
+                                <mat-hint align="end" class="error">A column with this name already exists.</mat-hint>
+                            }
+                        </mat-form-field>
+                    }
+                    @case ('geometry') {
+                        <mat-form-field>
+                            <mat-select placeholder="Attribute" formControlName="outputGeometryType">
+                                <mat-option value="MultiPoint">Multi Point</mat-option>
+                                <mat-option value="MultiLineString">Multi Line String</mat-option>
+                                <mat-option value="MultiPolygon">Multi Polygon</mat-option>
+                            </mat-select>
+                        </mat-form-field>
+                    }
+                }
+            </div>
+
+            <div>
+                <geoengine-dialog-section-heading
+                    title="Specify expression"
+                    subtitle="Provide expression function."
+                ></geoengine-dialog-section-heading>
+                <geoengine-code-editor
+                    formControlName="expression"
+                    language="Rust"
+                    [header]="fnSignature | async | stringSanitizer"
+                ></geoengine-code-editor>
+
+                @if (lastError$ | async; as lastError) {
+                    <pre class="error">{{ lastError }}</pre>
+                }
+            </div>
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="layerName"
+                [suggestion]="'Expression on ' + (form.controls.source.valueChanges | async)?.name"
+            >
+                @if (layerName.errors?.required || layerName.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error">The name must be non-empty.</mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button
+                type="submit"
+                mat-raised-button
+                color="primary"
+                [disabled]="(form.statusChanges | async) !== 'VALID' || (loading$ | async)"
+            >
+                Create
+            </button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

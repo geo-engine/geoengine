@@ -1,0 +1,21 @@
+:host {
+    width: 100%;
+}
+
+mat-spinner {
+    margin: 0.5rem auto;
+}
+
+table {
+    width: 100%;
+}
+
+.flex-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.hidden {
+    display: none;
+}

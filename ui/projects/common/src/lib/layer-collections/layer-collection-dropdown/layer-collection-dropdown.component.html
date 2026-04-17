@@ -1,0 +1,37 @@
+@if (layersAvailable) {
+    @for (collection of collectionsAndSelected | async; track collection) {
+        <mat-form-field>
+            <mat-label>{{ collection.collection.entryLabel ?? 'Entries' }}</mat-label>
+            <mat-select (valueChange)="selectItem($event, $index)" [value]="collection.selected" [disabled]="preselecting$ | async">
+                <mat-option>
+                    <ngx-mat-select-search
+                        [formControl]="geoengineAutocompleteSelect.filterFormControl"
+                        geoengineAutocompleteSelect
+                        [geoengineAutocompleteSelectAllValues]="collection.collection.items"
+                        [geoengineAutocompleteSelectSearchPredicate]="searchPredicate"
+                        #geoengineAutocompleteSelect="geoengineAutocompleteSelect"
+                        ngDefaultControl
+                    ></ngx-mat-select-search>
+                </mat-option>
+                @for (item of geoengineAutocompleteSelect.filteredValues | async; track item) {
+                    <mat-option [value]="item">{{ item.name }}</mat-option>
+                }
+            </mat-select>
+        </mat-form-field>
+
+        @if (collection.selected) {
+            @for (property of collection.selected.properties; track property) {
+                <p>
+                    <em>
+                        <span class="label">{{ property[0] }}</span> {{ property[1] }}
+                    </em>
+                </p>
+            }
+            @if (collection.selected.description.length) {
+                <p class="mat-caption label justify">{{ collection.selected.description }}</p>
+            }
+        }
+    }
+} @else {
+    <p class="empty"><em>no layers available</em></p>
+}

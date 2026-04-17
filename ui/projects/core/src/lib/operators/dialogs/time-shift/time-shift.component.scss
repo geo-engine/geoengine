@@ -1,0 +1,16 @@
+form {
+    height: 100%;
+    width: 100%;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+mat-slide-toggle {
+    margin-bottom: 1rem;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}

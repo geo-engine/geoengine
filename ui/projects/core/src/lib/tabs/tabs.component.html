@@ -1,0 +1,37 @@
+<button
+    mat-button
+    class="toggle"
+    (click)="toggleVisibility()"
+    matTooltipPosition="above"
+    [matTooltip]="toggleTooltip"
+    [matTooltipShowDelay]="toggleTooltipDelay"
+>
+    @switch (visible()) {
+        @case (false) {
+            <mat-icon>expand_less</mat-icon>
+        }
+        @case (true) {
+            <mat-icon>expand_more</mat-icon>
+        }
+    }
+</button>
+<nav mat-tab-nav-bar [tabPanel]="tabPanel" mat-stretch-tabs="false">
+    @for (tabContent of this.tabsService.tabs | async; track tabContent) {
+        <a
+            mat-tab-link
+            class="tab-link"
+            [style.width.%]="tabWidthPct | async"
+            (click)="setTab(tabContent)"
+            [active]="tabContent === tabsService.activeTab"
+        >
+            @if (tabContent.name | async; as tabContentName) {
+                <span fxFlex [matTooltip]="tabContentName">{{ tabContentName }}</span>
+            }
+            <mat-icon class="close-button" style="pointer-events: auto" (click)="closeTab(tabContent)">close</mat-icon>
+        </a>
+    }
+</nav>
+<mat-tab-nav-panel #tabPanel></mat-tab-nav-panel>
+<div [style.height.px]="contentHeight">
+    <ng-template cdkPortalOutlet></ng-template>
+</div>

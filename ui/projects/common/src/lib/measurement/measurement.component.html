@@ -1,0 +1,68 @@
+<div>
+    Output Measurement:
+    <mat-button-toggle-group
+        id="measurement-type"
+        [multiple]="false"
+        [ngModel]="getMeasurementType()"
+        (ngModelChange)="updateMeasurementType($event)"
+    >
+        <mat-button-toggle [value]="MeasurementType.Classification">Classification</mat-button-toggle>
+        <mat-button-toggle [value]="MeasurementType.Continuous">Continuous</mat-button-toggle>
+        <mat-button-toggle [value]="MeasurementType.Unitless">Unitless</mat-button-toggle>
+    </mat-button-toggle-group>
+
+    @if (measurement.type === MeasurementType.Classification && classificationMeasurement) {
+        <div>
+            <mat-form-field appearance="fill">
+                <mat-label>Measurement</mat-label>
+                <input matInput type="text" required="true" [(ngModel)]="classificationMeasurement.measurement" />
+            </mat-form-field>
+        </div>
+
+        @for (class of classificationMeasurement.classes | keyvalue; track class) {
+            <div class="flex-container">
+                <mat-form-field appearance="fill">
+                    <mat-label>Class value</mat-label>
+                    <input matInput type="number" required="true" [(ngModel)]="class.key" />
+                </mat-form-field>
+                <mat-form-field appearance="fill">
+                    <mat-label>Class label</mat-label>
+                    <input matInput type="text" required="true" [(ngModel)]="class.value" />
+                </mat-form-field>
+                <button mat-icon-button (click)="removeClass(class.key)">
+                    <mat-icon aria-label="Delete row">remove_circle_outline</mat-icon>
+                </button>
+            </div>
+        }
+
+        <form [formGroup]="addClassForm">
+            <div class="flex-container">
+                <mat-form-field appearance="fill">
+                    <mat-label>New class value</mat-label>
+                    <input matInput type="number" formControlName="key" />
+                </mat-form-field>
+                <mat-form-field appearance="fill">
+                    <mat-label>New class label</mat-label>
+                    <input matInput type="text" formControlName="value" />
+                </mat-form-field>
+
+                <button mat-icon-button [disabled]="!addClassForm.valid" (click)="addClass()">
+                    <mat-icon aria-label="Add class">add_circle_outline</mat-icon>
+                </button>
+            </div>
+        </form>
+    }
+
+    @if (measurement.type === MeasurementType.Continuous && continousMeasurement) {
+        <div class="flex-container">
+            <mat-form-field appearance="fill">
+                <mat-label>Measurement</mat-label>
+                <input matInput type="text" required="true" [(ngModel)]="continousMeasurement.measurement" />
+            </mat-form-field>
+            <mat-form-field appearance="fill">
+                <mat-label>Unit</mat-label>
+                <input matInput type="text" [(ngModel)]="continousMeasurement.unit" />
+            </mat-form-field>
+        </div>
+    }
+</div>

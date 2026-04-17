@@ -1,0 +1,50 @@
+:host {
+    width: 100%;
+    overflow-y: auto;
+    height: 100%;
+}
+
+mat-card {
+    margin: 1rem 1rem 0rem 1rem;
+}
+
+mat-card-content {
+    margin-top: 1rem;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.container {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.flex-container {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.symbologyButton {
+    margin: 1rem;
+}
+
+.actions {
+    text-align: right;
+    height: 3rem;
+    padding: 1rem;
+
+    button {
+        margin: 0.5rem;
+    }
+}
+
+textarea {
+    width: 100%;
+    height: 20rem;
+    overflow: auto;
+    resize: none;
+}

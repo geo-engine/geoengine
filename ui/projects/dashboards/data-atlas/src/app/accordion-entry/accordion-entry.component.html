@@ -1,0 +1,31 @@
+@for (collection of collections$ | async; track collection; let i = $index) {
+    <mat-card class="dataset">
+        <mat-card-header>
+            <mat-icon mat-card-avatar>{{ icon() }}</mat-icon>
+            <mat-card-title>{{ collection.name }}</mat-card-title>
+            <mat-card-subtitle>{{
+                collection.properties[0] ? collection.properties[0][1] : 'no author information available'
+            }}</mat-card-subtitle>
+        </mat-card-header>
+        <mat-card-content>
+            <p class="description">{{ collection.description }}</p>
+            <geoengine-layer-collection-dropdown
+                [root]="collection.id"
+                (layerSelected)="layerSelected(i, $event)"
+            ></geoengine-layer-collection-dropdown>
+            @if (selectedLayers$ | async; as selectedLayers) {
+                <div>
+                    <button mat-stroked-button (click)="loadData(i)" color="primary" [disabled]="!selectedLayers[i]">Add to map</button>
+                </div>
+            }
+        </mat-card-content>
+    </mat-card>
+}
+
+@if ((collections$ | async | valueDefault: []).length === 0) {
+    <mat-card>
+        <mat-card-content>
+            <p class="empty"><em>no datasets available</em></p>
+        </mat-card-content>
+    </mat-card>
+}

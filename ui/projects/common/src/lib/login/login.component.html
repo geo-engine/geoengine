@@ -1,0 +1,100 @@
+<form (ngSubmit)="onSubmit($event)">
+    <div class="container" fxLayout="column" fxLayoutAlign="space-around">
+        <div class="login">
+            <mat-card appearance="outlined">
+                <mat-card-header>
+                    <img [src]="config.BRANDING.LOGO_URL" class="logo" />
+                    <mat-card-subtitle>
+                        @switch (formStatus()) {
+                            @case (FormStatus.LoggedOut) {
+                                Login to this Geo Engine instance
+                            }
+                            @case (FormStatus.LoggedIn) {
+                                User Info
+                            }
+                        }
+                    </mat-card-subtitle>
+                </mat-card-header>
+
+                <mat-card-content>
+                    @switch (formStatus()) {
+                        @case (FormStatus.Oidc) {
+                            <mat-card-actions class="login-buttons">
+                                <button mat-raised-button (click)="oidcLogin()" color="primary">Sign in using OIDC</button>
+                                @if (config.USER.LOCAL_LOGIN_AVAILABLE) {
+                                    <button mat-raised-button (click)="formStatus.set(FormStatus.LoggedOut)">Use local login</button>
+                                }
+                            </mat-card-actions>
+                        }
+                        @case (FormStatus.LoggedOut) {
+                            <mat-form-field>
+                                <input matInput type="email" placeholder="E-Mail" [formField]="loginForm.email" />
+                            </mat-form-field>
+                            <mat-form-field>
+                                <input matInput type="password" placeholder="Password" [formField]="loginForm.password" />
+                            </mat-form-field>
+                            @if (invalidCredentials()) {
+                                <p class="error">Invalid Credentials</p>
+                            }
+                        }
+                        @case (FormStatus.Loading) {
+                            <mat-spinner></mat-spinner>
+                        }
+                        @case (FormStatus.LoggedIn) {
+                            @if (user(); as user) {
+                                <table>
+                                    <tr>
+                                        <th>E-Mail</th>
+                                        <td>{{ user.email }}</td>
+                                    </tr>
+                                    <tr>
+                                        <th>Real Name</th>
+                                        <td>{{ user.realName }}</td>
+                                    </tr>
+                                </table>
+                            }
+                        }
+                    }
+                </mat-card-content>
+                @if (formStatus() !== FormStatus.Oidc) {
+                    <mat-card-actions fxLayout="row" fxLayoutGap="1rem" fxLayoutAlign="space-between center">
+                        @switch (formStatus()) {
+                            @case (FormStatus.LoggedOut) {
+                                <button
+                                    mat-raised-button
+                                    type="submit"
+                                    [disabled]="loginForm.email().invalid() || !config.USER.LOCAL_LOGIN_AVAILABLE"
+                                    color="primary"
+                                    fxFlex
+                                >
+                                    Login
+                                </button>
+                                @if (canRegister) {
+                                    <a routerLink="/register">Register</a>
+                                }
+                            }
+                            @case (FormStatus.LoggedIn) {
+                                <button mat-raised-button (click)="$event.preventDefault(); redirectToMainView()" fxFlex>To App</button>
+                                <button mat-raised-button (click)="$event.preventDefault(); logout()" fxFlex color="primary">Logout</button>
+                            }
+                        }
+                    </mat-card-actions>
+                }
+            </mat-card>
+
+            @if (config.BRANDING.HOMEPAGE; as homepage) {
+                <div class="homepage-wrapper">
+                    <a [href]="homepage.URL" mat-flat-button color="accent" class="homepage-button">
+                        <mat-icon>keyboard_return</mat-icon>
+                        <span></span>
+                        <img
+                            [src]="homepage.BUTTON_IMAGE_URL"
+                            [alt]="homepage.BUTTON_ALT_TEXT"
+                            [matTooltip]="homepage.BUTTON_TOOLTIP_TEXT"
+                        />
+                    </a>
+                </div>
+            }
+        </div>
+    </div>
+</form>

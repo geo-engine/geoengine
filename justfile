@@ -2,6 +2,7 @@ mod api-clients
 mod backend 'geoengine'
 mod common 'common.justfile'
 mod python
+mod ui
 mod www
 
 _default:
@@ -9,11 +10,11 @@ _default:
 
 # Install dependencies for all submodules.
 [group("install")]
-install: backend::install python::install
+install: backend::install python::install ui::install
 
 # Call lint for all submodules.
 [group("lint")]
-lint: lint-justfiles lint-openapi-spec backend::lint python::lint www::lint
+lint: lint-justfiles lint-openapi-spec backend::lint python::lint ui::lint www::lint
 
 # Validate OpenAPI spec.
 [group("lint")]
@@ -26,7 +27,7 @@ lint-justfiles: format-justfiles
 # Check the format for all submodules. Format them with `--write`.
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]
-format write="false": (format-justfiles write) (www::format write)
+format write="false": (format-justfiles write) (www::format write) (ui::format write)
 
 # Check if justfiles are formatted correctly. Format them with `--write`.
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
@@ -36,10 +37,16 @@ format-justfiles write="false": common::_clear
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile common.justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile geoengine/justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile python/justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile ui/justfile
 
 # Build all submodules.
 [group("build")]
-build: backend::build backend::generate-openapi-spec api-clients::build python::build
+build: backend::build backend::generate-openapi-spec api-clients::build python::build ui::build www::build
+
+# Run all applications at the same time. Usage: `just run`.
+[group('run')]
+[parallel]
+run: backend::run ui::run www::run
 
 VERSION_CMD := "cargo metadata --manifest-path geoengine/Cargo.toml --format-version=1 --no-deps | jq -r '.packages[0].version'"
 PYTHON_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.toml" "project.version"'
@@ -60,6 +67,10 @@ increase-version-number: common::_clear
 _increase-version-number version: (api-clients::update-config version)
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.version" "{{ version }}"
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.dependencies[0]" "geoengine-api-client == {{ version }}"
+    cd ui \
+    && jq '.version = "{{ version }}"' package.json > package.json.tmp \
+    && mv package.json.tmp package.json \
+    && npm run prettier -- --write package.json
 
 [group("lint")]
 lint-version-numbers: common::_clear

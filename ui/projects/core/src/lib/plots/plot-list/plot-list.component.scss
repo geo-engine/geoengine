@@ -1,0 +1,15 @@
+:host {
+    display: block;
+    padding: 1rem;
+}
+
+.no-plots {
+    color: var(--geoengine-foreground-secondary-text-color, grey);
+    margin-top: 50%;
+    text-align: center;
+}
+
+geoengine-plot-list-entry:not(:last-child) {
+    display: block;
+    margin-bottom: 1rem;
+}

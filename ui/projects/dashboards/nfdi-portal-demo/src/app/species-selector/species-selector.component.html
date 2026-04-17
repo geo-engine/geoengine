@@ -1,0 +1,238 @@
+<div class="container mat-typography" #container>
+    <p>
+        Hier kann eine Spezies nach Artnamen ausgewählt werden. Für diese werden dann die Beobachtungen in der Karte angezeigt. Über eine
+        Suche kann diese Liste nach bestimmten Arten durchsucht werden.
+    </p>
+
+    <!-- Dragonfly -->
+
+    <mat-form-field color="accent">
+        <mat-label>Artauswahl Libellen</mat-label>
+        <mat-select (valueChange)="selectDragonflySpecies($event)" [(value)]="selectedDragonflySpecies">
+            <mat-option>
+                <ngx-mat-select-search
+                    [formControl]="geoengineAutocompleteSelect.filterFormControl"
+                    geoengineAutocompleteSelect
+                    [geoengineAutocompleteSelectAllValues]="dragonflySpecies"
+                    [geoengineAutocompleteSelectSearchPredicate]="speciesPredicate"
+                    #geoengineAutocompleteSelect="geoengineAutocompleteSelect"
+                ></ngx-mat-select-search>
+            </mat-option>
+            <mat-option>– Keine Auswahl –</mat-option>
+            @for (species of geoengineAutocompleteSelect.filteredValues | async; track species) {
+                <mat-option [value]="species">
+                    {{ species }}
+                </mat-option>
+            }
+        </mat-select>
+    </mat-form-field>
+
+    <mat-progress-bar
+        [mode]="dataSelectionService.species1LoadingState$ | async | valueDefault: 'determinate'"
+        [value]="100"
+        color="accent"
+    ></mat-progress-bar>
+
+    @if (dragonflySpeciesLayer) {
+        <div>
+            <div class="spacer"></div>
+            <geoengine-layer-list-element [layer]="dragonflySpeciesLayer" [menu]="false"></geoengine-layer-list-element>
+            <p class="mat-caption">AK Libellen NRW (Datenstand 2020)</p>
+        </div>
+    }
+
+    <div class="spacer"></div>
+
+    @if (getSpeciesInfo(selectedDragonflySpecies); as speciesInfo) {
+        <mat-expansion-panel class="species-info">
+            <mat-expansion-panel-header>Spezies-Info</mat-expansion-panel-header>
+            <img [src]="speciesInfo.imageSrc" [alt]="selectedDragonflySpecies" />
+            @if (speciesInfo.imageRef) {
+                <p class="mat-caption">({{ speciesInfo.imageRef }})</p>
+            }
+            <p class="info-text" [innerHtml]="speciesInfo.text"></p>
+        </mat-expansion-panel>
+    }
+
+    <div class="spacer"></div>
+
+    <!-- Fish -->
+    <mat-form-field color="accent">
+        <mat-label>Artauswahl Fische</mat-label>
+        <mat-select (valueChange)="selectFishSpecies($event)" [(value)]="selectedFishSpecies">
+            <mat-option>
+                <ngx-mat-select-search
+                    [formControl]="geoengineAutocompleteSelect2.filterFormControl"
+                    geoengineAutocompleteSelect
+                    [geoengineAutocompleteSelectAllValues]="fishSpecies"
+                    [geoengineAutocompleteSelectSearchPredicate]="speciesPredicate"
+                    #geoengineAutocompleteSelect2="geoengineAutocompleteSelect"
+                ></ngx-mat-select-search>
+            </mat-option>
+            <mat-option>– Keine Auswahl –</mat-option>
+            @for (species of geoengineAutocompleteSelect2.filteredValues | async; track species) {
+                <mat-option [value]="species">
+                    {{ species }}
+                </mat-option>
+            }
+        </mat-select>
+    </mat-form-field>
+
+    <mat-progress-bar
+        [mode]="dataSelectionService.species2LoadingState$ | async | valueDefault: 'determinate'"
+        [value]="100"
+        color="accent"
+    ></mat-progress-bar>
+
+    @if (fishSpeciesLayer) {
+        <div>
+            <div class="spacer"></div>
+            <geoengine-layer-list-element [layer]="fishSpeciesLayer" [menu]="false"></geoengine-layer-list-element>
+            <p class="mat-caption">
+                Die hier zu Demonstrationszwecken gezeigten Daten stammen aus "Brunken, H. & Vatterrott, H.-R. (2020): Fischartenatlas von
+                Deutschland und Österreich" und Monitoringdaten, die im Rahmen der Befischungen für die Wasserrahmenrichtlinie und der
+                Flora-Fauna-Habitatrichtlinie von 12 Bundesländern (ohne Bayern, Baden-Württemberg, Rheinland-Pfalz und Hamburg)
+                veröffentlicht wurden.
+            </p>
+        </div>
+    }
+
+    <div class="spacer"></div>
+
+    @if (getSpeciesInfo(selectedFishSpecies); as speciesInfo) {
+        <mat-expansion-panel class="species-info">
+            <mat-expansion-panel-header>Spezies-Info</mat-expansion-panel-header>
+            <img [src]="speciesInfo.imageSrc" [alt]="selectedDragonflySpecies" />
+            @if (speciesInfo.imageRef) {
+                <p class="mat-caption">({{ speciesInfo.imageRef }})</p>
+            }
+            <p class="info-text" [innerHtml]="speciesInfo.text"></p>
+        </mat-expansion-panel>
+    }
+
+    <div class="spacer"></div>
+
+    <mat-divider></mat-divider>
+
+    <p>Zeitauswahl</p>
+    <geoengine-time-step-selector
+        class="mat-elevation-z4"
+        timeFormat="YYYY"
+        [timeSteps]="dataSelectionService.timeSteps | async | valueDefault: []"
+    ></geoengine-time-step-selector>
+    <div fxLayout="row" class="startEndYears mat-caption">
+        <span>{{ startYear }}</span>
+        <span fxFlex></span>
+        <span>{{ endYear }}</span>
+    </div>
+    <p>
+        Es wird ein Jahr ausgewählt, für das sämtliche Beobachtungen angezeigt werden. Die Beobachtungen werden auf der Karte räumlich
+        zusammengefasst als Kreise dargestellt, wobei größere Kreise mehr Beobachtungspunkte (als Zahl im Kreis erkenntlich) repräsentieren.
+        Wird hineingezoomt, zerfallen einzelne Kreise in mehrere genauere Kreise, die weniger Beobachtungspunkte repräsentieren.
+    </p>
+
+    <mat-divider></mat-divider>
+
+    <div class="spacer"></div>
+
+    <p>Im Folgenden kann die Beprobungshäufigkeit der Libellen optional mit eingeblendet werden.</p>
+
+    <div fxLayout="row" fxLayoutGap="1rem" fxLayoutAlign="space-between start">
+        <div fxFlex>
+            @if (!intensityLayer) {
+                <p class="intensityLabel">Beprobungshäufigkeit</p>
+            }
+            @if (intensityLayer) {
+                <geoengine-layer-list-element [layer]="intensityLayer" [menu]="false"></geoengine-layer-list-element>
+            }
+        </div>
+        <mat-slide-toggle class="intensityToggle" (change)="showIntensities($event.checked)"></mat-slide-toggle>
+    </div>
+
+    <div class="spacer"></div>
+
+    <mat-divider></mat-divider>
+
+    <div class="spacer"></div>
+
+    <p>
+        Hier können zusätzlich Umweltdaten, z.B. Klima- oder Landnutzungsdaten, der Karte als Hintegrund hinzugefügt werden. Die Daten
+        werden für das gleiche Jahr dargestellt, das in der obigen Zeitauswahl ausgewählt wurde. Die folgende Auswahl erlaubt die Wahl eines
+        Monats für die Darstellung des Umweltlayers.
+    </p>
+
+    <mat-form-field color="accent">
+        <mat-label>Klima-/Wasser-Datenauswahl</mat-label>
+        <mat-select (valueChange)="selectEnvironmentLayer($event)">
+            <mat-option>– Keine Auswahl –</mat-option>
+            @for (layer of environmentLayers; track layer) {
+                <mat-option [value]="layer">
+                    {{ layer.displayName }}
+                </mat-option>
+            }
+        </mat-select>
+    </mat-form-field>
+
+    @if (environmentLayer) {
+        <div>
+            <geoengine-layer-list-element [layer]="environmentLayer" [menu]="false"></geoengine-layer-list-element>
+        </div>
+    }
+
+    <p [innerText]="selectedEnvironmentCitation | async" class="mat-caption"></p>
+
+    <div class="container mat-typography" fxLayout="row" fxLayoutAlign="space-between center">
+        <mat-slider showTickMarks discrete [min]="1" [max]="12" [step]="1" fxFlex>
+            <input matSliderThumb [ngModel]="1" (ngModelChange)="setMonth($event)" />
+        </mat-slider>
+        <span fxFlex="1rem"></span>
+        <span fxFlex="4rem">{{ thumbLabelMonthDisplay(currentMonth) }}</span>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <div class="spacer"></div>
+
+    @if (selectedEnvironmentLayer?.plotType === 'pieChart') {
+        <p>
+            Im Folgenden kann ein Kuchendiagramm berechnet werden, welches den Umweltlayer mit den Beobachtungsdaten räumlich und zeitlich
+            verknüpft und die Werteverteilung darstellt. Maßgeblich ist der ausgewählte Monat und das Jahr. Hierbei werden Gebiete mit mehr
+            als 50% Anteil "Natur- und Artenschutz" als "Naturschutzbereich" gewertet. Die anderen Bereiche werden als
+            "Nicht-Naturschutzbereich" gewertet.
+        </p>
+        @if (dragonflySpeciesLayer && fishSpeciesLayer) {
+            <mat-form-field>
+                <mat-label>Welcher Beobachtungslayer?</mat-label>
+                <mat-select [(value)]="plotLayerSelection">
+                    <mat-option [value]="'dragonfly'">Libellen</mat-option>
+                    <mat-option [value]="'fish'">Fische</mat-option>
+                </mat-select>
+            </mat-form-field>
+        }
+        <button
+            [disabled]="(!selectedDragonflySpecies && !selectedFishSpecies) || !selectedEnvironmentLayer"
+            mat-stroked-button
+            id="compute-plot"
+            (click)="computePieChart()"
+        >
+            Berechne Plot
+        </button>
+        <div class="spacer"></div>
+        @if ((plotData | async) !== undefined) {
+            <h3>Plot von {{ plotSpecies }} und {{ plotEnvironmentLayer }}</h3>
+        }
+        @if ((plotData | async) !== undefined) {
+            <geoengine-vega-viewer [chartData]="plotData | async"></geoengine-vega-viewer>
+        }
+        @if (plotLoading | async) {
+            <mat-spinner color="accent"></mat-spinner>
+        }
+        <div class="spacer"></div>
+    }
+
+    <mat-divider></mat-divider>
+
+    <geoengine-attributions></geoengine-attributions>
+
+    <div class="spacer"></div>
+</div>

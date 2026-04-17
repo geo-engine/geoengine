@@ -1,0 +1,105 @@
+<h1 class="mat-h1 header-container">
+    <img src="assets/geoengine.svg" class="logo" />
+    <div>ESG Indicator Service</div>
+    <button mat-button class="logout-button" (click)="logout()">Logout</button>
+</h1>
+
+<div class="grid-container" [class.landscape]="isLandscape()">
+    <mat-card class="dashboard-card">
+        <mat-card-header>
+            <mat-card-title> Welcome </mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="dashboard-card-content">
+            <p>Welcome to the ESG Indicator Service!</p>
+            <p>
+                Here, you can compute ESG indicators for your properties. To get started, please select a property on the map and a date on
+                the time slider.
+            </p>
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="dashboard-card inspect">
+        <mat-card-header>
+            <mat-card-title> Select Property </mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="dashboard-card-content">
+            <div class="map-container">
+                <geoengine-map-container #map [grid]="false">
+                    @if (userService.getSessionTokenStream() | async; as sessionToken) {
+                        @for (layer of layersReverse(); track layer.id) {
+                            @if (layer.layerType === 'vector') {
+                                <geoengine-ol-vector-layer
+                                    [layerId]="layer.id"
+                                    [workflow]="layer.workflowId"
+                                    [symbology]="$any(layer.symbology)"
+                                    [isVisible]="layer.isVisible"
+                                    (mapRedraw)="map.layerForcesRedraw()"
+                                ></geoengine-ol-vector-layer>
+                            }
+                            @if (layer.layerType === 'raster') {
+                                <geoengine-ol-raster-layer
+                                    [layerId]="layer.id"
+                                    [workflow]="layer.workflowId"
+                                    [symbology]="$any(layer.symbology)"
+                                    [isVisible]="layer.isVisible"
+                                    [sessionToken]="sessionToken"
+                                    (mapRedraw)="map.layerForcesRedraw()"
+                                ></geoengine-ol-raster-layer>
+                            }
+                        }
+                    }
+                </geoengine-map-container>
+            </div>
+            <!-- <geoengine-legend *ngIf="dataSelectionService.rasterLayer | async as rasterLayer" [layer]="rasterLayer"></geoengine-legend> -->
+            @if (dataSelectionService.rasterLayerLoading | async) {
+                <mat-progress-bar class="loading-indicator" mode="query"></mat-progress-bar>
+            }
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="dashboard-card">
+        <mat-card-header>
+            <mat-card-title> Select Time </mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="dashboard-card-content">
+            <!-- time selector -->
+            <geoengine-time-step-selector [timeSteps]="timeSteps" timeFormat="YYYY-MM"></geoengine-time-step-selector>
+
+            <!-- analyze button -->
+            <button mat-raised-button color="primary" (click)="analyze()" [disabled]="!selectedFeature()">Analyze</button>
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="dashboard-card score-card">
+        <mat-card-header>
+            <mat-card-title> Score </mat-card-title>
+        </mat-card-header>
+        <mat-card-content #analyzecard class="dashboard-card-content score-container">
+            @if (score(); as score) {
+                <p class="center score">{{ score.toFixed(1) }}</p>
+                <mat-progress-spinner
+                    #scoreIndicator
+                    class="score-spinner"
+                    diameter="150"
+                    [value]="(score / maxScore) * 100"
+                    [color]="'#fefefe'"
+                ></mat-progress-spinner>
+            } @else {
+                @if (scoreLoading()) {
+                    <mat-spinner color="accent"></mat-spinner>
+                } @else {
+                    <p class="center">Please select a property and a date.</p>
+                }
+            }
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="dashboard-card usage-card">
+        <mat-card-header>
+            <mat-card-title> Usage log </mat-card-title>
+        </mat-card-header>
+        <mat-card-content #analyzecard class="dashboard-card-content score-container">
+            <geoengine-quota-log></geoengine-quota-log>
+        </mat-card-content>
+    </mat-card>
+</div>

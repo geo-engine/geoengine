@@ -1,0 +1,5 @@
+<mat-list-item (click)="add()">
+    <img matListItemIcon [src]="datasetImg" [alt]="datasetType" />
+    <h4 matListItemTitle [matTooltip]="dataset().name">{{ dataset().name }}</h4>
+    <p matListItemLine [matTooltip]="dataset().description">{{ dataset().description }}</p>
+</mat-list-item>

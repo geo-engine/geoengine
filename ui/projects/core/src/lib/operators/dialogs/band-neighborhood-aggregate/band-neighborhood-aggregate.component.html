@@ -1,0 +1,72 @@
+<geoengine-sidenav-header>Band Neighborhood</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container>
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/rasterstacker.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="RASTER_TYPE" formControlName="rasterLayer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/band-neighborhood.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <p>Specify the aggregate function:</p>
+            <mat-button-toggle-group
+                id="rename-type"
+                [multiple]="false"
+                formControlName="neighborhoodAggregate"
+                (ngModelChange)="updateNeighborhoodAggregate()"
+            >
+                <mat-button-toggle [value]="NeighborhoodAggregate.Average">Average</mat-button-toggle>
+                <mat-button-toggle [value]="NeighborhoodAggregate.FirstDerivative">First Derivative</mat-button-toggle>
+            </mat-button-toggle-group>
+
+            @switch (form.controls.neighborhoodAggregate.value) {
+                @case (NeighborhoodAggregate.Average) {
+                    <mat-form-field>
+                        <mat-label>Window Size</mat-label>
+                        <input matInput type="number" min="3" step="2" formControlName="windowSize" />
+                    </mat-form-field>
+                    @if (form.controls.windowSize.hasError('notOdd')) {
+                        <mat-error>Window size must be odd.</mat-error>
+                    }
+                    @if (form.controls.windowSize.hasError('valueNotLarger')) {
+                        <mat-error>Window size must be at least 3.</mat-error>
+                    }
+                }
+                @case (NeighborhoodAggregate.FirstDerivative) {
+                    <mat-form-field>
+                        <mat-label>Distance between Bands</mat-label>
+                        <input matInput type="number" formControlName="bandDistance" />
+                    </mat-form-field>
+                    @if (form.controls.bandDistance.hasError('valueNotLarger')) {
+                        <mat-error>Distance must be larger than 0.0.</mat-error>
+                    }
+                }
+            }
+        </ng-container>
+
+        @if (lastError$ | async; as lastError) {
+            <p class="error">{{ lastError }}</p>
+        }
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name formControlName="name">
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+
+            <geoengine-symbology-creator #symbologyCreator></geoengine-symbology-creator>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="form.invalid || (loading$ | async)">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

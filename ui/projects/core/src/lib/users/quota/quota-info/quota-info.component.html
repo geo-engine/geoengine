@@ -1,0 +1,17 @@
+@if (hasQuota()) {
+    <span class="pair">
+        <span class="label">Available credits</span>
+        <span class="value">{{ sessionQuota?.available }}</span>
+    </span>
+    <span class="pair">
+        <span class="label">Used credits</span>
+        <span class="value">{{ sessionQuota?.used }}</span>
+    </span>
+    <span class="sync">
+        <button mat-icon-button (click)="refreshQuota()"><mat-icon>sync</mat-icon></button>
+    </span>
+}
+
+@if (!hasQuota()) {
+    <p>No quota information available.</p>
+}

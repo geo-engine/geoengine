@@ -1,0 +1,34 @@
+@if (provider.value(); as provider) {
+    <div class="container">
+        <mat-card class="top">
+            <mat-card-header>
+                <mat-card-title>{{ providerListing().name }}</mat-card-title>
+                <mat-card-subtitle>Type: {{ provider.type }}, ID: {{ providerListing().id }}</mat-card-subtitle>
+            </mat-card-header>
+            <mat-card-content style="white-space: pre-wrap">
+                @if (isReadonly.value()) {
+                    <mat-hint>You do not have permission to edit this provider</mat-hint>
+                }
+                @if (provider) {
+                    <geoengine-manager-provider-input
+                        (updated)="updatedDefinition.set($event)"
+                        [providerType]="providerType()"
+                        [provider]="provider"
+                        [readonly]="isReadonly.value()"
+                    />
+                }
+            </mat-card-content>
+            <div class="actions">
+                <button mat-raised-button color="primary" [disabled]="isReadonly.value() || !updatedDefinition()" (click)="submitUpdate()">
+                    Save changes
+                </button>
+                <button mat-raised-button color="warn" [disabled]="isReadonly.value()" (click)="delete()">Delete provider</button>
+            </div>
+        </mat-card>
+        <mat-card>
+            <mat-card-content>
+                <geoengine-manager-permissions resourceType="provider" [resourceId]="providerListing().id" />
+            </mat-card-content>
+        </mat-card>
+    </div>
+}

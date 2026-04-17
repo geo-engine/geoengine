@@ -1,0 +1,32 @@
+<geoengine-sidenav-header>Add Workflow via Id</geoengine-sidenav-header>
+
+<geoengine-dialog-help>
+    <p>
+        Here you can add a new layer by pasting a workflow id. This comes in handy, when you defined a workflow elsewhere, for instance, in
+        a Python notebook and want to continue working in the UI.
+    </p>
+</geoengine-dialog-help>
+
+<form [formGroup]="form">
+    <mat-form-field appearance="fill">
+        <mat-label>layer Name</mat-label>
+        <input matInput type="text" formControlName="layerName" />
+        @if (form.controls.layerName.errors) {
+            <mat-hint class="error">Must not be empty</mat-hint>
+        }
+    </mat-form-field>
+
+    <mat-form-field appearance="fill">
+        <mat-label>Workflow Id</mat-label>
+        <input matInput type="text" formControlName="workflowId" />
+        @if (form.controls.workflowId.errors) {
+            <mat-hint class="error">Must be valid UUID</mat-hint>
+        }
+    </mat-form-field>
+
+    <div class="actions">
+        <button type="button" mat-raised-button color="primary" [disabled]="(form.statusChanges | async) !== 'VALID'" (click)="add()">
+            Add Layer
+        </button>
+    </div>
+</form>

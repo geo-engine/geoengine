@@ -1,0 +1,40 @@
+<button
+    class="menu-btn"
+    mat-icon-button
+    [matMenuTriggerFor]="layerListMenu"
+    matTooltip="Actions for all layers"
+    matTooltipPosition="after"
+    [matTooltipShowDelay]="config.DELAYS.TOOLTIP"
+>
+    <mat-icon>layers</mat-icon>
+</button>
+
+<!-- TODO: use default font size for layer menu -->
+<mat-menu #layerListMenu="matMenu">
+    <button mat-menu-item aria-label="Toggle Layer List Visibility" (click)="layoutService.toggleLayerListVisibility()">
+        @if (layerListIsVisibile()) {
+            <mat-icon>expand_less</mat-icon>
+        } @else {
+            <mat-icon>expand_more</mat-icon>
+        }
+
+        <span class="mat-body-2">Show/Hide Layer List</span>
+    </button>
+    @if (mapIsGrid()) {
+        <button mat-menu-item (click)="mapService.setGrid(false)">
+            <mat-icon>aspect_ratio</mat-icon>
+            <span class="mat-body-2">Switch to Mono Map View</span>
+        </button>
+    } @else {
+        <button mat-menu-item (click)="mapService.setGrid(true)">
+            <mat-icon>view_module</mat-icon>
+            <span class="mat-body-2">Switch to Grid View</span>
+        </button>
+    }
+
+    <button mat-menu-item (click)="projectService.clearLayers()">
+        <mat-icon>delete_sweep</mat-icon>
+        <span class="mat-body-2">Remove All Layers</span>
+    </button>
+    <ng-content select=".menu-buttons"></ng-content>
+</mat-menu>

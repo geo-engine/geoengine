@@ -1,0 +1,38 @@
+table {
+    width: 100%;
+
+    th,
+    td {
+        white-space: nowrap;
+        padding: 0 0.5rem 0 0.5rem;
+        min-width: 2rem;
+    }
+    .selectColumn {
+        min-width: 1rem;
+    }
+}
+
+span.ok {
+    font-weight: bold;
+    color: green;
+}
+
+span.unavailable {
+    font-weight: bold;
+    color: purple;
+}
+
+span.error {
+    font-weight: bold;
+    color: red;
+}
+
+.actions {
+    float: right;
+    padding-top: 15px;
+}
+
+.actions button {
+    margin-left: 10px;
+    margin-bottom: 10px;
+}

@@ -1,0 +1,27 @@
+<svg width="24px" height="24px" xmlns="http://www.w3.org/2000/svg">
+  <rect fill="#bfbfbf" x="2" y="2" width="4" height="4" id="1_1" stroke="#000000"/>
+  <rect id="1_2" fill="#7f7f7f" x="6" y="2" width="4" height="4" stroke="#000000"/>
+  <rect id="1_3" fill="#bfbfbf" x="10" y="2" width="4" height="4" stroke="#000000"/>
+  <rect id="1_4" fill="#7f7f7f" x="14" y="2" width="4" height="4" stroke="#000000"/>
+  <rect id="1_5" fill="#bfbfbf" x="18" y="2" width="4" height="4" stroke="#000000"/>
+  <rect fill="#7f7f7f" x="2" y="6" width="4" height="4" id="2_1" stroke="#000000"/>
+  <rect id="2_2" fill="#bfbfbf" x="6" y="6" width="4" height="4" stroke="#000000"/>
+  <rect id="2_3" fill="#7f7f7f" x="10" y="6" width="4" height="4" stroke="#000000"/>
+  <rect id="2_4" fill="#bfbfbf" x="14" y="6" width="4" height="4" stroke="#000000"/>
+  <rect id="2_5" fill="#7f7f7f" x="18" y="6" width="4" height="4" stroke="#000000"/>
+  <rect id="3_3" fill="#bfbfbf" x="2" y="10" width="4" height="4" stroke="#000000"/>
+  <rect id="3_4" fill="#7f7f7f" x="6" y="10" width="4" height="4" stroke="#000000"/>
+  <rect id="3_5" fill="#bfbfbf" x="10" y="10" width="4" height="4" stroke="#000000"/>
+  <rect id="3_6" fill="#7f7f7f" x="14" y="10" width="4" height="4" stroke="#000000"/>
+  <rect id="3_7" fill="#bfbfbf" x="18" y="10" width="4" height="4" stroke="#000000"/>
+  <rect fill="#7f7f7f" x="2" y="14" width="4" height="4" id="s_9" stroke="#000000"/>
+  <rect fill="#bfbfbf" x="6" y="14" width="4" height="4" id="svg_10" stroke="#000000"/>
+  <rect fill="#7f7f7f" x="10" y="14" width="4" height="4" id="svg_11" stroke="#000000"/>
+  <rect fill="#bfbfbf" x="14" y="14" width="4" height="4" id="svg_12" stroke="#000000"/>
+  <rect fill="#7f7f7f" x="18" y="14" width="4" height="4" id="svg_13" stroke="#000000"/>
+  <rect fill="#bfbfbf" x="2" y="18" width="4" height="4" id="svg_15" stroke="#000000"/>
+  <rect fill="#7f7f7f" x="6" y="18" width="4" height="4" id="svg_16" stroke="#000000"/>
+  <rect fill="#bfbfbf" x="10" y="18" width="4" height="4" id="svg_17" stroke="#000000"/>
+  <rect fill="#7f7f7f" x="14" y="18" width="4" height="4" id="svg_18" stroke="#000000"/>
+  <rect fill="#bfbfbf" x="18" y="18" width="4" height="4" id="svg_19" stroke="#000000"/>
+</svg>

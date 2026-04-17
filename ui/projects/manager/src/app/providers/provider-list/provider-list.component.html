@@ -1,0 +1,26 @@
+<div class="container">
+    @if (addedProvider; as item) {
+        <mat-nav-list>
+            <mat-list-item class="selected">
+                <span matListItemTitle>{{ item.name }} [{{ item.id }}]</span>
+            </mat-list-item></mat-nav-list
+        >
+    } @else {
+        <div class="flex-container">
+            <button mat-raised-button color="primary" class="add-dataset" (click)="addProvider()"><mat-icon>add</mat-icon></button>
+        </div>
+        <cdk-virtual-scroll-viewport class="bottom" itemSize="itemSizePx" (scrolledIndexChange)="onScrolledIndexChange($event)">
+            <mat-nav-list>
+                <ng-container *cdkVirtualFor="let item of source; trackBy: trackById">
+                    <mat-list-item [class.selected]="_selectedProvider$()?.id === item.id" (click)="select(item)">
+                        <span matListItemTitle>{{ item.name }} [{{ item.id }}]</span>
+                    </mat-list-item>
+                </ng-container>
+            </mat-nav-list>
+
+            @if (source?.loading$ | async) {
+                <mat-spinner [diameter]="loadingSpinnerDiameterPx" />
+            }
+        </cdk-virtual-scroll-viewport>
+    }
+</div>

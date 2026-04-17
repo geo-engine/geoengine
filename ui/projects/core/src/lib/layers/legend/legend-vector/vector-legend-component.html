@@ -1,0 +1,142 @@
+<div fxLayout="column">
+    @if (showDefaultStyle()) {
+        <div fxLayout="row" fxLayoutAlign="start center" class="single-line">
+            <mat-icon>
+                @switch (layer.symbology.symbologyType) {
+                    @case (ST.POINT) {
+                        <geoengine-point-icon [iconStyle]="$any(layer.symbology.iconStyle)"></geoengine-point-icon>
+                    }
+                    @case (ST.LINE) {
+                        <geoengine-line-icon [iconStyle]="$any(layer.symbology.iconStyle)"></geoengine-line-icon>
+                    }
+                    @case (ST.POLYGON) {
+                        <geoengine-polygon-icon [iconStyle]="$any(layer.symbology.iconStyle)"></geoengine-polygon-icon>
+                    }
+                }
+            </mat-icon>
+            <!-- TODO: visualize the symbology -->
+            <span fxFlex>Default style</span>
+        </div>
+    }
+
+    <!-- Fill Color Legend   -->
+    @if (colorBreakPoints) {
+        <div>
+            <mat-divider></mat-divider>
+            <div fxLayout="row" fxLayoutAlign="start center" class="heading">
+                <span fxFlex
+                    >Fill Colors derived by
+                    <b
+                        ><i>{{ colorAttributeName }}</i>
+                    </b>
+                </span>
+            </div>
+            @for (breakpoint of colorBreakPoints; track breakpoint) {
+                <div fxLayout="row" fxLayoutAlign="start center" class="segment">
+                    <mat-icon>
+                        @switch (layer.symbology.symbologyType) {
+                            @case (ST.POINT) {
+                                <geoengine-point-icon [iconStyle]="getPointIconStyle({fillColor: breakpoint.color})"></geoengine-point-icon>
+                            }
+                            @case (ST.POLYGON) {
+                                <geoengine-polygon-icon
+                                    [iconStyle]="getPolygonIconStyle({fillColor: breakpoint.color})"
+                                ></geoengine-polygon-icon>
+                            }
+                        }
+                    </mat-icon>
+                    <span fxFlex>{{ breakpoint.value }}</span>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Stroke Color Legend   -->
+    @if (strokeColorBreakpoints) {
+        <div>
+            <mat-divider></mat-divider>
+            <div fxLayout="row" fxLayoutAlign="start center" class="heading">
+                <span fxFlex
+                    >Stroke Colors derived by
+                    <b
+                        ><i>{{ strokeColorAttributeName }}</i>
+                    </b>
+                </span>
+            </div>
+            @for (breakpoint of strokeColorBreakpoints; track breakpoint) {
+                <div fxLayout="row" fxLayoutAlign="start center" class="segment">
+                    <mat-icon>
+                        @switch (layer.symbology.symbologyType) {
+                            @case (ST.POINT) {
+                                <geoengine-point-icon
+                                    [iconStyle]="getPointIconStyle({strokeWidth: 1, strokeColor: breakpoint.color})"
+                                ></geoengine-point-icon>
+                            }
+                            @case (ST.POLYGON) {
+                                <geoengine-polygon-icon
+                                    [iconStyle]="getPolygonIconStyle({strokeWidth: 1, strokeColor: breakpoint.color})"
+                                ></geoengine-polygon-icon>
+                            }
+                            @case (ST.LINE) {
+                                <geoengine-line-icon
+                                    [iconStyle]="getLineIconStyle({strokeWidth: 1, strokeColor: breakpoint.color})"
+                                ></geoengine-line-icon>
+                            }
+                        }
+                    </mat-icon>
+                    <span fxFlex>{{ breakpoint.value }}</span>
+                </div>
+            }
+        </div>
+    }
+
+    <!-- Stroke Width Legend   -->
+    @if (strokeWidthAttributeName) {
+        <div>
+            <mat-divider></mat-divider>
+            <div fxLayout="row" fxLayoutAlign="start center" class="heading">
+                <span fxFlex>
+                    Stroke Width derived by
+                    <b>
+                        <i>{{ strokeWidthAttributeName }}</i>
+                    </b>
+                </span>
+            </div>
+            <div fxLayout="row" fxLayoutAlign="start center" class="segment">
+                <span fxFlex> with factor: {{ strokeWidthFactor }}</span>
+            </div>
+        </div>
+    }
+
+    <!-- Radius Legend for ClusteredPointSymbology  -->
+    @if (radiusAttributeName === '___radius') {
+        <div>
+            <mat-divider></mat-divider>
+            <div fxLayout="row" fxLayoutAlign="start center" class="single-line">
+                @if (radiusAttributeName === '___radius') {
+                    <span fxFlex
+                        >Radius derived by <b><i>clustering</i></b></span
+                    >
+                }
+            </div>
+        </div>
+    }
+
+    <!-- Radius Legend for PointSymbology -->
+    @if (radiusAttributeName && radiusAttributeName !== '___radius') {
+        <div>
+            <mat-divider></mat-divider>
+            <div fxLayout="row" fxLayoutAlign="start center" class="heading">
+                <span fxFlex
+                    >Radius derived by
+                    <b
+                        ><i>{{ radiusAttributeName }}</i></b
+                    ></span
+                >
+            </div>
+            <div fxLayout="row" fxLayoutAlign="start center" class="segment">
+                <span fxFlex> with factor: {{ radiusFactor }}</span>
+            </div>
+        </div>
+    }
+</div>

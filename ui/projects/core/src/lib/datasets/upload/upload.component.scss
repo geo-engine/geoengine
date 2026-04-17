@@ -1,0 +1,22 @@
+:host {
+    display: block;
+    padding: 1rem;
+}
+
+.actions {
+    padding-bottom: 1rem;
+}
+
+mat-spinner {
+    width: 25%;
+    height: auto;
+    margin: 1rem auto;
+}
+
+textarea {
+    width: 99%;
+}
+
+mat-form-field {
+    width: 100% !important;
+}

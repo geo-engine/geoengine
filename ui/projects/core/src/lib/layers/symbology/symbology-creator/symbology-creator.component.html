@@ -1,0 +1,50 @@
+<ng-container>
+    <mat-form-field appearance="fill">
+        <mat-label>Symbology</mat-label>
+        <mat-select [formControl]="value">
+            @if (enableCopyInputSymbology()) {
+                <mat-option [value]="AS_INPUT">Same as input</mat-option>
+            }
+            <mat-option [value]="COMPUTE_LINEAR_GRADIENT">Compute linear gradient</mat-option>
+            <mat-option [value]="LINEAR_GRADIENT_FROM_MIN_MAX">Create linear gradient between min/max</mat-option>
+        </mat-select>
+    </mat-form-field>
+    <div class="description">
+        <mat-hint>
+            @switch (value.value) {
+                @case (AS_INPUT) {
+                    <span class="mat-caption">Use the symbology of the input for the new layer.</span>
+                }
+                @case (COMPUTE_LINEAR_GRADIENT) {
+                    <span class="mat-caption">
+                        Compute a linear gradient by calculating min/max for a sample of the output. Uses the currently selected point in
+                        time.
+                    </span>
+                }
+                @case (LINEAR_GRADIENT_FROM_MIN_MAX) {
+                    <span class="mat-caption"> Create a linear gradient between the given minimum and maximum values. </span>
+                }
+            }
+        </mat-hint>
+    </div>
+    <div>
+        @if (value.getRawValue() === LINEAR_GRADIENT_FROM_MIN_MAX) {
+            <mat-form-field class="flex-item" fxFlex>
+                <mat-label>Min</mat-label>
+                <input matInput type="number" step="any" placeholder="Min" [formControl]="min" />
+                @if (min.getRawValue() === null || max.getRawValue() === null) {
+                    <mat-hint [ngClass]="{'mat-error': true, 'mat-hint': false}"> Specify a minimum and a maximum. </mat-hint>
+                }
+            </mat-form-field>
+        }
+        @if (value.getRawValue() === LINEAR_GRADIENT_FROM_MIN_MAX) {
+            <mat-form-field class="flex-item" fxFlex>
+                <mat-label>Max</mat-label>
+                <input matInput type="number" step="any" placeholder="Max" [formControl]="max" />
+                @if (min.getRawValue() !== null && max.getRawValue() !== null && max.getRawValue() <= min.getRawValue()) {
+                    <mat-hint [ngClass]="{'mat-error': true, 'mat-hint': false}"> The maximum must be greater than the minimum. </mat-hint>
+                }
+            </mat-form-field>
+        }
+    </div>
+</ng-container>

@@ -1,0 +1,14 @@
+:host {
+    margin: 1rem;
+    padding: 1rem;
+    overflow: scroll;
+}
+
+#compute-plot {
+    vertical-align: super;
+    margin-left: 1rem;
+}
+
+geoengine-vega-viewer {
+    display: block;
+}

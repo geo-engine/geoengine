@@ -1,0 +1,35 @@
+{
+    "compileOnSave": false,
+    "compilerOptions": {
+        "baseUrl": "./",
+        "outDir": "./dist/out-tsc",
+        "sourceMap": true,
+        "declaration": false,
+        "esModuleInterop": true,
+        "experimentalDecorators": true,
+        "module": "ES2022",
+        "moduleResolution": "bundler",
+        "importHelpers": false,
+        "target": "ES2022",
+        "lib": ["ES2022", "dom", "ESNext.Disposable"],
+        "paths": {
+            "@geoengine/core": ["dist/core", "projects/core/src"],
+            "@geoengine/common": ["dist/common", "projects/common/src"],
+            "@geoengine/manager": ["projects/manager/src"],
+            "fast-json-patch/index.mjs": ["./node_modules/fast-json-patch/index.d.ts"]
+        },
+        "forceConsistentCasingInFileNames": true,
+        "strict": true,
+        "noImplicitOverride": true,
+        "noImplicitReturns": true,
+        "noPropertyAccessFromIndexSignature": false,
+        "noFallthroughCasesInSwitch": true,
+        "useDefineForClassFields": false
+    },
+    "angularCompilerOptions": {
+        "enableI18nLegacyMessageIdFormat": false,
+        "strictInjectionParameters": true,
+        "strictInputAccessModifiers": true,
+        "strictTemplates": true
+    }
+}

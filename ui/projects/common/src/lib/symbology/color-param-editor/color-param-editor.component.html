@@ -1,0 +1,43 @@
+<geoengine-color-attribute-input
+    [readonlyAttribute]="true"
+    attributePlaceholder="Default Color"
+    [(ngModel)]="defaultColorAttribute"
+></geoengine-color-attribute-input>
+
+<mat-form-field appearance="fill">
+    <mat-label>Derive color from attribute</mat-label>
+    <mat-select placeholder="Attribute" [(ngModel)]="colorAttributeName">
+        <mat-option [value]="undefined"><em>None</em></mat-option>
+        @for (attribute of attributes(); track attribute) {
+            <mat-option [value]="attribute">{{ attribute }}</mat-option>
+        }
+    </mat-select>
+</mat-form-field>
+
+@if (isDerived) {
+    <mat-form-field appearance="fill">
+        <mat-label>Colorizer Type</mat-label>
+        <mat-select [(ngModel)]="colorizerType" required>
+            <mat-option value="linearGradient">linear gradient</mat-option>
+            <!-- <mat-option value="logarithmicGradient">logarithmic gradient</mat-option> -->
+            <mat-option value="palette">palette</mat-option>
+        </mat-select>
+    </mat-form-field>
+    @for (breakpoint of colorizerBreakpoints; track identify(i, breakpoint); let i = $index) {
+        <div>
+            <geoengine-color-breakpoint
+                [ngModel]="breakpoint"
+                (ngModelChange)="updateBreakpointAt(i, $event)"
+                fxFlex
+            ></geoengine-color-breakpoint>
+            <span>
+                <button mat-icon-button (click)="addBreakpointAt(i)">
+                    <mat-icon aria-label="Add row">add_circle_outline</mat-icon>
+                </button>
+                <button mat-icon-button [disabled]="colorizerBreakpoints.length <= 1" (click)="removeBreakpointAt(i)">
+                    <mat-icon aria-label="Delete row">remove_circle_outline</mat-icon>
+                </button>
+            </span>
+        </div>
+    }
+}

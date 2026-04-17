@@ -1,0 +1,91 @@
+<h2 mat-dialog-title>Create new dataset</h2>
+
+<div class="container">
+    <form [formGroup]="form">
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Basic Information</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <div>
+                    <mat-form-field appearance="fill">
+                        <mat-label>Name</mat-label>
+                        <input matInput type="text" formControlName="name" />
+                    </mat-form-field>
+                    <mat-form-field appearance="fill">
+                        <mat-label>Display Name</mat-label>
+                        <input matInput type="text" formControlName="displayName" />
+                    </mat-form-field>
+                </div>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Data Path</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <div>
+                    <mat-button-toggle-group
+                        id="path-type"
+                        [multiple]="false"
+                        formControlName="dataPathType"
+                        (ngModelChange)="updateDataPathType()"
+                    >
+                        <mat-button-toggle [value]="DataPaths.Upload">Upload</mat-button-toggle>
+                        <mat-button-toggle [value]="DataPaths.Volume">Volume</mat-button-toggle>
+                    </mat-button-toggle-group>
+
+                    @if (form.controls.dataPathType.value === DataPaths.Upload) {
+                        <mat-form-field appearance="fill">
+                            <mat-label>Upload Id</mat-label>
+                            <input matInput type="text" formControlName="uploadId" />
+                        </mat-form-field>
+                    } @else {
+                        <mat-form-field appearance="fill">
+                            <mat-label>Volume</mat-label>
+                            <mat-select formControlName="volumeName">
+                                @for (volume of volumes$ | async; track volume) {
+                                    <mat-option [value]="volume.name">
+                                        {{ volume.name }}
+                                    </mat-option>
+                                }
+                            </mat-select>
+                        </mat-form-field>
+                    }
+                </div>
+            </mat-card-content>
+        </mat-card>
+
+        <mat-card>
+            <mat-card-header>
+                <mat-card-title>Loading Info</mat-card-title>
+            </mat-card-header>
+
+            <mat-card-content>
+                <mat-button-toggle-group id="data-type" [multiple]="false" formControlName="dataType" (change)="updateDataType()">
+                    <mat-button-toggle [value]="DataTypes.Raster">Raster</mat-button-toggle>
+                    <mat-button-toggle [value]="DataTypes.Vector">Vector</mat-button-toggle>
+                </mat-button-toggle-group>
+
+                @switch (form.controls.dataType.value) {
+                    @case (DataTypes.Raster) {
+                        <geoengine-manager-gdal-metadata-list [dataPath]="dataPath()"></geoengine-manager-gdal-metadata-list>
+                    }
+                    @case (DataTypes.Vector) {
+                        <geoengine-ogr-dataset
+                            [uploadId]="form.controls.uploadId.value"
+                            [volumeName]="form.controls.volumeName.value"
+                        ></geoengine-ogr-dataset>
+                    }
+                }
+            </mat-card-content>
+        </mat-card>
+
+        <div class="actions">
+            <button mat-raised-button color="primary" [disabled]="isCreateDisabled()" (click)="createDataset()">Create dataset</button>
+        </div>
+    </form>
+</div>

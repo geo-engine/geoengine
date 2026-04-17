@@ -1,0 +1,36 @@
+mat-card {
+    margin-top: 1rem;
+}
+
+mat-divider {
+    padding-bottom: 1rem;
+}
+
+mat-slider {
+    min-width: unset;
+    width: 100%;
+}
+
+.colorizer-preview {
+    height: 1.5rem;
+    border: 1px solid black;
+}
+
+.histogram {
+    width: 100%;
+}
+
+.histogram-actions {
+    text-align: center;
+}
+
+button {
+    margin: 0.5rem;
+}
+
+.colorizer-preview {
+    height: 1.5rem;
+    border: 1px solid black;
+
+    margin: 1rem;
+}

@@ -1,0 +1,41 @@
+:host {
+    display: block;
+    padding: 1rem;
+}
+
+.dropzone {
+    width: 100%;
+    padding: 2rem;
+    box-sizing: border-box;
+    text-align: center;
+    border: dashed 1px #979797;
+    margin: 0 auto;
+}
+
+.input-dropzone {
+    opacity: 0;
+    position: absolute;
+    z-index: 2;
+    width: 100%;
+    height: 100%;
+    top: 0;
+    left: 0;
+}
+.browse-button {
+    z-index: 3;
+}
+
+.files-list {
+    width: 100%;
+    border: dashed 1px #979797;
+    margin: 1rem auto auto;
+    padding: 0;
+}
+
+.file-size {
+    color: #a4a4a4;
+}
+
+.deleteIcon {
+    transform: scale(0.75);
+}

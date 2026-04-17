@@ -1,0 +1,8 @@
+{
+    "DEFAULTS": {
+        "FOCUS_EXTENT": [8.71509, 50.28599, 8.8429, 50.3901]
+    },
+    "PROJECT": {
+        "CREATE_TEMPORARY_PROJECT_AT_STARTUP": true
+    }
+}

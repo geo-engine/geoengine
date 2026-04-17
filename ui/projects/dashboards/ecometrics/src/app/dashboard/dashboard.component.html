@@ -1,0 +1,124 @@
+<div class="grid-container" [class.landscape]="isLandscape()">
+    <mat-card class="dashboard-card">
+        <mat-card-header>
+            <mat-card-title> Welcome </mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="dashboard-card-content">
+            <p>Welcome to the Environmental Indicators Dashboard!</p>
+            <p>
+                Here, you can analyze specific areas of interest by selecting an indicator and drawing the area directly on the map. To get
+                started, please select an indicator. Then, simply draw your area of interest on the map and start the analysis.
+            </p>
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="dashboard-card">
+        <mat-card-header>
+            <mat-card-title> Select Indicator </mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="dashboard-card-content">
+            <p>Please choose one of the following indicators:</p>
+            <mat-form-field>
+                <mat-label>Select Indicator</mat-label>
+                <mat-select (selectionChange)="changeIndicator($event)">
+                    @for (indicator of indicators; track indicator) {
+                        <mat-option [value]="indicator">
+                            <b>{{ indicator.name }}:</b> {{ indicator.description }}
+                        </mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="dashboard-card inspect">
+        <mat-card-header>
+            <mat-card-title> Inspect Indicator </mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="dashboard-card-content">
+            <div class="map-container">
+                <geoengine-map-container #map [grid]="false">
+                    @if (userService.getSessionTokenStream() | async; as sessionToken) {
+                        @for (layer of layersReverse(); track layer.id) {
+                            @if (layer.layerType === 'vector') {
+                                <geoengine-ol-vector-layer
+                                    [layerId]="layer.id"
+                                    [workflow]="layer.workflowId"
+                                    [symbology]="$any(layer.symbology)"
+                                    [isVisible]="layer.isVisible"
+                                    (mapRedraw)="map.layerForcesRedraw()"
+                                ></geoengine-ol-vector-layer>
+                            }
+                            @if (layer.layerType === 'raster') {
+                                <geoengine-ol-raster-layer
+                                    [layerId]="layer.id"
+                                    [workflow]="layer.workflowId"
+                                    [symbology]="$any(layer.symbology)"
+                                    [isVisible]="layer.isVisible"
+                                    [sessionToken]="sessionToken"
+                                    (mapRedraw)="map.layerForcesRedraw()"
+                                ></geoengine-ol-raster-layer>
+                            }
+                        }
+                    }
+                </geoengine-map-container>
+            </div>
+            @if (dataSelectionService.rasterLayer | async; as rasterLayer) {
+                <geoengine-legend [layer]="rasterLayer"></geoengine-legend>
+            }
+            @if (dataSelectionService.rasterLayerLoading | async) {
+                <mat-progress-bar class="loading-indicator" mode="query"></mat-progress-bar>
+            }
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="dashboard-card">
+        <mat-card-header>
+            <mat-card-title> Select </mat-card-title>
+        </mat-card-header>
+        <mat-card-content class="dashboard-card-content">
+            <!-- two button for draw and reset -->
+            <div>
+                <button mat-raised-button color="accent" (click)="selectBox()" [disabled]="isSelectingBox()">
+                    Select region on the map
+                </button>
+                <button mat-raised-button (click)="reset()">Reset</button>
+            </div>
+
+            <!-- time selector -->
+            <geoengine-time-step-selector [timeSteps]="timeSteps" timeFormat="YYYY-MM"></geoengine-time-step-selector>
+
+            <!-- analyze button -->
+            <button mat-raised-button color="primary" (click)="analyze()" [disabled]="!selectedIndicator() || !selectedBBox()">
+                Analyze
+            </button>
+        </mat-card-content>
+    </mat-card>
+
+    <mat-card class="dashboard-card analyze">
+        <mat-card-header>
+            <mat-card-title> Analyze </mat-card-title>
+        </mat-card-header>
+        <mat-card-content #analyzecard class="dashboard-card-content">
+            <!-- vega component -->
+            @if (plotData(); as plot) {
+                <div class="chart-container">
+                    <geoengine-vega-viewer [width]="plotWidthPx()" [height]="plotHeightPx()" [chartData]="plot"></geoengine-vega-viewer>
+
+                    <p>
+                        The chart shows the distribution of values for the selected indicator within the area of interest. The x-axis
+                        represents the classes or values and the y-axis the amount of pixels with this value.
+                    </p>
+                </div>
+            } @else {
+                @if (plotLoading()) {
+                    @if (plotLoading()) {
+                        <mat-spinner color="accent"></mat-spinner>
+                    }
+                } @else {
+                    <p class="center">Please select an indicator and a region of interest.</p>
+                }
+            }
+        </mat-card-content>
+    </mat-card>
+</div>

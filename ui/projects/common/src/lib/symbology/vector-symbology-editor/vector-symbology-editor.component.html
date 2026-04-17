@@ -1,0 +1,142 @@
+<!-- For points -->
+@if (isPointLayer) {
+    <mat-card>
+        <mat-card-header>
+            <div class="icon-continer" mat-card-avatar>
+                <mat-icon>map</mat-icon>
+            </div>
+            <mat-card-title>Symbology Type</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+            <mat-slide-toggle [checked]="isClustered" (change)="setClusterSymbology($event.checked)"
+                >Visually clustered points</mat-slide-toggle
+            >
+        </mat-card-content>
+    </mat-card>
+}
+
+<!-- For lines and polygons -->
+@if (isLineLayer || isPolygonLayer) {
+    <mat-card>
+        <mat-card-header>
+            <div class="icon-continer" mat-card-avatar>
+                <mat-icon>map</mat-icon>
+            </div>
+            <mat-card-title>Visualization Options</mat-card-title>
+        </mat-card-header>
+        @if (isLineLayer) {
+            <mat-card-content>
+                <mat-slide-toggle [checked]="isAutoSimplified" (change)="updateLineSymbology({autoSimplified: $event.checked})">
+                    Simplify lines
+                </mat-slide-toggle>
+            </mat-card-content>
+        }
+        @if (isPolygonLayer) {
+            <mat-card-content>
+                <mat-slide-toggle [checked]="isAutoSimplified" (change)="updatePolygonSymbology({autoSimplified: $event.checked})">
+                    Simplify lines
+                </mat-slide-toggle>
+            </mat-card-content>
+        }
+    </mat-card>
+}
+
+<!-- For points and polygons -->
+@if (showFillColorEditor) {
+    <mat-card>
+        <mat-card-header>
+            <div class="icon-continer" mat-card-avatar>
+                <mat-icon>map</mat-icon>
+            </div>
+            <mat-card-title>Fill Color</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+            <geoengine-color-param-editor
+                [(ngModel)]="fillColor"
+                [attributes]="numericAttributes | async | valueDefault: []"
+            ></geoengine-color-param-editor>
+        </mat-card-content>
+    </mat-card>
+}
+
+<mat-card expanded="true">
+    <mat-card-header>
+        <div class="icon-continer" mat-card-avatar>
+            <mat-icon>map</mat-icon>
+        </div>
+        <mat-card-title>Stroke</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+        <h3 class="mat-subtitle-1">Color</h3>
+        <geoengine-color-param-editor
+            [(ngModel)]="strokeColor"
+            [attributes]="numericAttributes | async | valueDefault: []"
+        ></geoengine-color-param-editor>
+        <h3 class="mat-subtitle-1">Width</h3>
+        <geoengine-number-param-editor
+            [(ngModel)]="strokeWidth"
+            [min]="1"
+            [attributes]="numericAttributes | async | valueDefault: []"
+        ></geoengine-number-param-editor>
+    </mat-card-content>
+</mat-card>
+
+<!-- Points only -->
+@if (showRadiusEditor) {
+    <mat-card expanded="true">
+        <mat-card-header>
+            <div class="icon-continer" mat-card-avatar>
+                <mat-icon>map</mat-icon>
+            </div>
+            <mat-card-title>Radius</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+            <geoengine-number-param-editor
+                [(ngModel)]="radius"
+                [min]="1"
+                [attributes]="numericAttributes | async | valueDefault: []"
+            ></geoengine-number-param-editor>
+        </mat-card-content>
+    </mat-card>
+}
+
+<!-- Optional -->
+@if (supportsText) {
+    <mat-card expanded="true">
+        <mat-card-header>
+            <div class="icon-continer" mat-card-avatar>
+                <mat-icon>map</mat-icon>
+            </div>
+            <mat-card-title>Label</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+            <mat-form-field appearance="fill">
+                <mat-label>Derive label from attribute</mat-label>
+                <mat-select placeholder="Attribute" [(ngModel)]="textAttribute">
+                    <mat-option [value]="undefined"><em>None</em></mat-option>
+                    @for (attribute of allAttributes | async; track attribute) {
+                        <mat-option [value]="attribute">{{ attribute }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+            @if (hasText) {
+                <h3 class="mat-subtitle-1">Fill Color</h3>
+                <geoengine-color-param-editor
+                    [(ngModel)]="textFillColor"
+                    [attributes]="numericAttributes | async | valueDefault: []"
+                ></geoengine-color-param-editor>
+                <h3 class="mat-subtitle-1">Stroke Color</h3>
+                <geoengine-color-param-editor
+                    [(ngModel)]="textStrokeColor"
+                    [attributes]="numericAttributes | async | valueDefault: []"
+                ></geoengine-color-param-editor>
+                <h3 class="mat-subtitle-1">Stroke Width</h3>
+                <geoengine-number-param-editor
+                    [(ngModel)]="textStrokeWidth"
+                    [min]="1"
+                    [attributes]="numericAttributes | async | valueDefault: []"
+                ></geoengine-number-param-editor>
+            }
+        </mat-card-content>
+    </mat-card>
+}

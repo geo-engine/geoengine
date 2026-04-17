@@ -1,0 +1,15 @@
+:host {
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+}
+
+.actions {
+    text-align: right;
+    height: 3rem;
+    padding: 1rem;
+
+    button {
+        margin: 0.5rem;
+    }
+}

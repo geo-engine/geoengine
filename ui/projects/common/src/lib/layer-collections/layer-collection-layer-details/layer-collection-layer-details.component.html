@@ -1,0 +1,100 @@
+<span class="details-content" fxLayout="column" fxLayoutAlign="center start">
+    @if (description()) {
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            <mat-icon class="details-row-icon">info</mat-icon>
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">Description</p>
+                <p class="details-row-text-multi-line">{{ description() }}</p>
+            </span>
+        </span>
+    }
+
+    @if (layerMetadata()) {
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            <mat-icon class="details-row-icon">language</mat-icon>
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">SRS</p>
+                <p class="details-row-text-line">{{ layerMetadata()?.spatialReference?.srsString }}</p>
+            </span>
+        </span>
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            <mat-icon class="details-row-icon">fullscreen</mat-icon>
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">Spatial bounds</p>
+                @if (bboxLowerLeftString) {
+                    <p class="details-row-text-line">{{ bboxLowerLeftString }}</p>
+                    <p class="details-row-text-line">{{ bboxUpperRightString }}</p>
+                }
+                @if (!bboxLowerLeftString) {
+                    <p class="details-row-text-line">undefined</p>
+                }
+            </span>
+        </span>
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            <mat-icon class="details-row-icon">date_range</mat-icon>
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">Temporal bounds</p>
+                <p class="details-row-text-line">{{ timeString }}</p>
+            </span>
+        </span>
+    }
+
+    @if (rasterLayerMetadata) {
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            <mat-icon class="details-row-icon"
+                ><geoengine-raster-icon [xCells]="4" [yCells]="4" [colorizer]="rasterColorizer"></geoengine-raster-icon
+            ></mat-icon>
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">Raster type</p>
+                <p class="details-row-text-line">{{ rasterLayerMetadata.dataType.toString() }}</p>
+            </span>
+        </span>
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            <mat-icon class="details-row-icon">reorder</mat-icon>
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">Number of bands</p>
+                <p class="details-row-text-line">{{ rasterLayerMetadata.bands.length }}</p>
+            </span>
+        </span>
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            <mat-icon class="details-row-icon">
+                <geoengine-raster-icon [xCells]="4" [yCells]="4" [colorizer]="rasterColorizer"></geoengine-raster-icon>
+            </mat-icon>
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">Grid shape</p>
+                <p class="details-row-text-line">→ {{ rasterLayerMetadata.numberOfPixelsX }} px</p>
+                <p class="details-row-text-line">↓ {{ rasterLayerMetadata.numberOfPixelsY }} px</p>
+            </span>
+        </span>
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            <mat-icon class="details-row-icon"
+                ><geoengine-raster-icon [xCells]="4" [yCells]="4" [colorizer]="rasterColorizer"></geoengine-raster-icon
+            ></mat-icon>
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">Pixel size</p>
+                <p class="details-row-text-line">→ {{ rasterLayerMetadata.pixelSizeX }} unit</p>
+                <p class="details-row-text-line">↓ {{ rasterLayerMetadata.pixelSizeY }} unit</p>
+            </span>
+        </span>
+    }
+
+    @if (vectorLayerMetadata) {
+        <span class="details-row" fxLayout="row" fxLayoutAlign="start center">
+            @switch (vectorLayerMetadata.dataType) {
+                @case (VectorDataTypes.MultiPoint) {
+                    <mat-icon class="details-row-icon"><geoengine-point-icon></geoengine-point-icon></mat-icon>
+                }
+                @case (VectorDataTypes.MultiLineString) {
+                    <mat-icon class="details-row-icon"><geoengine-line-icon></geoengine-line-icon></mat-icon>
+                }
+                @case (VectorDataTypes.MultiPolygon) {
+                    <mat-icon class="details-row-icon"><geoengine-polygon-icon></geoengine-polygon-icon></mat-icon>
+                }
+            }
+            <span class="details-row-text" fxLayout="column" fxLayoutAlign="center start">
+                <p class="details-row-text-line">Vector type</p>
+                <p class="details-row-text-line">{{ vectorLayerMetadata.dataType.toString() }}</p>
+            </span>
+        </span>
+    }
+</span>

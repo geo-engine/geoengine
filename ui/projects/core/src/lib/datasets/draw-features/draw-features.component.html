@@ -1,0 +1,78 @@
+<geoengine-sidenav-header>Draw Features</geoengine-sidenav-header>
+
+<geoengine-dialog-help>
+    <p>
+        This is a tool for creating a new vector dataset by drawing new features on the map. Select the <i>Feature type</i> you want to draw
+        (points, lines or polygons) and give a <i>Name</i> and <i>Description</i> (optional). Use the <i>Reset Drawing</i> button to start
+        from scratch. The new layer appears in the layer list on the left.
+    </p>
+    <p>Note: In the layer's context menu you can change the layer name, edit the symbology and more.</p>
+</geoengine-dialog-help>
+
+@if (state$ | async; as state) {
+    <mat-card appearance="outlined">
+        <mat-card-header>
+            <mat-card-title>Draw features on the map</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+            <mat-form-field>
+                <mat-select
+                    placeholder="Feature type"
+                    [value]="selectedFeatureType"
+                    (valueChange)="updateFeatureType($event)"
+                    [disabled]="state === State.Finished"
+                >
+                    @for (featureType of featureTypes; track featureType) {
+                        <mat-option [value]="featureType">{{ featureType }}</mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+            <div class="actions">
+                <button mat-raised-button color="accent" (click)="resetDrawing()" [disabled]="state === State.Finished">
+                    Reset Drawing
+                </button>
+            </div>
+        </mat-card-content>
+    </mat-card>
+    <mat-card appearance="outlined">
+        <mat-card-header>
+            <mat-card-title>Create dataset from features</mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+            <form (ngSubmit)="submitCreate()" #drawForm="ngForm">
+                <p>
+                    <mat-form-field>
+                        <input
+                            matInput
+                            type="text"
+                            placeholder="Dataset/Layer Name"
+                            [(ngModel)]="datasetName"
+                            name="datasetName"
+                            [disabled]="state === State.Finished"
+                            required
+                        />
+                    </mat-form-field>
+                </p>
+                <p>
+                    <mat-form-field>
+                        <textarea
+                            matInput
+                            placeholder="Dataset Description"
+                            [(ngModel)]="datasetDescription"
+                            name="datasetDescription"
+                            [disabled]="state === State.Finished"
+                        ></textarea>
+                    </mat-form-field>
+                </p>
+                <div class="actions">
+                    <button type="submit" mat-raised-button color="primary" [disabled]="!drawForm.form.valid || state === State.Finished">
+                        Create dataset and add to map
+                    </button>
+                </div>
+            </form>
+        </mat-card-content>
+    </mat-card>
+    @if (indicateLoading$ | async) {
+        <mat-spinner></mat-spinner>
+    }
+}

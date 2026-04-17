@@ -1,0 +1,124 @@
+:host {
+    display: block;
+    padding: none;
+}
+
+.header {
+    height: 4.5rem;
+    width: 100%;
+
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+
+    .header-click {
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+
+        padding: 0 1rem;
+        cursor: pointer;
+        box-sizing: border-box;
+        height: inherit;
+        width: inherit;
+
+        overflow: hidden;
+
+        &:hover {
+            background-color: var(--geoengine-background-hover-color);
+        }
+    }
+
+    .header-button {
+        box-sizing: border-box;
+        margin: 0 0.5rem;
+    }
+
+    .header-icon {
+        flex-shrink: 0;
+
+        width: 1.5rem;
+        height: 1.5rem;
+        font-size: 1.5rem;
+        box-sizing: content-box;
+        border-radius: 50%;
+    }
+
+    .header-text {
+        box-sizing: border-box;
+        overflow: hidden;
+        padding: 0;
+        padding-left: 1rem;
+
+        .header-text-line {
+            margin: 0;
+            padding: 0;
+            font-weight: normal;
+            white-space: nowrap;
+            overflow: hidden;
+            display: block;
+            box-sizing: border-box;
+
+            text-overflow: ellipsis;
+        }
+
+        :nth-child(n + 2) {
+            font-size: 0.875rem;
+        }
+    }
+
+    .secondary-text {
+        color: var(--geoengine-foreground-secondary-text-color);
+    }
+}
+
+mat-progres-bar {
+    width: 100%;
+}
+
+.details-content {
+    padding: 0 1rem;
+    overflow: hidden;
+    width: 100%;
+
+    .details-row {
+        padding: 0;
+        margin: 0;
+        margin-left: 1rem;
+        margin-bottom: 1rem;
+        font-size: 0.875rem;
+        font-weight: normal;
+
+        .details-row-icon {
+            width: 1.25rem;
+            height: 1.25rem;
+            font-size: 1.25rem;
+            box-sizing: content-box;
+            border-radius: 50%;
+            padding: 0.25rem;
+        }
+
+        .details-row-text {
+            box-sizing: border-box;
+            overflow: hidden;
+            padding: 0;
+            padding-left: 1rem;
+
+            .details-row-text-line {
+                margin: 0;
+                padding: 0;
+                text-overflow: ellipsis;
+                display: block;
+                box-sizing: border-box;
+            }
+
+            .details-row-text-multi-line {
+                margin: 0;
+                padding: 0;
+                overflow: ellipsis;
+                display: block;
+                box-sizing: border-box;
+            }
+        }
+    }
+}

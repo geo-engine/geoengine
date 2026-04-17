@@ -1,0 +1,17 @@
+<div class="children">
+    <geoengine-layer-collection-list
+        class="left"
+        [showLayerToggle]="false"
+        [highlightSelection]="true"
+        [collectionNavigation]="CollectionNavigation.Disabled"
+        [collection]="collectionId()"
+        (selectLayer)="selectLayer($event)"
+        (selectCollection)="selectCollection($event)"
+    ></geoengine-layer-collection-list>
+</div>
+<div>
+    <button mat-button color="warn" type="button" (click)="removeChild()" [disabled]="!(selectedCollection || selectedLayer)">
+        <mat-icon>remove_circle_outline</mat-icon> Remove Selected
+    </button>
+    <button mat-button color="primary" type="button" (click)="createChild()"><mat-icon>add_circle_outline</mat-icon> Add Child</button>
+</div>

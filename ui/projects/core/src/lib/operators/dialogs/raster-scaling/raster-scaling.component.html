@@ -1,0 +1,137 @@
+<geoengine-sidenav-header>Raster Scaling / Unscaling</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()" ngNativeValidate>
+    <geoengine-operator-dialog-container [loading]="loading$ | async | valueDefault: false">
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/rasterscaling.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/rasterscaling.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <div class="block" formGroupName="slope">
+                <p>Slope</p>
+
+                <mat-form-field appearance="fill">
+                    <mat-label>Slope value from </mat-label>
+                    <mat-select formControlName="slopeOffsetSelection">
+                        @for (mk of slopeOffsetSelectionTypes; track mk) {
+                            <mat-option [value]="mk">
+                                {{ mk }}
+                            </mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+                @switch (form.controls.slope.controls.slopeOffsetSelection.value) {
+                    @case ('metadataKey') {
+                        <div fxLayout="row" fxLayoutAlign="space-between center" fxLayoutGap="0.5rem" class="keyOrConstant">
+                            <mat-form-field appearance="fill" fxFlex>
+                                <mat-label>Slope metadata <i>domain</i></mat-label>
+                                <input matInput type="text" formControlName="domain" />
+                            </mat-form-field>
+                            <mat-form-field appearance="fill" fxFlex>
+                                <mat-label>Slope metadata <i>key</i></mat-label>
+                                <input matInput type="text" formControlName="key" />
+                            </mat-form-field>
+                        </div>
+                    }
+                    @case ('constant') {
+                        <div class="keyOrConstant">
+                            <mat-form-field appearance="fill" fxFlex>
+                                <mat-label>Slope <i>Constant</i></mat-label>
+                                <input matInput type="number" step="any" formControlName="constant" />
+                            </mat-form-field>
+                        </div>
+                    }
+                }
+            </div>
+
+            <mat-divider></mat-divider>
+
+            <div class="block" formGroupName="offset">
+                <p>Offset</p>
+                <mat-form-field appearance="fill">
+                    <mat-label>Offset value from </mat-label>
+                    <mat-select formControlName="slopeOffsetSelection">
+                        @for (mk of slopeOffsetSelectionTypes; track mk) {
+                            <mat-option [value]="mk">
+                                {{ mk }}
+                            </mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+                @switch (form.controls.offset.controls.slopeOffsetSelection.value) {
+                    @case ('metadataKey') {
+                        <div fxLayout="row" fxLayoutAlign="space-between center" fxLayoutGap="0.5rem" class="keyOrConstant">
+                            <mat-form-field appearance="fill" fxFlex>
+                                <mat-label>Offset metadata <i>domain</i></mat-label>
+                                <input matInput type="text" formControlName="domain" />
+                            </mat-form-field>
+                            <mat-form-field appearance="fill" fxFlex>
+                                <mat-label>Offset metadata <i>key</i></mat-label>
+                                <input matInput type="text" formControlName="key" />
+                            </mat-form-field>
+                        </div>
+                    }
+                    @case ('constant') {
+                        <div class="keyOrConstant">
+                            <mat-form-field appearance="fill" fxFlex>
+                                <mat-label>Offset <i>Constant</i></mat-label>
+                                <input matInput type="number" step="any" formControlName="constant" />
+                            </mat-form-field>
+                        </div>
+                    }
+                }
+            </div>
+
+            <mat-divider></mat-divider>
+            <div class="block">
+                <p>Scale / unscale mode</p>
+                <mat-form-field appearance="fill">
+                    <mat-label>Scale Type</mat-label>
+                    <mat-select formControlName="scaleType">
+                        @for (scaleType of scaleTypes; track scaleType) {
+                            <mat-option [value]="scaleType">
+                                <span class="scaleType">{{ scaleType.type }}</span>
+                            </mat-option>
+                        }
+                    </mat-select>
+                </mat-form-field>
+                <div class="scaleModeHint">
+                    The selected <span class="scaleType">{{ form.controls.scaleType.value.type }}</span> mode uses the following formula:
+                    <span class="scaleFormula">{{ form.controls.scaleType.value.formula }}</span>
+                </div>
+            </div>
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="
+                    (form.controls.layer.valueChanges | async)?.name +
+                    ' scaled [' +
+                    (form.controls.scaleType.valueChanges | async)?.type +
+                    ']'
+                "
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+
+            <geoengine-symbology-creator #symbologyCreator></geoengine-symbology-creator>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="(disallowSubmit | async) || symbologyCreator.form.invalid">
+                Create
+            </button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

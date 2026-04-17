@@ -1,0 +1,21 @@
+<mat-form-field appearance="fill">
+    <mat-label>Default value</mat-label>
+    <input matInput type="number" [(ngModel)]="defaultNumber" [min]="min()" />
+</mat-form-field>
+
+<mat-form-field appearance="fill">
+    <mat-label>Derive number from attribute</mat-label>
+    <mat-select placeholder="Attribute" [(ngModel)]="numberAttributeName">
+        <mat-option [value]="undefined"><em>None</em></mat-option>
+        @for (attribute of attributes(); track attribute) {
+            <mat-option [value]="attribute">{{ attribute }}</mat-option>
+        }
+    </mat-select>
+</mat-form-field>
+
+@if (isDerived) {
+    <mat-form-field appearance="fill">
+        <mat-label>Factor</mat-label>
+        <input matInput type="number" [(ngModel)]="factor" />
+    </mat-form-field>
+}

@@ -1,0 +1,15 @@
+form {
+    height: 100%;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+pre.error {
+    overflow: auto;
+}

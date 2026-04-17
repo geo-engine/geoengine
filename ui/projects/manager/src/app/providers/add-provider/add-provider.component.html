@@ -1,0 +1,19 @@
+<h2 mat-dialog-title>Create new provider</h2>
+
+<div class="container">
+    <mat-card>
+        <mat-card-content>
+            <mat-label>Provider type</mat-label>
+            <mat-select [(ngModel)]="providerType">
+                @for (type of Object.values(ProviderType); track type) {
+                    <mat-option [value]="type">{{ type }}</mat-option>
+                }
+            </mat-select>
+            <geoengine-manager-provider-input [providerType]="providerType" [createNew]="true" (updated)="setChangedDefinition($event)" />
+        </mat-card-content>
+    </mat-card>
+
+    <div class="actions">
+        <button mat-raised-button color="primary" [disabled]="!provider" (click)="createProvider()">Create provider</button>
+    </div>
+</div>

@@ -1,0 +1,47 @@
+<geoengine-sidenav-header>Raster Type Conversion</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="add()">
+    <geoengine-operator-dialog-container>
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/rastertypeconversion.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/rastertypeconversion.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <mat-form-field appearance="fill">
+                <mat-label>Output Data Type</mat-label>
+                <mat-select formControlName="dataType">
+                    @for (dataType of rasterDataTypes; track dataType) {
+                        <mat-option [value]="dataType">
+                            {{ dataType }}
+                        </mat-option>
+                    }
+                </mat-select>
+            </mat-form-field>
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="
+                    (form.controls.layer.valueChanges | async)?.name + ' as ' + (form.controls.dataType.valueChanges | async)?.toString()
+                "
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="disallowSubmit | async">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

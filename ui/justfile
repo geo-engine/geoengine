@@ -1,0 +1,37 @@
+mod common '../common.justfile'
+
+_default:
+    @just --list
+
+# Install dependencies for app development, building and testing.
+[arg("no-lock", long="no-lock", value="true", help="Whether to ignore lock files when installing dependencies.")]
+[arg("with-deps", long="with-deps", value="true", help="Whether to install dependencies for Playwright.")]
+[group("install")]
+install no-lock="false" with-deps="false": common::_clear
+    rm -rf node_modules/@geoengine/api-client \
+           .angular/cache
+    cd ../api-clients/typescript && npm install
+    npm link ../api-clients/typescript
+    npm {{ if no-lock == "true" { "install" } else { "ci" } }}
+    npx playwright install {{ if with-deps == "true" { "--with-deps" } else { "" } }} --only-shell chromium
+
+# Check if justfiles are formatted correctly. Format them with `--write`.
+[arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
+[group("lint")]
+format write="false": common::_clear
+    npm run prettier -- {{ if write != "true" { "--check" } else { "--write" } }} .
+
+[arg("only-errors", long="only-errors", value="true", help="Whether to only print errors and warnings, without the full linting output.")]
+lint only-errors="false": common::_clear format
+    npm run lint -- {{ if only-errors == "true" { "--quiet" } else { "" } }}
+
+build project="gis": common::_clear
+    npm run build-prod:{{ project }}
+
+[arg("nightly", long="nightly", value="true", help="Whether to run the app against a foreign nightly instance of the backend.")]
+run project="gis" nightly="false": common::_clear
+    npm run serve:{{ project }}:{{ if nightly == "true" { "nightly" } else { "local" } }}
+
+[arg("ci", long="ci", value="true", help="Whether to run tests in CI mode.")]
+test ci="false": common::_clear
+    npm run test{{ if ci == "true" { ":browser:ci" } else { "" } }}

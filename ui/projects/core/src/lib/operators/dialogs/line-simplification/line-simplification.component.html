@@ -1,0 +1,52 @@
+<geoengine-sidenav-header>Rasterization</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="$event.preventDefault(); add()">
+    <geoengine-operator-dialog-container [loading]="loading$ | async | valueDefault: false">
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/operators/linesimplification.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/operators/linesimplification.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            <mat-form-field>
+                <mat-label>Algorithm</mat-label>
+                <mat-select formControlName="algorithm">
+                    <mat-option [value]="'douglasPeucker'">Douglas Peucker</mat-option>
+                    <mat-option [value]="'visvalingam'">Visvalingam</mat-option>
+                </mat-select>
+            </mat-form-field>
+            <mat-checkbox type="checkbox" [checked]="form.controls.epsilon.value === undefined" (change)="epsilonChecked($event.checked)">
+                Derive <em>epsilon</em> from query resolution.
+            </mat-checkbox>
+            @if (form.controls.epsilon.value !== undefined) {
+                <mat-form-field>
+                    <mat-label>epsilon</mat-label>
+                    <input matInput type="number" formControlName="epsilon" />
+                    @if (form.controls.epsilon.errors?.valueNotLarger) {
+                        <mat-hint class="error"> <em>epsilon</em> must be greater than zero </mat-hint>
+                    }
+                </mat-form-field>
+            }
+        </ng-container>
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="'Simplified ' + (form.controls.layer.valueChanges | async)?.name"
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="form.invalid || (loading$ | async)">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

@@ -1,0 +1,31 @@
+:host {
+    height: 100%;
+}
+
+#container {
+    display: block;
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+
+    .specification {
+        overflow-y: auto;
+    }
+
+    .actions {
+        text-align: right;
+        padding: 1rem;
+    }
+}
+
+mat-card {
+    margin: 1rem;
+}
+
+mat-card-content {
+    margin-top: 1rem;
+}
+
+.parameters-content:not(:empty) + .parameters-empty {
+    display: none;
+}

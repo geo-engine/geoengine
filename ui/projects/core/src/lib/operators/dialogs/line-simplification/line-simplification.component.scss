@@ -1,0 +1,56 @@
+:host {
+    display: contents;
+    overflow-y: auto;
+    padding: 0 1rem 1rem 1rem;
+}
+
+form {
+    height: 100%;
+    width: 100%;
+    box-sizing: border-box;
+}
+
+.container {
+    .custom-unit {
+        margin-bottom: 1rem;
+    }
+}
+
+.densityContainer {
+    padding: 0 0 1rem 0;
+}
+
+.labelRadioGroup {
+    padding: 1rem 0.5rem 0 0;
+}
+
+mat-form-field {
+    width: 100%;
+}
+
+.groupInRow {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 10px;
+    width: 100%;
+    padding-top: 1rem;
+
+    ::ng-deep .mat-mdc-form-field-infix {
+        width: unset;
+    }
+}
+
+.actions {
+    text-align: right;
+    padding: 1rem;
+}
+
+.sizeModeHint {
+    font-size: 0.8rem;
+    padding-bottom: 1rem;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}

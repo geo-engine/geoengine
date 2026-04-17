@@ -1,0 +1,78 @@
+.container {
+    overflow: hidden; // prevents margin breaking
+    margin: 0;
+    padding: 0;
+    width: 100vw;
+    height: 100vh;
+    background: var(--geoengine-primary-color);
+}
+
+.login {
+    width: 24rem;
+
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+}
+
+mat-card-content {
+    mat-form-field {
+        width: 100%;
+    }
+
+    table {
+        width: 100%;
+
+        th {
+            text-align: left;
+            margin-right: 0.5rem;
+        }
+    }
+}
+
+mat-card-actions button {
+    width: 100%;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+mat-spinner {
+    margin: 0 auto;
+}
+
+img.logo {
+    height: 3rem;
+    width: auto;
+    margin: 0 auto;
+}
+
+.homepage-wrapper {
+    width: 100%;
+    text-align: center;
+}
+
+.homepage-button {
+    margin: 1rem 1rem;
+
+    mat-icon {
+        color: inherit; // use color from button
+    }
+
+    img {
+        height: 1.5rem;
+        vertical-align: middle;
+    }
+}
+
+.login-buttons {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+}
+
+.login-buttons button {
+    margin-top: 1rem;
+}

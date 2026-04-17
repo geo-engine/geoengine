@@ -1,0 +1,37 @@
+<ng-container>
+    <div class="header">
+        <div matRipple class="header-click" (click)="onAdd()">
+            <mat-icon class="header-icon">map</mat-icon>
+            <div class="header-text">
+                <h4 class="header-text-line">{{ layer()?.name }}</h4>
+                @if (!expanded) {
+                    <p class="header-text-line secondary-text">{{ layer()?.description }}</p>
+                }
+            </div>
+        </div>
+
+        @if (showLayerToggle()) {
+            <button class="header-button" mat-icon-button (click)="toggleExpand()">
+                @if (!expanded) {
+                    <mat-icon>expand_more</mat-icon>
+                }
+                @if (expanded) {
+                    <mat-icon>expand_less</mat-icon>
+                }
+            </button>
+        }
+    </div>
+</ng-container>
+
+<ng-container>
+    @if (loading) {
+        <mat-progress-bar mode="query"></mat-progress-bar>
+    }
+</ng-container>
+
+@if (expanded) {
+    <geoengine-layer-collection-layer-details
+        [description]="description"
+        [layerMetadata]="layerMetadata"
+    ></geoengine-layer-collection-layer-details>
+}

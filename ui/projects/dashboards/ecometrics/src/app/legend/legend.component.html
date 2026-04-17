@@ -1,0 +1,19 @@
+@if (!!layer) {
+    <div class="legend-container mat-elevation-z4">
+        @if (visible()) {
+            <div class="legend-header">
+                <button mat-icon-button (click)="visible.set(false)">
+                    <mat-icon>close</mat-icon>
+                </button>
+                <h4>Legend</h4>
+            </div>
+            @if (layer(); as layer) {
+                <geoengine-raster-legend [layer]="layer" [orderValuesDescending]="true" [showBandNames]="false"></geoengine-raster-legend>
+            }
+        } @else {
+            <button mat-icon-button (click)="visible.set(true)">
+                <mat-icon>menu</mat-icon>
+            </button>
+        }
+    </div>
+}

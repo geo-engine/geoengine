@@ -1,0 +1,223 @@
+<div class="container">
+    <div class="layer-list-element" [class.list-item-extended]="layer().isLegendVisible">
+        <!-- TODO: use default font size for layer menu -->
+        <mat-menu #layerMenu="matMenu" [hidden]="menu()">
+            @if (layer().isVisible) {
+                <button mat-menu-item (click)="projectService.changeLayer(layer(), {isVisible: false})">
+                    <mat-icon>visibility_off</mat-icon>
+                    <span class="mat-body-2">Hide Layer</span>
+                </button>
+            } @else {
+                <button mat-menu-item (click)="projectService.changeLayer(layer(), {isVisible: true})">
+                    <mat-icon>visibility</mat-icon>
+                    <span class="mat-body-2">Show Layer</span>
+                </button>
+            }
+
+            @if (layer().isLegendVisible) {
+                <button mat-menu-item (click)="toggleLegend(layer())">
+                    <mat-icon>expand_less</mat-icon>
+                    <span class="mat-body-2">Hide Legend</span>
+                </button>
+            } @else {
+                <button mat-menu-item (click)="toggleLegend(layer())">
+                    <mat-icon>expand_more</mat-icon>
+                    <span class="mat-body-2">Show Legend</span>
+                </button>
+            }
+
+            <button mat-menu-item (click)="dialog.open(LineageGraphComponent, {data: {layer: layer()}})">
+                <mat-icon>merge_type</mat-icon>
+                <span class="mat-body-2">Lineage</span>
+            </button>
+            <button mat-menu-item (click)="projectService.removeLayer(layer())">
+                <mat-icon>delete</mat-icon>
+                <span class="mat-body-2">Remove</span>
+            </button>
+            <button mat-menu-item (click)="dialog.open(RenameLayerComponent, {data: {layer: layer()}})">
+                <mat-icon>mode_edit</mat-icon>
+                <span class="mat-body-2">Rename</span>
+            </button>
+            <button mat-menu-item (click)="showSymbologyEditor(layer())">
+                <mat-icon>color_lens</mat-icon>
+                <span class="mat-body-2">Edit Symbology</span>
+            </button>
+            <button mat-menu-item (click)="showProvenance(layer())">
+                <mat-icon>description</mat-icon>
+                <span class="mat-body-2">Show Provenance</span>
+            </button>
+            <button mat-menu-item (click)="showDatatable(layer())">
+                <mat-icon>table</mat-icon>
+                <span class="mat-body-2">Show Datatable</span>
+            </button>
+            <button mat-menu-item (click)="copyWorkflowIdToClipboard(layer())">
+                <mat-icon>content_copy</mat-icon>
+                <span class="mat-body-2">Copy Workflow Id to Clipboard</span>
+            </button>
+            <button mat-menu-item (click)="downloadMetadata(layer())">
+                <mat-icon>file_download</mat-icon>
+                <span class="mat-body-2">Download Metadata</span>
+            </button>
+            <button mat-menu-item (click)="showDownload(layer())">
+                <mat-icon>file_download</mat-icon>
+                <span class="mat-body-2">Download Layer</span>
+            </button>
+        </mat-menu>
+
+        <div class="list-element-inner-container layer-list-element" fxLayout="column" fxLayoutAlign="space-between none">
+            <div fxLayout="row" fxLayoutAlign="space-between center">
+                @if ((projectService.getLayerStatusStream(layer()) | async) === LoadingState.ERROR) {
+                    <button mat-icon-button class="mat-warn error-button" aria-label="Reload" (click)="projectService.reloadLayer(layer())">
+                        <mat-icon>replay</mat-icon>
+                    </button>
+                }
+
+                @if ((projectService.getLayerStatusStream(layer()) | async) !== LoadingState.ERROR) {
+                    <button
+                        mat-icon-button
+                        (click)="toggleLegend(layer())"
+                        matTooltip="{{ layer().isLegendVisible ? 'Hide' : 'Show' }} Legend"
+                        matTooltipPosition="after"
+                        [matTooltipShowDelay]="config.DELAYS.TOOLTIP"
+                    >
+                        @if (!layer().isVisible) {
+                            <mat-icon mat-list-icon>visibility_off</mat-icon>
+                        }
+                        @if (layer().isVisible) {
+                            @switch (layer().symbology.symbologyType) {
+                                @case (ST.POINT) {
+                                    <mat-icon>
+                                        <geoengine-point-icon [iconStyle]="$any(getIconStyleStream(layer()) | async)">
+                                        </geoengine-point-icon>
+                                    </mat-icon>
+                                }
+                                @case (ST.LINE) {
+                                    <mat-icon>
+                                        <geoengine-line-icon [iconStyle]="$any(getIconStyleStream(layer()) | async)"> </geoengine-line-icon>
+                                    </mat-icon>
+                                }
+                                @case (ST.POLYGON) {
+                                    <mat-icon>
+                                        <geoengine-polygon-icon [iconStyle]="$any(getIconStyleStream(layer()) | async)">
+                                        </geoengine-polygon-icon>
+                                    </mat-icon>
+                                }
+                                @case (ST.RASTER) {
+                                    <mat-icon mat-list-icon>
+                                        @switch (projectService.getLayerDataStatusStream(layer()) | async) {
+                                            @case (LoadingState.NODATAFORGIVENTIME) {
+                                                <span class="lineThrough">access_time</span>
+                                            }
+                                            @default {
+                                                <geoengine-raster-icon
+                                                    [colorizer]="rasterSymbology(layer()).rasterColorizer"
+                                                    [xCells]="6"
+                                                    [yCells]="6"
+                                                >
+                                                </geoengine-raster-icon>
+                                            }
+                                        }
+                                    </mat-icon>
+                                }
+                                @default {
+                                    <mat-icon mat-list-icon>error_outline</mat-icon>
+                                }
+                            }
+                        }
+                    </button>
+                }
+
+                <!--                                                                        <div cdkDragHandle class="layer-list-item-text grabbable"-->
+                <!--                                                                             fxFlex="grow"-->
+                <!--                                                                             (click)="layerService.setSelectedLayer(layer)"-->
+                <!--                                                                             [matTooltip]="layer.name" matTooltipPosition="after"-->
+                <!--                                                                             [matTooltipShowDelay]="config.DELAYS.TOOLTIP">-->
+                <!--                                                                            {{layer.name}}-->
+                <!--                                                                        </div>-->
+
+                <div
+                    cdkDragHandle
+                    class="layer-list-item-text grabbable"
+                    fxFlex="grow"
+                    [matTooltip]="layer().name"
+                    matTooltipPosition="after"
+                    [matTooltipShowDelay]="config.DELAYS.TOOLTIP"
+                >
+                    {{ layer().name }}
+                </div>
+
+                @if (menu()) {
+                    <button
+                        mat-icon-button
+                        class="secondary_action"
+                        [matMenuTriggerFor]="layerMenu"
+                        matTooltip="Layer Actions"
+                        matTooltipPosition="after"
+                        [matTooltipShowDelay]="config.DELAYS.TOOLTIP"
+                    >
+                        <mat-icon>more_vert</mat-icon>
+                    </button>
+                }
+            </div>
+
+            @if (layer().isLegendVisible) {
+                @switch (layer().symbology.getSymbologyType()) {
+                    @case (ST.POINT) {
+                        <div fxLayoutAlign="space-between stretch" fxLayout="row" class="legend no-drag">
+                            <geoengine-vector-legend fxFlex="grow" [layer]="$any(layer())"> </geoengine-vector-legend>
+                            <button mat-icon-button (click)="toggleLegend(layer())">
+                                <mat-icon>expand_less</mat-icon>
+                            </button>
+                        </div>
+                    }
+                    @case (ST.LINE) {
+                        <div fxLayoutAlign="space-between stretch" fxLayout="row" class="legend no-drag">
+                            <geoengine-vector-legend fxFlex="grow" [layer]="$any(layer())"> </geoengine-vector-legend>
+                            <button mat-icon-button (click)="toggleLegend(layer())">
+                                <mat-icon>expand_less</mat-icon>
+                            </button>
+                        </div>
+                    }
+                    @case (ST.POLYGON) {
+                        <div fxLayoutAlign="space-between stretch" fxLayout="row" class="legend no-drag">
+                            <geoengine-vector-legend fxFlex="grow" [layer]="$any(layer())"> </geoengine-vector-legend>
+                            <button mat-icon-button (click)="toggleLegend(layer())">
+                                <mat-icon>expand_less</mat-icon>
+                            </button>
+                        </div>
+                    }
+                    @case (ST.RASTER) {
+                        <div fxLayoutAlign="space-between stretch" fxLayout="row" class="legend no-drag">
+                            <geoengine-raster-legend fxFlex="grow" [layer]="$any(layer())"></geoengine-raster-legend>
+                            <button mat-icon-button (click)="toggleLegend(layer())">
+                                <mat-icon>expand_less</mat-icon>
+                            </button>
+                        </div>
+                    }
+                }
+            }
+
+            <!-- TODO: re-implement -->
+            <!--                    <div class="legend no-drag"-->
+            <!--                         *ngIf="showChannelParameterSlider(layer)">-->
+            <!--                        <geoengine-layer-list-workflow-parameter-slider-->
+            <!--                            [layer]="layer"-->
+            <!--                            parameterName="channelConfig"-->
+            <!--                            parameterDisplayName="channel"-->
+            <!--                        >-->
+
+            <!--                        </geoengine-layer-list-workflow-parameter-slider>-->
+            <!--                    </div>-->
+
+            <mat-progress-bar
+                [mode]="(projectService.getLayerStatusStream(layer()) | async) === LoadingState.LOADING ? 'query' : 'determinate'"
+                [value]="100"
+            ></mat-progress-bar>
+            <!--                    <mat-progress-bar-->
+            <!--                        [mode]="(projectService.getLayerDataStatusStream(layer) | async) === LoadingState.LOADING ? 'query' : 'determinate'"-->
+            <!--                        [value]="100"-->
+            <!--                        [color]="(layerService.getSelectedLayerStream() | async) === layer ? 'accent' : 'primary'"-->
+            <!--                    ></mat-progress-bar>-->
+        </div>
+    </div>
+</div>

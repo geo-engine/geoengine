@@ -1,0 +1,57 @@
+<cdk-virtual-scroll-viewport [itemSize]="itemSizePx" (scrolledIndexChange)="onScrolledIndexChange($event)">
+    <mat-nav-list>
+        <ng-container *cdkVirtualFor="let item of source; trackBy: trackById">
+            @if (item.type === 'collection') {
+                @if (collectionNavigation() === CollectionNavigation.Disabled) {
+                    <mat-list-item (click)="select(item)" [class.selected]="highlightSelection() && selectedCollection === item">
+                        <mat-icon matListItemIcon>layers</mat-icon>
+                        <h4 matListItemTitle>{{ item.name }}</h4>
+                        <p matListItemLine>{{ item.description }}</p>
+                    </mat-list-item>
+                }
+                @if (collectionNavigation() === CollectionNavigation.Element) {
+                    <mat-list-item
+                        (click)="navigateToCollection(item)"
+                        [class.selected]="highlightSelection() && selectedCollection === item"
+                    >
+                        <mat-icon matListItemIcon>layers</mat-icon>
+                        <h4 matListItemTitle>{{ item.name }}</h4>
+                        <p matListItemLine>{{ item.description }}</p>
+                    </mat-list-item>
+                }
+                @if (collectionNavigation() === CollectionNavigation.Button) {
+                    <ng-container>
+                        <div
+                            class="collection-with-button-navigation"
+                            [class.selected]="highlightSelection() && selectedCollection === item"
+                        >
+                            <div matRipple class="click" (click)="select(item)">
+                                <mat-icon class="icon">layers</mat-icon>
+                                <div class="text">
+                                    <h4 class="text-line">{{ item.name }}</h4>
+                                    <p class="text-line secondary-text">{{ item.description }}</p>
+                                </div>
+                            </div>
+                            <button class="button" mat-icon-button (click)="navigateToCollection(item)">
+                                <mat-icon>chevron_right</mat-icon>
+                            </button>
+                        </div>
+                    </ng-container>
+                }
+            }
+            @if (item.type === 'layer') {
+                <geoengine-layer-collection-layer
+                    [showLayerToggle]="showLayerToggle()"
+                    [trackBy]="item.name + item.description"
+                    [layer]="item"
+                    (addClick)="select(item)"
+                    [class.selected]="highlightSelection() && selectedLayer === item"
+                ></geoengine-layer-collection-layer>
+            }
+        </ng-container>
+    </mat-nav-list>
+
+    @if (source?.loading$ | async) {
+        <mat-spinner [diameter]="loadingSpinnerDiameterPx()"></mat-spinner>
+    }
+</cdk-virtual-scroll-viewport>

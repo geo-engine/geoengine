@@ -1,0 +1,81 @@
+<geoengine-sidenav-header>Box Plot</geoengine-sidenav-header>
+
+<form [formGroup]="form" (ngSubmit)="$event.preventDefault(); add()">
+    <geoengine-operator-dialog-container>
+        <a mat-icon-button operatorInputIcon href="https://docs.geoengine.io/plots/boxplot.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorInput>
+            <geoengine-layer-selection [types]="inputTypes" formControlName="layer"></geoengine-layer-selection>
+            @if (isRasterLayer$ | async) {
+                <div>
+                    <geoengine-multi-layer-selection
+                        [types]="RASTER_TYPE"
+                        [inputNaming]="rasterInputNaming"
+                        title="Additional Rasters"
+                        subtitle=""
+                        formControlName="additionalRasterLayers"
+                        [min]="0"
+                        [max]="7"
+                    ></geoengine-multi-layer-selection>
+                </div>
+            }
+        </ng-container>
+
+        <a mat-icon-button operatorParametersIcon href="https://docs.geoengine.io/plots/boxplot.html" target="_blank">
+            <mat-icon>help_center</mat-icon>
+        </a>
+
+        <ng-container operatorParameters>
+            @if (isVectorLayer$ | async) {
+                <div formArrayName="columnNames">
+                    <div fxLayout="row">
+                        <geoengine-dialog-section-heading
+                            title="Attribute Selection"
+                            subtitle="Please select the attributes to generate the box plot for."
+                        ></geoengine-dialog-section-heading>
+                        <div fxFlex fxLayout="row" fxLayoutAlign="end">
+                            <button type="button" (click)="addColumn()" mat-button color="primary">
+                                <mat-icon>add_circle_outline</mat-icon>
+                            </button>
+                        </div>
+                    </div>
+                    @for (column of columnNames.controls; track column; let i = $index) {
+                        <div fxLayout="column" class="attributeRow">
+                            <div class="attributeRow" fxLayout="row" fxFlex>
+                                <mat-form-field>
+                                    <mat-select placeholder="Attribute" [formControlName]="i">
+                                        @for (attribute of attributes$ | async; track attribute) {
+                                            <mat-option [value]="attribute">{{ attribute }}</mat-option>
+                                        }
+                                    </mat-select>
+                                </mat-form-field>
+                                @if (columnNames.length > 1) {
+                                    <button type="button" (click)="removeColumn(i)" mat-button color="primary">
+                                        <mat-icon>remove_circle_outline</mat-icon>
+                                    </button>
+                                }
+                            </div>
+                        </div>
+                    }
+                </div>
+            }
+        </ng-container>
+
+        <ng-container layerSpecification>
+            <geoengine-operator-output-name
+                formControlName="name"
+                [suggestion]="'BoxPlot of ' + (form.controls.layer.valueChanges | async)?.name"
+            >
+                @if (form.controls.name.errors?.required || form.controls.name.errors?.onlyWhitespace) {
+                    <mat-hint align="end" class="error"> The name must be non-empty. </mat-hint>
+                }
+            </geoengine-operator-output-name>
+        </ng-container>
+
+        <ng-container actions>
+            <button type="submit" mat-raised-button color="primary" [disabled]="(form.statusChanges | async) !== 'VALID'">Create</button>
+        </ng-container>
+    </geoengine-operator-dialog-container>
+</form>

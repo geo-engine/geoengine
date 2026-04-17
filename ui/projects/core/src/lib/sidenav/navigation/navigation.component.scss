@@ -1,0 +1,22 @@
+button {
+    display: inline-block;
+    // padding: 0;
+    line-height: 100%;
+
+    $width: 3rem;
+
+    min-width: $width;
+    width: $width;
+    min-height: $width;
+    height: $width;
+
+    margin-right: 0.5rem;
+
+    mat-icon {
+        margin: 0;
+    }
+}
+
+mat-spinner {
+    margin: 0 auto;
+}

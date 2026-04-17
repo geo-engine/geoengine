@@ -1,0 +1,48 @@
+<div class="container mat-typography" #container>
+    <geoengine-layer-collection-dropdown
+        [root]="rootCollectionId"
+        (layerSelected)="layerSelected($event)"
+        [preselectedPath]="preselectedPath"
+        (pathChange)="pathChange($event)"
+    ></geoengine-layer-collection-dropdown>
+
+    <div class="ebv-actions">
+        @if (layerId) {
+            <button mat-raised-button class="show" fxFlex color="primary" (click)="showEbv()">Show</button>
+        }
+        @if (layer) {
+            <button mat-raised-button color="primary" (click)="editSymbology()"><mat-icon>palette</mat-icon></button>
+        }
+    </div>
+    @if (layer) {
+        <div class="pin-symbology">
+            <span class="pin-symbology-text">Remember current legend / colorscale for all entities of the current metric </span
+            ><mat-slide-toggle [(ngModel)]="pinnedSymbology"></mat-slide-toggle>
+        </div>
+    }
+
+    <mat-divider></mat-divider>
+
+    @if (layer) {
+        <div fxLayout="row" fxLayoutAlign="space-between start">
+            <geoengine-ebv-country-selector fxFlex=""></geoengine-ebv-country-selector>
+            <span fxFlex="1rem"></span>
+            <button mat-raised-button color="primary" [disabled]="isPlotButtonDisabled$ | async" (click)="plot()">Calculate</button>
+        </div>
+
+        @if (plotData | async; as plot) {
+            <geoengine-vega-viewer [chartData]="plot"></geoengine-vega-viewer>
+        }
+
+        @if (plotLoading | async) {
+            <mat-spinner color="accent"></mat-spinner>
+        }
+
+        <div class="spacer"></div>
+        <mat-divider></mat-divider>
+    }
+
+    <geoengine-ebv-attributions></geoengine-ebv-attributions>
+
+    <div class="spacer"></div>
+</div>

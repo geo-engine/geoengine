@@ -1,0 +1,34 @@
+@use 'sass:map';
+@use '@angular/material' as mat;
+@use 'app-theme' as theme;
+
+:root {
+    --geoengine-primary-color: #{mat.get-theme-color(theme.$geoengine-theme, primary)};
+    --geoengine-accent-color: #{mat.get-theme-color(theme.$geoengine-theme, accent)};
+    --geoengine-warn-color: #{mat.get-theme-color(theme.$geoengine-theme, warn)};
+
+    --geoengine-faded-accent-color: #{mat.m2-get-color-from-palette(theme.$geoengine-accent, 0.32)};
+
+    --geoengine-foreground-text-color: #{mat.get-theme-color(theme.$geoengine-theme, foreground, text)};
+    --geoengine-foreground-secondary-text-color: #{mat.get-theme-color(theme.$geoengine-theme, foreground, secondary-text)};
+
+    --geoengine-background-color: #{map.get(map.get(theme.$geoengine-theme, background), background)};
+    --geoengine-background-hover-color: #{mat.get-theme-color(theme.$geoengine-theme, background, hover)};
+    --geoengine-card-background-color: #{mat.get-theme-color(theme.$geoengine-theme, background, card)};
+
+    --geoengine-divider-color: #{mat.get-theme-color(theme.$geoengine-theme, foreground, divider)};
+
+    font-family: Poppins, sans-serif;
+    font-size: 16px;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+
+    background-color: #f7f8fa;
+}
+
+a {
+    color: mat.get-theme-color(theme.$geoengine-theme, foreground, secondary-text);
+}

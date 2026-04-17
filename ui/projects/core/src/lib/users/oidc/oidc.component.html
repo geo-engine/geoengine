@@ -1,0 +1,46 @@
+<geoengine-sidenav-header>User</geoengine-sidenav-header>
+<mat-card>
+    <mat-card-header>
+        <mat-card-title>Login</mat-card-title>
+    </mat-card-header>
+
+    <mat-card-content>
+        <ng-container *geoengineIfLoggedIn>
+            @if (user.value(); as user) {
+                <p>Welcome {{ user.realName }}!</p>
+            }
+            <button mat-raised-button color="primary" (click)="logout()">Logout</button>
+        </ng-container>
+        <ng-container *geoengineIfGuest>
+            <p>You are currently not logged in. By clicking the button below, you will be redirected to a login page.</p>
+            <button mat-raised-button color="primary" (click)="login()">Login</button>
+        </ng-container>
+    </mat-card-content>
+</mat-card>
+
+<mat-card>
+    <mat-card-header>
+        <mat-card-title>Session</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+        <geoengine-user-session></geoengine-user-session>
+    </mat-card-content>
+</mat-card>
+
+<mat-card>
+    <mat-card-header>
+        <mat-card-title>Quota</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+        <geoengine-quota-info></geoengine-quota-info>
+    </mat-card-content>
+</mat-card>
+
+<mat-card>
+    <mat-card-header>
+        <mat-card-title>Roles</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+        <geoengine-roles></geoengine-roles>
+    </mat-card-content>
+</mat-card>

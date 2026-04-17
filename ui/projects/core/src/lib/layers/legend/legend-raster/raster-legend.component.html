@@ -1,0 +1,104 @@
+@if (selectedBands(); as bands) {
+    <table>
+        <thead>
+            <!-- measurement -->
+            <tr>
+                <td colspan="3" class="measurement">
+                    @if (showBandNames()) {
+                        <span>
+                            @if (bands.length > 1) {
+                                Bandnames
+                            } @else {
+                                Bandname
+                            }
+                            :
+                            <i>
+                                @for (band of bands; track band.name) {
+                                    {{ band.name }}
+                                    @if (!$last) {
+                                        <span>,</span>
+                                    }
+                                }
+                            </i>
+                        </span>
+                    }
+
+                    @if (bandsHaveUnits()) {
+                        Measurement
+                        @if (bands.length > 1) {
+                            <span>s</span>
+                        }
+                        :
+                        @for (band of bands; track band.name) {
+                            @if (band.measurement | continuousMeasurement; as measurement) {
+                                <i>
+                                    {{ measurement.measurement }}
+                                    @if (measurement.unit) {
+                                        <span> (in {{ measurement.unit }})</span>
+                                    }
+                                </i>
+                                @if (!$last) {
+                                    <span>, </span>
+                                }
+                            }
+                            @if (band.measurement | classificationMeasurement; as measurement) {
+                                <i>{{ measurement.measurement }}</i>
+                                @if (!$last) {
+                                    <span>, </span>
+                                }
+                            }
+                            @if (band.measurement | unitlessMeasurement; as measurement) {
+                                <i>unitless</i>
+                                @if (!$last) {
+                                    <span>, </span>
+                                }
+                            }
+                        }
+                    }
+                </td>
+            </tr>
+        </thead>
+        <tbody>
+            @if (layer().symbology.rasterColorizer.isContinuous()) {
+                @for (breakpoint of displayedBreakpoints(); track breakpoint) {
+                    <tr>
+                        @if ($first) {
+                            <td
+                                class="gradient"
+                                [rowSpan]="layer().symbology.rasterColorizer.getBreakpoints().length"
+                                [style.background]="
+                                    layer().symbology.rasterColorizer | geoengineRasterColorizerCssGradient: gradientAngle()
+                                "
+                            ></td>
+                        }
+                        <td>{{ breakpoint }}</td>
+                    </tr>
+                }
+            } @else if (layer().symbology.rasterColorizer.isDiscrete() && bands[0]) {
+                @if (bands[0].measurement | classificationMeasurement; as measurement) {
+                    @for (breakpoint of colorizerBreakpoints(); track breakpoint) {
+                        <tr>
+                            <td class="classes">
+                                <div class="icon" [style.background-color]="breakpoint | breakpointToCssStringPipe"></div>
+                            </td>
+                            <td class="classes">{{ breakpoint.value }}</td>
+                            <td>{{ measurement.classes[breakpoint.value] }}</td>
+                        </tr>
+                    }
+                } @else {
+                    @for (breakpoint of colorizerBreakpoints(); track breakpoint) {
+                        <tr>
+                            <td class="classes">
+                                <div class="icon" [style.background-color]="breakpoint | breakpointToCssStringPipe"></div>
+                            </td>
+                            <td>{{ breakpoint.value }}</td>
+                        </tr>
+                    }
+                }
+            }
+        </tbody>
+    </table>
+} @else {
+    <!-- loading spinner -->
+    <mat-spinner></mat-spinner>
+}

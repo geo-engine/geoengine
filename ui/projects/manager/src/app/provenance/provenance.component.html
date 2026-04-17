@@ -1,0 +1,34 @@
+<form [formGroup]="form">
+    @for (control of form.controls.provenance.controls; track control; let i = $index) {
+        <div formArrayName="provenance">
+            @if (i > 0) {
+                <mat-divider></mat-divider>
+            }
+            <div class="container">
+                <div [formGroupName]="i" class="content">
+                    <mat-form-field appearance="fill">
+                        <mat-label>Citation</mat-label>
+                        <textarea matInput formControlName="citation"></textarea>
+                    </mat-form-field>
+                    <mat-form-field appearance="fill">
+                        <mat-label>License</mat-label>
+                        <textarea matInput formControlName="license"></textarea>
+                    </mat-form-field>
+                    <mat-form-field appearance="fill">
+                        <mat-label>URI</mat-label>
+                        <input matInput formControlName="uri" />
+                    </mat-form-field>
+                </div>
+                <button mat-icon-button (click)="removeEntry(i)"><mat-icon>delete</mat-icon></button>
+            </div>
+        </div>
+    }
+    @if (form.controls.provenance.controls.length === 0) {
+        <div>
+            <i>No entries yet. Click "Add Entry" to add a first entry.</i>
+        </div>
+    }
+    <div class="actions">
+        <button mat-raised-button (click)="addEntry()">Add Entry</button>
+    </div>
+</form>

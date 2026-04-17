@@ -1,0 +1,29 @@
+<mat-toolbar [fxLayout]="sidenavPosition === 'start' ? 'row-reverse' : 'row'">
+    <button mat-button (click)="close()" matTooltip="close sidenav" matTooltipPosition="after">
+        @if (sidenavPosition === 'end') {
+            <mat-icon>keyboard_arrow_right</mat-icon>
+        }
+        @if (sidenavPosition === 'start') {
+            <mat-icon>keyboard_arrow_left</mat-icon>
+        }
+    </button>
+    <h2 fxFlex>{{ sidenavRef.getTitleStream() | async }}</h2>
+    @if (sidenavRef.getBackButtonComponentStream() | async) {
+        <button mat-button (click)="back()" matTooltip="back" matTooltipPosition="before">
+            <mat-icon>subdirectory_arrow_left</mat-icon>
+        </button>
+    }
+</mat-toolbar>
+@if (sidenavRef.hasSearchComponentStream() | async) {
+    <mat-toolbar>
+        <mat-form-field class="search-form" subscriptSizing="dynamic">
+            <mat-icon matPrefix>search</mat-icon>
+            <mat-label>Search</mat-label>
+            <input matInput type="text" [(ngModel)]="searchTerm" (ngModelChange)="sidenavRef.searchTerm($event)" />
+        </mat-form-field>
+        <span #searchElements></span>
+    </mat-toolbar>
+}
+<div fxFlex>
+    <ng-template #target></ng-template>
+</div>

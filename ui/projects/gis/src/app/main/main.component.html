@@ -1,0 +1,79 @@
+<mat-toolbar class="navbar mat-elevation-z3" #topToolbar>
+    <img [src]="config.BRANDING.LOGO_URL" class="logo" />
+
+    <geoengine-layer-list-menu></geoengine-layer-list-menu>
+
+    @if (config.BRANDING.HOMEPAGE; as homepage) {
+        <div class="divider"></div>
+
+        <a [href]="homepage.URL" mat-flat-button color="primary" class="homepage-button">
+            <mat-icon>keyboard_return</mat-icon>
+            <span></span>
+            <img [src]="homepage.BUTTON_IMAGE_URL" [alt]="homepage.BUTTON_ALT_TEXT" [matTooltip]="homepage.BUTTON_TOOLTIP_TEXT" />
+        </a>
+    }
+
+    <div class="divider"></div>
+
+    <geoengine-zoom-handles (zoomIn)="map.zoomIn()" (zoomOut)="map.zoomOut()"></geoengine-zoom-handles>
+
+    <div class="divider"></div>
+
+    <geoengine-small-time-interaction></geoengine-small-time-interaction>
+
+    <div class="divider"></div>
+
+    <div class="space"></div>
+
+    <geoengine-navigation [buttons]="navigationButtons | async | valueDefault: []"></geoengine-navigation>
+</mat-toolbar>
+
+<mat-sidenav-container fullscreen>
+    <mat-sidenav position="end" mode="side">
+        <geoengine-sidenav-container></geoengine-sidenav-container>
+    </mat-sidenav>
+
+    <geoengine-layer-list
+        class="mat-elevation-z3"
+        [height]="layerListHeight$ | async | numberSanitizer"
+        [addAFirstLayerSidenavConfig]="addDataConfig | async | valueDefault: undefined"
+    >
+    </geoengine-layer-list>
+
+    <div class="mid-container" [style.height.px]="middleContainerHeight$ | async">
+        <geoengine-map-container #map [grid]="mapIsGrid$ | async | valueDefault: false">
+            @if (userService.getSessionTokenStream() | async; as sessionToken) {
+                @for (layer of layersReverse$ | async; track idFromLayer($index, layer)) {
+                    @if (layer.layerType === 'vector') {
+                        <geoengine-ol-vector-layer
+                            [layerId]="layer.id"
+                            [workflow]="layer.workflowId"
+                            [symbology]="$any(layer.symbology)"
+                            [isVisible]="layer.isVisible"
+                            (mapRedraw)="map.layerForcesRedraw()"
+                        ></geoengine-ol-vector-layer>
+                    }
+                    @if (layer.layerType === 'raster') {
+                        <geoengine-ol-raster-layer
+                            [layerId]="layer.id"
+                            [workflow]="layer.workflowId"
+                            [symbology]="$any(layer.symbology)"
+                            [isVisible]="layer.isVisible"
+                            [sessionToken]="sessionToken"
+                            (mapRedraw)="map.layerForcesRedraw()"
+                        ></geoengine-ol-raster-layer>
+                    }
+                }
+            }
+        </geoengine-map-container>
+    </div>
+    @if (config.COMPONENTS.MAP_RESOLUTION_EXTENT_OVERLAY.AVAILABLE) {
+        <geoengine-map-resolution-extent-overlay
+            [bottom]="bottomContainerHeight$ | async | numberSanitizer"
+        ></geoengine-map-resolution-extent-overlay>
+    }
+    <geoengine-tab-panel
+        [visible]="layerDetailViewVisible$ | async | valueDefault: false"
+        [maxHeight]="bottomContainerHeight$ | async | numberSanitizer"
+    ></geoengine-tab-panel>
+</mat-sidenav-container>

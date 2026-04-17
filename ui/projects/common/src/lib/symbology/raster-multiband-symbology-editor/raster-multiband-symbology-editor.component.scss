@@ -1,0 +1,29 @@
+form {
+    height: 100%;
+}
+
+geoengine-code-editor {
+    margin-bottom: 1rem;
+}
+
+mat-form-field:not(:last-child) {
+    margin-right: 0.5rem;
+}
+
+mat-spinner {
+    margin: 0.5rem auto;
+}
+
+.error {
+    color: var(--geoengine-warn-color, red);
+}
+
+.no-rasters {
+    color: var(--geoengine-foreground-secondary-text-color, grey);
+    margin-top: 50%;
+    text-align: center;
+}
+
+mat-card {
+    margin-top: 1rem;
+}

@@ -1,0 +1,49 @@
+#table-container {
+    overflow: auto;
+    background-color: var(--geoengine-card-background-color);
+
+    height: calc(100% - 56px);
+}
+.mat-mdc-icon-button {
+    width: 30px;
+    padding-right: 10px;
+}
+table {
+    width: 100%;
+
+    // ::ng-deep thead tr {
+    //     height: 3rem !important;
+    // }
+
+    // ::ng-deep tbody tr {
+    //     height: 2rem !important;
+    // }
+
+    th,
+    td {
+        white-space: nowrap;
+        padding: 0 0.5rem 0 0.5rem;
+        min-width: 2rem;
+    }
+    .selectColumn {
+        min-width: 1rem;
+    }
+    .mediaviewColumn {
+        min-width: 5rem;
+        display: block;
+    }
+}
+
+.no-data-row {
+    text-align: center;
+    font-style: italic;
+    color: var(--geoengine-foreground-secondary-text-color);
+}
+
+.mat-mdc-paginator {
+    float: right;
+}
+
+.dropdown {
+    margin-left: 1rem;
+}

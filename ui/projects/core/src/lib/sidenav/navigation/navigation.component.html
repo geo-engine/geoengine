@@ -1,0 +1,25 @@
+<div>
+    @for (button of buttons(); track button.tooltip) {
+        <button
+            mat-icon-button
+            [color]="button.colorObservable ? (button.colorObservable | async) : buttonColor(button.sidenavConfig)"
+            (click)="button.sidenavConfig ? setComponent(button.sidenavConfig) : undefined"
+            [matTooltip]="(button.tooltipObservable ? (button.tooltipObservable | async) : button.tooltip) | stringSanitizer"
+            matTooltipPosition="below"
+        >
+            <!-- we don't use switch-case because type narrowing is not yet supported: https://github.com/angular/angular/issues/20780 -->
+            @if (button.icon.type === 'icon') {
+                <mat-icon>{{ button.icon.name }}</mat-icon>
+            }
+            @if (button.icon.type === 'observableIcon') {
+                <mat-icon>{{ button.icon.name | async }}</mat-icon>
+            }
+            @if (button.icon.type === 'svg') {
+                <mat-icon [svgIcon]="button.icon.name | stringSanitizer"></mat-icon>
+            }
+            @if (button.icon.type === 'loading') {
+                <mat-spinner diameter="24"></mat-spinner>
+            }
+        </button>
+    }
+</div>
