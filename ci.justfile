@@ -27,4 +27,4 @@ www: mwww::install mwww::lint mwww::build mwww::test
 
 # Check that generated code is up to date and that there are no uncommitted changes in the git repository. This ensures that the generated code is up to date and that there are no uncommitted changes in the git repository. This is important for CI because it ensures that the generated code is up to date and that there are no uncommitted changes in the git repository.
 [group('ci')]
-repo: mbackend::install mrepo::lint
+repo: mbackend::install mwww::install mrepo::lint

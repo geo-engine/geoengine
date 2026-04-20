@@ -1,4 +1,4 @@
-# Geo Engine — Backend
+# Geo Engine – Backend
 
 This directory contains the Geo Engine backend service:
 a Rust-based API server that implements the project's geospatial data APIs, data management, and core processing logic.
