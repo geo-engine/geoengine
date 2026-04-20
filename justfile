@@ -27,6 +27,10 @@ format write="false": (repo::format write) (www::format write) (ui::format write
 [group("build")]
 build: backend::build backend::generate-openapi-spec api-clients::build python::build ui::build www::build
 
+# Test all submodules.
+[group("test")]
+test: api-clients::test backend::test python::test ui::test www::test
+
 # Run all applications at the same time. Usage: `just run`.
 [group('run')]
 [parallel]
