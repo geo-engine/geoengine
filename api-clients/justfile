@@ -7,6 +7,8 @@ OPENAPI_GENERATOR_CLI := "npx @openapitools/openapi-generator-cli --openapitools
 _default:
     @just --list
 
+install:
+
 # Build all API clients by executing the build steps for each language.
 [group('build')]
 build: common::_clear \
@@ -58,7 +60,7 @@ _build-typescript-postprocess:
     cd typescript && npm install
     rm \
         typescript/.openapi-generator/FILES \
-        package-lock.json
+        typescript/package-lock.json
 
 # Build the API clients for Rust by generating code with the OpenAPI Generator and applying post-processing steps.
 [group('build')]
@@ -74,6 +76,8 @@ _build-rust-postprocess:
     rm -rf \
         rust/git_push.sh \
         rust/.travis.yml
+
+lint: lint-openapi-spec
 
 [group('config')]
 lint-openapi-spec: common::_clear

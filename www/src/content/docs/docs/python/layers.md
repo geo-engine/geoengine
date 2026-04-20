@@ -102,7 +102,7 @@ Create a new `LayerCollection`
 ```python
 @classmethod
 def from_response(
-    cls, response_pages: list[geoengine_openapi_client.LayerCollection]
+    cls, response_pages: list[geoengine_api_client.LayerCollection]
 ) -> LayerCollection
 ```
 
@@ -293,7 +293,7 @@ Create a new `Layer`
 
 ```python
 @classmethod
-def from_response(cls, response: geoengine_openapi_client.Layer) -> Layer
+def from_response(cls, response: geoengine_api_client.Layer) -> Layer
 ```
 
 Parse an HTTP JSON response to an `Layer`
@@ -325,7 +325,7 @@ Save a layer as a new dataset.
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.Layer
+def to_api_dict() -> geoengine_api_client.Layer
 ```
 
 Convert to a dictionary that can be serialized to JSON

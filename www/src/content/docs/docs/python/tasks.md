@@ -17,8 +17,7 @@ A wrapper for a task id
 
 ```python
 @classmethod
-def from_response(cls,
-                  response: geoengine_openapi_client.TaskResponse) -> TaskId
+def from_response(cls, response: geoengine_api_client.TaskResponse) -> TaskId
 ```
 
 Parse a http response to an `TaskId`
@@ -51,8 +50,8 @@ A wrapper for a task status type
 
 ```python
 @classmethod
-def from_response(
-        cls, response: geoengine_openapi_client.TaskStatus) -> TaskStatusInfo
+def from_response(cls,
+                  response: geoengine_api_client.TaskStatus) -> TaskStatusInfo
 ```
 
 Parse a http response to a `TaskStatusInfo`

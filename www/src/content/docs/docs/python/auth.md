@@ -75,7 +75,7 @@ Return the server url of the current session
 
 ```python
 @property
-def configuration() -> geoengine_openapi_client.Configuration
+def configuration() -> geoengine_api_client.Configuration
 ```
 
 Return the current http configuration

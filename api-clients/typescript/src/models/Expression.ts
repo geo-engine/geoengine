@@ -54,19 +54,19 @@ import {
  * 
  * Users can think of this implicit function signature for, e.g., two inputs:
  * 
- * ```Rust
+ * ```rust,ignore
  * fn (A: f64, B: f64) -> f64
  * ```
  * 
  * As a start, expressions contain algebraic operations and mathematical functions.
  * 
- * ```Rust
+ * ```rust,ignore
  * (A + B) / 2
  * ```
  * 
  * In addition, branches can be used to check for conditions.
  * 
- * ```Rust
+ * ```rust,ignore
  * if A IS NODATA {
  *     B
  * } else {
@@ -76,7 +76,7 @@ import {
  * 
  * Function calls can be used to access utility functions.
  * 
- * ```Rust
+ * ```rust,ignore
  * max(A, 0)
  * ```
  * 
@@ -96,7 +96,7 @@ import {
  * 
  * To generate more complex expressions, it is possible to have variable assignments.
  * 
- * ```Rust
+ * ```rust,ignore
  * let mean = (A + B) / 2;
  * let coefficient = 0.357;
  * mean * coefficient

@@ -69,13 +69,13 @@ jobs:
           swap-storage: true
 
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.ref_name }}
           path: geoengine
 
       - name: Checkout container files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: geo-engine/geoengine-container
           ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
@@ -183,9 +183,6 @@ jobs:
         with:
           ref: ${{ github.ref_name }}
           path: geoengine
-
-      - name: Link subfolder to current dir
-        run: ln -s geoengine/ui geoengine-ui
 
       - name: Checkout container files
         uses: actions/checkout@v6

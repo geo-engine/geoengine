@@ -36,6 +36,13 @@ export default defineConfig({
             components: {
                 SiteTitle: './src/components/TitleOverride.astro',
             },
+            expressiveCode: {
+                shiki: {
+                    langAlias: {
+                        'rust,ignore': 'rust',
+                    },
+                },
+            },
             sidebar: [
                 {
                     label: 'Welcome to Geo Engine Docs',

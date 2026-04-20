@@ -17,7 +17,7 @@ This class is used to generate geoengine compatible color breakpoint definitions
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.Breakpoint
+def to_api_dict() -> geoengine_api_client.Breakpoint
 ```
 
 Return the color breakpoint as a dictionary.
@@ -27,7 +27,7 @@ Return the color breakpoint as a dictionary.
 ```python
 @staticmethod
 def from_response(
-        response: geoengine_openapi_client.Breakpoint) -> ColorBreakpoint
+        response: geoengine_api_client.Breakpoint) -> ColorBreakpoint
 ```
 
 Parse a http response to a `ColorBreakpoint`.
@@ -113,7 +113,7 @@ Return the colorizer as a JSON string.
 
 ```python
 @staticmethod
-def from_response(response: geoengine_openapi_client.Colorizer) -> Colorizer
+def from_response(response: geoengine_api_client.Colorizer) -> Colorizer
 ```
 
 Create a colorizer from a response.
@@ -140,7 +140,7 @@ A linear gradient colorizer.
 ```python
 @staticmethod
 def from_response_linear(
-    response: geoengine_openapi_client.LinearGradient
+        response: geoengine_api_client.LinearGradient
 ) -> LinearGradientColorizer
 ```
 
@@ -149,7 +149,7 @@ Create a colorizer from a response.
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.Colorizer
+def to_api_dict() -> geoengine_api_client.Colorizer
 ```
 
 Return the colorizer as a dictionary.
@@ -168,7 +168,7 @@ A logarithmic gradient colorizer.
 ```python
 @staticmethod
 def from_response_logarithmic(
-    response: geoengine_openapi_client.LogarithmicGradient
+    response: geoengine_api_client.LogarithmicGradient
 ) -> LogarithmicGradientColorizer
 ```
 
@@ -177,7 +177,7 @@ Create a colorizer from a response.
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.Colorizer
+def to_api_dict() -> geoengine_api_client.Colorizer
 ```
 
 Return the colorizer as a dictionary.
@@ -196,8 +196,7 @@ A palette colorizer.
 ```python
 @staticmethod
 def from_response_palette(
-        response: geoengine_openapi_client.PaletteColorizer
-) -> PaletteColorizer
+        response: geoengine_api_client.PaletteColorizer) -> PaletteColorizer
 ```
 
 Create a colorizer from a response.
@@ -205,7 +204,7 @@ Create a colorizer from a response.
 #### to_api_dict
 
 ```python
-def to_api_dict() -> geoengine_openapi_client.Colorizer
+def to_api_dict() -> geoengine_api_client.Colorizer
 ```
 
 Return the colorizer as a dictionary.
