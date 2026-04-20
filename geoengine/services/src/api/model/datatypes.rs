@@ -2201,7 +2201,7 @@ impl From<MultiPolygon> for geoengine_datatypes::primitives::MultiPolygon {
 }
 
 #[derive(PartialEq, Eq, Serialize, Deserialize, Debug, Clone)]
-pub struct StringPair((String, String));
+pub struct StringPair(pub (String, String));
 
 pub type GdalConfigOption = StringPair;
 pub type AxisLabels = StringPair;

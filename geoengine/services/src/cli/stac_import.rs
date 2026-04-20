@@ -3,6 +3,7 @@
 use ordered_float::OrderedFloat;
 use std::{
     collections::{HashMap, HashSet},
+    path::PathBuf,
     str::FromStr,
     time::{Duration, Instant},
 };
@@ -29,8 +30,9 @@ use crate::{
         },
         model::{
             datatypes::{
-                GridBoundingBox2D, GridIdx2D, LayerId, Measurement, RasterDataType,
-                SpatialGridDefinition, TimeGranularity, TimeStep, UnitlessMeasurement,
+                GdalConfigOption, GridBoundingBox2D, GridIdx2D, LayerId, Measurement,
+                RasterDataType, SpatialGridDefinition, StringPair, TimeGranularity, TimeStep,
+                UnitlessMeasurement,
             },
             operators::{
                 GdalDatasetParameters, GdalMultiBand, RasterBandDescriptor, RasterBandDescriptors,
@@ -139,6 +141,15 @@ pub struct StacImport {
     /// must be date time property
     #[arg(long, default_value = "updated")]
     z_index_property_name: Option<String>,
+
+    #[arg(long)]
+    s3_endpoint: Option<String>,
+
+    #[arg(long)]
+    s3_access_key: Option<String>,
+
+    #[arg(long)]
+    s3_secret_key: Option<String>,
     // /// Parent layer collection ID
     // #[arg(long, default_value_t = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID)]
     // parent_layer_collection_id: Uuid,
@@ -598,6 +609,7 @@ impl StacImporter {
 
         let processor = AssetBandProcessor {
             asset,
+            params: &self.params,
             time,
             geo_transform,
             dataset_bands,
@@ -680,6 +692,7 @@ impl StacImporter {
 
         let processor = AssetBandProcessor {
             asset,
+            params: &self.params,
             time,
             geo_transform,
             dataset_bands,
@@ -1439,6 +1452,7 @@ fn handle_missing_eo_bands_for_asset(
 
 struct AssetBandProcessor<'a> {
     asset: &'a Asset,
+    params: &'a StacImport,
     time: TimeInstance,
     geo_transform: GeoTransform,
     dataset_bands: &'a [RasterBandDescriptor],
@@ -1495,7 +1509,10 @@ impl AssetBandProcessor<'_> {
         //     self.date, self.asset_key, self.asset.href
         // );
 
-        // TODO: in case of s3: add or reference credentials
+        let file_path = gdal_file_path(self.asset)?;
+
+        let gdal_config_options = self.gdal_options_for_file_path(&file_path)?;
+
         let tile = AddDatasetTile {
             time: TimeInterval::new(self.time, self.time + i64::from(24 * 60 * 60 * 1000)) // TODO: make time validity configurable
                 .context("Failed to create time interval")?
@@ -1504,7 +1521,7 @@ impl AssetBandProcessor<'_> {
             band: band_index as u32,
             z_index: self.z_index,
             params: GdalDatasetParameters {
-                file_path: gdal_file_path(self.asset)?.into(),
+                file_path: file_path.into(),
                 rasterband_channel: band_idx + 1, // gdal channels are 1-based
                 geo_transform: self.geo_transform.into(),
                 width,
@@ -1513,12 +1530,51 @@ impl AssetBandProcessor<'_> {
                 no_data_value: None,
                 properties_mapping: None,
                 gdal_open_options: None,
-                gdal_config_options: None,
+                gdal_config_options,
                 allow_alphaband_as_mask: false,
             },
         };
 
         Ok(tile)
+    }
+
+    fn gdal_options_for_file_path(
+        &self,
+        file_path: &GdalFilePath,
+    ) -> Result<Option<Vec<GdalConfigOption>>, anyhow::Error> {
+        let gdal_open_options = if let GdalFilePath::S3(_) = *file_path {
+            // TODO: allow skipping s3 assets on missing credentials?
+            let s3_endpoint = self.params.s3_endpoint.as_ref().ok_or(anyhow::anyhow!(
+                "S3 endpoint must be provided for S3 assets"
+            ))?;
+            let s3_access_key = self.params.s3_access_key.as_ref().ok_or(anyhow::anyhow!(
+                "S3 access key must be provided for S3 assets"
+            ))?;
+            let s3_secret_key = self.params.s3_secret_key.as_ref().ok_or(anyhow::anyhow!(
+                "S3 secret key must be provided for S3 assets"
+            ))?;
+
+            // for old gdal version s3 endpoint may not include the protocol
+            if s3_endpoint.starts_with("http://") || s3_endpoint.starts_with("https://") {
+                anyhow::bail!(
+                    "S3 endpoint should not include protocol (http/https), got: {s3_endpoint}"
+                );
+            }
+
+            Some(vec![
+                StringPair(("AWS_S3_ENDPOINT".to_string(), s3_endpoint.to_string())),
+                StringPair(("AWS_ACCESS_KEY_ID".to_string(), s3_access_key.to_string())),
+                StringPair((
+                    "AWS_SECRET_ACCESS_KEY".to_string(),
+                    s3_secret_key.to_string(),
+                )),
+                // StringPair(("AWS_HTTPS".to_string(), "YES".to_string())), // TODO: make configurable?
+                StringPair(("AWS_VIRTUAL_HOSTING".to_string(), "FALSE".to_string())), // TODO: make configurable?
+            ])
+        } else {
+            None
+        };
+        Ok(gdal_open_options)
     }
 
     fn process_band_v1_1_0(
@@ -1567,7 +1623,10 @@ impl AssetBandProcessor<'_> {
         //     self.date, self.asset_key, self.asset.href
         // );
 
-        // TODO: in case of s3: add or reference credentials
+        let file_path = gdal_file_path(self.asset)?;
+
+        let gdal_config_options = self.gdal_options_for_file_path(&file_path)?;
+
         let tile = AddDatasetTile {
             time: TimeInterval::new(self.time, self.time + i64::from(24 * 60 * 60 * 1000)) // TODO: make time validity configurable
                 .context("Failed to create time interval")?
@@ -1576,7 +1635,7 @@ impl AssetBandProcessor<'_> {
             band: band_index as u32,
             z_index: self.z_index,
             params: GdalDatasetParameters {
-                file_path: gdal_file_path(self.asset)?.into(),
+                file_path: file_path.into(),
                 rasterband_channel: band_idx + 1, // gdal channels are 1-based
                 geo_transform: self.geo_transform.into(),
                 width,
@@ -1585,7 +1644,7 @@ impl AssetBandProcessor<'_> {
                 no_data_value: None,
                 properties_mapping: None,
                 gdal_open_options: None,
-                gdal_config_options: None,
+                gdal_config_options,
                 allow_alphaband_as_mask: false,
             },
         };
@@ -1594,13 +1653,27 @@ impl AssetBandProcessor<'_> {
     }
 }
 
-fn gdal_file_path(asset: &Asset) -> anyhow::Result<String> {
+fn gdal_file_path(asset: &Asset) -> anyhow::Result<GdalFilePath> {
     if asset.href.starts_with("http") {
-        Ok(format!("/vsicurl/{}", asset.href))
+        Ok(GdalFilePath::Http(format!("/vsicurl/{}", asset.href)))
     } else if let Some(s3_url) = asset.href.strip_prefix("s3://") {
-        Ok(format!("/vsis3/{}", s3_url))
+        Ok(GdalFilePath::S3(format!("/vsis3/{}", s3_url)))
     } else {
         anyhow::bail!("Unsupported asset href format for GDAL: {}", asset.href);
+    }
+}
+
+enum GdalFilePath {
+    Http(String),
+    S3(String),
+}
+
+impl GdalFilePath {
+    fn into(self) -> PathBuf {
+        match self {
+            GdalFilePath::Http(path) => PathBuf::from(path),
+            GdalFilePath::S3(path) => PathBuf::from(path),
+        }
     }
 }
 
