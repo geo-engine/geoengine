@@ -47,7 +47,7 @@ jobs:
           echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
 
       - name: Checkout container files
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: geo-engine/geoengine-container
           ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
