@@ -21,7 +21,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: api-client/python
+        working-directory: api-clients/python
 
     environment:
       name: pypi
@@ -65,7 +65,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: api-client/typescript
+        working-directory: api-clients/typescript
 
     steps:
       - uses: actions/checkout@v6
@@ -97,7 +97,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: api-client/rust
+        working-directory: api-clients/rust
 
     steps:
       - uses: actions/checkout@v6
