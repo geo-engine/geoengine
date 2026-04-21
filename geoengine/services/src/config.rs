@@ -200,6 +200,7 @@ impl ConfigElement for QueryContext {
 #[derive(Debug, Deserialize)]
 pub struct DatasetService {
     pub list_limit: u32,
+    pub json_size_limit: usize,
 }
 
 impl ConfigElement for DatasetService {
