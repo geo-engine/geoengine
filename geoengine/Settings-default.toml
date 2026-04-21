@@ -13,7 +13,7 @@ list_limit = 20
 
 [dataset_service]
 list_limit = 20
-json_size_limit = 10240 # 10MB
+json_size_limit = 10240000 # 10MB
 
 [layer_service]
 list_limit = 20
