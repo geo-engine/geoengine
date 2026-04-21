@@ -107,5 +107,9 @@ jobs:
           toolchain: ${{ matrix.rust-version }}
       - name: Install dependencies
         run: cargo fetch
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
       - name: Publish
         run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
