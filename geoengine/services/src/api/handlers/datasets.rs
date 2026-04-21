@@ -11,6 +11,7 @@ use crate::{
             MetaDataSuggestion, Provenances, UpdateDataset, Volume,
         },
     },
+    config::{DatasetService, get_config_element},
     contexts::{ApplicationContext, SessionContext},
     datasets::{
         DatasetName,
@@ -70,8 +71,14 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
+    let config_dataset_json_limit = get_config_element::<DatasetService>()
+        .expect("DatasetService config element not found")
+        .json_size_limit;
+    let json_config = web::JsonConfig::default().limit(config_dataset_json_limit);
+
     cfg.service(
         web::scope("/dataset")
+            .app_data(json_config)
             .service(
                 web::resource("/suggest").route(web::post().to(suggest_meta_data_handler::<C>)),
             )

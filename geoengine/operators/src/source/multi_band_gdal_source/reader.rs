@@ -167,7 +167,7 @@ impl ReaderState {
             gdal_read_widow: gdal_read_window,
             read_window_bounds: shifted_readable_bounds,
             bounds_of_target: tile.grid_bounds,
-            flip_y: false,
+            flip_y,
         })
     }
 }
