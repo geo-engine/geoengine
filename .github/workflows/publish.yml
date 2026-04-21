@@ -90,7 +90,8 @@ jobs:
 
     permissions:
       contents: read
-
+      id-token: write
+      
     strategy:
       matrix:
         rust-version: ["1.80.0"] # use lowest supported Rust version
