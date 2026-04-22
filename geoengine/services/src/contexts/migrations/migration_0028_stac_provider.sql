@@ -1,0 +1,30 @@
+CREATE TYPE "StacProviderS3Credentials" AS (
+    access_key text,
+    secret_key text
+);
+
+CREATE TYPE "StacProviderDatasetBand" AS ("name" text);
+
+CREATE TYPE "StacProviderDataset" AS (
+    "name" text,
+    description text,
+    data_type "RasterDataType",
+    resolution "SpatialResolution",
+    projection "SpatialReference",
+    bands "StacProviderDatasetBand" []
+);
+
+CREATE TYPE "StacDataProviderDefinition" AS (
+    "name" text,
+    id uuid,
+    description text,
+    priority smallint,
+    api_url text,
+    collection_name text,
+    s3_credentials "StacProviderS3Credentials",
+    time_dimension "TimeDimension",
+    datasets "StacProviderDataset" []
+);
+
+ALTER TYPE "DataProviderDefinition" ADD ATTRIBUTE
+stac_data_provider_definition "StacDataProviderDefinition";

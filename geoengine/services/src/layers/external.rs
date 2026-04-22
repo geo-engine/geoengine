@@ -12,6 +12,7 @@ use crate::datasets::external::netcdfcf::NetCdfCfDataProviderDefinition;
 use crate::datasets::external::pangaea::PangaeaDataProviderDefinition;
 use crate::datasets::external::{
     CopernicusDataspaceDataProviderDefinition, SentinelS2L2ACogsProviderDefinition,
+    StacDataProviderDefinition,
 };
 use crate::datasets::listing::ProvenanceOutput;
 use crate::error::Result;
@@ -89,6 +90,7 @@ pub enum TypedDataProviderDefinition {
     NetCdfCfDataProviderDefinition(NetCdfCfDataProviderDefinition),
     PangaeaDataProviderDefinition(PangaeaDataProviderDefinition),
     SentinelS2L2ACogsProviderDefinition(SentinelS2L2ACogsProviderDefinition),
+    StacDataProviderDefinition(StacDataProviderDefinition),
     WildliveDataConnectorDefinition(WildliveDataConnectorDefinition),
 }
 
@@ -158,6 +160,12 @@ impl From<WildliveDataConnectorDefinition> for TypedDataProviderDefinition {
     }
 }
 
+impl From<StacDataProviderDefinition> for TypedDataProviderDefinition {
+    fn from(def: StacDataProviderDefinition) -> Self {
+        Self::StacDataProviderDefinition(def)
+    }
+}
+
 impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderDefinition<D>> {
     fn from(typed: TypedDataProviderDefinition) -> Self {
         match typed {
@@ -178,6 +186,7 @@ impl<D: GeoEngineDb> From<TypedDataProviderDefinition> for Box<dyn DataProviderD
             TypedDataProviderDefinition::CopernicusDataspaceDataProviderDefinition(def) => {
                 Box::new(def)
             }
+            TypedDataProviderDefinition::StacDataProviderDefinition(def) => Box::new(def),
             TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => Box::new(def),
         }
     }
@@ -197,6 +206,7 @@ impl<D: GeoEngineDb> AsRef<dyn DataProviderDefinition<D>> for TypedDataProviderD
             Self::EdrDataProviderDefinition(def) => def,
             Self::CopernicusDataspaceDataProviderDefinition(def) => def,
             Self::SentinelS2L2ACogsProviderDefinition(def) => def,
+            Self::StacDataProviderDefinition(def) => def,
             Self::WildliveDataConnectorDefinition(def) => def,
         }
     }
@@ -219,6 +229,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
                 Box::new(def).initialize(db).await
             }
             Self::SentinelS2L2ACogsProviderDefinition(def) => Box::new(def).initialize(db).await,
+            Self::StacDataProviderDefinition(def) => Box::new(def).initialize(db).await,
             Self::WildliveDataConnectorDefinition(def) => Box::new(def).initialize(db).await,
         }
     }
@@ -246,6 +257,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
             Self::EdrDataProviderDefinition(def) => DataProviderDefinition::<D>::type_name(def),
             Self::CopernicusDataspaceDataProviderDefinition(_) => "CioDataProviderDefinition",
             Self::SentinelS2L2ACogsProviderDefinition(_) => "SentinelS2L2ACogsProviderDefinition",
+            Self::StacDataProviderDefinition(def) => DataProviderDefinition::<D>::type_name(def),
             Self::WildliveDataConnectorDefinition(def) => {
                 DataProviderDefinition::<D>::type_name(def)
             }
@@ -273,6 +285,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
             Self::SentinelS2L2ACogsProviderDefinition(def) => {
                 DataProviderDefinition::<D>::name(def)
             }
+            Self::StacDataProviderDefinition(def) => DataProviderDefinition::<D>::name(def),
             Self::WildliveDataConnectorDefinition(def) => DataProviderDefinition::<D>::name(def),
         }
     }
@@ -296,6 +309,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
                 DataProviderDefinition::<D>::id(def)
             }
             Self::SentinelS2L2ACogsProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
+            Self::StacDataProviderDefinition(def) => DataProviderDefinition::<D>::id(def),
             Self::WildliveDataConnectorDefinition(def) => DataProviderDefinition::<D>::id(def),
         }
     }
@@ -325,6 +339,7 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
             Self::SentinelS2L2ACogsProviderDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
+            Self::StacDataProviderDefinition(def) => DataProviderDefinition::<D>::priority(def),
             Self::WildliveDataConnectorDefinition(def) => {
                 DataProviderDefinition::<D>::priority(def)
             }
@@ -370,6 +385,9 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for TypedDataProviderDefinition {
                 DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => {
+                DataProviderDefinition::<D>::update(def, other).await
+            }
+            TypedDataProviderDefinition::StacDataProviderDefinition(def) => {
                 DataProviderDefinition::<D>::update(def, other).await
             }
             TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => {
