@@ -1,7 +1,7 @@
 ---
 title: Geo Engine Rust API Client
 subtitle: api-client
-icon: ../../images/logos/OpenAPI.svg
+icon: ../../images/logos/openapi_white.svg
 links:
     - title: crates.io
       url: https://crates.io/crates/geoengine-api-client
