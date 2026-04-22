@@ -3,6 +3,8 @@ title: Geo Engine Python Library
 subtitle: geoengine-python
 icon: ../../images/logos/python.svg
 links:
+    - title: PyPI
+      url: https://pypi.org/project/geoengine/
     - title: GitHub
       url: https://github.com/geo-engine/geoengine/tree/main/python
 ---
