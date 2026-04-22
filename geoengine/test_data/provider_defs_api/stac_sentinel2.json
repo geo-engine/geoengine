@@ -1,0 +1,53 @@
+{
+  "type": "StacProviderDefinition",
+  "id": "b274275c-373d-4a3f-8b45-9b48e9614329",
+  "name": "Sentinel 2 L2A from STAC",
+  "description": "",
+  "priority": 50,
+  "apiUrl": "https://stac.nsiscloud.polsa.gov.pl/v1",
+  "collectionName": "sentinel-2-l2a",
+  "s3Credentials": null,
+  "timeDimension": {
+    "type": "regular",
+    "origin": 0,
+    "step": {
+      "granularity": "days",
+      "value": 1
+    }
+  },
+  "datasets": [
+    {
+      "name": "Sentinel-2 L2A EPSG:32632 U16 10m",
+      "description": "",
+      "dataType": "U16",
+      "resolution": 10.0,
+      "projection": "EPSG:32632",
+      "bands": [
+        {
+          "name": "B02"
+        },
+        {
+          "name": "B03"
+        },
+        {
+          "name": "B04"
+        },
+        {
+          "name": "B08"
+        }
+      ]
+    },
+    {
+      "name": "Sentinel-2 L2A EPSG:32632 U8 20m",
+      "description": "",
+      "dataType": "U8",
+      "resolution": 20.0,
+      "projection": "EPSG:32632",
+      "bands": [
+        {
+          "name": "SCL"
+        }
+      ]
+    }
+  ]
+}

@@ -1,4 +1,7 @@
-use super::datatypes::{CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption};
+use super::datatypes::{
+    CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, RasterDataType,
+    SpatialReference, SpatialResolution, TimeGranularity, TimeInstance,
+};
 use super::operators::TypedResultDescriptor;
 use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
@@ -887,6 +890,234 @@ impl From<crate::datasets::external::sentinel_s2_l2a_cogs::SentinelS2L2ACogsProv
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacProviderS3Credentials {
+    pub access_key: String,
+    pub secret_key: String,
+}
+
+impl From<StacProviderS3Credentials>
+    for crate::datasets::external::stac::StacProviderS3Credentials
+{
+    fn from(value: StacProviderS3Credentials) -> Self {
+        Self {
+            access_key: value.access_key,
+            secret_key: value.secret_key,
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderS3Credentials>
+    for StacProviderS3Credentials
+{
+    fn from(value: crate::datasets::external::stac::StacProviderS3Credentials) -> Self {
+        Self {
+            access_key: value.access_key,
+            secret_key: SECRET_REPLACEMENT.to_string(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacProviderDatasetBand {
+    pub name: String,
+}
+
+impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProviderDatasetBand {
+    fn from(value: StacProviderDatasetBand) -> Self {
+        Self { name: value.name }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProviderDatasetBand {
+    fn from(value: crate::datasets::external::stac::StacProviderDatasetBand) -> Self {
+        Self { name: value.name }
+    }
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(untagged)]
+pub enum StacProviderDatasetResolution {
+    Uniform(f64),
+    Spatial(SpatialResolution),
+}
+
+impl From<geoengine_datatypes::primitives::SpatialResolution> for StacProviderDatasetResolution {
+    fn from(value: geoengine_datatypes::primitives::SpatialResolution) -> Self {
+        Self::Spatial(value.into())
+    }
+}
+
+impl From<StacProviderDatasetResolution> for geoengine_datatypes::primitives::SpatialResolution {
+    fn from(value: StacProviderDatasetResolution) -> Self {
+        match value {
+            StacProviderDatasetResolution::Uniform(value) => {
+                geoengine_datatypes::primitives::SpatialResolution::new_unchecked(value, value)
+            }
+            StacProviderDatasetResolution::Spatial(value) => value.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacProviderDataset {
+    pub name: String,
+    pub description: String,
+    pub data_type: RasterDataType,
+    pub resolution: StacProviderDatasetResolution,
+    #[schema(value_type = String)]
+    pub projection: SpatialReference,
+    pub bands: Vec<StacProviderDatasetBand>,
+}
+
+impl From<StacProviderDataset> for crate::datasets::external::stac::StacProviderDataset {
+    fn from(value: StacProviderDataset) -> Self {
+        Self {
+            name: value.name,
+            description: value.description,
+            data_type: value.data_type.into(),
+            resolution: value.resolution.into(),
+            projection: value.projection.into(),
+            bands: value.bands.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderDataset> for StacProviderDataset {
+    fn from(value: crate::datasets::external::stac::StacProviderDataset) -> Self {
+        Self {
+            name: value.name,
+            description: value.description,
+            data_type: value.data_type.into(),
+            resolution: value.resolution.into(),
+            projection: value.projection.into(),
+            bands: value.bands.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+fn api_time_dimension_to_datatypes(
+    value: StacTimeDimension,
+) -> geoengine_datatypes::primitives::TimeDimension {
+    match value {
+        StacTimeDimension::Regular { origin, step } => {
+            geoengine_datatypes::primitives::TimeDimension::Regular(
+                geoengine_datatypes::primitives::RegularTimeDimension {
+                    origin: origin.into(),
+                    step: step.into(),
+                },
+            )
+        }
+        StacTimeDimension::Irregular => geoengine_datatypes::primitives::TimeDimension::Irregular,
+    }
+}
+
+fn datatypes_time_dimension_to_api(
+    value: geoengine_datatypes::primitives::TimeDimension,
+) -> StacTimeDimension {
+    match value {
+        geoengine_datatypes::primitives::TimeDimension::Regular(
+            geoengine_datatypes::primitives::RegularTimeDimension { origin, step },
+        ) => StacTimeDimension::Regular {
+            origin: origin.into(),
+            step: step.into(),
+        },
+        geoengine_datatypes::primitives::TimeDimension::Irregular => StacTimeDimension::Irregular,
+    }
+}
+
+#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacTimeStep {
+    pub granularity: TimeGranularity,
+    pub value: u32,
+}
+
+impl From<StacTimeStep> for geoengine_datatypes::primitives::TimeStep {
+    fn from(value: StacTimeStep) -> Self {
+        Self {
+            granularity: value.granularity.into(),
+            step: value.value,
+        }
+    }
+}
+
+impl From<geoengine_datatypes::primitives::TimeStep> for StacTimeStep {
+    fn from(value: geoengine_datatypes::primitives::TimeStep) -> Self {
+        Self {
+            granularity: value.granularity.into(),
+            value: value.step,
+        }
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase", tag = "type")]
+pub enum StacTimeDimension {
+    #[schema(title = "Regular")]
+    Regular {
+        origin: TimeInstance,
+        step: StacTimeStep,
+    },
+    #[schema(title = "Irregular")]
+    Irregular,
+}
+
+#[type_tag(value = "StacProviderDefinition")]
+#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
+#[serde(rename_all = "camelCase")]
+pub struct StacDataProviderDefinition {
+    pub name: String,
+    pub id: DataProviderId,
+    pub description: String,
+    pub priority: Option<i16>,
+    pub api_url: String,
+    pub collection_name: String,
+    pub s3_credentials: Option<StacProviderS3Credentials>,
+    pub time_dimension: StacTimeDimension,
+    pub datasets: Vec<StacProviderDataset>,
+}
+
+impl From<StacDataProviderDefinition>
+    for crate::datasets::external::stac::StacDataProviderDefinition
+{
+    fn from(value: StacDataProviderDefinition) -> Self {
+        crate::datasets::external::stac::StacDataProviderDefinition {
+            name: value.name,
+            id: value.id.into(),
+            description: value.description,
+            priority: value.priority,
+            api_url: value.api_url,
+            collection_name: value.collection_name,
+            s3_credentials: value.s3_credentials.map(Into::into),
+            time_dimension: api_time_dimension_to_datatypes(value.time_dimension),
+            datasets: value.datasets.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacDataProviderDefinition>
+    for StacDataProviderDefinition
+{
+    fn from(value: crate::datasets::external::stac::StacDataProviderDefinition) -> Self {
+        StacDataProviderDefinition {
+            r#type: Default::default(),
+            name: value.name,
+            id: value.id.into(),
+            description: value.description,
+            priority: value.priority,
+            api_url: value.api_url,
+            collection_name: value.collection_name,
+            s3_credentials: value.s3_credentials.map(Into::into),
+            time_dimension: datatypes_time_dimension_to_api(value.time_dimension),
+            datasets: value.datasets.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 #[type_tag(value = "DatasetLayerListing")]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1037,6 +1268,7 @@ pub enum TypedDataProviderDefinition {
     NetCdfCfDataProviderDefinition(NetCdfCfDataProviderDefinition),
     PangaeaDataProviderDefinition(PangaeaDataProviderDefinition),
     SentinelS2L2ACogsProviderDefinition(SentinelS2L2ACogsProviderDefinition),
+    StacDataProviderDefinition(StacDataProviderDefinition),
     WildliveDataConnectorDefinition(WildliveDataConnectorDefinition),
 }
 
@@ -1054,6 +1286,7 @@ impl From<TypedDataProviderDefinition> for crate::layers::external::TypedDataPro
             TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def.into()),
             TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::PangaeaDataProviderDefinition(def.into()),
             TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def.into()),
+            TypedDataProviderDefinition::StacDataProviderDefinition(def) => crate::layers::external::TypedDataProviderDefinition::StacDataProviderDefinition(def.into()),
             TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => crate::layers::external::TypedDataProviderDefinition::WildliveDataConnectorDefinition(def.into()),
         }
     }
@@ -1073,6 +1306,7 @@ impl From<crate::layers::external::TypedDataProviderDefinition> for TypedDataPro
             crate::layers::external::TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def) => TypedDataProviderDefinition::NetCdfCfDataProviderDefinition(def.into()),
             crate::layers::external::TypedDataProviderDefinition::PangaeaDataProviderDefinition(def) => TypedDataProviderDefinition::PangaeaDataProviderDefinition(def.into()),
             crate::layers::external::TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def) => TypedDataProviderDefinition::SentinelS2L2ACogsProviderDefinition(def.into()),
+            crate::layers::external::TypedDataProviderDefinition::StacDataProviderDefinition(def) => TypedDataProviderDefinition::StacDataProviderDefinition(def.into()),
             crate::layers::external::TypedDataProviderDefinition::WildliveDataConnectorDefinition(def) => TypedDataProviderDefinition::WildliveDataConnectorDefinition(def.into()),
         }
     }
@@ -1174,5 +1408,42 @@ impl From<crate::machine_learning::MlModel> for MlModel {
             metadata: value.metadata.into(),
             file_name: value.file_name,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        StacDataProviderDefinition, StacProviderDatasetResolution, TypedDataProviderDefinition,
+    };
+    use geoengine_datatypes::test_data;
+    use std::fs;
+
+    #[test]
+    fn stac_fixture_deserializes_to_api_type() {
+        let fixture = fs::read_to_string(test_data!("provider_defs_api/stac_sentinel2.json"))
+            .expect("failed to read stac fixture");
+
+        let stac_definition: StacDataProviderDefinition = serde_json::from_str(&fixture)
+            .expect("stac fixture must deserialize to StacDataProviderDefinition");
+
+        assert_eq!(stac_definition.collection_name, "sentinel-2-l2a");
+        assert!(matches!(
+            stac_definition.datasets[0].resolution,
+            StacProviderDatasetResolution::Uniform(value) if value == 10.
+        ));
+
+        let definition: TypedDataProviderDefinition =
+            serde_json::from_str(&fixture).expect("stac fixture must deserialize");
+
+        let TypedDataProviderDefinition::StacDataProviderDefinition(definition) = definition else {
+            panic!("fixture must deserialize into StacDataProviderDefinition");
+        };
+
+        assert_eq!(definition.collection_name, "sentinel-2-l2a");
+        assert!(matches!(
+            definition.datasets[0].resolution,
+            StacProviderDatasetResolution::Uniform(value) if value == 10.
+        ));
     }
 }
