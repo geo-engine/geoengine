@@ -51,6 +51,12 @@ jobs:
       - name: Adjust lcov.info
         # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
         run: sed -i 's|/github/workspace/||g' geoengine/lcov.info
+      - name: Upload geoengine coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: geoengine-coverage-lcov
+          path: geoengine/lcov.info
+          if-no-files-found: warn
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
@@ -203,6 +209,13 @@ jobs:
         working-directory: python/geoengine
         env:
           COVERALLS_REPO_TOKEN: ${{ github.token }}
+      - name: Upload Python coverage artifact
+        if: ${{ matrix.coverage }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: python-coverage-lcov-${{ matrix.python-version }}
+          path: python/coverage.lcov
+          if-no-files-found: warn
   
   www:
     runs-on: ubuntu-24.04
@@ -282,7 +295,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: extractions/setup-just@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
@@ -336,7 +349,7 @@ jobs:
           - dashboards/esg-indicator-service
     
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: extractions/setup-just@v4
       - name: Install Dependencies
         run: just ui install
@@ -354,13 +367,23 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: extractions/setup-just@v4
       - name: Install Dependencies
         run: just ui install --with-deps
       - run: just ui test --ci
         env:
           CI: true
+      - name: Upload UI coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ui-coverage
+          path: |
+            ui/coverage/**
+            ui/**/coverage/**
+            www/coverage/**
+            coverage/**
+          if-no-files-found: warn
 
   ui-lint:
     name: "ui / lint"
@@ -373,7 +396,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - uses: extractions/setup-just@v4
       - name: Install Dependencies
         run: just ui install
