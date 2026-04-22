@@ -48,9 +48,9 @@ jobs:
       #     key: ci_test_
       - name: Testsuite
         uses: ./.github/actions/test
-      - name: Adjust lcov.info
+      # - name: Adjust lcov.info
         # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
-        run: sed -i 's|/github/workspace/||g' geoengine/lcov.info
+        # run: sed -i 's|/github/workspace/||g' geoengine/lcov.info
       - name: Upload geoengine coverage artifact
         uses: actions/upload-artifact@v4
         with:
@@ -202,7 +202,7 @@ jobs:
         # 1. We need to adjust the paths in the lcov file to match the repository structure.
         # 2. We need to download the coveralls script and upload the report.
         run: |
-          sed -i 's|SF:geoengine/|SF:|' ../coverage.lcov
+          # sed -i 's|SF:geoengine/|SF:|' ../coverage.lcov
           curl -sL https://coveralls.io/coveralls-linux.tar.gz | tar -xz
           ./coveralls report ../coverage.lcov
         # If we don't run it in the code folder, the paths in the report will prefixed with `library/geoengine/`.
