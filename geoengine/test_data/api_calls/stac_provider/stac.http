@@ -1,0 +1,56 @@
+
+###
+
+# @name anonymousSession
+POST http://localhost:3030/api/anonymous
+Content-Type: application/json
+
+### 
+
+# @name provider
+POST http://localhost:3030/api/layerDb/providers
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+< ../../provider_defs_api/stac_sentinel2.json
+
+### 
+
+GET http://localhost:3030/api/layers/{{provider.response.body.$.id}}/capabilities
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+GET http://localhost:3030/api/layers/collections/{{provider.response.body.$.id}}/root?offset=0&limit=10
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+GET http://localhost:3030/api/layers/collections/{{provider.response.body.$.id}}/projections?offset=0&limit=10
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+GET http://localhost:3030/api/layers/collections/{{provider.response.body.$.id}}/projections%2Fepsg32632?offset=0&limit=10
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+GET http://localhost:3030/api/layers/collections/{{provider.response.body.$.id}}/projections%2Fepsg32632%2FdataTypes?offset=0&limit=10
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+GET http://localhost:3030/api/layers/collections/{{provider.response.body.$.id}}/projections%2Fepsg32632%2FdataTypes%2Fu8?offset=0&limit=10
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+GET http://localhost:3030/api/layers/{{provider.response.body.$.id}}/dataset%2F1
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+
+GET http://localhost:3030/api/layers/{{provider.response.body.$.id}}/dataset%2F0
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
