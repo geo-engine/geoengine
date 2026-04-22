@@ -48,21 +48,17 @@ jobs:
       #     key: ci_test_
       - name: Testsuite
         uses: ./.github/actions/test
-      # - name: Adjust lcov.info
+      - name: Adjust lcov.info
         # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
-        # run: sed -i 's|/github/workspace/||g' geoengine/lcov.info
-      - name: Upload geoengine coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: geoengine-coverage-lcov
-          path: geoengine/lcov.info
-          if-no-files-found: warn
+        run: sed -i 's|/github/workspace/||g' geoengine/lcov.info
       - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           file: geoengine/lcov.info
           fail-on-error: false # do not fail the workflow if the upload fails
+          parallel: true
+          flag-name: backend
 
   geoengine-lint:
     name: "geoengine / lint"
@@ -197,25 +193,20 @@ jobs:
           just python run-examples
           --build-type=release
           ${{ matrix.coverage && '--coverage' || '' }}
-      - name: Report coverage to Coveralls
+      - name: Adjust lcov.info
         if: ${{ matrix.coverage }}
-        # 1. We need to adjust the paths in the lcov file to match the repository structure.
-        # 2. We need to download the coveralls script and upload the report.
-        run: |
-          # sed -i 's|SF:geoengine/|SF:|' ../coverage.lcov
-          curl -sL https://coveralls.io/coveralls-linux.tar.gz | tar -xz
-          ./coveralls report ../coverage.lcov
-        # If we don't run it in the code folder, the paths in the report will prefixed with `library/geoengine/`.
-        working-directory: python/geoengine
-        env:
-          COVERALLS_REPO_TOKEN: ${{ github.token }}
-      - name: Upload Python coverage artifact
+        # The lcov file is generated in the container and contains relative paths from the python folder
+        # so we need to adjust them to match the repository structure for coveralls.
+        run: sed -i 's|SF:geoengine/|SF:python/geoengine/|' python/coverage.lcov
+      - name: Upload coverage to Coveralls
         if: ${{ matrix.coverage }}
-        uses: actions/upload-artifact@v4
+        uses: coverallsapp/github-action@v2
         with:
-          name: python-coverage-lcov-${{ matrix.python-version }}
-          path: python/coverage.lcov
-          if-no-files-found: warn
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          file: python/coverage.lcov
+          fail-on-error: false # do not fail the workflow if the upload fails
+          parallel: true
+          flag-name: python
   
   www:
     runs-on: ubuntu-24.04
@@ -423,3 +414,19 @@ jobs:
       - uses: extractions/setup-just@v4
       - name: Lint repository-wide formats & versions
         run: just ci repo
+
+  repository-coverage:
+    name: "repository / coverage"
+    if: ${{ always() }}
+
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Close parallel coverage report
+        uses: coverallsapp/github-action@v2
+        with:
+          parallel-finished: true
+          carryforward: "backend,python"
