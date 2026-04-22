@@ -12,17 +12,20 @@ use crate::workflows::workflow::Workflow;
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::{DataId, DataProviderId, LayerId, NamedData};
 use geoengine_datatypes::primitives::{
-    RasterQueryRectangle, SpatialResolution, TimeDimension, VectorQueryRectangle,
+    CacheHint, RasterQueryRectangle, SpatialResolution, TimeDimension, VectorQueryRectangle,
 };
-use geoengine_datatypes::raster::RasterDataType;
+use geoengine_datatypes::raster::{
+    GeoTransform, GridBoundingBox2D, RasterDataType, SpatialGridDefinition,
+};
 use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::{
-    MetaData, MetaDataProvider, RasterOperator, RasterResultDescriptor, TypedOperator,
-    VectorResultDescriptor,
+    MetaData, MetaDataProvider, RasterBandDescriptors, RasterOperator, RasterResultDescriptor,
+    SpatialGridDescriptor, TimeDescriptor, TypedOperator, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
 use geoengine_operators::source::{
-    GdalLoadingInfo, GdalSource, GdalSourceParameters, OgrSourceDataset,
+    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+    MultiBandGdalSource, MultiBandGdalSourceParameters, OgrSourceDataset,
 };
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -74,7 +77,7 @@ pub struct StacProviderDataset {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacProviderDatasetBand")]
 pub struct StacProviderDatasetBand {
-    pub name: String, // the identifier in the STAC response
+    pub name: String,
 }
 
 #[async_trait]
@@ -237,6 +240,22 @@ impl StacDataProvider {
             .and_then(|value| value.parse::<usize>().ok())
     }
 
+    fn dataset_from_data_id(
+        &self,
+        id: &DataId,
+    ) -> Result<&StacProviderDataset, geoengine_operators::error::Error> {
+        let external = id
+            .external()
+            .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
+
+        let dataset_index = Self::dataset_index_from_layer_id(&external.layer_id)
+            .ok_or(geoengine_operators::error::Error::UnknownDataId)?;
+
+        self.datasets
+            .get(dataset_index)
+            .ok_or(geoengine_operators::error::Error::UnknownDataId)
+    }
+
     fn paginate(
         items: Vec<CollectionItem>,
         options: LayerCollectionListOptions,
@@ -246,13 +265,6 @@ impl StacDataProvider {
             .skip(options.offset as usize)
             .take(options.limit as usize)
             .collect()
-    }
-}
-
-#[async_trait]
-impl DataProvider for StacDataProvider {
-    async fn provenance(&self, _id: &DataId) -> crate::error::Result<ProvenanceOutput> {
-        todo!("stac provenance blueprint")
     }
 }
 
@@ -319,10 +331,11 @@ impl LayerCollectionProvider for StacDataProvider {
                                             first_dimension.id(),
                                         )),
                                     },
-                                    name: display,
+                                    name: display.clone(),
                                     description: format!(
-                                        "Datasets with {} {slug}",
-                                        first_dimension.label()
+                                        "Datasets with {} {}",
+                                        first_dimension.label(),
+                                        display,
                                     ),
                                     properties: vec![],
                                 })
@@ -356,9 +369,10 @@ impl LayerCollectionProvider for StacDataProvider {
                                     },
                                     name: format!("By {}", dimension.label()),
                                     description: format!(
-                                        "Filter datasets by {} with {} {first_value}",
+                                        "Filter datasets by {} with {} {}",
                                         dimension.label(),
                                         first_dimension.label(),
+                                        first_value,
                                     ),
                                     properties: vec![],
                                 })
@@ -395,11 +409,13 @@ impl LayerCollectionProvider for StacDataProvider {
                                             second_dimension.id(),
                                         )),
                                     },
-                                    name: display,
+                                    name: display.clone(),
                                     description: format!(
-                                        "Datasets with {} {first_value} and {} {slug}",
+                                        "Datasets with {} {} and {} {}",
                                         first_dimension.label(),
+                                        first_value,
                                         second_dimension.label(),
+                                        display,
                                     ),
                                     properties: vec![],
                                 })
@@ -501,8 +517,8 @@ impl LayerCollectionProvider for StacDataProvider {
             description: dataset.description.clone(),
             workflow: Workflow::Legacy {
                 operator: TypedOperator::Raster(
-                    GdalSource {
-                        params: GdalSourceParameters::new(NamedData {
+                    MultiBandGdalSource {
+                        params: MultiBandGdalSourceParameters::new(NamedData {
                             namespace: None,
                             provider: Some(self.id.to_string()),
                             name: id.to_string(),
@@ -515,6 +531,141 @@ impl LayerCollectionProvider for StacDataProvider {
             properties: vec![],
             metadata: HashMap::new(),
         })
+    }
+}
+
+#[derive(Debug, Clone)]
+struct StacMultiBandMetaData {
+    dataset: StacProviderDataset,
+}
+
+impl StacMultiBandMetaData {
+    fn default_spatial_extent_for_projection(&self) -> (f64, f64, f64, f64) {
+        // Default descriptors must provide a non-empty footprint so WMS intersection checks work.
+        // These extents are placeholders until STAC item-derived bounds are wired in.
+        let projection = self.dataset.projection.to_string();
+
+        if projection == "EPSG:32632" {
+            // From NSISCloud Sentinel-2 sample tile metadata in test_data/api_calls/nsiscloud/test.http
+            return (399_960.0, 5_700_000.0, 109_800.0, 109_800.0);
+        }
+
+        if projection == "EPSG:4326" {
+            return (-180.0, 90.0, 360.0, 180.0);
+        }
+
+        if projection == "EPSG:3857" {
+            return (
+                -20_037_508.342_789_2,
+                20_037_508.342_789_2,
+                40_075_016.685_578_4,
+                40_075_016.685_578_4,
+            );
+        }
+
+        // Generic fallback in projected units.
+        (0.0, 1_000_000.0, 1_000_000.0, 1_000_000.0)
+    }
+}
+
+#[async_trait]
+impl
+    MetaData<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for StacMultiBandMetaData
+{
+    async fn loading_info(
+        &self,
+        query: MultiBandGdalLoadingInfoQueryRectangle,
+    ) -> geoengine_operators::util::Result<MultiBandGdalLoadingInfo> {
+        // Placeholder infrastructure: STAC tile discovery will be injected here in a follow-up.
+        // Returning empty file list keeps the MultiBand pipeline connected end-to-end.
+        dbg!("hi from loading info", &query);
+        Ok(MultiBandGdalLoadingInfo::new(
+            vec![query.query_rectangle.time_interval()],
+            vec![],
+            CacheHint::default(),
+        ))
+    }
+
+    async fn result_descriptor(&self) -> geoengine_operators::util::Result<RasterResultDescriptor> {
+        let (origin_x, origin_y, extent_width, extent_height) =
+            self.default_spatial_extent_for_projection();
+
+        let x_resolution: f64 = self.dataset.resolution.x.abs();
+        let y_resolution: f64 = -self.dataset.resolution.y.abs();
+
+        let grid_width: isize = ((extent_width / x_resolution).ceil().max(1.0_f64)) as isize;
+        let grid_height: isize =
+            ((extent_height / y_resolution.abs()).ceil().max(1.0_f64)) as isize;
+
+        let geo_transform = GeoTransform::new(
+            geoengine_datatypes::primitives::Coordinate2D::new(origin_x, origin_y),
+            x_resolution,
+            y_resolution,
+        );
+        let spatial_grid = SpatialGridDefinition::new(
+            geo_transform,
+            GridBoundingBox2D::new([0, 0], [grid_height - 1, grid_width - 1])
+                .expect("valid non-empty grid bounds"),
+        );
+
+        Ok(RasterResultDescriptor {
+            data_type: self.dataset.data_type,
+            spatial_reference: self.dataset.projection.into(),
+            time: TimeDescriptor::new_irregular(None),
+            spatial_grid: SpatialGridDescriptor::new_source(spatial_grid),
+            bands: RasterBandDescriptors::new_multiple_bands(self.dataset.bands.len() as u32),
+        })
+    }
+
+    fn box_clone(
+        &self,
+    ) -> Box<
+        dyn MetaData<
+                MultiBandGdalLoadingInfo,
+                RasterResultDescriptor,
+                MultiBandGdalLoadingInfoQueryRectangle,
+            >,
+    > {
+        Box::new(self.clone())
+    }
+}
+
+#[async_trait]
+impl DataProvider for StacDataProvider {
+    async fn provenance(&self, _id: &DataId) -> crate::error::Result<ProvenanceOutput> {
+        todo!("stac provenance blueprint")
+    }
+}
+
+#[async_trait]
+impl
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for StacDataProvider
+{
+    async fn meta_data(
+        &self,
+        id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
+    > {
+        let dataset = self.dataset_from_data_id(id)?;
+
+        Ok(Box::new(StacMultiBandMetaData {
+            dataset: dataset.clone(),
+        }))
     }
 }
 

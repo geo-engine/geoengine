@@ -25,7 +25,10 @@ use geoengine_operators::engine::{
     MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor,
 };
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
-use geoengine_operators::source::{GdalLoadingInfo, OgrSourceDataset};
+use geoengine_operators::source::{
+    GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+    OgrSourceDataset,
+};
 use serde::{Deserialize, Serialize};
 
 #[async_trait]
@@ -66,7 +69,11 @@ pub trait DataProvider: LayerCollectionProvider
     + MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
     + MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
-    + Send
+    + MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > + Send
     + Sync
     + std::fmt::Debug
     + AsAny
