@@ -64,6 +64,22 @@ const EXTERNAL_VOLUME_NAME: &str = "external";
 const MAX_RETRIES: u32 = 10;
 const INITIAL_RETRY_DELAY_MS: u64 = 1000;
 
+// TODO: make the filter depend on stac version and stac extension versions?
+// TODO: also filter fields of collections api?
+const STAC_ITEMS_FIELDS_FILTER: &[&str] = &[
+    "stac_version",
+    "stac_extensions",
+    "properties.datetime",
+    "properties.updated",
+    "assets.*.type",
+    "assets.*.data_type",
+    "assets.*.href",
+    "assets.*.bands",
+    "assets.*.proj:transform",
+    "assets.*.proj:shape",
+    "assets.*.proj:code",
+];
+
 /// STAC catalog importer for Geo Engine
 #[derive(Debug, Parser)]
 pub struct StacImport {
@@ -79,17 +95,20 @@ pub struct StacImport {
     #[arg(long, default_value = None)]
     limit: Option<usize>,
 
-    // time range start to import
-    #[arg(long, default_value = "2020-12-25T00:00:00Z")]
-    time_start: String,
+    /// Time range start to import (optional)
+    /// Example: 2020-12-25T00:00:00Z
+    #[arg(long)]
+    time_start: Option<String>,
 
-    // time range end to import
-    #[arg(long, default_value = "2020-12-31T23:59:59Z")]
-    time_end: String,
+    /// Time range end to import (optional)
+    /// Example: 2020-12-31T23:59:59Z
+    #[arg(long)]
+    time_end: Option<String>,
 
-    // bbox to import: minx miny maxx maxy
-    #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ', default_values = &["0.3184423382324359", "-0.0884814721075339", "20.784002046916676", "72.0970954730969"])]
-    bbox: Vec<f64>,
+    /// Bounding box to import: minx miny maxx maxy (optional)
+    /// Example: 0.3184423382324359 -0.0884814721075339 20.784002046916676 72.0970954730969
+    #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ')]
+    bbox: Option<Vec<f64>>,
 
     // // bands to import
     // #[clap(short, long, value_parser, num_args = 1.., value_delimiter = ' ', default_values = &["aot", "nir08", "rededge1", "rededge2", "rededge3", "scl", "swir16", "swir22"])]
@@ -150,6 +169,10 @@ pub struct StacImport {
 
     #[arg(long)]
     s3_secret_key: Option<String>,
+
+    /// if true, filter the stac item fields in the query to only fetch the fields required for the import, which may reduce the response size and speed up the import.
+    #[arg(long, default_value_t = false)]
+    filter_item_fields: bool,
     // /// Parent layer collection ID
     // #[arg(long, default_value_t = INTERNAL_LAYER_DB_ROOT_COLLECTION_ID)]
     // parent_layer_collection_id: Uuid,
@@ -177,7 +200,8 @@ struct StacImporter {
     bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
     known_datasets: HashSet<DatasetKey>,
     created_datasets: HashSet<DatasetKey>,
-    time_range: TimeInterval,
+    items_processed_total: u64,
+    import_start_time: Instant,
 }
 
 impl StacImporter {
@@ -194,16 +218,14 @@ impl StacImporter {
             .context("Failed to scan collection")?;
 
         Ok(Self {
-            time_range: TimeInterval::new(
-                DateTime::from_str(&params.time_start)?,
-                DateTime::from_str(&params.time_end)?,
-            )?,
             params,
             client,
             session_id,
             bands,
             known_datasets: HashSet::new(),
             created_datasets: HashSet::new(),
+            items_processed_total: 0,
+            import_start_time: Instant::now(),
         })
     }
 
@@ -302,8 +324,9 @@ impl StacImporter {
         futures::pin_mut!(buffered_stream);
         while let Some(result) = buffered_stream.next().await {
             let item_collection = result?;
+            let number_returned = item_collection.items.len() as u64;
 
-            let dataset_tiles = self.process_items(item_collection).await?;
+            let dataset_tiles = self.process_items(item_collection.clone()).await?;
 
             for (dataset_key, tiles) in &dataset_tiles {
                 let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
@@ -343,7 +366,8 @@ impl StacImporter {
                 }
             }
 
-            let _ = self.print_progress(&dataset_tiles);
+            self.items_processed_total += number_returned;
+            let _ = self.print_progress(&item_collection);
         }
 
         Ok(())
@@ -908,33 +932,43 @@ impl StacImporter {
         Ok(())
     }
 
-    fn print_progress(
-        &self,
-        dataset_tiles: &HashMap<DatasetKey, Vec<AddDatasetTile>>,
-    ) -> anyhow::Result<()> {
-        let min_date = dataset_tiles
-            .values()
-            .flatten()
-            .map(|tile| tile.time.start)
-            .min();
+    fn print_progress(&self, item_collection: &stac::ItemCollection) -> anyhow::Result<()> {
+        let elapsed_secs = self.import_start_time.elapsed().as_secs_f64();
+        let items_per_sec = if elapsed_secs > 0.0 {
+            self.items_processed_total as f64 / elapsed_secs
+        } else {
+            0.0
+        };
 
-        if let Some(min_date) = min_date {
-            let start_millis = self.time_range.start().inner() as f64;
-            let end_millis = self.time_range.end().inner() as f64;
-            let current_millis = min_date.inner() as f64;
-
-            // Items are received in descending order (from end to start)
-            let progress = ((end_millis - current_millis) / (end_millis - start_millis) * 100.0)
+        if let Some(number_matched) = item_collection
+            .additional_fields
+            .get("numberMatched")
+            .and_then(|v| v.as_u64())
+        {
+            let progress = (self.items_processed_total as f64 / number_matched as f64 * 100.0)
                 .clamp(0.0, 100.0);
 
+            let remaining = number_matched.saturating_sub(self.items_processed_total);
+            let eta_secs = if items_per_sec > 0.0 {
+                remaining as f64 / items_per_sec
+            } else {
+                f64::INFINITY
+            };
+            let eta_str = if eta_secs.is_finite() {
+                format_duration(eta_secs as u64)
+            } else {
+                "unknown".to_string()
+            };
+
             println!(
-                "[{:.1}%] Processed items down to date: {} in range {}/{} ",
-                progress,
-                DateTime::try_from(geoengine_datatypes::primitives::TimeInstance::from(
-                    min_date
-                ))?,
-                DateTime::try_from(self.time_range.start())?,
-                DateTime::try_from(self.time_range.end())?,
+                "[{:.1}%] Processed {}/{} items ({:.1} items/s, ETA: {})",
+                progress, self.items_processed_total, number_matched, items_per_sec, eta_str
+            );
+        } else if !item_collection.items.is_empty() {
+            // If number_matched is not available, just show the count and rate
+            println!(
+                "[INFO] Processed {} items ({:.1} items/s)",
+                self.items_processed_total, items_per_sec
             );
         }
 
@@ -1375,6 +1409,16 @@ impl StacImporter {
     }
 }
 
+fn format_duration(secs: u64) -> String {
+    if secs < 60 {
+        format!("{secs}s")
+    } else if secs < 3600 {
+        format!("{}m{}s", secs / 60, secs % 60)
+    } else {
+        format!("{}h{}m{}s", secs / 3600, (secs % 3600) / 60, secs % 60)
+    }
+}
+
 fn epsg_code_from_fields(
     proj_extension_version: StacExtensionMajorVersion,
     fields: &serde_json::Map<String, serde_json::Value>,
@@ -1736,23 +1780,38 @@ async fn query_item_collection(
 }
 
 fn create_query_params(params: &StacImport) -> Vec<(String, String)> {
-    let mut query_params = vec![
-        (
-            "bbox".to_owned(),
-            format!(
-                "{},{},{},{}", // array-brackets are not used in standard but required here for unknkown reason
-                params.bbox[0], params.bbox[1], params.bbox[2], params.bbox[3]
-            ),
-        ), // TODO: order coordinates depending on projection
-        (
+    let mut query_params: Vec<(String, String)> = Vec::new();
+
+    // Add bbox if provided
+    if let Some(bbox) = &params.bbox {
+        if bbox.len() == 4 {
+            query_params.push((
+                "bbox".to_owned(),
+                format!(
+                    "{},{},{},{}", // array-brackets are not used in standard but required here for unknkown reason
+                    bbox[0], bbox[1], bbox[2], bbox[3]
+                ),
+            )); // TODO: order coordinates depending on projection
+        }
+    }
+
+    if params.time_start.is_some() || params.time_end.is_some() {
+        query_params.push((
             "datetime".to_owned(),
-            format!("{}/{}", params.time_start, params.time_end),
-        ),
-    ];
+            format!(
+                "{}/{}",
+                params.time_start.as_deref().unwrap_or(""),
+                params.time_end.as_deref().unwrap_or("")
+            ),
+        ));
+    }
 
     if let Some(limit) = params.limit {
         query_params.push(("limit".to_owned(), limit.to_string()));
     }
+
+    // TODO: only filter if server supports it? check via `conformance` field in API?
+    query_params.push(("fields".to_owned(), STAC_ITEMS_FIELDS_FILTER.join(",")));
 
     query_params
 }
