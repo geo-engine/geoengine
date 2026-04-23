@@ -417,7 +417,9 @@ jobs:
 
   repository-coverage:
     name: "repository / coverage"
+
     if: ${{ always() }}
+    needs: [geoengine-test, python]
 
     runs-on: ubuntu-24.04
 
