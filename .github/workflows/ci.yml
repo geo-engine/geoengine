@@ -17,6 +17,9 @@ jobs:
     name: "geoengine / test"
     runs-on: ubuntu-24.04
 
+    outputs:
+      coverage-artifact-id: ${{ steps.upload-coverage-artifact.outputs.artifact-id }}
+
     permissions:
       contents: read
 
@@ -48,17 +51,14 @@ jobs:
       #     key: ci_test_
       - name: Testsuite
         uses: ./.github/actions/test
-      - name: Adjust lcov.info
-        # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
-        run: sed -i 's|/github/workspace/||g' geoengine/lcov.info
-      - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@v2
+      - id: upload-coverage-artifact
+        uses: actions/upload-artifact@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          file: geoengine/lcov.info
-          fail-on-error: false # do not fail the workflow if the upload fails
-          parallel: true
-          flag-name: backend
+          name: lcov-report-backend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: geoengine/lcov.info
+          compression-level: 9
+          retention-days: 3
+          if-no-files-found: error
 
   geoengine-lint:
     name: "geoengine / lint"
@@ -137,6 +137,9 @@ jobs:
     permissions:
       contents: read
 
+    outputs:
+      coverage-artifact-id: ${{ steps.upload-coverage-artifact.outputs.artifact-id }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -193,20 +196,15 @@ jobs:
           just python run-examples
           --build-type=release
           ${{ matrix.coverage && '--coverage' || '' }}
-      - name: Adjust lcov.info
+      - id: upload-coverage-artifact
         if: ${{ matrix.coverage }}
-        # The lcov file is generated in the container and contains relative paths from the python folder
-        # so we need to adjust them to match the repository structure for coveralls.
-        run: sed -i 's|SF:geoengine/|SF:python/geoengine/|' python/coverage.lcov
-      - name: Upload coverage to Coveralls
-        if: ${{ matrix.coverage }}
-        uses: coverallsapp/github-action@v2
+        uses: actions/upload-artifact@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          file: python/coverage.lcov
-          fail-on-error: false # do not fail the workflow if the upload fails
-          parallel: true
-          flag-name: python
+          name: lcov-report-python-${{ github.run_id }}-${{ github.run_attempt }}
+          path: python/coverage.lcov
+          compression-level: 9
+          retention-days: 1
+          if-no-files-found: error
   
   www:
     runs-on: ubuntu-24.04
@@ -365,16 +363,7 @@ jobs:
       - run: just ui test --ci
         env:
           CI: true
-      - name: Upload UI coverage artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: ui-coverage
-          path: |
-            ui/coverage/**
-            ui/**/coverage/**
-            www/coverage/**
-            coverage/**
-          if-no-files-found: warn
+      # TODO: coverage for UI tests
 
   ui-lint:
     name: "ui / lint"
@@ -418,8 +407,9 @@ jobs:
   repository-coverage:
     name: "repository / coverage"
 
-    if: ${{ always() }}
-    needs: [geoengine-test, python]
+    needs: 
+      - geoengine-test
+      - python
 
     runs-on: ubuntu-24.04
 
@@ -427,8 +417,23 @@ jobs:
       contents: read
 
     steps:
-      - name: Close parallel coverage report
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Download Backend Coverage Report
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.geoengine-test.outputs.coverage-artifact-id }}
+          path: geoengine/
+      - name: Download Python Coverage Report
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.python.outputs.coverage-artifact-id }}
+          path: python/
+      - name: Modify lcov paths
+        run: |
+          sed -i 's|/github/workspace/geoengine/||g' geoengine/lcov.info
+      - name: Upload coverage to Coveralls
         uses: coverallsapp/github-action@v2
         with:
-          parallel-finished: true
-          carryforward: "backend,python"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fail-on-error: false # do not fail the workflow if the upload fails
