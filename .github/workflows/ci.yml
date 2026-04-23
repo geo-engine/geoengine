@@ -70,7 +70,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
@@ -109,7 +108,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
@@ -155,7 +153,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -214,7 +211,6 @@ jobs:
     steps:
         - name: Checkout code
           uses: actions/checkout@v6
-        - uses: extractions/setup-just@v4
         - name: Install
           run: just www install
         - name: Check formatting and lints
@@ -241,7 +237,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -264,7 +259,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -283,7 +277,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-      - uses: extractions/setup-just@v4
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
@@ -301,7 +294,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Install Java (OpenAPI Generator requires Java to run)
         run: |
           # deleted in devcontainer image, but required by java installer
@@ -337,7 +329,6 @@ jobs:
     
     steps:
       - uses: actions/checkout@v5
-      - uses: extractions/setup-just@v4
       - name: Install Dependencies
         run: just ui install
       - name: Build app ${{ matrix.app }}
@@ -355,7 +346,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v5
-      - uses: extractions/setup-just@v4
       - name: Install Dependencies
         run: just ui install --with-deps
       - run: just ui test --ci
@@ -374,7 +364,6 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v5
-      - uses: extractions/setup-just@v4
       - name: Install Dependencies
         run: just ui install
       - name: Code Format Check with Prettier
@@ -397,6 +386,5 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Lint repository-wide formats & versions
         run: just ci repo
