@@ -874,7 +874,8 @@ CREATE TYPE "WildliveDataConnectorDefinition" AS (
     auth "WildliveDataConnectorAuth"
 );
 
-CREATE TYPE "StacProviderS3Credentials" AS (
+CREATE TYPE "StacProviderS3Config" AS (
+    endpoint text,
     access_key text,
     secret_key text
 );
@@ -898,7 +899,7 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     priority smallint,
     api_url text,
     collection_name text,
-    s3_credentials "StacProviderS3Credentials",
+    s3_config "StacProviderS3Config",
     time_dimension "TimeDimension",
     datasets "StacProviderDataset" []
 );

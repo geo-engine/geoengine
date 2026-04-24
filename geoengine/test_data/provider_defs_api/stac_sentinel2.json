@@ -6,7 +6,11 @@
   "priority": 50,
   "apiUrl": "https://stac.nsiscloud.polsa.gov.pl/v1",
   "collectionName": "sentinel-2-l2a",
-  "s3Credentials": null,
+  "s3Config": {
+    "endpoint": "eodata.nsiscloud.polsa.gov.pl",
+    "accessKey": "XXX",
+    "secretKey": "XXX"
+  },
   "timeDimension": {
     "type": "regular",
     "origin": 0,
@@ -80,6 +84,71 @@
       "bands": [
         {
           "name": "SCL"
+        }
+      ]
+    },
+    {
+      "name": "Sentinel-2 L2A EPSG:32632 U16 60m",
+      "description": "",
+      "dataType": "U16",
+      "resolution": 60.0,
+      "projection": "EPSG:32632",
+      "spatialGrid": {
+        "descriptor": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 199980.0,
+              "y": 8000040.0
+            },
+            "xPixelSize": 60.0,
+            "yPixelSize": -60.0
+          },
+          "gridBounds": {
+            "topLeftIdx": { "xIdx": 0, "yIdx": 0 },
+            "bottomRightIdx": { "xIdx": 11830, "yIdx": 133497 }
+          }
+        }
+      },
+      "bands": [
+        {
+          "name": "B01"
+        },
+        {
+          "name": "B02"
+        },
+        {
+          "name": "B03"
+        },
+        {
+          "name": "B04"
+        },
+        {
+          "name": "B05"
+        },
+        {
+          "name": "B06"
+        },
+        {
+          "name": "B07"
+        },
+        {
+          "name": "B8A"
+        },
+        {
+          "name": "B09"
+        },
+        {
+          "name": "B11"
+        },
+        {
+          "name": "B12"
+        },
+        {
+          "name": "AOT"
+        },
+        {
+          "name": "WVP"
         }
       ]
     }
