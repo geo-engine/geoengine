@@ -892,29 +892,28 @@ impl From<crate::datasets::external::sentinel_s2_l2a_cogs::SentinelS2L2ACogsProv
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
-pub struct StacProviderS3Credentials {
-    pub access_key: String,
-    pub secret_key: String,
+pub struct StacProviderS3Config {
+    pub endpoint: String,
+    pub access_key: Option<String>,
+    pub secret_key: Option<String>,
 }
 
-impl From<StacProviderS3Credentials>
-    for crate::datasets::external::stac::StacProviderS3Credentials
-{
-    fn from(value: StacProviderS3Credentials) -> Self {
+impl From<StacProviderS3Config> for crate::datasets::external::stac::StacProviderS3Config {
+    fn from(value: StacProviderS3Config) -> Self {
         Self {
+            endpoint: value.endpoint,
             access_key: value.access_key,
             secret_key: value.secret_key,
         }
     }
 }
 
-impl From<crate::datasets::external::stac::StacProviderS3Credentials>
-    for StacProviderS3Credentials
-{
-    fn from(value: crate::datasets::external::stac::StacProviderS3Credentials) -> Self {
+impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProviderS3Config {
+    fn from(value: crate::datasets::external::stac::StacProviderS3Config) -> Self {
         Self {
+            endpoint: value.endpoint,
             access_key: value.access_key,
-            secret_key: SECRET_REPLACEMENT.to_string(),
+            secret_key: value.secret_key.map(|_| SECRET_REPLACEMENT.to_string()),
         }
     }
 }
@@ -1079,7 +1078,7 @@ pub struct StacDataProviderDefinition {
     pub priority: Option<i16>,
     pub api_url: String,
     pub collection_name: String,
-    pub s3_credentials: Option<StacProviderS3Credentials>,
+    pub s3_config: Option<StacProviderS3Config>,
     pub time_dimension: StacTimeDimension,
     pub datasets: Vec<StacProviderDataset>,
 }
@@ -1095,7 +1094,7 @@ impl From<StacDataProviderDefinition>
             priority: value.priority,
             api_url: value.api_url,
             collection_name: value.collection_name,
-            s3_credentials: value.s3_credentials.map(Into::into),
+            s3_config: value.s3_config.map(Into::into),
             time_dimension: api_time_dimension_to_datatypes(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
         }
@@ -1114,7 +1113,7 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             priority: value.priority,
             api_url: value.api_url,
             collection_name: value.collection_name,
-            s3_credentials: value.s3_credentials.map(Into::into),
+            s3_config: value.s3_config.map(Into::into),
             time_dimension: datatypes_time_dimension_to_api(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
         }
