@@ -21,7 +21,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: api-client/python
+        working-directory: api-clients/python
 
     environment:
       name: pypi
@@ -49,7 +49,7 @@ jobs:
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: python/dist/ # does not use `run.working-directory`
+          packages-dir: api-clients/python/dist/ # does not use `run.working-directory`
 
   typescript:
     name: Publish TypeScript Package
@@ -65,7 +65,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: api-client/typescript
+        working-directory: api-clients/typescript
 
     steps:
       - uses: actions/checkout@v6
@@ -90,14 +90,15 @@ jobs:
 
     permissions:
       contents: read
-
+      id-token: write
+      
     strategy:
       matrix:
         rust-version: ["1.80.0"] # use lowest supported Rust version
 
     defaults:
       run:
-        working-directory: api-client/rust
+        working-directory: api-clients/rust
 
     steps:
       - uses: actions/checkout@v6
@@ -107,5 +108,9 @@ jobs:
           toolchain: ${{ matrix.rust-version }}
       - name: Install dependencies
         run: cargo fetch
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
       - name: Publish
-        run: cargo publish --token ${{ secrets.CARGO_TOKEN }}
+        run: cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
