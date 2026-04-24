@@ -22,6 +22,23 @@
       "dataType": "U16",
       "resolution": 10.0,
       "projection": "EPSG:32632",
+      "spatialGrid": {
+        "descriptor": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 199980.0,
+              "y": 8000040.0
+            },
+            "xPixelSize": 10.0,
+            "yPixelSize": -10.0
+          },
+          "gridBounds": {
+            "topLeftIdx": { "xIdx": 0, "yIdx": 0 },
+            "bottomRightIdx": { "xIdx": 70981, "yIdx": 800983 }
+          }
+        }
+      },
       "bands": [
         {
           "name": "B02"
@@ -43,6 +60,23 @@
       "dataType": "U8",
       "resolution": 20.0,
       "projection": "EPSG:32632",
+      "spatialGrid": {
+        "descriptor": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 199980.0,
+              "y": 8000040.0
+            },
+            "xPixelSize": 20.0,
+            "yPixelSize": -20.0
+          },
+          "gridBounds": {
+            "topLeftIdx": { "xIdx": 0, "yIdx": 0 },
+            "bottomRightIdx": { "xIdx": 35491, "yIdx": 400492 }
+          }
+        }
+      },
       "bands": [
         {
           "name": "SCL"
