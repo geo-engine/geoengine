@@ -887,6 +887,7 @@ CREATE TYPE "StacProviderDataset" AS (
     data_type "RasterDataType",
     resolution "SpatialResolution",
     projection "SpatialReference",
+    spatial_grid "SpatialGridDescriptor",
     bands "StacProviderDatasetBand" []
 );
 

@@ -6,7 +6,7 @@ use super::operators::TypedResultDescriptor;
 use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
-    MlModelMetadata, MockMetaData, OgrMetaData,
+    MlModelMetadata, MockMetaData, OgrMetaData, SpatialGridDescriptor,
 };
 use crate::datasets::DatasetName;
 use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
@@ -970,6 +970,7 @@ pub struct StacProviderDataset {
     pub resolution: StacProviderDatasetResolution,
     #[schema(value_type = String)]
     pub projection: SpatialReference,
+    pub spatial_grid: SpatialGridDescriptor,
     pub bands: Vec<StacProviderDatasetBand>,
 }
 
@@ -981,6 +982,7 @@ impl From<StacProviderDataset> for crate::datasets::external::stac::StacProvider
             data_type: value.data_type.into(),
             resolution: value.resolution.into(),
             projection: value.projection.into(),
+            spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into_iter().map(Into::into).collect(),
         }
     }
@@ -994,6 +996,7 @@ impl From<crate::datasets::external::stac::StacProviderDataset> for StacProvider
             data_type: value.data_type.into(),
             resolution: value.resolution.into(),
             projection: value.projection.into(),
+            spatial_grid: value.spatial_grid.into(),
             bands: value.bands.into_iter().map(Into::into).collect(),
         }
     }
