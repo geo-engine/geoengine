@@ -84,9 +84,54 @@ _increase-version-number version: (api-clients::update-config version)
     && mv package.json.tmp package.json \
     && npm run prettier -- --write package.json
 
-# Check repository-wide lints.
+# Print the current version number of Geo Engine. Usage: `just repo print-version-number`.
+print-version-number:
+    @echo `{{ VERSION_CMD }}`
+
+# Print the current version number of the API client. Usage: `just repo print-api-client-version`.
+print-published-api-client-rust-version:
+    @cargo info geoengine-api-client | sed -n 's/^version: //p'
+
+# Print the current version number of the API client. Usage: `just repo print-api-client-version`.
+print-published-api-client-typescript-version:
+    @npm view @geoengine/api-client version
+
+# Print the current version number of the API client. Usage: `just repo print-api-client-version`.
+print-published-api-client-python-version:
+    @curl -s "https://pypi.org/pypi/geoengine-api-client/json" | jq -r '.info.version'
+
+# Print the current version number of the Python library. Usage: `just repo print-python-library-version`.
+print-published-python-version:
+    @curl -s "https://pypi.org/pypi/geoengine/json" | jq -r '.info.version'
+
+# Check if the current version of Geo Engine API Client is already published on crates.io. Usage: `just repo is-api-client-rust-already-published`.
+is-api-client-rust-already-published: (_is-already-published "print-published-api-client-rust-version")
+
+# Check if the current version of Geo Engine API Client is already published on npm. Usage: `just repo is-api-client-typescript-already-published`.
+is-api-client-typescript-already-published: (_is-already-published "print-published-api-client-typescript-version")
+
+# Check if the current version of Geo Engine API Client is already published on PyPI. Usage: `just repo is-api-client-python-already-published`.
+is-api-client-python-already-published: (_is-already-published "print-published-api-client-python-version")
+
+# Check if the current version of the Python library is already published on PyPI. Usage: `just repo is-python-library-already-published`.
+is-python-library-already-published: (_is-already-published "print-published-python-version")
+
+_is-already-published other-version-cmd:
+    @{{ if shell("just", "repo", "print-version-number") == shell("just", "repo", other-version-cmd) { 'echo "true"' } else { 'echo "false"' } }}
+
+# Check if the current version of the Geo Engine container is already published on quay.io. Usage: `just repo is-container-already-published 0.9`.
+is-container-already-published tag: (_is-container-already-published "geoengine" "geoengine" tag)
+
+# Check if the current version of the Geo Engine UI container is already published on quay.io. Usage: `just repo is-ui-container-already-published 0.9`.
+is-ui-container-already-published tag: (_is-container-already-published "geoengine" "geoengine-ui" tag)
+
+_is-container-already-published organization repository tag:
+    @podman run docker://quay.io/skopeo/stable:latest inspect docker://quay.io/{{ organization }}/{{ repository }}:{{ tag }} > /dev/null 2>&1 && echo "true" || echo "false"
+
+# Check repository-wide lints. Usage: `just repo lint`.
 lint: format lint-version-numbers lint-generated-code
 
+# Check that version numbers are consistent across the project. Usage: `just repo lint-version-numbers`.
 [group("lint")]
 lint-version-numbers: common::_clear
     @echo "Checking if version numbers are consistent across the project ({{ shell(VERSION_CMD) }})…"
@@ -94,6 +139,6 @@ lint-version-numbers: common::_clear
     @{{ if shell(VERSION_CMD) == shell(PYTHON_DEP_VERSION_CMD) { 'echo "Python library dependency is consistent."' } else { error("Python library dependency has wrong version (" + shell(PYTHON_DEP_VERSION_CMD) + ").") } }}
     @{{ if shell(VERSION_CMD) == shell(API_CLIENT_VERSION_CMD) { 'echo "API client version is consistent."' } else { error("API client has wrong version (" + shell(API_CLIENT_VERSION_CMD) + ").") } }}
 
-# Check that generated code is up to date and that there are no uncommitted changes in the git repository. This ensures that the generated code is up to date and that there are no uncommitted changes in the git repository. This is important for CI because it ensures that the generated code is up to date and that there are no uncommitted changes in the git repository.
+# Check that generated code is up to date and that there are no uncommitted changes in the git repository. Usage: `just repo lint-generated-code`.
 [group('lint')]
 lint-generated-code: common::_clear backend::generate-openapi-spec api-clients::build www::build && common::check-no-changes-in-git-repo

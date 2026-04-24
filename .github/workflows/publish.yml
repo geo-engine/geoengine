@@ -4,14 +4,18 @@ name: Build & Publish
 
 on:
   workflow_dispatch:
-  workflow_run:
-    workflows: [Test]
-    types: [completed]
-    branches: [main]
+  push:
+    branches:
+      - main
+    paths:
+      - "api-client/python/**"
+      - "api-client/typescript/**"
+      - "api-client/rust/**"
+      - "python/**"
 
 jobs:
-  python:
-    name: Publish Python Package
+  api-client-python:
+    name: Publish Python API Client Package
 
     runs-on: ubuntu-latest
 
@@ -50,9 +54,10 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: python/dist/ # does not use `run.working-directory`
+          skip-existing: true
 
-  typescript:
-    name: Publish TypeScript Package
+  api-client-typescript:
+    name: Publish TypeScript API Client Package
 
     runs-on: ubuntu-latest
 
@@ -79,12 +84,19 @@ jobs:
       - name: Build
         run: npm run build
       - name: Publish
-        run: npm publish --access public
+        run: |
+          if `just repo is-api-client-typescript-already-published`; then
+            echo "Version is already published, skipping publish step."
+            exit 0
+          fi
+          
+          npm publish --access public
+          
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  rust:
-    name: Publish Rust Package
+  api-client-rust:
+    name: Publish Rust API Client Package
 
     runs-on: ubuntu-latest
 
@@ -108,4 +120,46 @@ jobs:
       - name: Install dependencies
         run: cargo fetch
       - name: Publish
-        run: cargo publish --token ${{ secrets.CARGO_TOKEN }}
+        run: |
+          if `just repo is-api-client-rust-already-published`; then
+            echo "Version is already published, skipping publish step."
+            exit 0
+          fi
+
+          cargo publish
+
+  python:
+    name: Publish Python Package
+
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.10"] # use lowest supported Python version
+
+    defaults:
+      run:
+        working-directory: python
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/geoengine
+
+    permissions:
+      contents: read
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Install dependencies
+        run: just python install
+      - name: Build a binary wheel and a source tarball
+        run: just python build
+      - name: Publish package to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          skip-existing: true
