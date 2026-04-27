@@ -66,15 +66,18 @@ PYTHON_DEP_VERSION_CMD := 'pipx run toml-cli get --toml-path "python/pyproject.t
 API_CLIENT_VERSION_CMD := "python3 -c \"import configparser;cp=configparser.ConfigParser();cp.read('api-clients/.generation/config.ini');print(cp['general']['version'])\""
 
 # Increases the version number for Geo Engine and then updates api-clients, Python, UI, etc. accordingly.
-increase-version-number: common::_clear
+[arg("major", long="major", value="false", help="Whether to increase the minor version instead of the patch version.")]
+increase-version-number major="false": common::_clear
     cargo set-version \
-        --bump patch \
+        --bump {{ if major == "true" { "minor" } else { "patch" } }} \
         --exclude geoengine-expression-deps \
         --manifest-path geoengine/Cargo.toml
 
     @echo "New version: `{{ VERSION_CMD }}`"
 
-    just _increase-version-number `{{ VERSION_CMD }}`
+    just repo _increase-version-number `{{ VERSION_CMD }}`
+
+    git cliff --tag `{{ VERSION_CMD }}` --output CHANGELOG.md
 
 _increase-version-number version: (api-clients::update-config version)
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.version" "{{ version }}"
@@ -87,6 +90,9 @@ _increase-version-number version: (api-clients::update-config version)
 # Print the current version number of Geo Engine. Usage: `just repo print-version-number`.
 print-version-number:
     @echo `{{ VERSION_CMD }}`
+
+print-version-tag:
+    @echo v`{{ VERSION_CMD }}`
 
 # Print the current version number of the API client. Usage: `just repo print-api-client-version`.
 print-published-api-client-rust-version:
@@ -124,6 +130,10 @@ is-container-already-published tag: (_is-container-already-published "geoengine"
 
 # Check if the current version of the Geo Engine UI container is already published on quay.io. Usage: `just repo is-ui-container-already-published 0.9`.
 is-ui-container-already-published tag: (_is-container-already-published "geoengine" "geoengine-ui" tag)
+
+# Check if the current version of Geo Engine is already published as git tag. Usage: `just repo is-tag-already-published`.
+is-tag-already-published:
+    git rev-parse "{{ `just repo print-version-tag` }}" > /dev/null 2>&1 && echo "true" || echo "false"
 
 _is-container-already-published organization repository tag:
     @podman run docker://quay.io/skopeo/stable:latest inspect docker://quay.io/{{ organization }}/{{ repository }}:{{ tag }} > /dev/null 2>&1 && echo "true" || echo "false"

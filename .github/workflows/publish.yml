@@ -12,6 +12,7 @@ on:
       - "api-client/typescript/**"
       - "api-client/rust/**"
       - "python/**"
+      - "geoengine/Cargo.toml"
 
 jobs:
   api-client-python:
@@ -169,3 +170,27 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           skip-existing: true
+
+  tag:
+    name: Publish Git Tag
+
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Create and push git tag
+        run: |
+          if `just repo is-tag-already-published`; then
+            echo "Tag is already published, skipping tag step."
+            exit 0
+          fi
+
+          github.git.createRef({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            ref: "refs/tags/`just repo::print-version-tag`",
+            sha: context.sha
+          })

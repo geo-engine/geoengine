@@ -1,131 +1,336 @@
-# Changelog
+## [0.9.1] - 2026-04-27
 
-All notable changes to this project will be documented in this file.
+### 🚀 Features
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+- Pixel based raster queries (#784)
+- Use non-hash routes (and fix signin form) (#870)
+- Optional build with base_href for all projects (#878)
+- _(www)_ Add package registry links for Geo Engine UI and API clients in Python, Rust, and TypeScript (#1171)
 
-## [Unreleased]
+### 🐛 Bug Fixes
 
-### Added
+- Update OpenAPI linting command in CI workflow
+- Update version command in justfile to change directory before executing
+- Update API client version command to use python3
+- Update CI repo task to include www installation
+- Add test group to justfile for running tests on all submodules
+- Update actions/checkout and extractions/setup-just versions in CI workflows
+- Flip_y and metdata size for climate data (#1163)
 
-- Added a new handler `Model Training` and task `Machine Learning Model`. These provide the ability to train a machine learning model with xgboost on geospatial data and store it for further usage.
-  - https://github.com/geo-engine/geoengine/pull/846
+### 💼 Other
 
-- Added a generic permission API for all resource types and a role management.
-  - https://github.com/geo-engine/geoengine/pull/756
+- Update @geoengine/openapi-client dependency to 0.0.33 (#887)
 
-- Added a new option to the colorizer, allowing to use over- and underflow colors.
-  - https://github.com/geo-engine/geoengine/pull/684
+### 🚜 Refactor
 
-- Added a GBIF.org occurrence snapshot data provider.
-  - https://github.com/geo-engine/geoengine/pull/718
+- Update Angular and related dependencies to version 21.2.0 (#875)
+- Move to ui subfolder
+- Add ui to monorepo
+- Add ui to monorepo (#1166)
+- Update User-Agent header in WFS tests to reflect new api-client structure
 
-- Added a GFBio Collection Data Provider that replaces the custom GFBio API for accessing search results.
-  - https://github.com/geo-engine/geoengine/pull/697
+### ⚙️ Miscellaneous Tasks
 
-- Added a handler (`/layers/{provider}/{layer}/workflowId`) to register a layer by id and return the resulting workflow id.
-  - https://github.com/geo-engine/geoengine/pull/692
+- Add repository linting job and version consistency checks (#1165)
+- Add workflow_dispatch trigger to publish workflow (#1167)
+- Delete .github/workflows/docs.yml (#1172)
+- Update container publish workflow to use 'latest' tag and skip existing versions
+- Report merged coverage for geoengine, Python, and UI tests (#1173)
+- Update working directory paths for API clients in publish workflow
 
-- Added a new operator `XGBoost`. This operator allows to use a pretrained model in order to make predictions based on some set of raster tile data.
-  - https://github.com/geo-engine/geoengine/pull/639
+## [ge-backend-v0.8.0] - 2026-01-26
 
-- Added a handler (`/available`) to the API to check if the service is available.
-  - https://github.com/geo-engine/geoengine/pull/681
+### 🚀 Features
 
-- Added spatial resolution to the `RasterResultDescriptor` that tracks the native resolution of the raster data through raster operations.
-  - https://github.com/geo-engine/geoengine/pull/618
+- Pixel based query rects for raster requests (#854)
+- Operators in OpenAPI (#1116)
+- Add histogram and statistics plot operators to openapi.json (#1130)
+- Add titles for TypedVectorOperator, TypedRasterOperator, and TypedPlotOperator in OpenAPI schema (#1133)
+- STAC dataset import (#1114)
+- Add extended devcontainer (#1138)
+- Just commands for ci and local ci (#1135)
+- Introduce over/undercolor parameter instead of default color for gradients
+- Add ml model input and output shape to allow models run on entire tiles (#205)
+- Specify ml model nodata handling (#236)
+- Pixel based raster queries (#221)
+- Datetime vector column type (#790)
+- _(core)_ Basemap formats and picker (#791)
+- _(manager)_ Provider management (#785)
+- Wildlive Connector in Manager (#840)
+- Embed manager in GIS (#851)
 
-- Added traits and methods for updating / mapping the pixels of grid types. Also added a trait for creating grid types using a function for each pixels location.
-  - https://github.com/geo-engine/geoengine/pull/561
+### 🐛 Bug Fixes
 
-- Added a layers API that allows browsing datasets, stored layers and external data in a uniform fashion
-  - https://github.com/geo-engine/geoengine/pull/554
+- Cache and Stacker should keep band order for subsets (#1120)
+- Openapi enum variant names (#1139)
+- Adapt to new websockets API (#234)
+- Semicolon instead of comma
+- _(manager)_ Save NoDataValue in `gdal-dataset-parameters` correctly (#789)
+- _(core)_ Class histogram allows classified rasters (#793)
+- _(core)_ Output name component did not propagate changes (#812)
+- Color table behaves strangely on changes (#834)
+- Oidc redirect path for subfolders (#846)
+- Dependency conflicts and Playwright. (#867)
 
-- Added a `ClassHistogram` plot operator for creating histograms of categorical data
-  - https://github.com/geo-engine/geoengine/pull/560
-  - Works for Raster and Vector data
+### 💼 Other
 
-- (`ebv`) Added data range computations when generating EBV overviews
-  - https://github.com/geo-engine/geoengine/pull/565
-  - Metadata has new field `dataRange`, which is optional
+- Update dependencies and Rust toolchain to 1.94.0 (#1129)
+- Move backend into geoengine folder (#1142)
+- Datetimes without tz
+- Use GE to combine points and sentinel 2 data, train RF, ... (#119)
+- Stacking band names
+- Disable=too-many-instance-attributes
+- Output band serialization
+- Convert int params to float. Backend thinks its a str otherwise.
+- Improve instant handling
+- Handle unspecified output band descriptor
+- Expression: parse outputBand only if not none
+- AREA_OR_POINT check
+- Raise exeption in test if type is list not dataset
+- Update dependencies as of 2025-05-07 (#222)
+- Update dependencies as of 2025-07-15 (#232)
+- Update dependencies (#244)
+- Adapt to openapi client update (#246)
+- Update dependencies (#250)
+- Use openapi client 0.0.30 (#249)
+- Update dependency version ranges in pyproject.toml (#257)
+- Update geoengine-openapi-client dependency to 0.0.33 (#259)
+- Search input always on top
+- Moved some OGC params/constants into config.model.ts
+- Filter sources and channels
+- Invert colors for dataset
+- All entries are strings
+- Remove index variable from the template loop
+- Add missing whitespace
+- Make the linter even more happy
+- Update to "angular2": "2.0.0-beta.15", "openlayers": "^3.15.1" and some more...
+- Added Float64
+- Add nameToInterpolation and export UnitConfig
+- Add boolean as parameter type
+- Move + rename from add-data.component. first attempt to handle units + transformations.
+- Move data-table into the components folder.
+- Remove some console.log calls
+- Replace LAYER*IS*\* with enumResultType
+- Let new operators create a symbology
+- Support for #abc and #aabbcc
+- Added time-ribbon.component.ts
+- Fix invalid moments break everything
+- Ignore incorrect time settings
+- Added msg reflectance operator
+- Added MsgSolarangle and MsgTemperature
+- Added Msg Pansharpening
+- Added msg co2 correction
+- WaveMappingDataSourceFilter
+- Make the linter happier
+- Add data observable
+- Update while animating / interacting
+- Magic numbers as constants + happy linter.
+- Add checkboxes (linking & brushing #1)
+- Happy linter
+- "fix" layer order
+- Scroll to selected (map) features
+- Click #3
+- Use updateScrollPosition
+- Use the OperaorConfig interface to allow direct access of properties.
+- Add index signature to make "tsc" happy
+- Add a section for expected errors
+- Add a type MappingSourceResonse to make tsc happy
+- Use explicit typing and properties
+- Add a Row type
+- Rework #1
+- Disable wrapX for ol.interaction.Select
+- Group ABCD datasets by provider
+- Sort
+- Get rid of exception if the list of layers is empty
+- Add CsvSourceType
+- Don't kill time...
+- Fix strange jump on (map) selection
+- Fix month displayed as 0-11
+- Only show transformation switches if both (transformed + untransformed) have a unit...
+- Add cloud class layer button (50% done)
+- Add complete cloudmask opgraph
+- Handle raster sources without a name...
+- Add data / repository
+- Open links in new tab/window + limit length (using ...)
+- Fix layout + make colors always readable
+- Don't scroll the toolbar
+- Try to set the first basket as default
+- Replace ng2-material with material2
+- Add gfbiologo
+- Get attributes (mandatory fields) and use them when requesting a layer / creating an op
+- Fix userService undefined
+- Fix overflowing basket names
+- Only show gfbio baskets for gfbio users
+- Available information
+- Include only unit elements. begin path at unit
+- Indicate that dataset is not available
+- Small adjustments
+- Small fixes
+- `ReplaySubject` hat no item bound
+- Histogram operator
+- No Column Correction if header length is too small.
+- Don't crash if plot array in missing in json upon project deserialization
+- Handle zero based months
+- Return unchanged value if there is no .trim() function
+- Don't crash on invalid regexp!
+- Lowered z-index of table-header and fixed bug with checkboxes
+- Add feedback form (backend still to discuss)
+- Use action row and rename submit button
+- Move size calculation into the component. Add option to emmit initial min max values
+- Center spinner and provide sync option for map and histogram
+- Raster mask operator as entry component
+- Layer list toggle
+- Mediaview image
+- Layer statistics
+- Data table is now scrollable
+- Add SymbologyEditorComponent to layer list for button click
+- Opacity form % to [0, 1]
+- 0.2.11
+- Remove plot removed layer streams
+- Return types, variable names, triple equals, remove log
+- Reproject if necessary
+- Copy symbology from first raster
+- Move public method above private methods
+- Layer Menu Button is back again
+- Wrong operator fields in `RaterScaling`
+- Logo update
+- Update dependencies (#786)
+- Serve app without precompiling libraries (#801)
+- Update to latest openapi client (#841)
+- Use openapi client 0.0.30 (#855)
+- Update to angular 21 (#854)
+- Use vitest instead of karma for testing (#857)
 
-- Added download of workflow metadata (description, result descriptor, citations) as zip file
-  - https://github.com/geo-engine/geoengine-python/pull/65
+### 🚜 Refactor
 
-- Added Open ID Connect authentication
-  - https://github.com/geo-engine/geoengine/pull/587
+- Rust-1.93 and dependency updates (#1122)
+- Simplify cmap generation and add type hints
+- Let matplotlib handle the error
+- Rename color map parameter
+- Extract logic for special palette case
+- Remove type literal from colorizer constructor calls
+- Make breakpoint generation muuuch less unintuitive
+- Palette colorizer can now be created with two different methods
+- Move python to subfolder
+- Integrate python repository into monorepo
+- Add python to monorepo (#1147)
+- Monorepo www (#1149)
+- Add api-client to monorepo (#1164)
+- Adapt to new eslint config format (#792)
+- Use angular 20 (#794)
+- Standalone components (#795)
+- Injectors instead of constructor parameters (#800)
+- CodeMirror 5 -> CodeMirror 6 (#802)
+- Inputs, outputs & queries to signals where possible (#803)
 
-- Added statistics for vector data
-  - https://github.com/geo-engine/geoengine/pull/614
+### ⚙️ Miscellaneous Tasks
 
-- Added a `RasterKernel` operator
-  - https://github.com/geo-engine/geoengine/pull/644
+- Add continuous benchmarking (#1128)
+- Refactor benchmark workflow with environment variables (#1140)
+- Revise colorizer parameter typing
+- Typing/linting improvements
+- Lint pr title using conventional commit style (#228)
+- Use Ruff as new formatter and linter (#233)
+- Add notebook execution to coverage report (#245)
+- Add repository linting job and version consistency checks
+- Lint pr title using conventional commit style (#787)
 
-- Added a `RasterScale` operator
-  - https://github.com/geo-engine/geoengine/pull/610
+### 🛡️ Security
 
-- Added a `Rasterization` operator
-  - https://github.com/geo-engine/geoengine/pull/683
+- Security fixes (#862)
 
-- Added method to create dataset from the result of the workflow via a task
-  - https://github.com/geo-engine/geoengine/pull/675
+## [0.8.0] - 2026-01-29
 
-- Added a `PieChart` operator
-  - https://github.com/geo-engine/geoengine/pull/694
+### 🚀 Features
 
-### Changed
+- Xgboost training operator and training task. Initial PR commit.
+- Add ml model input and output shape to allow models run on entire tiles (#1000)
+- _(services)_ Connector to wildlife portal data (#1043)
+- _(operators)_ Skip empty tiles and merge masks in onnx; remove trace/debug in release mode (#1061)
+- _(services)_ Provider management (#1050)
+- _(datatypes)_ Reproject outside area of use (#1071)
+- _(services)_ Add progress to dataset writer task (#1075)
+- _(expression)_ Add tanh to functions (#1076)
+- _(services)_ Refresh token usage for WildLIVE connector (#1077)
+- WildLIVE connector outputs more layers with more detailed information (#1095)
 
-- Layer listings now contain a properties list. Layers contain a metadata map.
-  - https://github.com/geo-engine/geoengine/pull/761
+### 🐛 Bug Fixes
 
-- The Interpolation operator's input resolution can now be set to `native` to take the best available resolution, if it is known.
-  - https://github.com/geo-engine/geoengine/pull/618
+- Remove unneccessary type declaration
+- Add flush to tokio file writer in `write_ml_model` tests to prevent random read errors
+- Adapt code to changes in xgboost-rs crate
+- _(services)_ Classification measurement serialization (#1055)
+- _(services)_ Update result descriptor along with loading info (#1060)
+- _(services)_ Fix migration 019 - the correct file_name field (#1063)
+- _(operators)_ Add empty onnx tensor shape to handled cases (#1065)
+- _(services)_ Mock WildLIVE portal API in un-mocked WildLIVE portal connector tests (#1070)
+- _(services)_ Default permissions for providers existing before migration 0020 (#1072)
+- _(services)_ Permission queries (#1080)
+- Use fewer rustup deps for expression (#1098)
+- Openapi specifies response of add_role correctly (#1103)
+- Apply herbie lints for numerical expressions (#1115)
 
-- Removed the custom Geo Bon EBV portal handlers. Instead, the EBV hierarchy is now browsed through the layer collection API.
-  - https://github.com/geo-engine/geoengine/pull/581
+### 💼 Other
 
-- Changed the temporal reference of regular raster time series from a start date to a valid time interval `dataTime`. Before and after the `dataTime`, only one loading info with nodata will be produced instead of lots of nodata-chunks with the original interval of the time series.
-  - https://github.com/geo-engine/geoengine/pull/569
-  - **breaking** The json dataset definition now has a `dataTime` field, instead of "start".
+- Uuid 1
+- :new()
+- :Coordiante to geo_types::Coord
+- :Coordiante to geo_types::Coord
+- ColorFields is now called DefaultColors
+- Split offset scale from other properties
+- Listing from database
+- Drop ml_models db if exists
+- Space in output_band of expression
+- Add requested bounds, fill only if needed
+- Add test using fill bound hints
+- Migration 0016
+- _(services)_ Update aruna (#1069)
+- Update dependencies (#1081)
+- Set rust version to 1.91.0 & update dependencies (#1085)
+- Update deprecated version of num-bigint-dig (#1087)
+- Update to Rust 1.92 (#1101)
 
-- No-data pixels in a Raster are now represented by a validity mask.
-  - https://github.com/geo-engine/geoengine/pull/561
-  - `MaskedGrid` replaces `Grid` in `GridOrEmpty` / `RasterTile`
-  - GeoTIFF files created by the engine contain the validity mask if not specified otherwise.
+### 🚜 Refactor
 
-- Refactored dataset ids and external provders
-  - https://github.com/geo-engine/geoengine/pull/554
-  - **breaking** the parameters of the source operators changed which makes old workflow jsons incompatible
-  - **breaking** the id of datasets changed which makes old dataset definition jsons incompatible
+- Colorizer now uses an intermediate (flattened) enum for over/under (de-)serialization.
+- Impl over/under_color on DefaultColors Enum
+- Updates-2025-07-02 (#1062)
+- _(services)_ Use actix-ws instead of actix-web-actors (#1064)
 
-- Added `Measurement`s to vector data workflows
-  - https://github.com/geo-engine/geoengine/pull/557
-  - **breaking**:The `VectorResultDescriptor`'s field `columns` now has two fields: `data_type` and `measurement`.
-  - Operators were adapted to propagate `Measurement`s if possible.
+### ⚙️ Miscellaneous Tasks
 
-- The `Expression` operator now uses temporal alignment for 3-8 sources.
-  - https://github.com/geo-engine/geoengine/pull/559
-  - Added a `RasterArrayTimeAdapter` to temporally align an array of raster sources
+- Lint pull request title (#1056)
+- Use action for pr title linting (#1057)
+- Free disk space on container action (#1086)
+- Validate openapi.json (#1088)
+- Limit scope of GITHUB_TOKEN in actions (#1089)
 
-- (`ebv`) EBV Provider now handles non-regular data
-  - https://github.com/geo-engine/geoengine/pull/564
-  - **breaking**: since metadata changed to cover two variants of time defintions, overview metadata is no longer valid
+## [d_20210827] - 2021-08-27
 
-- `DateTime` now serializes to ISO 8601 format
-  - https://github.com/geo-engine/geoengine/pull/590
-  - Uses the same format now as `Display` or `ToString`
+### 💼 Other
 
-- Changed `Statistics` input and output format
-  - https://github.com/geo-engine/geoengine/pull/614
-  - The input parameters now include a field `column_names` to select vector columns/alias raster inputs
-  - The output was changed to a map from column names/raster aliases to the respective statistics
+- Wrong cell width for grid merging
+- --features pro
 
-- The Expression uses a Pratt Parser instead of the previously used PrecClimber from `pest.rs`.
-  - https://github.com/geo-engine/geoengine/pull/641
+## [d_20210707] - 2021-07-02
 
-- The `Settings-default.toml` now contains an entry `gdal.allowed_drivers` that specifies all allowed drivers for GDAL.
-  - https://github.com/geo-engine/geoengine/pull/659
+### 💼 Other
 
-- The `ProvenanceOutput` now contains a list of `Provenance` instead of a single entry
-  - https://github.com/geo-engine/geoengine/pull/729
+- Apt update before install
+- Apt update before install
+- Add rustfmt
+- Replaced doc-comment tabs with spaces
+- Added option to keep null values on range filter
+- Lines and Polygons
+- Option to input and output generic slices/buffers
+- Time of feature collection as in- and output
+- The new API requires replacing `into` with `try_into`
+- Error on duplicate renaming key
+- Handle time steps part 1
+- Update todo for end_time
+- Nodata as None
+- Use less one-char-variables
+
+### 🧪 Testing
+
+- Name of join variant
