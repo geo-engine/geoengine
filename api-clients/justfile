@@ -125,7 +125,7 @@ update-generator-configs:
 # Update the backend commit in the config.ini and increment the version.
 [group('config')]
 [arg("version", long="version", help="The version number to set in the config.ini.")]
-update-config version: (_update-config version) update-generator-configs lint-openapi-spec
+update-config version: (_update-config version) update-generator-configs lint-openapi-spec build
 
 [script("python3")]
 _update-config version:
