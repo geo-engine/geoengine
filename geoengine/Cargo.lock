@@ -2612,7 +2612,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-datatypes"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "arrow",
  "arrow-array",
@@ -2648,7 +2648,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-expression"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "geo 0.32.0",
  "geoengine-expression-deps",
@@ -2677,7 +2677,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-macros"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "pretty_assertions",
  "prettyplease",
@@ -2688,7 +2688,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-operators"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "approx",
  "arrow",
@@ -2740,7 +2740,7 @@ dependencies = [
 
 [[package]]
 name = "geoengine-services"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "actix",
  "actix-files",

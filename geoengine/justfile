@@ -8,6 +8,7 @@ _default:
 install:
     cargo install --locked cargo-llvm-cov
     cargo install --locked cargo-edit
+    cargo install --locked git-cliff
 
 # Generate OpenAPI specification as JSON file. The file is generated in the current directory.
 [group("build")]

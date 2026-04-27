@@ -14,7 +14,7 @@ on:
       tag_name:
         description: "Tag name for the container"
         required: true
-        default: "nightly"
+        default: "latest"
 
       container_repository_branch:
         description: "Branch of the container repository"
@@ -31,7 +31,7 @@ jobs:
       contents: read
 
     env:
-      TAG_NAME: nightly
+      TAG_NAME: latest
       CONTAINER_REPOSITORY_BRANCH: main
       CONTAINER_NAME: geoengine
 
@@ -105,11 +105,19 @@ jobs:
           podman stop $POD_ID
 
       - name: Push image to quay.io
+        if: env.TAG_NAME != 'latest'
         run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
 
-      - name: Push nightly with date
-        if: env.TAG_NAME == 'nightly'
-        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
+      - name: Push latest with version number to quay.io
+        if: env.TAG_NAME == 'latest'
+        run: |
+          if `just repo is-container-already-published $(just repo::print-version-number)`; then
+            echo "Version is already published, skipping publish step."
+            exit 0
+          fi
+
+          podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
+          podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:`just repo print-version-number`
 
   notify-slack-on-backend-failure:
     name: Post to a Slack channel in case of failure
@@ -153,8 +161,8 @@ jobs:
       contents: read
 
     env:
-      TAG_NAME: nightly
-      FULL_TAG_NAME: nightly
+      TAG_NAME: latest
+      FULL_TAG_NAME: latest
       CONTAINER_REPOSITORY_BRANCH: main
       BUILD_TAG: gis
 
@@ -204,12 +212,20 @@ jobs:
             .
 
       - name: Push image to quay.io
+        if: env.TAG_NAME != 'latest'
         run: podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}
 
-      - name: Push nightly with date
-        if: env.TAG_NAME == 'nightly'
-        run: podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}-$(date +'%Y-%m-%d')
-  
+      - name: Push latest with version number to quay.io
+        if: env.TAG_NAME == 'latest'
+        run: |
+          if `just repo is-container-already-published $(just repo::print-version-number)`; then
+            echo "Version is already published, skipping publish step."
+            exit 0
+          fi
+
+          podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}
+          podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}-`just repo print-version-number`
+        
   notify-slack-on-ui-failure:
     name: Post to a Slack channel in case of failure
     needs: create-ui-container
