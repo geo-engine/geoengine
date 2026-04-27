@@ -79,7 +79,7 @@ increase-version-number major="false": common::_clear
 
     git cliff --tag `{{ VERSION_CMD }}` --output CHANGELOG.md
 
-_increase-version-number version: (backend::generate-openapi-spec) (api-clients::update-config version)
+_increase-version-number version: backend::generate-openapi-spec (api-clients::update-config version)
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.version" "{{ version }}"
     pipx run toml-cli set --toml-path "python/pyproject.toml" "project.dependencies[0]" "geoengine-api-client == {{ version }}"
     cd ui \
