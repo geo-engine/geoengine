@@ -845,7 +845,7 @@ impl
 #[async_trait]
 impl DataProvider for StacDataProvider {
     async fn provenance(&self, _id: &DataId) -> crate::error::Result<ProvenanceOutput> {
-        todo!("stac provenance blueprint")
+        Err(crate::error::Error::NotImplemented)
     }
 }
 
@@ -1087,7 +1087,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        todo!("stac raster metadata blueprint")
+        Err(crate::error::Error::NotImplemented)
     }
 }
 
@@ -1102,7 +1102,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        todo!("stac vector metadata blueprint")
+        Err(crate::error::Error::NotImplemented
     }
 }
 
@@ -1124,7 +1124,7 @@ impl
         >,
         geoengine_operators::error::Error,
     > {
-        todo!("stac mock vector metadata blueprint")
+        Err(crate::error::Error::NotImplemented
     }
 }
 
