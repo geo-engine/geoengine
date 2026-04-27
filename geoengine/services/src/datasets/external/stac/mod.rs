@@ -37,6 +37,7 @@ use snafu::ensure;
 use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use std::str::FromStr;
+use tracing::debug;
 use url::Url;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
@@ -633,6 +634,8 @@ impl
             ),
         ];
 
+        debug!("STAC query first page with parameters: {:?}", query_params);
+
         let client = reqwest::Client::new();
         let mut next_url = Some(items_url);
         let mut use_initial_query = true;
@@ -651,6 +654,7 @@ impl
         let mut time_steps = Vec::new();
 
         while let Some(url) = next_url {
+            debug!("STAC query next page with url: {}", url);
             let mut request = client.get(url.clone());
             if use_initial_query {
                 request = request.query(&query_params);
@@ -845,7 +849,9 @@ impl
 #[async_trait]
 impl DataProvider for StacDataProvider {
     async fn provenance(&self, _id: &DataId) -> crate::error::Result<ProvenanceOutput> {
-        Err(crate::error::Error::NotImplemented)
+        Err(crate::error::Error::NotImplemented {
+            message: "STAC provenance is not yet implemented".to_owned(),
+        })
     }
 }
 
@@ -935,7 +941,7 @@ impl StacMultiBandMetaData {
         self.s3_config.as_ref().map(|config| {
             let mut options = vec![
                 ("AWS_S3_ENDPOINT".to_owned(), config.endpoint.clone()),
-                ("AWS_VIRTUAL_HOSTING".to_owned(), "FALSE".to_owned()),
+                ("AWS_VIRTUAL_HOSTING".to_owned(), "FALSE".to_owned()), // TODO: make configurable
             ];
 
             if let Some(access_key) = &config.access_key {
@@ -1087,7 +1093,7 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
         Box<dyn MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        Err(crate::error::Error::NotImplemented)
+        Err(geoengine_operators::error::Error::NotImplemented)
     }
 }
 
@@ -1102,7 +1108,7 @@ impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRecta
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
         geoengine_operators::error::Error,
     > {
-        Err(crate::error::Error::NotImplemented
+        Err(geoengine_operators::error::Error::NotImplemented)
     }
 }
 
@@ -1124,7 +1130,7 @@ impl
         >,
         geoengine_operators::error::Error,
     > {
-        Err(crate::error::Error::NotImplemented
+        Err(geoengine_operators::error::Error::NotImplemented)
     }
 }
 
