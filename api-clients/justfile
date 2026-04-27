@@ -119,6 +119,7 @@ update-generator-configs:
 
     with open('openapitools.json', 'w', encoding='utf-8') as f:
         json.dump(generator_config, f, indent=spaces)
+        f.write('\n')
 
     print("Generated OpenAPI Generator configuration for TypeScript, Python, and Rust.")
 
