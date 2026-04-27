@@ -25,7 +25,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: api-client/python
+        working-directory: api-clients/python
 
     environment:
       name: pypi
@@ -53,7 +53,7 @@ jobs:
       - name: Publish package to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: python/dist/ # does not use `run.working-directory`
+          packages-dir: api-clients/python/dist/ # does not use `run.working-directory`
           skip-existing: true
 
   api-client-typescript:
@@ -63,6 +63,7 @@ jobs:
 
     permissions:
       contents: read
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
 
     strategy:
       matrix:
@@ -70,7 +71,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: api-client/typescript
+        working-directory: api-clients/typescript
 
     steps:
       - uses: actions/checkout@v6
@@ -102,6 +103,7 @@ jobs:
 
     permissions:
       contents: read
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
 
     strategy:
       matrix:
@@ -109,7 +111,7 @@ jobs:
 
     defaults:
       run:
-        working-directory: api-client/rust
+        working-directory: api-clients/rust
 
     steps:
       - uses: actions/checkout@v6
@@ -119,6 +121,8 @@ jobs:
           toolchain: ${{ matrix.rust-version }}
       - name: Install dependencies
         run: cargo fetch
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
       - name: Publish
         run: |
           if `just repo is-api-client-rust-already-published`; then
@@ -127,6 +131,8 @@ jobs:
           fi
 
           cargo publish
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
   python:
     name: Publish Python Package
