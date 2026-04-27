@@ -33,6 +33,7 @@ _build-python-preprocess:
 
 _build-python-postprocess:
     .generation/post-process/python.py
+    find ./python -name "*.py" -exec sed -i '/The version of the OpenAPI document/d' {} +
     rm -rf \
         python/docs \
         python/git_push.sh \
@@ -57,6 +58,7 @@ _build-typescript-postprocess:
     echo "wwwroot/*.js" > typescript/.gitignore
     echo "node_modules" > typescript/.gitignore
     echo "typings" > typescript/.gitignore
+    find ./typescript -name "*.ts" -exec sed -i '/The version of the OpenAPI document/d' {} +
     cd typescript && npm install
     rm \
         typescript/.openapi-generator/FILES \
@@ -72,6 +74,7 @@ _build-rust-preprocess:
 
 _build-rust-postprocess:
     .generation/post-process/rust.py
+    find ./rust -name "*.rs" -exec sed -i '/The version of the OpenAPI document/d' {} +
 
     rm -rf \
         rust/git_push.sh \
