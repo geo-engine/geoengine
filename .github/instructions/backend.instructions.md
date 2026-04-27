@@ -1,8 +1,9 @@
 ---
-applyTo: "backend/**/*.rs"
+name: Backend Development Instructions
+applyTo: "geoengine/**/*.rs"
 ---
 
-# Backend Developer Instructions
+# Backend/Rust Developer Instructions
 
 These instructions are for contributors working on the Rust backend code under the `geoengine/` directory.
 They cover common developer workflows (build, run, test), code style, CI expectations, and links to relevant resources.
@@ -24,7 +25,7 @@ These `just` targets are defined in the repository `justfile` at the project roo
 
 ## Environment & Configuration
 
-- Configuration is loaded from environment variables and config files read by the service. For local development, see `backend/README.md` for example `.env` values and service dependencies.
+- Configuration is loaded from environment variables and config files read by the service. For local development, see `geoengine/README.md` for example `.env` values and service dependencies.
 - If the backend depends on external services (databases, caches, etc.), prefer using the repository's `podman` containers, e.g., PostGIS (when available), or local test fixtures.
 
 ## Database & migrations
@@ -45,6 +46,16 @@ These `just` targets are defined in the repository `justfile` at the project roo
 - Never use `unwrap()` or `expect()` in production code. Instead, propagate errors using the `?` operator or handle them gracefully.
 - Use structured logging where appropriate and include contextual fields for easier debugging.
 
+### Expect messages
+
+If you unwrap an `Error` without handling it, you should use `expect` and adhere to the [common messages styles from the Rust Doc](https://doc.rust-lang.org/std/error/index.html#common-message-styles):
+
+> describe the reason we expect the Result should be Ok. With this style we would prefer to write:
+> `let path = std::env::var("IMPORTANT_PATH").expect("env variable IMPORTANT_PATH should be set by wrapper_script.sh");`
+
+Only do this in test code or when you are certain that the error cannot occur in production.
+In all other cases, prefer to propagate errors with `?` and handle them at a higher level.
+
 ## Formatting & style
 
 - Use `rustfmt` (run via `just backend fmt`) to format code.
@@ -54,7 +65,7 @@ These `just` targets are defined in the repository `justfile` at the project roo
 ## Documentation
 
 - Public APIs must have `///` doc comments.
-- Update `backend/README.md` when adding new developer-facing behavior or start-up steps.
+- Update `geoengine/README.md` when adding new developer-facing behavior or start-up steps.
 
 ## Debugging
 
