@@ -10,7 +10,7 @@ on:
   workflow_dispatch:
 
 permissions:
-   contents: read
+  contents: read
 
 env:
   CARGO_TERM_COLOR: always
@@ -65,7 +65,7 @@ jobs:
 
   geoengine-lint:
     name: "geoengine / lint"
-    
+
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
 
@@ -130,7 +130,40 @@ jobs:
           key: ci_test_${{ matrix.build }}
       - name: Build
         run: just backend build "${{ matrix.build }}"
-  
+
+  geoengine-release-feature-build:
+    name: "geoengine / release build (${{ matrix.profile_name }})"
+
+    runs-on: ubuntu-24.04
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: read
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile_name: default-features
+            cargo_features: ""
+          - profile_name: api-docs
+            cargo_features: "--features api-docs"
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Init rustup toolchain
+        # somehow rustup show will take care to initialize the version based on the toolchain file
+        run: rustup show
+      - name: setup rust build cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: ""
+          key: ci_release_feature_${{ matrix.profile_name }}
+      - name: Release build geoengine-server
+        working-directory: geoengine
+        run: cargo build --locked --release --bin geoengine-server ${{ matrix.cargo_features }}
+
   python:
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
@@ -205,7 +238,7 @@ jobs:
           compression-level: 9
           retention-days: 1
           if-no-files-found: error
-  
+
   www:
     runs-on: ubuntu-24.04
     container: quay.io/geoengine/devcontainer:latest
@@ -214,17 +247,16 @@ jobs:
       contents: read
 
     steps:
-        - name: Checkout code
-          uses: actions/checkout@v6
-        - name: Install
-          run: just www install
-        - name: Check formatting and lints
-          run: just www lint
-        - name: Build
-          run: just www build
-        - name: Idempotency check
-          run: just common check-no-changes-in-git-repo
-
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Install
+        run: just www install
+      - name: Check formatting and lints
+        run: just www lint
+      - name: Build
+        run: just www build
+      - name: Idempotency check
+        run: just common check-no-changes-in-git-repo
 
   api-client-python:
     name: "api-client / python"
@@ -331,7 +363,7 @@ jobs:
           - dashboards/ebv-analyzer
           - dashboards/ecometrics
           - dashboards/esg-indicator-service
-    
+
     steps:
       - uses: actions/checkout@v6
       - name: Install Dependencies
@@ -340,7 +372,7 @@ jobs:
         run: just ui build ${{ matrix.app }}
         env:
           CI: true
-  
+
   ui-test:
     name: "ui / test"
     runs-on: ubuntu-24.04
@@ -398,7 +430,7 @@ jobs:
   repository-coverage:
     name: "repository / coverage"
 
-    needs: 
+    needs:
       - geoengine-test
       - python
 
