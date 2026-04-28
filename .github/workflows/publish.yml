@@ -3,16 +3,19 @@
 name: Build & Publish
 
 on:
-  workflow_dispatch:
+  # run on push to main branch if any of the relevant files changed
   push:
     branches:
       - main
     paths:
-      - "api-client/python/**"
-      - "api-client/typescript/**"
-      - "api-client/rust/**"
-      - "python/**"
+      - "api-clients/python/setup.py"
+      - "api-clients/typescript/package.json"
+      - "api-clients/rust/Cargo.toml"
+      - "python/pyproject.toml"
       - "geoengine/Cargo.toml"
+  
+  # schedule manually
+  workflow_dispatch:
 
 jobs:
   api-client-python:

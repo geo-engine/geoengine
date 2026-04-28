@@ -1,9 +1,10 @@
 name: Create containers
 
 on:
-  # run every night
-  schedule:
-    - cron: "0 22 * * *"
+  # run on push of a new tag that matches the pattern `v*.*.*` (e.g., v1.2.3)
+  push:
+    tags:
+      - 'v*.*.*'
 
   # schedule manually
   workflow_dispatch:
@@ -68,6 +69,8 @@ jobs:
           docker-images: true
           swap-storage: true
 
+      - uses: extractions/setup-just@v4
+
       - name: Checkout code
         uses: actions/checkout@v6
         with:
@@ -119,27 +122,6 @@ jobs:
           podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
           podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:`just repo print-version-number`
 
-  notify-slack-on-backend-failure:
-    name: Post to a Slack channel in case of failure
-    needs: create-backend-container
-    if: always()
-
-    runs-on: ubuntu-24.04
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Post to a Slack channel
-        if: ${{ needs.create-backend-container.result == 'failure' }}
-        id: slack
-        uses: slackapi/slack-github-action@v1.23.0
-        with:
-          channel-id: "geoengine-dev-core"
-          slack-message: "⚠️ The workflow ${{ github.workflow }} in the repository ${{ github.event.repository.name }} FAILED!"
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-  
   create-ui-container:
     if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
 
@@ -185,6 +167,7 @@ jobs:
         if: env.BUILD_TAG != 'gis' && env.BUILD_TAG != 'manager'
         run: echo "BUILD_TAG=dashboards/${{env.BUILD_TAG}}" >> $GITHUB_ENV
     
+      - uses: extractions/setup-just@v4
 
       - name: Checkout code
         uses: actions/checkout@v6
@@ -225,11 +208,14 @@ jobs:
 
           podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}
           podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}-`just repo print-version-number`
-        
-  notify-slack-on-ui-failure:
+
+  notify-slack-on-failure:
     name: Post to a Slack channel in case of failure
-    needs: create-ui-container
+    needs:
+      - create-backend-container
+      - create-ui-container
     if: always()
+
     runs-on: ubuntu-24.04
 
     permissions:
@@ -237,7 +223,7 @@ jobs:
 
     steps:
       - name: Post to a Slack channel
-        if: ${{ needs.create-ui-container.result == 'failure' }}
+        if: ${{ needs.create-backend-container.result == 'failure' || needs.create-ui-container.result == 'failure' }}
         id: slack
         uses: slackapi/slack-github-action@v1.23.0
         with:
