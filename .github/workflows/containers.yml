@@ -120,7 +120,7 @@ jobs:
           fi
 
           podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
-          podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:`just repo print-version-number`
+          podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:`just repo print-version-tag`
 
   create-ui-container:
     if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
@@ -200,7 +200,7 @@ jobs:
           fi
 
           podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:${{env.TAG_NAME}}
-          podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:`just repo print-version-number`
+          podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:`just repo print-version-tag`
 
   notify-slack-on-failure:
     name: Post to a Slack channel in case of failure
