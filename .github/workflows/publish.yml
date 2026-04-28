@@ -179,6 +179,9 @@ jobs:
       - name: Store tag and check if tag is already published
         id: tag
         run: |
+          # Add the workspace to safe.directory to bypass the ownership check
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          
           echo "tag_already_published=$(just repo is-tag-already-published)" >> $GITHUB_OUTPUT
           echo "version_tag=$(just repo print-version-tag)" >> $GITHUB_OUTPUT
       - name: Skip tag step if tag is already published
