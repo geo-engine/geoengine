@@ -196,7 +196,7 @@ jobs:
           script: |
             const versionTag = process.env.VERSION_TAG;
 
-            github.git.createRef({
+            await github.rest.git.createRef({
               owner: context.repo.owner,
               repo: context.repo.repo,
               ref: `refs/tags/${versionTag}`,

@@ -123,7 +123,7 @@ is-api-client-python-already-published: (_is-already-published "print-published-
 is-python-library-already-published: (_is-already-published "print-published-python-version")
 
 _is-already-published other-version-cmd:
-    @{{ if shell("just", "repo", "print-version-number") == shell("just", "repo", other-version-cmd) { 'echo "true"' } else { 'echo "false"' } }}
+    @{{ if shell("just repo print-version-number") == shell("just repo $1", other-version-cmd) { 'echo "true"' } else { 'echo "false"' } }}
 
 # Check if the current version of the Geo Engine container is already published on quay.io. Usage: `just repo is-container-already-published geoengine v0.9.1`.
 is-container-already-published repository tag organization="geoengine":
