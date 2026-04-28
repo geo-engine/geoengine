@@ -41,6 +41,15 @@ _build-python-postprocess:
         python/.gitlab-ci.yml \
         python/.github
 
+# Build the Python distribution by creating source and wheel distributions.
+[group('build')]
+[working-directory("python")]
+build-python-dist: common::_clear
+    python -m pip install --upgrade pip build
+    pip install -r requirements.txt
+    pip install -r test-requirements.txt
+    python3 -m build
+
 # Build the API clients for TypeScript by generating code with the OpenAPI Generator and applying post-processing steps. Also install npm dependencies and set up .gitignore.
 [group('build')]
 build-typescript: common::_clear (_build_call "typescript") _build-typescript-postprocess
@@ -64,6 +73,13 @@ _build-typescript-postprocess:
         typescript/.openapi-generator/FILES \
         typescript/package-lock.json
 
+# Build the TypeScript distribution by creating source and wheel distributions.
+[group('build')]
+[working-directory("typescript")]
+build-typescript-dist: common::_clear
+    npm install
+    npm run build
+
 # Build the API clients for Rust by generating code with the OpenAPI Generator and applying post-processing steps.
 [group('build')]
 build-rust: common::_clear _build-rust-preprocess (_build_call "rust") _build-rust-postprocess
@@ -79,6 +95,13 @@ _build-rust-postprocess:
     rm -rf \
         rust/git_push.sh \
         rust/.travis.yml
+
+# Build the Rust distribution by creating source and wheel distributions.
+[group('build')]
+[working-directory("rust")]
+build-rust-dist: common::_clear
+    cargo fetch
+    
 
 lint: lint-openapi-spec
 
