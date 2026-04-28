@@ -114,7 +114,7 @@ jobs:
       - name: Push latest with version number to quay.io
         if: env.TAG_NAME == 'latest'
         run: |
-          if `just repo is-container-already-published $(just repo::print-version-number)`; then
+          if `just repo is-container-already-published geoengine $(just repo::print-version-number)`; then
             echo "Version is already published, skipping publish step."
             exit 0
           fi
@@ -128,14 +128,8 @@ jobs:
     strategy:
       matrix:
         app: 
-          - {project: gis}
-          - {project: gfbio}
-          - {project: data-atlas}
-          - {project: nfdi-portal-demo}
-          - {project: ebv-analyzer}
-          - {project: ecometrics}
-          - {project: esg-indicator-service}
-          - {project: manager}
+          - {project: gis, name: gis}
+          - {project: gfbio, name: vat}
 
     runs-on: ubuntu-24.04
 
@@ -144,23 +138,22 @@ jobs:
 
     env:
       TAG_NAME: latest
-      FULL_TAG_NAME: latest
       CONTAINER_REPOSITORY_BRANCH: main
       BUILD_TAG: gis
 
     steps:
       - name: Modify TAG_NAME if on `tag_name` is set on `workflow_dispatch`
         if: github.event.inputs.tag_name != ''
-        run: echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+        run: |
+          echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
       
       - name: Modify CONTAINER_REPOSITORY_BRANCH if on `container_repository_branch` is set on `workflow_dispatch`
         if: github.event.inputs.container_repository_branch != ''
         run: |
           echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
 
-      - name: Set `FULL_TAG_NAME` wrt. apps
+      - name: Set `BUILD_TAG` wrt. apps
         run: |
-          echo "FULL_TAG_NAME=${{matrix.app.project}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
           echo "BUILD_TAG=${{matrix.app.project}}" >> $GITHUB_ENV
 
       - name: Modify `BUILD_TAG` if dashboard
@@ -189,25 +182,25 @@ jobs:
       - name: Build with podman
         run: |
           podman build \
-            --tag "geoengine-ui:${{env.FULL_TAG_NAME}}" \
+            --tag "${{matrix.app.name}}:${{env.TAG_NAME}}" \
             --build-arg GEOENGINE_UI_PROJECT="${{env.BUILD_TAG}}" \
             -f container/geoengine-ui/Dockerfile \
             .
 
       - name: Push image to quay.io
         if: env.TAG_NAME != 'latest'
-        run: podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}
+        run: podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:${{env.TAG_NAME}}
 
       - name: Push latest with version number to quay.io
         if: env.TAG_NAME == 'latest'
         run: |
-          if `just repo is-container-already-published $(just repo::print-version-number)`; then
+          if `just repo is-container-already-published ${{matrix.app.name}} $(just repo::print-version-number)`; then
             echo "Version is already published, skipping publish step."
             exit 0
           fi
 
-          podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}
-          podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}-`just repo print-version-number`
+          podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:${{env.TAG_NAME}}
+          podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:`just repo print-version-number`
 
   notify-slack-on-failure:
     name: Post to a Slack channel in case of failure
