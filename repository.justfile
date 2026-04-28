@@ -19,12 +19,13 @@ format write="false": (format-justfiles write) (format-md write) (format-json wr
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]
 format-justfiles write="false": common::_clear
-    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile justfile
-    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile common.justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile api-clients/justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile ci.justfile
-    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile repository.justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile common.justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile geoengine/justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile python/justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile repository.justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile ui/justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile www/justfile
 
@@ -123,20 +124,15 @@ is-api-client-python-already-published: (_is-already-published "print-published-
 is-python-library-already-published: (_is-already-published "print-published-python-version")
 
 _is-already-published other-version-cmd:
-    @{{ if shell("just", "repo", "print-version-number") == shell("just", "repo", other-version-cmd) { 'echo "true"' } else { 'echo "false"' } }}
+    @{{ if shell("just repo print-version-number") == shell("just repo $1", other-version-cmd) { 'echo "true"' } else { 'echo "false"' } }}
 
-# Check if the current version of the Geo Engine container is already published on quay.io. Usage: `just repo is-container-already-published 0.9`.
-is-container-already-published tag: (_is-container-already-published "geoengine" "geoengine" tag)
-
-# Check if the current version of the Geo Engine UI container is already published on quay.io. Usage: `just repo is-ui-container-already-published 0.9`.
-is-ui-container-already-published tag: (_is-container-already-published "geoengine" "geoengine-ui" tag)
+# Check if the current version of the Geo Engine container is already published on quay.io. Usage: `just repo is-container-already-published geoengine v0.9.1`.
+is-container-already-published repository tag organization="geoengine":
+    @podman run docker://quay.io/skopeo/stable:latest inspect docker://quay.io/{{ organization }}/{{ repository }}:{{ tag }} > /dev/null 2>&1 && echo "true" || echo "false"
 
 # Check if the current version of Geo Engine is already published as git tag. Usage: `just repo is-tag-already-published`.
 is-tag-already-published:
-    git rev-parse "{{ `just repo print-version-tag` }}" > /dev/null 2>&1 && echo "true" || echo "false"
-
-_is-container-already-published organization repository tag:
-    @podman run docker://quay.io/skopeo/stable:latest inspect docker://quay.io/{{ organization }}/{{ repository }}:{{ tag }} > /dev/null 2>&1 && echo "true" || echo "false"
+    @git show-ref --tags "{{ `just repo print-version-tag` }}" --quiet && echo "true" || echo "false"
 
 # Check repository-wide lints. Usage: `just repo lint`.
 lint: format lint-version-numbers lint-generated-code

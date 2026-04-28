@@ -90,3 +90,10 @@ run-examples test-code-path="../geoengine" build-type="debug" coverage="": commo
 format-code: common::_clear _venv-is-installed
     {{ PYTHON }} -m ruff format
     {{ PYTHON }} -m ruff check --fix
+
+# Publish the Python client to PyPI. Usage: `just python publish`. Use the `--dry-run` flag to publish to TestPyPI instead.
+[arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[group('publish')]
+publish dry-run="false": common::_clear
+    python -m pip install --upgrade pip twine
+    python -m twine upload --repository {{ if dry-run == "true" { "testpypi" } else { "pypi" } }} dist/*
