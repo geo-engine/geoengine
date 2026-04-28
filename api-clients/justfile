@@ -11,10 +11,7 @@ install:
 
 # Build all API clients by executing the build steps for each language.
 [group('build')]
-build: common::_clear \
-    _build-python-preprocess _build-rust-preprocess _build-typescript-preprocess \
-    _build_call \
-    _build-python-postprocess _build-rust-postprocess _build-typescript-postprocess
+build: common::_clear _build-python-preprocess _build-rust-preprocess _build-typescript-preprocess _build_call _build-python-postprocess _build-rust-postprocess _build-typescript-postprocess
 
 _build_call generator="":
     {{ OPENAPI_GENERATOR_CLI }} generate {{ if generator == "" { "" } else { "--generator-key " + generator } }}
@@ -102,7 +99,6 @@ _build-rust-postprocess:
 build-rust-dist: common::_clear
     cargo fetch
 
-
 lint: lint-openapi-spec
 
 [group('config')]
@@ -112,7 +108,8 @@ lint-openapi-spec: common::_clear
         --recommend
 
 # Generate the OpenAPI Generator configuration files from the config.ini.
-[group('config'), script("python3")]
+[group('config')]
+[script("python3")]
 update-generator-configs:
     import configparser
     import json
@@ -150,8 +147,8 @@ update-generator-configs:
     print("Generated OpenAPI Generator configuration for TypeScript, Python, and Rust.")
 
 # Update the backend commit in the config.ini and increment the version.
-[group('config')]
 [arg("version", long="version", help="The version number to set in the config.ini.")]
+[group('config')]
 update-config version: (_update-config version) update-generator-configs lint-openapi-spec build
 
 [script("python3")]
@@ -179,11 +176,11 @@ test: common::_clear test-python test-rust test-typescript
 test-python: common::_clear
     #!/usr/bin/env bash
     python3 -m venv .venv && source .venv/bin/activate || source .venv/bin/activate
-    
+
     python -m pip install --upgrade pip
     if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
-    
+
     pytest
 
 [group('test')]
@@ -199,22 +196,22 @@ test-typescript: common::_clear
     npm run build
 
 # Publish the Python API client to PyPI. Usage: `just repo publish-python`. Use the `--dry-run` flag to publish to TestPyPI instead.
-[group('publish')]
 [arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[group('publish')]
 [working-directory("python")]
 publish-python dry-run="false": common::_clear
     python -m pip install --upgrade pip twine
     python -m twine upload --repository {{ if dry-run == "true" { "testpypi" } else { "pypi" } }} dist/*
 
 # Publish the Rust API client to crates.io. Usage: `just repo publish-rust`. Use the `--dry-run` flag to not actually publish.
-[group('rust')]
 [arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[group('rust')]
 [working-directory("rust")]
 publish-rust dry-run="false": common::_clear
     cargo publish {{ if dry-run == "true" { "--dry-run" } else { "" } }}
 
-[group('typescript')]
 [arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[group('typescript')]
 [working-directory("typescript")]
 publish-typescript dry-run="false": common::_clear
     npm publish --access public {{ if dry-run == "true" { "--dry-run" } else { "" } }}

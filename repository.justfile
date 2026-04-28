@@ -19,12 +19,13 @@ format write="false": (format-justfiles write) (format-md write) (format-json wr
 [arg("write", long="write", value="true", help="Whether to write the formatted files back to disk.")]
 [group("lint")]
 format-justfiles write="false": common::_clear
-    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile justfile
-    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile common.justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile api-clients/justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile ci.justfile
-    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile repository.justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile common.justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile geoengine/justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile python/justfile
+    just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile repository.justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile ui/justfile
     just --fmt {{ if write != "true" { "--check" } else { "" } }} --unstable --justfile www/justfile
 
