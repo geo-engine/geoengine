@@ -181,7 +181,7 @@ jobs:
         run: |
           # Add the workspace to safe.directory to bypass the ownership check
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          
+
           echo "tag_already_published=$(just repo is-tag-already-published)" >> $GITHUB_OUTPUT
           echo "version_tag=$(just repo print-version-tag)" >> $GITHUB_OUTPUT
       - name: Skip tag step if tag is already published
@@ -192,13 +192,23 @@ jobs:
         uses: actions/github-script@v9
         with:
           script: |
-            const versionTag = process.env.VERSION_TAG;
+            const { owner, repo } = context.repo;
+            const tagName = process.env.VERSION_TAG;
 
-            await github.rest.git.createRef({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              ref: `refs/tags/${versionTag}`,
-              sha: context.sha
+            // Construct the URL to the changelog at this specific tag
+            const changelogUrl = `https://github.com/${owner}/${repo}/blob/${tagName}/CHANGELOG.md`;
+            const releaseBody = `## Release Notes\n\nFull changes for this version can be found in the [CHANGELOG.md](${changelogUrl}).`;
+
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tagName,
+              target_commitish: context.sha,
+              name: tagName,
+              body: releaseBody,
+              draft: false,
+              prerelease: false,
+              generate_release_notes: false,
             });
         env:
           VERSION_TAG: ${{ steps.tag.outputs.version_tag }}
