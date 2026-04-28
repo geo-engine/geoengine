@@ -131,7 +131,7 @@ is-container-already-published repository tag organization="geoengine":
 
 # Check if the current version of Geo Engine is already published as git tag. Usage: `just repo is-tag-already-published`.
 is-tag-already-published:
-    git rev-parse "{{ `just repo print-version-tag` }}" > /dev/null 2>&1 && echo "true" || echo "false"
+    @git show-ref --tags "{{ `just repo print-version-tag` }}" --quiet && echo "true" || echo "false"
 
 # Check repository-wide lints. Usage: `just repo lint`.
 lint: format lint-version-numbers lint-generated-code
