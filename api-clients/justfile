@@ -101,7 +101,7 @@ _build-rust-postprocess:
 [working-directory("rust")]
 build-rust-dist: common::_clear
     cargo fetch
-    
+
 
 lint: lint-openapi-spec
 
@@ -197,3 +197,24 @@ test-rust: common::_clear
 test-typescript: common::_clear
     npm install
     npm run build
+
+# Publish the Python API client to PyPI. Usage: `just repo publish-python`. Use the `--dry-run` flag to publish to TestPyPI instead.
+[group('publish')]
+[arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[working-directory("python")]
+publish-python dry-run="false": common::_clear
+    python -m pip install --upgrade pip twine
+    python -m twine upload --repository {{ if dry-run == "true" { "testpypi" } else { "pypi" } }} dist/*
+
+# Publish the Rust API client to crates.io. Usage: `just repo publish-rust`. Use the `--dry-run` flag to not actually publish.
+[group('rust')]
+[arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[working-directory("rust")]
+publish-rust dry-run="false": common::_clear
+    cargo publish {{ if dry-run == "true" { "--dry-run" } else { "" } }}
+
+[group('typescript')]
+[arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[working-directory("typescript")]
+publish-typescript dry-run="false": common::_clear
+    npm publish --access public {{ if dry-run == "true" { "--dry-run" } else { "" } }}

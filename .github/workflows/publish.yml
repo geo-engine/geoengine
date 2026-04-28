@@ -55,9 +55,7 @@ jobs:
         run: just api-clients build-python-dist
       - name: Publish package to PyPI
         if: steps.tag.outputs.tag_already_published == 'false'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: api-clients/python/dist/ # does not use `run.working-directory`
+        run: just api-clients publish-python
 
   api-client-typescript:
     name: Publish TypeScript API Client Package
@@ -88,8 +86,7 @@ jobs:
         run: just api-clients build-typescript-dist
       - name: Publish
         if: steps.tag.outputs.tag_already_published == 'false'
-        run: npm publish --access public
-        working-directory: api-clients/typescript
+        run: just api-clients publish-typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
@@ -105,17 +102,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
+      - name: Set up Rust ${{ env.rust-version }}
+        uses: actions-rs/toolchain@v1
+        with:
+          toolchain: ${{ env.rust-version }}
       - name: Check if tag is already published
         id: tag
         run: echo "tag_already_published=$(just repo is-api-client-rust-already-published)" >> $GITHUB_OUTPUT
       - name: Skip publish step if version is already published
         if: steps.tag.outputs.tag_already_published == 'true'
         run: echo "Version is already published, skipping publish step."
-      - name: Set up Rust ${{ env.rust-version }}
-        if: steps.tag.outputs.tag_already_published == 'false'
-        uses: actions-rs/toolchain@v1
-        with:
-          toolchain: ${{ env.rust-version }}
       - name: Install dependencies
         if: steps.tag.outputs.tag_already_published == 'false'
         run: just api-clients build-rust-dist
@@ -124,8 +120,7 @@ jobs:
         id: auth
       - name: Publish
         if: steps.tag.outputs.tag_already_published == 'false'
-        run: cargo publish
-        working-directory: api-clients/rust
+        run: just api-clients publish-rust
         env:
           CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
@@ -166,9 +161,7 @@ jobs:
           just python build
       - name: Publish package to PyPI
         if: steps.tag.outputs.tag_already_published == 'false'
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/dist/
+        run: just python publish
 
   tag:
     name: Publish Git Tag
