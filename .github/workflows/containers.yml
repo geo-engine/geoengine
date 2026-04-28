@@ -113,6 +113,7 @@ jobs:
 
       - name: Push latest with version number to quay.io
         if: env.TAG_NAME == 'latest'
+        working-directory: geoengine
         run: |
           if `just repo is-container-already-published geoengine $(just repo::print-version-number)`; then
             echo "Version is already published, skipping publish step."
@@ -193,6 +194,7 @@ jobs:
 
       - name: Push latest with version number to quay.io
         if: env.TAG_NAME == 'latest'
+        working-directory: geoengine
         run: |
           if `just repo is-container-already-published ${{matrix.app.name}} $(just repo::print-version-number)`; then
             echo "Version is already published, skipping publish step."

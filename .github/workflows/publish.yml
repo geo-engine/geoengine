@@ -22,6 +22,7 @@ jobs:
     name: Publish Python API Client Package
 
     runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
 
     strategy:
       matrix:
@@ -64,6 +65,7 @@ jobs:
     name: Publish TypeScript API Client Package
 
     runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
 
     permissions:
       contents: read
@@ -104,6 +106,7 @@ jobs:
     name: Publish Rust API Client Package
 
     runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
 
     permissions:
       contents: read
@@ -142,6 +145,7 @@ jobs:
     name: Publish Python Package
 
     runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
 
     strategy:
       matrix:
@@ -178,6 +182,7 @@ jobs:
     name: Publish Git Tag
 
     runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
 
     permissions:
       contents: write
