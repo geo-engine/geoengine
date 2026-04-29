@@ -50,6 +50,7 @@ jobs:
           add-job-id-key: false
           env-vars: ""
           workspaces: "geoengine"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Testsuite
         uses: ./.github/actions/test
       - id: upload-coverage-artifact
@@ -84,6 +85,7 @@ jobs:
           add-job-id-key: false
           env-vars: ""
           workspaces: "geoengine"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Rustfmt
         run: just backend lint-rustfmt
       - name: Clippy
@@ -118,6 +120,7 @@ jobs:
           add-job-id-key: false
           env-vars: ""
           workspaces: "geoengine"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Build
         run: just backend build "${{ matrix.build }}"
   
@@ -162,6 +165,7 @@ jobs:
           add-job-id-key: false
           env-vars: ""
           workspaces: "geoengine"
+          save-if: ${{ github.ref == 'refs/heads/main' }}
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
