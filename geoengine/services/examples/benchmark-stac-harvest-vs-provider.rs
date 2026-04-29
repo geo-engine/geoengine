@@ -199,6 +199,33 @@ async fn main() -> Result<()> {
             &log_dir.join(format!("server_{}_provider.log", run)),
         )?;
         records.push(provider);
+
+        println!("\n=== Run {run}/{}: NDVI harvest scenario ===", config.runs);
+        let ndvi_harvest =
+            run_ndvi_harvest_benchmark(run, &config, &root_dir, &log_dir, &png_dir).await?;
+        write_record(&mut csv_writer, &ndvi_harvest)?;
+        write_gdal_access_records(
+            &mut gdal_access_writer,
+            run,
+            "ndvi-harvest",
+            &log_dir.join(format!("server_{}_ndvi_harvest.log", run)),
+        )?;
+        records.push(ndvi_harvest);
+
+        println!(
+            "\n=== Run {run}/{}: NDVI provider scenario ===",
+            config.runs
+        );
+        let ndvi_provider =
+            run_ndvi_provider_benchmark(run, &config, &root_dir, &log_dir, &png_dir).await?;
+        write_record(&mut csv_writer, &ndvi_provider)?;
+        write_gdal_access_records(
+            &mut gdal_access_writer,
+            run,
+            "ndvi-provider",
+            &log_dir.join(format!("server_{}_ndvi_provider.log", run)),
+        )?;
+        records.push(ndvi_provider);
     }
 
     csv_writer.flush()?;
@@ -551,12 +578,250 @@ fn build_wms_style(band: u32, min: f64, max: f64) -> Result<String> {
     ))
 }
 
+fn build_ndvi_workflow_operator(
+    root_dir: &Path,
+    data_scl_20: Value,
+    data_nir_red_10: Value,
+) -> Result<Value> {
+    let blueprint_path = root_dir.join("test_data/api_calls/nsiscloud/workflow.json");
+    let blueprint_text = fs::read_to_string(&blueprint_path)
+        .with_context(|| format!("reading {}", blueprint_path.display()))?;
+    let mut workflow: Value =
+        serde_json::from_str(&blueprint_text).context("parsing NDVI workflow blueprint JSON")?;
+    let has_operator_wrapper = workflow.get("operator").is_some();
+
+    let op = if has_operator_wrapper {
+        workflow
+            .get_mut("operator")
+            .ok_or_else(|| anyhow!("NDVI workflow blueprint is missing 'operator' field"))?
+    } else {
+        &mut workflow
+    };
+
+    op["sources"]["raster"]["sources"]["raster"]["sources"]["rasters"][0]["sources"]["raster"]["sources"]
+        ["raster"]["sources"]["raster"]["params"]["data"] = data_scl_20;
+    op["sources"]["raster"]["sources"]["raster"]["sources"]["rasters"][1]["sources"]["raster"]["params"]
+        ["data"] = data_nir_red_10;
+
+    if has_operator_wrapper {
+        Ok(workflow)
+    } else {
+        Ok(serde_json::json!({"type": "Raster", "operator": workflow}))
+    }
+}
+
+async fn register_workflow_raw(api: &Configuration, typed_operator: Value) -> Result<Uuid> {
+    let response = api
+        .client
+        .post(format!("{}/workflow", api.base_path))
+        .bearer_auth(
+            api.bearer_access_token
+                .as_ref()
+                .ok_or_else(|| anyhow!("missing bearer token in API configuration"))?,
+        )
+        .json(&typed_operator)
+        .send()
+        .await
+        .context("registering workflow")?;
+
+    let status = response.status();
+    let body = response
+        .text()
+        .await
+        .context("reading workflow registration response")?;
+
+    if !status.is_success() {
+        bail!(
+            "workflow registration failed: status={} body={}",
+            status,
+            body
+        );
+    }
+
+    let id_response: models::IdResponse =
+        serde_json::from_str(&body).context("decoding workflow registration response")?;
+
+    Ok(id_response.id)
+}
+
+async fn run_ndvi_harvest_benchmark(
+    run: u32,
+    config: &Config,
+    root_dir: &Path,
+    log_dir: &Path,
+    png_dir: &Path,
+) -> Result<BenchRecord> {
+    let base_url = config.base_url();
+    let log_file = log_dir.join(format!("server_{}_ndvi_harvest.log", run));
+    let _server = ServerHandle::start(root_dir, &log_file, &base_url).await?;
+
+    let mut api = api_configuration(&base_url);
+    let token = anonymous_token(&api).await?;
+    api.bearer_access_token = Some(token.to_string());
+
+    ensure_release_cli_binary(root_dir)?;
+
+    let import_start = Instant::now();
+    run_stac_import(config, root_dir)?;
+    let import_ms = import_start.elapsed().as_millis();
+
+    let workflow_registration_start = Instant::now();
+    let data_scl_20 = Value::String("sentinel-2-l2a_EPSG32632_U8_20".to_owned());
+    let data_nir_red_10 = Value::String("sentinel-2-l2a_EPSG32632_U16_10".to_owned());
+    let typed_operator = build_ndvi_workflow_operator(root_dir, data_scl_20, data_nir_red_10)?;
+    let workflow_id = register_workflow_raw(&api, typed_operator).await?;
+    trigger_workflow_metadata_fallback(&api, workflow_id).await?;
+    let workflow_registration_ms = workflow_registration_start.elapsed().as_millis();
+
+    let style = build_wms_style(0, -0.1, 0.8)?;
+
+    let wms_start = Instant::now();
+    let response = apis::ogcwms_api::wms_handler(
+        &api,
+        &workflow_id.to_string(),
+        models::WmsRequest::GetMap,
+        Some(BBOX),
+        None,
+        Some(CRS),
+        None,
+        Some("application/json"),
+        Some("image/png"),
+        Some(IMAGE_HEIGHT),
+        None,
+        None,
+        Some(&workflow_id.to_string()),
+        None,
+        Some(models::WmsService::Wms),
+        None,
+        None,
+        Some(&style),
+        Some(TIME),
+        Some(true),
+        Some("1.3.0"),
+        Some(IMAGE_WIDTH),
+    )
+    .await
+    .map_err(map_api_error("ndvi harvest WMS request"))?;
+
+    let status = response.status();
+    let png_bytes = response
+        .bytes()
+        .await
+        .context("reading ndvi harvest WMS response body")?;
+    require_http_200(status, "ndvi harvest WMS")?;
+    fs::write(
+        png_dir.join(format!("ndvi_harvest_run_{}.png", run)),
+        png_bytes,
+    )
+    .context("writing ndvi harvest PNG")?;
+    let wms_ms = wms_start.elapsed().as_millis();
+    let loading_info_ms = wait_for_loading_info_ms(&log_file).await?;
+
+    Ok(BenchRecord {
+        run,
+        scenario: "ndvi-harvest",
+        import_ms,
+        workflow_registration_ms,
+        loading_info_ms,
+        wms_ms,
+        http_status: status.as_u16(),
+    })
+}
+
+async fn run_ndvi_provider_benchmark(
+    run: u32,
+    config: &Config,
+    root_dir: &Path,
+    log_dir: &Path,
+    png_dir: &Path,
+) -> Result<BenchRecord> {
+    let base_url = config.base_url();
+    let log_file = log_dir.join(format!("server_{}_ndvi_provider.log", run));
+    let _server = ServerHandle::start(root_dir, &log_file, &base_url).await?;
+
+    let mut api = api_configuration(&base_url);
+    let token = anonymous_token(&api).await?;
+    api.bearer_access_token = Some(token.to_string());
+
+    let workflow_registration_start = Instant::now();
+
+    let provider_definition = build_provider_definition(config, root_dir)?;
+    let scl_dataset_idx = provider_dataset_index(&provider_definition, "U8", 20.0)?;
+    let nir_red_dataset_idx = provider_dataset_index(&provider_definition, "U16", 10.0)?;
+
+    let provider_id = register_stac_provider_fallback(&api, provider_definition).await?;
+
+    let data_scl_20 = Value::String(format!("_:{}:`dataset/{}`", provider_id, scl_dataset_idx));
+    let data_nir_red_10 = Value::String(format!(
+        "_:{}:`dataset/{}`",
+        provider_id, nir_red_dataset_idx
+    ));
+    let typed_operator = build_ndvi_workflow_operator(root_dir, data_scl_20, data_nir_red_10)?;
+    let workflow_id = register_workflow_raw(&api, typed_operator).await?;
+    trigger_workflow_metadata_fallback(&api, workflow_id).await?;
+
+    let workflow_registration_ms = workflow_registration_start.elapsed().as_millis();
+
+    let style = build_wms_style(0, -0.1, 0.8)?;
+
+    let wms_start = Instant::now();
+    let response = apis::ogcwms_api::wms_handler(
+        &api,
+        &workflow_id.to_string(),
+        models::WmsRequest::GetMap,
+        Some(BBOX),
+        None,
+        Some(CRS),
+        None,
+        Some("application/json"),
+        Some("image/png"),
+        Some(IMAGE_HEIGHT),
+        None,
+        None,
+        Some(&workflow_id.to_string()),
+        None,
+        Some(models::WmsService::Wms),
+        None,
+        None,
+        Some(&style),
+        Some(TIME),
+        Some(true),
+        Some("1.3.0"),
+        Some(IMAGE_WIDTH),
+    )
+    .await
+    .map_err(map_api_error("ndvi provider WMS request"))?;
+
+    let status = response.status();
+    let png_bytes = response
+        .bytes()
+        .await
+        .context("reading ndvi provider WMS response body")?;
+    require_http_200(status, "ndvi provider WMS")?;
+    fs::write(
+        png_dir.join(format!("ndvi_provider_run_{}.png", run)),
+        png_bytes,
+    )
+    .context("writing ndvi provider PNG")?;
+    let wms_ms = wms_start.elapsed().as_millis();
+    let loading_info_ms = wait_for_loading_info_ms(&log_file).await?;
+
+    Ok(BenchRecord {
+        run,
+        scenario: "ndvi-provider",
+        import_ms: 0,
+        workflow_registration_ms,
+        loading_info_ms,
+        wms_ms,
+        http_status: status.as_u16(),
+    })
+}
+
 fn run_stac_import(config: &Config, root_dir: &Path) -> Result<()> {
     let cli_binary = release_binary(root_dir, "geoengine-cli");
 
     let status = Command::new(&cli_binary)
         .arg("stac-import")
-        .arg("--missing-bands-handling")
         .arg("--limit")
         .arg(config.import_limit.to_string())
         .arg("--bbox")
@@ -598,6 +863,30 @@ fn build_provider_definition(config: &Config, root_dir: &Path) -> Result<Value> 
     provider_definition["s3Config"]["secretKey"] = Value::String(config.stac_s3_secret_key.clone());
 
     Ok(provider_definition)
+}
+
+fn provider_dataset_index(
+    provider_definition: &Value,
+    data_type: &str,
+    resolution: f64,
+) -> Result<usize> {
+    let datasets = provider_definition["datasets"]
+        .as_array()
+        .ok_or_else(|| anyhow!("provider definition datasets must be an array"))?;
+
+    datasets
+        .iter()
+        .position(|dataset| {
+            dataset["dataType"].as_str() == Some(data_type)
+                && dataset["resolution"].as_f64() == Some(resolution)
+        })
+        .ok_or_else(|| {
+            anyhow!(
+                "could not find dataset index for dataType={} resolution={}",
+                data_type,
+                resolution
+            )
+        })
 }
 
 async fn register_stac_provider_fallback(
@@ -729,16 +1018,10 @@ fn print_summary(records: &[BenchRecord]) {
         wms_ms: u128,
     }
 
-    let mut harvest = Agg::default();
-    let mut provider = Agg::default();
+    let mut by_scenario: BTreeMap<&str, Agg> = BTreeMap::new();
 
     for record in records {
-        let agg = if record.scenario == "harvest" {
-            &mut harvest
-        } else {
-            &mut provider
-        };
-
+        let agg = by_scenario.entry(record.scenario).or_default();
         agg.count += 1;
         agg.import_ms += record.import_ms;
         agg.workflow_registration_ms += record.workflow_registration_ms;
@@ -746,7 +1029,7 @@ fn print_summary(records: &[BenchRecord]) {
         agg.wms_ms += record.wms_ms;
     }
 
-    for (name, agg) in [("harvest", harvest), ("provider", provider)] {
+    for (name, agg) in &by_scenario {
         if agg.count == 0 {
             continue;
         }

@@ -17,7 +17,7 @@ use geoengine_datatypes::operations::reproject::{
 };
 use geoengine_datatypes::primitives::{
     AxisAlignedRectangle, CacheHint, RasterQueryRectangle, SpatialResolution, TimeDimension,
-    TimeInstance, TimeInterval, VectorQueryRectangle,
+    TimeInstance, TimeInterval, TryRegularTimeFillIterExt, VectorQueryRectangle,
 };
 use geoengine_datatypes::raster::{GeoTransform, GridBoundingBox2D, GridIdx2D, RasterDataType};
 use geoengine_datatypes::spatial_reference::SpatialReference;
@@ -88,7 +88,8 @@ pub struct StacProviderDataset {
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacProviderDatasetBand")]
 pub struct StacProviderDatasetBand {
-    pub name: String,
+    pub asset_title: String,
+    pub band_name: Option<String>,
 }
 
 #[async_trait]
@@ -203,6 +204,30 @@ impl GroupingDimension {
 }
 
 impl StacDataProvider {
+    fn format_resolution_component(value: f64) -> String {
+        let formatted = format!("{value:.9}");
+        let trimmed = formatted.trim_end_matches('0').trim_end_matches('.');
+        let normalized = if trimmed.is_empty() { "0" } else { trimmed };
+        normalized.replace('.', "p")
+    }
+
+    fn dataset_stable_id(dataset: &StacProviderDataset) -> String {
+        let projection = dataset
+            .projection
+            .to_string()
+            .to_ascii_lowercase()
+            .replace(':', "");
+        let data_type = format!("{:?}", dataset.data_type).to_ascii_lowercase();
+        let res_x = Self::format_resolution_component(dataset.resolution.x);
+        let res_y = Self::format_resolution_component(dataset.resolution.y);
+
+        if (dataset.resolution.x - dataset.resolution.y).abs() < 1e-9 {
+            format!("{projection}_{data_type}_{res_x}")
+        } else {
+            format!("{projection}_{data_type}_{res_x}x{res_y}")
+        }
+    }
+
     fn dataset_dimension_display_value(
         dataset: &StacProviderDataset,
         dimension: GroupingDimension,
@@ -261,13 +286,20 @@ impl StacDataProvider {
         values_by_slug.into_iter().collect::<Vec<_>>()
     }
 
-    fn dataset_layer_id(index: usize) -> LayerId {
-        LayerId(format!("dataset/{index}"))
+    fn dataset_layer_id(dataset: &StacProviderDataset) -> LayerId {
+        LayerId(format!("dataset/{}", Self::dataset_stable_id(dataset)))
     }
 
-    fn dataset_index_from_layer_id(id: &LayerId) -> Option<usize> {
-        id.0.strip_prefix("dataset/")
-            .and_then(|value| value.parse::<usize>().ok())
+    fn dataset_by_layer_id(&self, id: &LayerId) -> Option<&StacProviderDataset> {
+        let suffix = id.0.strip_prefix("dataset/")?;
+
+        if let Ok(index) = suffix.parse::<usize>() {
+            return self.datasets.get(index);
+        }
+
+        self.datasets
+            .iter()
+            .find(|dataset| Self::dataset_stable_id(dataset) == suffix)
     }
 
     fn dataset_from_data_id(
@@ -278,11 +310,7 @@ impl StacDataProvider {
             .external()
             .ok_or(geoengine_operators::error::Error::DataIdTypeMissMatch)?;
 
-        let dataset_index = Self::dataset_index_from_layer_id(&external.layer_id)
-            .ok_or(geoengine_operators::error::Error::UnknownDataId)?;
-
-        self.datasets
-            .get(dataset_index)
+        self.dataset_by_layer_id(&external.layer_id)
             .ok_or(geoengine_operators::error::Error::UnknownDataId)
     }
 
@@ -477,8 +505,7 @@ impl LayerCollectionProvider for StacDataProvider {
                         let mut items = self
                             .datasets
                             .iter()
-                            .enumerate()
-                            .filter(|(_, dataset)| {
+                            .filter(|dataset| {
                                 Self::dataset_matches(
                                     dataset,
                                     &[
@@ -487,12 +514,12 @@ impl LayerCollectionProvider for StacDataProvider {
                                     ],
                                 )
                             })
-                            .map(|(index, dataset)| {
+                            .map(|dataset| {
                                 CollectionItem::Layer(LayerListing {
                                     r#type: Default::default(),
                                     id: ProviderLayerId {
                                         provider_id: self.id,
-                                        layer_id: Self::dataset_layer_id(index),
+                                        layer_id: Self::dataset_layer_id(dataset),
                                     },
                                     name: dataset.name.clone(),
                                     description: dataset.description.clone(),
@@ -530,12 +557,8 @@ impl LayerCollectionProvider for StacDataProvider {
     }
 
     async fn load_layer(&self, id: &LayerId) -> crate::error::Result<Layer> {
-        let dataset_index = Self::dataset_index_from_layer_id(id)
-            .ok_or(crate::error::Error::UnknownLayerId { id: id.clone() })?;
-
         let dataset = self
-            .datasets
-            .get(dataset_index)
+            .dataset_by_layer_id(id)
             .ok_or(crate::error::Error::UnknownLayerId { id: id.clone() })?;
 
         Ok(Layer {
@@ -630,7 +653,7 @@ impl
             ("limit".to_owned(), "100".to_owned()),
             (
                 "fields".to_owned(),
-                "stac_version,properties.datetime,properties.updated,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform".to_owned(),
+                "stac_version,properties.datetime,properties.updated,assets.*.tile,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform".to_owned(),
             ),
         ];
 
@@ -641,14 +664,6 @@ impl
         let mut use_initial_query = true;
 
         // TODO: intersect with query bands?
-
-        let selected_bands = self
-            .dataset
-            .bands
-            .iter()
-            .enumerate()
-            .map(|(idx, band)| (band.name.clone(), idx as u32))
-            .collect::<HashMap<_, _>>();
 
         let mut files = Vec::new();
         let mut time_steps = Vec::new();
@@ -695,13 +710,28 @@ impl
                     .map(|updated| updated.timestamp_millis())
                     .unwrap_or_else(|| item_datetime.timestamp_millis());
 
-                let time_start = TimeInstance::from_millis(item_datetime.timestamp_millis())
+                let item_time = TimeInstance::from_millis(item_datetime.timestamp_millis())
                     .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-                let time =
-                    TimeInterval::new(time_start, time_start + i64::from(24 * 60 * 60 * 1000))
-                        .map_err(|_e| {
+
+                let time = match self.time_dimension {
+                    TimeDimension::Regular(regular) => {
+                        let time_start = regular
+                            .snap_prev(item_time)
+                            .map_err(|_e| {
+                                geoengine_operators::error::Error::InvalidDataProviderConfig
+                            })?;
+                        let time_end = (time_start + regular.step).map_err(|_e| {
                             geoengine_operators::error::Error::InvalidDataProviderConfig
                         })?;
+
+                        TimeInterval::new(time_start, time_end).map_err(|_e| {
+                            geoengine_operators::error::Error::InvalidDataProviderConfig
+                        })?
+                    }
+                    TimeDimension::Irregular => {
+                        unreachable!("irregular time dimension rejected at provider initialization")
+                    }
+                };
 
                 time_steps.push(time);
 
@@ -709,7 +739,7 @@ impl
                     continue;
                 }
 
-                for (asset_key, asset) in item.assets {
+                for (_asset_key, asset) in item.assets {
                     if data_type_from_asset_v1_1_0(&asset) != Some(self.dataset.data_type) {
                         continue;
                     }
@@ -737,8 +767,7 @@ impl
                         continue;
                     }
 
-                    let Ok(asset_band_names) = band_names_from_asset_v1_1_0(&asset_key, &asset)
-                    else {
+                    let Some(asset_title) = asset.title.as_deref() else {
                         continue;
                     };
 
@@ -754,19 +783,43 @@ impl
 
                     let gdal_config_options = self.gdal_config_options_for_file_path(&file_path);
 
-                    for (asset_band_idx, asset_band_name) in asset_band_names.iter().enumerate() {
-                        let Some(dataset_band_idx) = selected_bands.get(asset_band_name) else {
+                    for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
+                        if dataset_band.asset_title != asset_title {
                             continue;
+                        }
+
+                        let rasterband_channel = if asset.bands.is_empty() {
+                            if dataset_band.band_name.is_some() {
+                                return Err(
+                                    geoengine_operators::error::Error::InvalidDataProviderConfig,
+                                );
+                            }
+
+                            1
+                        } else {
+                            let Some(required_band_name) = dataset_band.band_name.as_deref() else {
+                                return Err(
+                                    geoengine_operators::error::Error::InvalidDataProviderConfig,
+                                );
+                            };
+
+                            let Some(asset_band_idx) = asset.bands.iter().position(|asset_band| {
+                                asset_band.name.as_deref() == Some(required_band_name)
+                            }) else {
+                                continue;
+                            };
+
+                            asset_band_idx + 1
                         };
 
                         files.push(TileFile {
                             time,
                             spatial_partition,
-                            band: *dataset_band_idx,
+                            band: dataset_band_idx as u32,
                             z_index,
                             params: GdalDatasetParameters {
                                 file_path: file_path.clone(),
-                                rasterband_channel: asset_band_idx + 1,
+                                rasterband_channel,
                                 geo_transform: GdalDatasetGeoTransform {
                                     origin_coordinate: geo_transform.origin_coordinate(),
                                     x_pixel_size: geo_transform.x_pixel_size(),
@@ -797,9 +850,17 @@ impl
         time_steps.sort_by(|a, b| a.start().cmp(&b.start()).then(a.end().cmp(&b.end())));
         time_steps.dedup();
 
-        if time_steps.is_empty() {
-            time_steps.push(query.query_rectangle.time_interval());
-        }
+        let time_steps = match self.time_dimension {
+            TimeDimension::Regular(regular) => time_steps
+                .into_iter()
+                .map(Ok::<_, geoengine_operators::error::Error>)
+                .try_time_regular_range_fill(regular, time_interval)
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?,
+            TimeDimension::Irregular => {
+                unreachable!("irregular time dimension rejected at provider initialization")
+            }
+        };
 
         files.sort_by(|a, b| {
             a.time
@@ -1034,28 +1095,6 @@ fn raster_data_type_from_stac_data_type(
         stac_extensions::raster::DataType::Float64 => Some(RasterDataType::F64),
         _ => None,
     }
-}
-
-fn band_names_from_asset_v1_1_0(asset_key: &str, asset: &stac::Asset) -> Result<Vec<String>, ()> {
-    if asset.bands.is_empty() {
-        return Err(());
-    }
-
-    let prefix = if asset.bands.len() > 1 {
-        format!("{asset_key}_")
-    } else {
-        String::new()
-    };
-
-    let mut names = Vec::new();
-    for band in &asset.bands {
-        let Some(band_name) = &band.name else {
-            return Err(());
-        };
-        names.push(format!("{}{}", prefix, band_name));
-    }
-
-    Ok(names)
 }
 
 fn proj_code_matches_dataset(

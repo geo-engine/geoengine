@@ -880,7 +880,10 @@ CREATE TYPE "StacProviderS3Config" AS (
     secret_key text
 );
 
-CREATE TYPE "StacProviderDatasetBand" AS ("name" text);
+CREATE TYPE "StacProviderDatasetBand" AS (
+    asset_title text,
+    band_name text
+);
 
 CREATE TYPE "StacProviderDataset" AS (
     "name" text,

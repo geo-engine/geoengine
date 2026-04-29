@@ -921,18 +921,25 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StacProviderDatasetBand {
-    pub name: String,
+    pub asset_title: String,
+    pub band_name: Option<String>,
 }
 
 impl From<StacProviderDatasetBand> for crate::datasets::external::stac::StacProviderDatasetBand {
     fn from(value: StacProviderDatasetBand) -> Self {
-        Self { name: value.name }
+        Self {
+            asset_title: value.asset_title,
+            band_name: value.band_name,
+        }
     }
 }
 
 impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProviderDatasetBand {
     fn from(value: crate::datasets::external::stac::StacProviderDatasetBand) -> Self {
-        Self { name: value.name }
+        Self {
+            asset_title: value.asset_title,
+            band_name: value.band_name,
+        }
     }
 }
 
