@@ -16,9 +16,11 @@ upgrade: common::_clear
 build: common::_clear
     npm run build
 
+# Serve the website in development mode with hot reloading, or start the preview server if the "--preview" flag. Usage: `just run` or `just run --preview`
+[arg("preview", long="preview", value="true", help="Whether to start the preview instead of the dev server.")]
 [group("run")]
-run: common::_clear
-    npm run dev
+run preview="false": common::_clear
+    {{ if preview == "true" { "npm run build && npm run preview" } else { "npm run dev" } }}
 
 lint: common::_clear format
     npm run eslint
