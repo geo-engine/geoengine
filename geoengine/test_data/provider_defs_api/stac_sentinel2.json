@@ -24,66 +24,135 @@
       "name": "Sentinel-2 L2A EPSG:32632 U16 10m",
       "description": "",
       "dataType": "U16",
-      "resolution": 10.0,
+      "resolution": 10,
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
         "spatialGrid": {
           "geoTransform": {
             "originCoordinate": {
-              "x": 199980.0,
-              "y": 8000040.0
+              "x": 399960,
+              "y": 5700000
             },
-            "xPixelSize": 10.0,
-            "yPixelSize": -10.0
+            "xPixelSize": 10,
+            "yPixelSize": -10
           },
           "gridBounds": {
-            "topLeftIdx": { "xIdx": 0, "yIdx": 0 },
-            "bottomRightIdx": { "xIdx": 70981, "yIdx": 800983 }
+            "topLeftIdx": {
+              "xIdx": 0,
+              "yIdx": 0
+            },
+            "bottomRightIdx": {
+              "xIdx": 10979,
+              "yIdx": 10979
+            }
           }
         }
       },
       "bands": [
         {
-          "name": "B02"
+          "assetTitle": "Aerosol optical thickness (AOT) - 10m",
+          "bandName": "AOT"
         },
         {
-          "name": "B03"
+          "assetTitle": "Blue (band 2) - 10m",
+          "bandName": "B02"
         },
         {
-          "name": "B04"
+          "assetTitle": "Green (band 3) - 10m",
+          "bandName": "B03"
         },
         {
-          "name": "B08"
+          "assetTitle": "NIR 1 (band 8) - 10m",
+          "bandName": "B08"
+        },
+        {
+          "assetTitle": "Red (band 4) - 10m",
+          "bandName": "B04"
+        },
+        {
+          "assetTitle": "Water vapour (WVP) - 10m",
+          "bandName": "WVP"
         }
       ]
     },
     {
-      "name": "Sentinel-2 L2A EPSG:32632 U8 20m",
+      "name": "Sentinel-2 L2A EPSG:32632 U16 20m",
       "description": "",
-      "dataType": "U8",
-      "resolution": 20.0,
+      "dataType": "U16",
+      "resolution": 20,
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
         "spatialGrid": {
           "geoTransform": {
             "originCoordinate": {
-              "x": 199980.0,
-              "y": 8000040.0
+              "x": 399960,
+              "y": 5700000
             },
-            "xPixelSize": 20.0,
-            "yPixelSize": -20.0
+            "xPixelSize": 20,
+            "yPixelSize": -20
           },
           "gridBounds": {
-            "topLeftIdx": { "xIdx": 0, "yIdx": 0 },
-            "bottomRightIdx": { "xIdx": 35491, "yIdx": 400492 }
+            "topLeftIdx": {
+              "xIdx": 0,
+              "yIdx": 0
+            },
+            "bottomRightIdx": {
+              "xIdx": 5489,
+              "yIdx": 5489
+            }
           }
         }
       },
       "bands": [
         {
-          "name": "SCL"
+          "assetTitle": "Aerosol optical thickness (AOT) - 20m",
+          "bandName": "AOT"
+        },
+        {
+          "assetTitle": "Blue (band 2) - 20m",
+          "bandName": "B02"
+        },
+        {
+          "assetTitle": "Coastal aerosol (band 1) - 20m",
+          "bandName": "B01"
+        },
+        {
+          "assetTitle": "Green (band 3) - 20m",
+          "bandName": "B03"
+        },
+        {
+          "assetTitle": "NIR 2 (band 8A) - 20m",
+          "bandName": "B8A"
+        },
+        {
+          "assetTitle": "Red (band 4) - 20m",
+          "bandName": "B04"
+        },
+        {
+          "assetTitle": "Red edge 1 (band 5) - 20m",
+          "bandName": "B05"
+        },
+        {
+          "assetTitle": "Red edge 2 (band 6) - 20m",
+          "bandName": "B06"
+        },
+        {
+          "assetTitle": "Red edge 3 (band 7) - 20m",
+          "bandName": "B07"
+        },
+        {
+          "assetTitle": "SWIR 1 (band 11) - 20m",
+          "bandName": "B11"
+        },
+        {
+          "assetTitle": "SWIR 2 (band 12) - 20m",
+          "bandName": "B12"
+        },
+        {
+          "assetTitle": "Water vapour (WVP) - 20m",
+          "bandName": "WVP"
         }
       ]
     },
@@ -91,64 +160,237 @@
       "name": "Sentinel-2 L2A EPSG:32632 U16 60m",
       "description": "",
       "dataType": "U16",
-      "resolution": 60.0,
+      "resolution": 60,
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
         "spatialGrid": {
           "geoTransform": {
             "originCoordinate": {
-              "x": 199980.0,
-              "y": 8000040.0
+              "x": 399960,
+              "y": 5700000
             },
-            "xPixelSize": 60.0,
-            "yPixelSize": -60.0
+            "xPixelSize": 60,
+            "yPixelSize": -60
           },
           "gridBounds": {
-            "topLeftIdx": { "xIdx": 0, "yIdx": 0 },
-            "bottomRightIdx": { "xIdx": 11830, "yIdx": 133497 }
+            "topLeftIdx": {
+              "xIdx": 0,
+              "yIdx": 0
+            },
+            "bottomRightIdx": {
+              "xIdx": 1829,
+              "yIdx": 1829
+            }
           }
         }
       },
       "bands": [
         {
-          "name": "B01"
+          "assetTitle": "Aerosol optical thickness (AOT) - 60m",
+          "bandName": "AOT"
         },
         {
-          "name": "B02"
+          "assetTitle": "Blue (band 2) - 60m",
+          "bandName": "B02"
         },
         {
-          "name": "B03"
+          "assetTitle": "Coastal aerosol (band 1) - 60m",
+          "bandName": "B01"
         },
         {
-          "name": "B04"
+          "assetTitle": "Green (band 3) - 60m",
+          "bandName": "B03"
         },
         {
-          "name": "B05"
+          "assetTitle": "NIR 2 (band 8A) - 60m",
+          "bandName": "B8A"
         },
         {
-          "name": "B06"
+          "assetTitle": "NIR 3 (band 9) - 60m",
+          "bandName": "B09"
         },
         {
-          "name": "B07"
+          "assetTitle": "Red (band 4) - 60m",
+          "bandName": "B04"
         },
         {
-          "name": "B8A"
+          "assetTitle": "Red edge 1 (band 5) - 60m",
+          "bandName": "B05"
         },
         {
-          "name": "B09"
+          "assetTitle": "Red edge 2 (band 6) - 60m",
+          "bandName": "B06"
         },
         {
-          "name": "B11"
+          "assetTitle": "Red edge 3 (band 7) - 60m",
+          "bandName": "B07"
         },
         {
-          "name": "B12"
+          "assetTitle": "SWIR 1 (band 11) - 60m",
+          "bandName": "B11"
         },
         {
-          "name": "AOT"
+          "assetTitle": "SWIR 2 (band 12) - 60m",
+          "bandName": "B12"
         },
         {
-          "name": "WVP"
+          "assetTitle": "Water vapour (WVP) - 60m",
+          "bandName": "WVP"
+        }
+      ]
+    },
+    {
+      "name": "Sentinel-2 L2A EPSG:32632 U8 10m",
+      "description": "",
+      "dataType": "U8",
+      "resolution": 10,
+      "projection": "EPSG:32632",
+      "spatialGrid": {
+        "descriptor": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 399960,
+              "y": 5700000
+            },
+            "xPixelSize": 10,
+            "yPixelSize": -10
+          },
+          "gridBounds": {
+            "topLeftIdx": {
+              "xIdx": 0,
+              "yIdx": 0
+            },
+            "bottomRightIdx": {
+              "xIdx": 10979,
+              "yIdx": 10979
+            }
+          }
+        }
+      },
+      "bands": [
+        {
+          "assetTitle": "True color image",
+          "bandName": "B02"
+        },
+        {
+          "assetTitle": "True color image",
+          "bandName": "B03"
+        },
+        {
+          "assetTitle": "True color image",
+          "bandName": "B04"
+        }
+      ]
+    },
+    {
+      "name": "Sentinel-2 L2A EPSG:32632 U8 20m",
+      "description": "",
+      "dataType": "U8",
+      "resolution": 20,
+      "projection": "EPSG:32632",
+      "spatialGrid": {
+        "descriptor": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 399960,
+              "y": 5700000
+            },
+            "xPixelSize": 20,
+            "yPixelSize": -20
+          },
+          "gridBounds": {
+            "topLeftIdx": {
+              "xIdx": 0,
+              "yIdx": 0
+            },
+            "bottomRightIdx": {
+              "xIdx": 5489,
+              "yIdx": 5489
+            }
+          }
+        }
+      },
+      "bands": [
+        {
+          "assetTitle": "Cloud probability (CLD) - 20m",
+          "bandName": "CLD"
+        },
+        {
+          "assetTitle": "Scene classification map (SCL) - 20m"
+        },
+        {
+          "assetTitle": "Snow probability (SNW) - 20m",
+          "bandName": "SNW"
+        },
+        {
+          "assetTitle": "True color image",
+          "bandName": "B02"
+        },
+        {
+          "assetTitle": "True color image",
+          "bandName": "B03"
+        },
+        {
+          "assetTitle": "True color image",
+          "bandName": "B04"
+        }
+      ]
+    },
+    {
+      "name": "Sentinel-2 L2A EPSG:32632 U8 60m",
+      "description": "",
+      "dataType": "U8",
+      "resolution": 60,
+      "projection": "EPSG:32632",
+      "spatialGrid": {
+        "descriptor": "source",
+        "spatialGrid": {
+          "geoTransform": {
+            "originCoordinate": {
+              "x": 399960,
+              "y": 5700000
+            },
+            "xPixelSize": 60,
+            "yPixelSize": -60
+          },
+          "gridBounds": {
+            "topLeftIdx": {
+              "xIdx": 0,
+              "yIdx": 0
+            },
+            "bottomRightIdx": {
+              "xIdx": 1829,
+              "yIdx": 1829
+            }
+          }
+        }
+      },
+      "bands": [
+        {
+          "assetTitle": "Cloud probability (CLD) - 60m",
+          "bandName": "CLD"
+        },
+        {
+          "assetTitle": "Scene classification map (SCL) - 60m"
+        },
+        {
+          "assetTitle": "Snow probability (SNW) - 60m",
+          "bandName": "SNW"
+        },
+        {
+          "assetTitle": "True color image",
+          "bandName": "B02"
+        },
+        {
+          "assetTitle": "True color image",
+          "bandName": "B03"
+        },
+        {
+          "assetTitle": "True color image",
+          "bandName": "B04"
         }
       ]
     }

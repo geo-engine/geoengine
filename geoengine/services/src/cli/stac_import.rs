@@ -71,10 +71,15 @@ const STAC_ITEMS_FIELDS_FILTER: &[&str] = &[
     "stac_extensions",
     "properties.datetime",
     "properties.updated",
+    "properties.proj:epsg",
+    "properties.proj:code",
+    "assets.*.title",
     "assets.*.type",
     "assets.*.data_type",
+    "assets.*.gsd",
     "assets.*.href",
     "assets.*.bands",
+    "assets.*.proj:epsg",
     "assets.*.proj:transform",
     "assets.*.proj:shape",
     "assets.*.proj:code",
@@ -145,12 +150,6 @@ pub struct StacImport {
     #[arg(long, default_value_t = 2)]
     prefetch_pages: usize,
 
-    // handle missing bands:
-    // no eo:bands and only single-band -> use item key as band name
-    // no raster:bands and role visual and three bands -> use u8 bands
-    // if this parameter is false, assets with missing eo:bands or raster:bands will be skipped
-    #[arg(long, default_value_t = false)]
-    missing_bands_handling: bool,
     // TODO: time granularity (validity of items)
     /// Filter datasets by EPSG codes (only create and insert tiles for these EPSG codes)
     #[clap(long, value_parser, num_args = 0.., value_delimiter = ' ')]
@@ -187,7 +186,7 @@ pub struct StacImport {
 }
 
 /// Example call for Sentinel 2 from Element 84:
-/// `cargo run --bin geoengine-cli stac-import --limit 267 --missing-bands-handling --verbose`
+/// `cargo run --bin geoengine-cli stac-import --limit 267 --verbose`
 pub async fn stac_import(params: StacImport) -> Result<(), anyhow::Error> {
     let mut importer = StacImporter::new(params).await?;
     importer.run().await
@@ -415,10 +414,7 @@ impl StacImporter {
         let time: TimeInstance = date_without_time.into();
 
         // item-level epsg code (may be overwritten by asset)
-        let item_epsg_code = epsg_code_from_fields(
-            stac_extension_versions.projection,
-            &item.properties.additional_fields,
-        )?;
+        let item_epsg_code = epsg_code_from_item(&item, stac_extension_versions.projection)?;
 
         // Filter by EPSG code if epsgs parameter is provided
         // TODO: also filter when epsg code is at asset and not item level
@@ -505,7 +501,7 @@ impl StacImporter {
                         eo: StacExtensionMajorVersion::V1,
                     },
                 ) => {
-                    self.process_item_asset_v1_0_0(asset_key, asset, item_epsg_code, time, z_index)
+                    self.process_item_asset_v1_0_0(asset, item_epsg_code, time, z_index)
                         .await
                 }
                 (
@@ -516,7 +512,7 @@ impl StacImporter {
                         eo: StacExtensionMajorVersion::V2,
                     },
                 ) => {
-                    self.process_item_asset_v1_1_0(asset_key, asset, item_epsg_code, time, z_index)
+                    self.process_item_asset_v1_1_0(asset, item_epsg_code, time, z_index)
                         .await
                 }
                 _ => Err(anyhow::anyhow!(
@@ -547,7 +543,6 @@ impl StacImporter {
 
     async fn process_item_asset_v1_0_0(
         &mut self,
-        asset_key: &str,
         asset: &Asset,
         epsg: Option<u32>,
         time: TimeInstance,
@@ -556,22 +551,11 @@ impl StacImporter {
         let geo_transform = geo_transform_from_fields(&asset.additional_fields)
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
 
-        let data_type = if let Ok(data_type) = data_type_from_asset(stac::Version::v1_0_0, asset) {
-            data_type
-        } else if self.params.missing_bands_handling
-            && asset
-                .roles
-                .iter()
-                .any(|roles| roles.contains(&"visual".to_string()))
-        {
-            // if no data type can be determined but asset has role visual, assume u8 data type with one band per visual asset
-            RasterDataType::U8
-        } else {
-            anyhow::bail!("Failed to determine data type from asset");
-        };
+        let data_type = data_type_from_asset(stac::Version::v1_0_0, asset)
+            .context("Failed to determine data type from asset")?;
 
-        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V1, &asset.additional_fields)
-            .unwrap_or(epsg)
+        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V1, &asset.additional_fields)?
+            .or(epsg)
             .ok_or(anyhow::anyhow!("Failed to determine EPSG code from asset"))?;
 
         let dataset_key = DatasetKey {
@@ -606,15 +590,7 @@ impl StacImporter {
                     .map_err(|e| anyhow::anyhow!("invalid eo:bands: {e}"))
             });
 
-        let eo_bands = match eo_bands {
-            Ok(eo_bands) => eo_bands,
-            Err(_) if self.params.missing_bands_handling => {
-                handle_missing_eo_bands_for_asset(asset_key, asset)?
-            }
-            Err(e) => {
-                return Err(e);
-            }
-        };
+        let eo_bands = eo_bands?;
 
         let dataset_bands = self
             .bands
@@ -624,12 +600,10 @@ impl StacImporter {
             })
             .ok_or(anyhow::anyhow!("unknown dataset key: {dataset_key:?}"))?;
 
-        // if multiple bands for asset, prefix band names with asset key
-        let prefix = if eo_bands.len() > 1 {
-            format!("{asset_key}_",)
-        } else {
-            String::new()
-        };
+        let asset_title = asset
+            .title
+            .as_deref()
+            .ok_or(anyhow::anyhow!("Missing title in asset metadata"))?;
 
         let processor = AssetBandProcessor {
             asset,
@@ -642,8 +616,14 @@ impl StacImporter {
 
         let mut tiles = Vec::new();
         for (band_idx, eo_band) in eo_bands.iter().enumerate() {
+            let band_name = if eo_bands.len() > 1 {
+                format!("{asset_title} [{}]", eo_band.name)
+            } else {
+                asset_title.to_string()
+            };
+
             let tile = processor
-                .process_band_v1_0_0(band_idx, &prefix, eo_band)
+                .process_band_v1_0_0(band_idx, &band_name)
                 .context(format!("Failed to process band {}", eo_band.name))?;
             tiles.push((dataset_key.clone(), tile));
         }
@@ -653,7 +633,6 @@ impl StacImporter {
 
     async fn process_item_asset_v1_1_0(
         &mut self,
-        asset_key: &str,
         asset: &Asset,
         epsg: Option<u32>,
         time: TimeInstance,
@@ -662,22 +641,11 @@ impl StacImporter {
         let geo_transform = geo_transform_from_fields(&asset.additional_fields)
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
 
-        let data_type = if let Ok(data_type) = data_type_from_asset(stac::Version::v1_1_0, asset) {
-            data_type
-        } else if self.params.missing_bands_handling
-            && asset
-                .roles
-                .iter()
-                .any(|roles| roles.contains(&"visual".to_string()))
-        {
-            // if no data type can be determined but asset has role visual, assume u8 data type with one band per visual asset
-            RasterDataType::U8
-        } else {
-            anyhow::bail!("Failed to determine data type from asset");
-        };
+        let data_type = data_type_from_asset(stac::Version::v1_1_0, asset)
+            .context("Failed to determine data type from asset")?;
 
-        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V2, &asset.additional_fields)
-            .unwrap_or(epsg)
+        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V2, &asset.additional_fields)?
+            .or(epsg)
             .ok_or(anyhow::anyhow!("Failed to determine EPSG code from asset"))?;
 
         let dataset_key = DatasetKey {
@@ -703,8 +671,7 @@ impl StacImporter {
             self.known_datasets.insert(dataset_key.clone());
         }
 
-        let asset_bands =
-            band_names_from_asset_v1_1_0(asset_key, &asset, self.params.missing_bands_handling)?;
+        let asset_bands = band_names_from_asset_v1_1_0(&asset)?;
 
         let dataset_bands = self
             .bands
@@ -1423,18 +1390,62 @@ fn epsg_code_from_fields(
     proj_extension_version: StacExtensionMajorVersion,
     fields: &serde_json::Map<String, serde_json::Value>,
 ) -> Result<Option<u32>, anyhow::Error> {
+    let proj_epsg = fields.get("proj:epsg").and_then(|value| {
+        value
+            .as_u64()
+            .map(|code| code as u32)
+            .or_else(|| value.as_str().and_then(|code| code.parse::<u32>().ok()))
+    });
+
+    let proj_code = fields
+        .get("proj:code")
+        .and_then(serde_json::Value::as_str)
+        .and_then(parse_epsg_from_proj_code);
+
     Ok(match proj_extension_version {
-        StacExtensionMajorVersion::V1 => fields
-            .get("proj:epsg")
-            .and_then(serde_json::Value::as_u64)
-            .map(|code| code as u32),
-        StacExtensionMajorVersion::V2 => fields
-            .get("proj:code")
-            .and_then(|v| v.as_str())
-            .and_then(|s| s.strip_prefix("EPSG:"))
-            .map(|code| code.parse::<u32>().context("Invalid EPSG code"))
-            .transpose()?,
+        StacExtensionMajorVersion::V1 => proj_epsg.or(proj_code),
+        StacExtensionMajorVersion::V2 => proj_code.or(proj_epsg),
     })
+}
+
+fn epsg_code_from_item(
+    item: &stac::Item,
+    proj_extension_version: StacExtensionMajorVersion,
+) -> Result<Option<u32>, anyhow::Error> {
+    let from_additional =
+        epsg_code_from_fields(proj_extension_version, &item.properties.additional_fields)?;
+    if from_additional.is_some() {
+        return Ok(from_additional);
+    }
+
+    let Some(properties) = serde_json::to_value(item)
+        .ok()
+        .and_then(|value| value.get("properties").cloned())
+        .and_then(|value| value.as_object().cloned())
+    else {
+        return Ok(None);
+    };
+
+    let from_properties = epsg_code_from_fields(proj_extension_version, &properties)?;
+    if from_properties.is_some() {
+        return Ok(from_properties);
+    }
+
+    let fallback_version = match proj_extension_version {
+        StacExtensionMajorVersion::V1 => StacExtensionMajorVersion::V2,
+        StacExtensionMajorVersion::V2 => StacExtensionMajorVersion::V1,
+    };
+
+    epsg_code_from_fields(fallback_version, &properties)
+}
+
+fn parse_epsg_from_proj_code(code: &str) -> Option<u32> {
+    if let Some(code) = code.strip_prefix("EPSG:") {
+        return code.parse::<u32>().ok();
+    }
+
+    // e.g. http://www.opengis.net/def/crs/EPSG/0/32632
+    code.rsplit('/').next()?.parse::<u32>().ok()
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -1478,22 +1489,6 @@ enum AttributeValue {
     Epsg(u32),
 }
 
-fn handle_missing_eo_bands_for_asset(
-    asset_key: &str,
-    asset: &Asset,
-) -> anyhow::Result<Vec<EoBand>> {
-    let raster_bands: Vec<stac_extensions::raster::Band> = asset
-        .additional_fields
-        .get("raster:bands")
-        .ok_or(anyhow::anyhow!("Missing raster:bands"))
-        .and_then(|bands| {
-            serde_json::from_value(bands.clone())
-                .map_err(|e| anyhow::anyhow!("invalid raster:bands: {e}"))
-        })?;
-
-    handle_missing_eo_bands(asset_key, &raster_bands)
-}
-
 struct AssetBandProcessor<'a> {
     asset: &'a Asset,
     params: &'a StacImport,
@@ -1507,15 +1502,12 @@ impl AssetBandProcessor<'_> {
     fn process_band_v1_0_0(
         &self,
         band_idx: usize,
-        prefix: &str,
-        eo_band: &EoBand,
+        band_name: &str,
     ) -> anyhow::Result<AddDatasetTile> {
-        let band_name = format!("{}{}", prefix, eo_band.name);
-
         let band_index = self
             .dataset_bands
             .iter()
-            .position(|b| b.name == band_name.as_str())
+            .position(|b| b.name == band_name)
             .ok_or(anyhow::anyhow!("unknown band: {band_name}"))?;
 
         let proj_shape = self
@@ -1951,7 +1943,7 @@ async fn scan_collection(
                     raster: StacExtensionMajorVersion::V1,
                     eo: StacExtensionMajorVersion::V1,
                 },
-            ) => scan_item_asset_v1_0_0(asset_key, asset, params.missing_bands_handling),
+            ) => scan_item_asset_v1_0_0(asset),
             (
                 &stac::Version::v1_1_0,
                 StacExtensionVersions {
@@ -1959,7 +1951,7 @@ async fn scan_collection(
                     raster: StacExtensionMajorVersion::V2,
                     eo: StacExtensionMajorVersion::V2,
                 },
-            ) => scan_item_asset_v1_1_0(asset_key, asset, params.missing_bands_handling),
+            ) => scan_item_asset_v1_1_0(asset),
             _ => Err(anyhow::anyhow!(
                 "Unsupported STAC version or extension versions: {:?}, {stac_extension_versions:?}",
                 collection.version
@@ -1968,20 +1960,7 @@ async fn scan_collection(
 
         match asset_bands {
             Ok(Some(asset_bands)) => {
-                for (partial_key, band_descriptors) in asset_bands {
-                    // merge asset bands into dataset bands
-                    let existing_bands = dataset_bands.entry(partial_key).or_default();
-
-                    for descriptor in band_descriptors {
-                        if existing_bands
-                            .iter()
-                            .find(|b| b.name == descriptor.name)
-                            .is_none()
-                        {
-                            existing_bands.push(descriptor);
-                        }
-                    }
-                }
+                merge_dataset_bands(&mut dataset_bands, asset_bands);
             }
             Err(err) => {
                 println!("[ERROR] Skipping asset {asset_key}: {err:#}");
@@ -1996,10 +1975,23 @@ async fn scan_collection(
     Ok(dataset_bands)
 }
 
+fn merge_dataset_bands(
+    dataset_bands: &mut HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
+    additions: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>,
+) {
+    for (partial_key, band_descriptors) in additions {
+        let existing_bands = dataset_bands.entry(partial_key).or_default();
+
+        for descriptor in band_descriptors {
+            if existing_bands.iter().all(|b| b.name != descriptor.name) {
+                existing_bands.push(descriptor);
+            }
+        }
+    }
+}
+
 fn scan_item_asset_v1_0_0(
-    asset_key: &str,
     asset: &stac::ItemAsset,
-    missing_bands_handling: bool,
 ) -> anyhow::Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
@@ -2021,22 +2013,17 @@ fn scan_item_asset_v1_0_0(
                 .map_err(|e| anyhow::anyhow!("invalid eo:bands: {e}"))
         });
 
-    let (raster_bands, eo_bands) = if missing_bands_handling {
-        handle_missing_bands(raster_bands, eo_bands, asset, asset_key)?
-    } else {
-        (raster_bands?, eo_bands?)
-    };
+    let (raster_bands, eo_bands) = (raster_bands?, eo_bands?);
+    let band_count = raster_bands.len();
 
-    if raster_bands.len() != eo_bands.len() {
+    if band_count != eo_bands.len() {
         anyhow::bail!("Skipping asset with mismatched raster:bands and eo:bands length",);
     }
 
-    // if multiple bands for asset, prefix band names with asset key
-    let prefix = if raster_bands.len() > 1 {
-        format!("{asset_key}_")
-    } else {
-        String::new()
-    };
+    let asset_title = asset
+        .title
+        .as_deref()
+        .ok_or(anyhow::anyhow!("Missing title in asset metadata"))?;
 
     for (raster_band, eo_band) in raster_bands.into_iter().zip(eo_bands.into_iter()) {
         let data_type = raster_band
@@ -2048,7 +2035,11 @@ fn scan_item_asset_v1_0_0(
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
         let resolution = geo_transform.x_pixel_size().into();
 
-        let band_name = format!("{}{}", prefix, eo_band.name);
+        let band_name = if band_count > 1 {
+            format!("{asset_title} [{}]", eo_band.name)
+        } else {
+            asset_title.to_string()
+        };
 
         dataset_bands
                 .entry(PartialDatasetKey {
@@ -2067,9 +2058,7 @@ fn scan_item_asset_v1_0_0(
 }
 
 fn scan_item_asset_v1_1_0(
-    asset_key: &str,
     asset: &stac::ItemAsset,
-    missing_bands_handling: bool,
 ) -> anyhow::Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
@@ -2087,11 +2076,7 @@ fn scan_item_asset_v1_1_0(
         .context(format!("Unsupported data_type: {}", data_type))?;
 
     // in STAC 1.1.0 `raster:bands` and `eo:bands` are merged into common metadata `bands`
-    let band_names = band_names_from_asset_fields_v1_1_0(
-        asset_key,
-        &asset.additional_fields,
-        missing_bands_handling,
-    )?;
+    let band_names = band_names_from_item_asset_v1_1_0(asset)?;
 
     let resolution = asset
         .additional_fields
@@ -2117,170 +2102,67 @@ fn scan_item_asset_v1_1_0(
     Ok(Some(dataset_bands))
 }
 
-fn band_names_from_asset_fields_v1_1_0(
-    asset_key: &str,
-    asset_fields: &serde_json::Map<String, serde_json::Value>,
-    missing_bands_handling: bool,
-) -> anyhow::Result<Vec<String>> {
-    let band_names = asset_fields
-        .get("bands")
-        .and_then(serde_json::Value::as_array);
+fn band_names_from_asset_v1_1_0(asset: &stac::Asset) -> anyhow::Result<Vec<String>> {
+    let asset_title = asset
+        .title
+        .as_deref()
+        .ok_or(anyhow::anyhow!("Missing title in asset metadata"))?;
 
-    if let Some(bands) = band_names {
-        if bands.is_empty() {
-            if missing_bands_handling {
-                // fallback, if asset has empty `bands`, assume single band asset and take asset key as band name
-                println!("[DEBUG] Asset has empty bands array, using asset key as band name");
-                return Ok(vec![asset_key.to_string()]);
-            }
-
-            anyhow::bail!("Asset has empty bands array");
-        }
-
-        let prefix = if bands.len() > 1 {
-            format!("{asset_key}_",)
-        } else {
-            String::new()
-        };
-
-        let mut names = Vec::new();
-        for band in bands {
-            let name =
-                band.get("name")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or(anyhow::anyhow!(
-                        "Band is missing name or name is not a string"
-                    ))?;
-            names.push(format!("{prefix}{name}"));
-        }
-        return Ok(names);
-    };
-
-    if missing_bands_handling {
-        // fallback, if `bands` is missing, assume single band asset and take asset key as band name
-        return Ok(vec![asset_key.to_string()]);
-    }
-
-    anyhow::bail!("Missing bands for asset");
-}
-
-fn band_names_from_asset_v1_1_0(
-    asset_key: &str,
-    asset: &stac::Asset,
-    missing_bands_handling: bool,
-) -> anyhow::Result<Vec<String>> {
     let bands = &asset.bands;
 
     if bands.is_empty() {
-        if missing_bands_handling {
-            // fallback, if asset has empty `bands`, assume single band asset and take asset key as band name
-            println!("[DEBUG] Asset has empty bands array, using asset key as band name");
-            return Ok(vec![asset_key.to_string()]);
-        }
-
-        anyhow::bail!("Asset has empty bands array");
+        return Ok(vec![asset_title.to_string()]);
     }
-
-    let prefix = if bands.len() > 1 {
-        format!("{asset_key}_",)
-    } else {
-        String::new()
-    };
 
     let mut names = Vec::new();
-    for band in bands {
-        if let Some(band_name) = &band.name {
-            names.push(format!("{}{}", prefix, band_name));
-        } else {
-            anyhow::bail!("[ERROR] Band is missing name");
-        }
+    if bands.len() == 1 {
+        names.push(asset_title.to_string());
+        return Ok(names);
     }
+
+    for band in bands {
+        let Some(band_name) = &band.name else {
+            anyhow::bail!("Band is missing name for multi-band asset");
+        };
+        names.push(format!("{asset_title} [{band_name}]"));
+    }
+
     Ok(names)
 }
 
-fn handle_missing_bands(
-    raster_bands_result: anyhow::Result<Vec<stac_extensions::raster::Band>>,
-    eo_bands_result: anyhow::Result<Vec<EoBand>>,
-    asset: &stac::ItemAsset,
-    asset_key: &str,
-) -> anyhow::Result<(Vec<stac_extensions::raster::Band>, Vec<EoBand>)> {
-    match (raster_bands_result, eo_bands_result) {
-        (Ok(raster_bands), Ok(eo_bands)) => Ok((raster_bands, eo_bands)),
-        (Err(_), Ok(eo_bands)) => {
-            let raster_bands =
-                handle_missing_raster_bands(asset, &eo_bands).with_context(|| {
-                    format!("Missing raster:bands and cannot create defaults for asset {asset_key}")
-                })?;
-            Ok((raster_bands, eo_bands))
-        }
-        (Ok(raster_bands), Err(_)) => {
-            let eo_bands =
-                handle_missing_eo_bands(asset_key, &raster_bands).with_context(|| {
-                    format!("Missing eo:bands and cannot create defaults for asset {asset_key}")
-                })?;
-            Ok((raster_bands, eo_bands))
-        }
-        (Err(_), Err(_)) => {
-            anyhow::bail!("Missing both raster:bands and eo:bands for asset {asset_key}")
-        }
-    }
-}
+fn band_names_from_item_asset_v1_1_0(asset: &stac::ItemAsset) -> anyhow::Result<Vec<String>> {
+    let asset_title = asset
+        .title
+        .as_deref()
+        .ok_or(anyhow::anyhow!("Missing title in asset metadata"))?;
 
-/// Handle missing raster:bands by creating defaults for visual assets
-/// Returns Ok(bands) if defaults can be created, Err otherwise
-fn handle_missing_raster_bands(
-    asset: &stac::ItemAsset,
-    eo_bands: &[EoBand],
-) -> anyhow::Result<Vec<stac_extensions::raster::Band>> {
-    // Check if asset has visual role by looking at additional_fields
-    let has_visual_role = asset.roles.iter().any(|r| r == "visual");
+    let band_names = asset
+        .additional_fields
+        .get("bands")
+        .and_then(serde_json::Value::as_array);
 
-    if !has_visual_role {
-        anyhow::bail!("Asset does not have visual role");
+    let Some(bands) = band_names else {
+        return Ok(vec![asset_title.to_string()]);
+    };
+
+    if bands.is_empty() {
+        return Ok(vec![asset_title.to_string()]);
     }
 
-    if eo_bands.len() != 3 {
-        anyhow::bail!(
-            "Asset has visual role but does not have exactly 3 eo:bands (found {})",
-            eo_bands.len()
-        );
+    if bands.len() == 1 {
+        return Ok(vec![asset_title.to_string()]);
     }
 
-    // Create 3 default U8 bands for visual assets (RGB)
-    Ok(vec![
-        stac_extensions::raster::Band {
-            data_type: Some(stac_extensions::raster::DataType::UInt8),
-            ..Default::default()
-        },
-        stac_extensions::raster::Band {
-            data_type: Some(stac_extensions::raster::DataType::UInt8),
-            ..Default::default()
-        },
-        stac_extensions::raster::Band {
-            data_type: Some(stac_extensions::raster::DataType::UInt8),
-            ..Default::default()
-        },
-    ])
-}
-
-/// Handle missing eo:bands by creating defaults based on the number of raster bands
-/// Returns Ok(bands) if defaults can be created, Err otherwise
-fn handle_missing_eo_bands(
-    asset_key: &str,
-    raster_bands: &[stac_extensions::raster::Band],
-) -> anyhow::Result<Vec<EoBand>> {
-    match raster_bands.len() {
-        1 => {
-            // Use asset key as band name for single-band assets without eo:bands
-            Ok(vec![EoBand {
-                name: asset_key.to_string(),
-            }])
-        }
-        _ => anyhow::bail!(
-            "Cannot create default eo:bands for {} raster bands",
-            raster_bands.len()
-        ),
+    let mut names = Vec::new();
+    for band in bands {
+        let band_name = band
+            .get("name")
+            .and_then(serde_json::Value::as_str)
+            .ok_or(anyhow::anyhow!("Band is missing name for multi-band asset"))?;
+        names.push(format!("{asset_title} [{band_name}]"));
     }
+
+    Ok(names)
 }
 
 fn geo_transform_from_fields(
@@ -2477,11 +2359,49 @@ fn parse_stac_extension_versions(extensions: &[String]) -> anyhow::Result<StacEx
     })
 }
 
+fn infer_collection_extension_versions(
+    collection: &stac::Collection,
+) -> anyhow::Result<StacExtensionVersions> {
+    if collection.version != stac::Version::v1_0_0 {
+        anyhow::bail!(
+            "Cannot infer extension versions for STAC {}",
+            collection.version
+        );
+    }
+
+    let has_projection = collection.item_assets.values().any(|asset| {
+        asset.additional_fields.contains_key("proj:transform")
+            || asset.additional_fields.contains_key("proj:shape")
+            || asset.additional_fields.contains_key("proj:epsg")
+    });
+    let has_raster = collection
+        .item_assets
+        .values()
+        .any(|asset| asset.additional_fields.contains_key("raster:bands"));
+    let has_eo = collection
+        .item_assets
+        .values()
+        .any(|asset| asset.additional_fields.contains_key("eo:bands"));
+
+    Ok(StacExtensionVersions {
+        projection: has_projection
+            .then_some(StacExtensionMajorVersion::V1)
+            .ok_or(anyhow::anyhow!("Missing projection extension"))?,
+        raster: has_raster
+            .then_some(StacExtensionMajorVersion::V1)
+            .ok_or(anyhow::anyhow!("Missing raster extension"))?,
+        eo: has_eo
+            .then_some(StacExtensionMajorVersion::V1)
+            .ok_or(anyhow::anyhow!("Missing eo extension"))?,
+    })
+}
+
 impl TryFrom<&stac::Collection> for StacExtensionVersions {
     type Error = anyhow::Error;
 
     fn try_from(collection: &stac::Collection) -> Result<Self, Self::Error> {
         parse_stac_extension_versions(&collection.extensions)
+            .or_else(|_| infer_collection_extension_versions(collection))
     }
 }
 
@@ -2550,5 +2470,19 @@ mod tests {
         assert_eq!(versions.projection, StacExtensionMajorVersion::V2);
         assert_eq!(versions.raster, StacExtensionMajorVersion::V2);
         assert_eq!(versions.eo, StacExtensionMajorVersion::V2);
+    }
+
+    #[test]
+    fn it_infers_missing_collection_projection_extension_for_v1() {
+        let collection_json =
+            include_str!("../../../test_data/stac_responses/collections/element84.json");
+        let collection: stac::Collection =
+            serde_json::from_str(collection_json).expect("collection fixture should parse");
+
+        let versions = StacExtensionVersions::try_from(&collection).expect("versions should parse");
+
+        assert_eq!(versions.projection, StacExtensionMajorVersion::V1);
+        assert_eq!(versions.raster, StacExtensionMajorVersion::V1);
+        assert_eq!(versions.eo, StacExtensionMajorVersion::V1);
     }
 }
