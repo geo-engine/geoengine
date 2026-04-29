@@ -50,6 +50,7 @@ use snafu::{ResultExt, ensure};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::Path;
+use std::time::Instant;
 use tracing::{debug, trace};
 
 mod error;
@@ -463,6 +464,7 @@ where
             }
         };
 
+        let loading_info_start = Instant::now();
         let loading_info = self
             .meta_data
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
@@ -471,6 +473,8 @@ where
                 true,
             ))
             .await?;
+        let loading_info_ms = loading_info_start.elapsed().as_millis();
+        debug!(loading_info_ms, "loading_info timing");
 
         let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes().clone().as_vec();
