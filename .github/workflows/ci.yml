@@ -161,11 +161,13 @@ jobs:
         uses: Swatinem/rust-cache@v2
         with:
           prefix-key: "cache-rust"
-          shared-key: "python"
+          # re-use cache of build job, since it both calls `cargo build` in debug mode
+          shared-key: "build"
           add-job-id-key: false
           env-vars: ""
           workspaces: "geoengine"
-          save-if: ${{ github.ref == 'refs/heads/main' }}
+          # build job already saves the cache, so we can skip saving here
+          save-if: false
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
