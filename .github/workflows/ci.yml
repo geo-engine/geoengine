@@ -42,7 +42,6 @@ jobs:
       - name: Init rustup toolchain
         # initialize based on the toolchain file
         run: rustup toolchain install
-        working-directory: geoengine
       - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -77,7 +76,6 @@ jobs:
       - name: Init rustup toolchain
         # initialize based on the toolchain file
         run: rustup toolchain install
-        working-directory: geoengine
       - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -112,7 +110,6 @@ jobs:
       - name: Init rustup toolchain
         # initialize based on the toolchain file
         run: rustup toolchain install
-        working-directory: geoengine
       - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -157,7 +154,6 @@ jobs:
       - name: Init rustup toolchain
         # initialize based on the toolchain file
         run: rustup toolchain install
-        working-directory: geoengine
       - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
