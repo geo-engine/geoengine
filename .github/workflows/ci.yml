@@ -39,6 +39,10 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
+      - name: Init rustup toolchain
+        # initialize based on the toolchain file
+        run: rustup toolchain install
+        working-directory: geoengine
       - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -71,8 +75,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
       - name: Init rustup toolchain
-        # somehow rustup show will take care to initialize the version based on the toolchain file
-        run: rustup show
+        # initialize based on the toolchain file
+        run: rustup toolchain install
+        working-directory: geoengine
       - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -105,8 +110,9 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v6
       - name: Init rustup toolchain
-        # somehow rustup show will take care to initialize the version based on the toolchain file
-        run: rustup show
+        # initialize based on the toolchain file
+        run: rustup toolchain install
+        working-directory: geoengine
       - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
@@ -148,6 +154,10 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+      - name: Init rustup toolchain
+        # initialize based on the toolchain file
+        run: rustup toolchain install
+        working-directory: geoengine
       - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
