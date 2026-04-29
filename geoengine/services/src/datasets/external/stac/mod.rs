@@ -630,7 +630,7 @@ impl
             ("limit".to_owned(), "100".to_owned()),
             (
                 "fields".to_owned(),
-                "stac_version,properties.datetime,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform".to_owned(),
+                "stac_version,properties.datetime,properties.updated,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform".to_owned(),
             ),
         ];
 
@@ -686,6 +686,14 @@ impl
                 let Some(item_datetime) = item.properties.datetime else {
                     continue;
                 };
+
+                let z_index = item
+                    .properties
+                    .updated
+                    .as_deref()
+                    .and_then(|updated| chrono::DateTime::parse_from_rfc3339(updated).ok())
+                    .map(|updated| updated.timestamp_millis())
+                    .unwrap_or_else(|| item_datetime.timestamp_millis());
 
                 let time_start = TimeInstance::from_millis(item_datetime.timestamp_millis())
                     .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
@@ -755,7 +763,7 @@ impl
                             time,
                             spatial_partition,
                             band: *dataset_band_idx,
-                            z_index: 0, // TODO: compute z-index
+                            z_index,
                             params: GdalDatasetParameters {
                                 file_path: file_path.clone(),
                                 rasterband_channel: asset_band_idx + 1,

@@ -4,6 +4,7 @@ use geoengine_api_client::apis::configuration::Configuration;
 use geoengine_api_client::models;
 use geoengine_datatypes::operations::image::{Colorizer, RasterColorizer, RgbaColor};
 use serde_json::Value;
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::env;
 use std::fs::{self, File};
 use std::io::Write;
@@ -18,7 +19,8 @@ const CRS: &str = "EPSG:32632";
 const TIME: &str = "2026-01-03T00:00:00.000Z";
 const IMAGE_WIDTH: i32 = 1830;
 const IMAGE_HEIGHT: i32 = 1830;
-
+const IMPORT_BBOX: &str = "7.560547850100084 50.45526533913283 9.140457957690465 51.45116832125808";
+const DEFAULT_SERVER_RUST_LOG: &str = "debug";
 #[derive(Debug, Clone)]
 struct Config {
     runs: u32,
@@ -40,9 +42,9 @@ struct BenchRecord {
     run: u32,
     scenario: &'static str,
     import_ms: u128,
-    setup_ms: u128,
+    workflow_registration_ms: u128,
+    loading_info_ms: u128,
     wms_ms: u128,
-    total_ms: u128,
     http_status: u16,
 }
 
@@ -57,13 +59,14 @@ impl ServerHandle {
         let stderr = stdout
             .try_clone()
             .context("cloning server log file handle")?;
+        let rust_log = env::var("RUST_LOG").unwrap_or_else(|_| DEFAULT_SERVER_RUST_LOG.to_owned());
 
         let child = Command::new("cargo")
             .arg("run")
             .arg("--release")
             .arg("--bin")
             .arg("geoengine-server")
-            .env("RUST_LOG", "info")
+            .env("RUST_LOG", rust_log)
             .current_dir(root_dir)
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr))
@@ -114,6 +117,35 @@ impl Drop for ServerHandle {
     }
 }
 
+fn ensure_release_cli_binary(root_dir: &Path) -> Result<()> {
+    let cli_binary = release_binary(root_dir, "geoengine-cli");
+
+    if cli_binary.exists() {
+        return Ok(());
+    }
+
+    let status = Command::new("cargo")
+        .arg("run")
+        .arg("--release")
+        .arg("--bin")
+        .arg("geoengine-cli")
+        .arg("--")
+        .arg("--help")
+        .current_dir(root_dir)
+        .status()
+        .context("building geoengine-cli release binary")?;
+
+    if !status.success() {
+        bail!("building geoengine-cli release binary failed with status {status}");
+    }
+
+    Ok(())
+}
+
+fn release_binary(root_dir: &Path, name: &str) -> PathBuf {
+    root_dir.join("target").join("release").join(name)
+}
+
 #[tokio::main]
 async fn main() -> Result<()> {
     let config = Config::from_env()?;
@@ -129,8 +161,13 @@ async fn main() -> Result<()> {
         File::create(&csv_file).with_context(|| format!("creating {}", csv_file.display()))?;
     writeln!(
         csv_writer,
-        "run,scenario,import_ms,setup_ms,wms_ms,total_ms,http_status"
+        "run,scenario,import_ms,workflow_registration_ms,wms_ms,loading_info_ms,http_status"
     )?;
+
+    let gdal_access_file = config.out_dir.join("gdal_file_accesses.csv");
+    let mut gdal_access_writer = File::create(&gdal_access_file)
+        .with_context(|| format!("creating {}", gdal_access_file.display()))?;
+    writeln!(gdal_access_writer, "run,scenario,file_path,access_count")?;
 
     println!("Running benchmark with RUNS={}", config.runs);
     println!("Output directory: {}", config.out_dir.display());
@@ -141,6 +178,12 @@ async fn main() -> Result<()> {
         println!("\n=== Run {run}/{}: harvesting scenario ===", config.runs);
         let harvest = run_harvest_benchmark(run, &config, &root_dir, &log_dir, &png_dir).await?;
         write_record(&mut csv_writer, &harvest)?;
+        write_gdal_access_records(
+            &mut gdal_access_writer,
+            run,
+            "harvest",
+            &log_dir.join(format!("server_{}_harvest.log", run)),
+        )?;
         records.push(harvest);
 
         println!(
@@ -149,12 +192,28 @@ async fn main() -> Result<()> {
         );
         let provider = run_provider_benchmark(run, &config, &root_dir, &log_dir, &png_dir).await?;
         write_record(&mut csv_writer, &provider)?;
+        write_gdal_access_records(
+            &mut gdal_access_writer,
+            run,
+            "provider",
+            &log_dir.join(format!("server_{}_provider.log", run)),
+        )?;
         records.push(provider);
     }
 
     csv_writer.flush()?;
+    gdal_access_writer.flush()?;
 
     println!("\nBenchmark results: {}", csv_file.display());
+    println!("GDAL file access report: {}", gdal_access_file.display());
+
+    let comparison_file = config.out_dir.join("gdal_file_comparison.csv");
+    generate_gdal_file_comparison(&gdal_access_file, &comparison_file)?;
+    println!(
+        "GDAL file comparison (pivot): {}",
+        comparison_file.display()
+    );
+
     print_summary(&records);
 
     Ok(())
@@ -176,13 +235,16 @@ async fn run_harvest_benchmark(
     let token = anonymous_token(&api).await?;
     api.bearer_access_token = Some(token.to_string());
 
+    // Keep one-time CLI release compilation out of measured import time.
+    ensure_release_cli_binary(root_dir)?;
+
     let import_start = Instant::now();
     run_stac_import(config, root_dir)?;
     let import_ms = import_start.elapsed().as_millis();
 
-    let setup_start = Instant::now();
+    let workflow_registration_start = Instant::now();
     let workflow_id = register_harvest_workflow(&api).await?;
-    let setup_ms = setup_start.elapsed().as_millis();
+    let workflow_registration_ms = workflow_registration_start.elapsed().as_millis();
 
     let style = build_wms_style(8, 1051.0, 16015.0)?;
 
@@ -223,14 +285,15 @@ async fn run_harvest_benchmark(
     fs::write(png_dir.join(format!("harvest_run_{}.png", run)), png_bytes)
         .context("writing harvest PNG")?;
     let wms_ms = wms_start.elapsed().as_millis();
+    let loading_info_ms = wait_for_loading_info_ms(&log_file).await?;
 
     Ok(BenchRecord {
         run,
         scenario: "harvest",
         import_ms,
-        setup_ms,
+        workflow_registration_ms,
+        loading_info_ms,
         wms_ms,
-        total_ms: import_ms + setup_ms + wms_ms,
         http_status: status.as_u16(),
     })
 }
@@ -251,7 +314,7 @@ async fn run_provider_benchmark(
     let token = anonymous_token(&api).await?;
     api.bearer_access_token = Some(token.to_string());
 
-    let setup_start = Instant::now();
+    let workflow_registration_start = Instant::now();
 
     let provider_definition = build_provider_definition(config, root_dir)?;
     let provider_id = register_stac_provider_fallback(&api, provider_definition).await?;
@@ -264,7 +327,7 @@ async fn run_provider_benchmark(
 
     trigger_workflow_metadata_fallback(&api, workflow_id).await?;
 
-    let setup_ms = setup_start.elapsed().as_millis();
+    let workflow_registration_ms = workflow_registration_start.elapsed().as_millis();
 
     let style = build_wms_style(9, 1051.0, 16015.0)?;
 
@@ -305,16 +368,99 @@ async fn run_provider_benchmark(
     fs::write(png_dir.join(format!("provider_run_{}.png", run)), png_bytes)
         .context("writing provider PNG")?;
     let wms_ms = wms_start.elapsed().as_millis();
+    let loading_info_ms = wait_for_loading_info_ms(&log_file).await?;
 
     Ok(BenchRecord {
         run,
         scenario: "provider",
         import_ms: 0,
-        setup_ms,
+        workflow_registration_ms,
+        loading_info_ms,
         wms_ms,
-        total_ms: setup_ms + wms_ms,
         http_status: status.as_u16(),
     })
+}
+
+async fn wait_for_loading_info_ms(log_file: &Path) -> Result<u128> {
+    for _ in 0..20 {
+        if let Some(ms) = extract_latest_loading_info_ms(log_file)? {
+            return Ok(ms);
+        }
+
+        sleep(Duration::from_millis(100)).await;
+    }
+
+    eprintln!(
+        "warning: could not find loading_info_ms marker in {}; using 0",
+        log_file.display()
+    );
+    Ok(0)
+}
+
+fn extract_latest_loading_info_ms(log_file: &Path) -> Result<Option<u128>> {
+    let log_text =
+        fs::read_to_string(log_file).with_context(|| format!("reading {}", log_file.display()))?;
+
+    for line in log_text.lines().rev() {
+        let clean_line = strip_ansi_escape_sequences(line);
+
+        let rest = if let Some((_, rest)) = clean_line.split_once("loading_info_ms=") {
+            rest
+        } else if let Some((_, rest)) = clean_line.split_once("loading_info_ms:") {
+            rest
+        } else if let Some((_, rest)) = clean_line.split_once("loading_info_ms") {
+            rest
+        } else {
+            continue;
+        };
+
+        let digits: String = rest
+            .chars()
+            .skip_while(|c| !c.is_ascii_digit())
+            .take_while(|c| c.is_ascii_digit())
+            .collect();
+
+        if digits.is_empty() {
+            continue;
+        }
+
+        let ms = digits.parse::<u128>().with_context(|| {
+            format!(
+                "parsing loading_info_ms marker '{digits}' in {}",
+                log_file.display()
+            )
+        })?;
+
+        return Ok(Some(ms));
+    }
+
+    Ok(None)
+}
+
+fn strip_ansi_escape_sequences(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut i = 0;
+
+    while i < bytes.len() {
+        if bytes[i] == 0x1B && i + 1 < bytes.len() && bytes[i + 1] == b'[' {
+            i += 2;
+            while i < bytes.len() {
+                let b = bytes[i];
+                if (0x40..=0x7E).contains(&b) {
+                    i += 1;
+                    break;
+                }
+                i += 1;
+            }
+            continue;
+        }
+
+        out.push(bytes[i] as char);
+        i += 1;
+    }
+
+    out
 }
 
 async fn trigger_workflow_metadata_fallback(api: &Configuration, workflow_id: Uuid) -> Result<()> {
@@ -406,11 +552,9 @@ fn build_wms_style(band: u32, min: f64, max: f64) -> Result<String> {
 }
 
 fn run_stac_import(config: &Config, root_dir: &Path) -> Result<()> {
-    let status = Command::new("cargo")
-        .arg("run")
-        .arg("--release")
-        .arg("--bin")
-        .arg("geoengine-cli")
+    let cli_binary = release_binary(root_dir, "geoengine-cli");
+
+    let status = Command::new(&cli_binary)
         .arg("stac-import")
         .arg("--missing-bands-handling")
         .arg("--limit")
@@ -432,7 +576,7 @@ fn run_stac_import(config: &Config, root_dir: &Path) -> Result<()> {
         .arg(&config.stac_s3_secret_key)
         .current_dir(root_dir)
         .status()
-        .context("running geoengine-cli stac-import")?;
+        .with_context(|| format!("running {} stac-import", cli_binary.display()))?;
 
     if !status.success() {
         bail!("stac-import failed with status {status}");
@@ -522,12 +666,57 @@ fn write_record(writer: &mut File, record: &BenchRecord) -> Result<()> {
         record.run,
         record.scenario,
         record.import_ms,
-        record.setup_ms,
+        record.workflow_registration_ms,
         record.wms_ms,
-        record.total_ms,
+        record.loading_info_ms,
         record.http_status
     )
     .context("writing CSV row")
+}
+
+fn write_gdal_access_records(
+    writer: &mut File,
+    run: u32,
+    scenario: &str,
+    log_file: &Path,
+) -> Result<()> {
+    let access_counts = collect_gdal_file_access_counts(log_file)?;
+
+    for (file_path, count) in access_counts {
+        writeln!(writer, "{run},{scenario},{file_path},{count}")
+            .context("writing GDAL access row")?;
+    }
+
+    Ok(())
+}
+
+fn collect_gdal_file_access_counts(log_file: &Path) -> Result<BTreeMap<String, u32>> {
+    let log_text =
+        fs::read_to_string(log_file).with_context(|| format!("reading {}", log_file.display()))?;
+    let mut counts: BTreeMap<String, u32> = BTreeMap::new();
+
+    for line in log_text.lines() {
+        let clean_line = strip_ansi_escape_sequences(line);
+        let Some((_, rest)) = clean_line.split_once("Loading raster tile from file:") else {
+            continue;
+        };
+
+        let mut path = rest.trim();
+        if let Some(stripped) = path.strip_prefix('"') {
+            path = stripped;
+        }
+        if let Some(stripped) = path.strip_suffix('"') {
+            path = stripped;
+        }
+
+        if path.is_empty() {
+            continue;
+        }
+
+        *counts.entry(path.to_owned()).or_insert(0) += 1;
+    }
+
+    Ok(counts)
 }
 
 fn print_summary(records: &[BenchRecord]) {
@@ -535,9 +724,9 @@ fn print_summary(records: &[BenchRecord]) {
     struct Agg {
         count: u32,
         import_ms: u128,
-        setup_ms: u128,
+        workflow_registration_ms: u128,
+        loading_info_ms: u128,
         wms_ms: u128,
-        total_ms: u128,
     }
 
     let mut harvest = Agg::default();
@@ -552,9 +741,9 @@ fn print_summary(records: &[BenchRecord]) {
 
         agg.count += 1;
         agg.import_ms += record.import_ms;
-        agg.setup_ms += record.setup_ms;
+        agg.workflow_registration_ms += record.workflow_registration_ms;
+        agg.loading_info_ms += record.loading_info_ms;
         agg.wms_ms += record.wms_ms;
-        agg.total_ms += record.total_ms;
     }
 
     for (name, agg) in [("harvest", harvest), ("provider", provider)] {
@@ -564,14 +753,83 @@ fn print_summary(records: &[BenchRecord]) {
 
         let count = f64::from(agg.count);
         println!(
-            "{name}: runs={} avg_import_ms={:.2} avg_setup_ms={:.2} avg_wms_ms={:.2} total_ms={:.2}",
+            "{name}: runs={} avg_import_ms={:.2} avg_workflow_registration_ms={:.2} avg_wms_ms={:.2} avg_loading_info_ms={:.2}",
             agg.count,
             agg.import_ms as f64 / count,
-            agg.setup_ms as f64 / count,
+            agg.workflow_registration_ms as f64 / count,
             agg.wms_ms as f64 / count,
-            agg.total_ms as f64 / count
+            agg.loading_info_ms as f64 / count
         );
     }
+}
+
+fn generate_gdal_file_comparison(input_file: &Path, output_file: &Path) -> Result<()> {
+    // Read the gdal_file_accesses.csv file
+    let content = fs::read_to_string(input_file)
+        .with_context(|| format!("reading {}", input_file.display()))?;
+
+    // Parse the CSV and organize by file_path and scenario
+    let mut data: HashMap<String, HashMap<String, u32>> = HashMap::new();
+
+    for line in content.lines().skip(1) {
+        let parts: Vec<&str> = line.split(',').collect();
+        if parts.len() != 4 {
+            continue;
+        }
+
+        let scenario = parts[1];
+        let file_path = parts[2];
+        let access_count = parts[3].parse::<u32>().unwrap_or(0);
+
+        data.entry(file_path.to_owned())
+            .or_insert_with(HashMap::new)
+            .insert(scenario.to_owned(), access_count);
+    }
+
+    // Collect all scenarios
+    let mut scenarios: HashSet<String> = HashSet::new();
+    for file_data in data.values() {
+        for scenario in file_data.keys() {
+            scenarios.insert(scenario.clone());
+        }
+    }
+
+    let mut scenarios: Vec<String> = scenarios.into_iter().collect();
+    scenarios.sort();
+
+    // Create output CSV
+    let mut output =
+        File::create(output_file).with_context(|| format!("creating {}", output_file.display()))?;
+
+    // Write header
+    write!(output, "file_path")?;
+    for scenario in &scenarios {
+        write!(output, ",{}", scenario)?;
+    }
+    writeln!(output)?;
+
+    // Write data rows (sorted by file_path)
+    let mut file_paths: Vec<String> = data.keys().cloned().collect();
+    file_paths.sort();
+
+    for file_path in file_paths {
+        write!(output, "{}", file_path)?;
+        if let Some(file_data) = data.get(&file_path) {
+            for scenario in &scenarios {
+                let count = file_data.get(scenario).copied().unwrap_or(0);
+                write!(output, ",{}", count)?;
+            }
+        } else {
+            for _ in &scenarios {
+                write!(output, ",")?;
+            }
+        }
+        writeln!(output)?;
+    }
+
+    output.flush()?;
+
+    Ok(())
 }
 
 fn workspace_root() -> PathBuf {
@@ -601,7 +859,7 @@ impl Config {
         let import_limit = env_or_default("IMPORT_LIMIT", "100")?
             .parse::<u32>()
             .context("parsing IMPORT_LIMIT")?;
-        let import_bbox = env_or_default("IMPORT_BBOX", "8.766 50.802 8.767 50.803")?;
+        let import_bbox = env_or_default("IMPORT_BBOX", IMPORT_BBOX)?;
         let import_time_start = env_or_default("IMPORT_TIME_START", "2026-01-01T00:00:00Z")?;
         let import_time_end = env_or_default("IMPORT_TIME_END", "2026-01-31T23:59:59Z")?;
 
