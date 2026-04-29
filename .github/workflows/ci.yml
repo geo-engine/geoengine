@@ -39,19 +39,14 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
-      # TODO: Get Cache back
-      # - name: setup rust build cache
-      #   uses: Swatinem/rust-cache@v2
-      #   with:
-      #     # An explicit cache key that is used instead of the automatic `job`-based
-      #     # cache key and is thus stable across jobs.
-      #     # Default: empty
-      #     shared-key: ""
-
-      #     # An additional cache key that is added alongside the automatic `job`-based
-      #     # cache key and can be used to further differentiate jobs.
-      #     # Default: empty
-      #     key: ci_test_
+      - name: Setup Rust Build Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "cache-rust"
+          shared-key: "test"
+          add-job-id-key: false
+          env-vars: ""
+          workspaces: "geoengine"
       - name: Testsuite
         uses: ./.github/actions/test
       - id: upload-coverage-artifact
@@ -78,18 +73,14 @@ jobs:
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
-      - name: setup rust build cache
+      - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
-          # An explicit cache key that is used instead of the automatic `job`-based
-          # cache key and is thus stable across jobs.
-          # Default: empty
-          shared-key: ""
-
-          # An additional cache key that is added alongside the automatic `job`-based
-          # cache key and can be used to further differentiate jobs.
-          # Default: empty
-          key: ci_test_
+          prefix-key: "cache-rust"
+          shared-key: "lint"
+          add-job-id-key: false
+          env-vars: ""
+          workspaces: "geoengine"
       - name: Rustfmt
         run: just backend lint-rustfmt
       - name: Clippy
@@ -116,18 +107,14 @@ jobs:
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
-      - name: setup rust build cache
+      - name: Setup Rust Build Cache
         uses: Swatinem/rust-cache@v2
         with:
-          # An explicit cache key that is used instead of the automatic `job`-based
-          # cache key and is thus stable across jobs.
-          # Default: empty
-          shared-key: ""
-
-          # An additional cache key that is added alongside the automatic `job`-based
-          # cache key and can be used to further differentiate jobs.
-          # Default: empty
-          key: ci_test_${{ matrix.build }}
+          prefix-key: "cache-rust"
+          shared-key: "build${{ matrix.build }}"
+          add-job-id-key: false
+          env-vars: ""
+          workspaces: "geoengine"
       - name: Build
         run: just backend build "${{ matrix.build }}"
   
@@ -161,6 +148,14 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+      - name: Setup Rust Build Cache
+        uses: Swatinem/rust-cache@v2
+        with:
+          prefix-key: "cache-rust"
+          shared-key: "python"
+          add-job-id-key: false
+          env-vars: ""
+          workspaces: "geoengine"
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -187,14 +182,14 @@ jobs:
       - name: Tests
         run: >
           just python test
-          --build-type=release
+          --build-type=debug
           ${{ matrix.coverage && '--coverage' || '' }}
       - name: Example dependencies
         run: just python install-dependencies "examples" "${{ matrix.module-resolution }}"
       - name: Examples
         run: >
           just python run-examples
-          --build-type=release
+          --build-type=debug
           ${{ matrix.coverage && '--coverage' || '' }}
       - id: upload-coverage-artifact
         if: ${{ matrix.coverage }}
