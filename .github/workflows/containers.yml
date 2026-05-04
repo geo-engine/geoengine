@@ -1,9 +1,10 @@
 name: Create containers
 
 on:
-  # run every night
-  schedule:
-    - cron: "0 22 * * *"
+  # run on push of a new tag that matches the pattern `v*.*.*` (e.g., v1.2.3)
+  push:
+    tags:
+      - 'v*.*.*'
 
   # schedule manually
   workflow_dispatch:
@@ -14,7 +15,7 @@ on:
       tag_name:
         description: "Tag name for the container"
         required: true
-        default: "nightly"
+        default: "latest"
 
       container_repository_branch:
         description: "Branch of the container repository"
@@ -31,7 +32,7 @@ jobs:
       contents: read
 
     env:
-      TAG_NAME: nightly
+      TAG_NAME: latest
       CONTAINER_REPOSITORY_BRANCH: main
       CONTAINER_NAME: geoengine
 
@@ -67,6 +68,8 @@ jobs:
           large-packages: true
           docker-images: true
           swap-storage: true
+
+      - uses: extractions/setup-just@v4
 
       - name: Checkout code
         uses: actions/checkout@v6
@@ -105,47 +108,29 @@ jobs:
           podman stop $POD_ID
 
       - name: Push image to quay.io
+        if: env.TAG_NAME != 'latest'
         run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
 
-      - name: Push nightly with date
-        if: env.TAG_NAME == 'nightly'
-        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}-$(date +'%Y-%m-%d')
+      - name: Push latest with version number to quay.io
+        if: env.TAG_NAME == 'latest'
+        working-directory: geoengine
+        run: |
+          if `just repo is-container-already-published geoengine $(just repo::print-version-number)`; then
+            echo "Version is already published, skipping publish step."
+            exit 0
+          fi
 
-  notify-slack-on-backend-failure:
-    name: Post to a Slack channel in case of failure
-    needs: create-backend-container
-    if: always()
+          podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
+          podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:`just repo print-version-tag`
 
-    runs-on: ubuntu-24.04
-
-    permissions:
-      contents: read
-
-    steps:
-      - name: Post to a Slack channel
-        if: ${{ needs.create-backend-container.result == 'failure' }}
-        id: slack
-        uses: slackapi/slack-github-action@v1.23.0
-        with:
-          channel-id: "geoengine-dev-core"
-          slack-message: "⚠️ The workflow ${{ github.workflow }} in the repository ${{ github.event.repository.name }} FAILED!"
-        env:
-          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
-  
   create-ui-container:
     if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
 
     strategy:
       matrix:
         app: 
-          - {project: gis}
-          - {project: gfbio}
-          - {project: data-atlas}
-          - {project: nfdi-portal-demo}
-          - {project: ebv-analyzer}
-          - {project: ecometrics}
-          - {project: esg-indicator-service}
-          - {project: manager}
+          - {project: gis, name: gis}
+          - {project: gfbio, name: vat}
 
     runs-on: ubuntu-24.04
 
@@ -153,30 +138,30 @@ jobs:
       contents: read
 
     env:
-      TAG_NAME: nightly
-      FULL_TAG_NAME: nightly
+      TAG_NAME: latest
       CONTAINER_REPOSITORY_BRANCH: main
       BUILD_TAG: gis
 
     steps:
       - name: Modify TAG_NAME if on `tag_name` is set on `workflow_dispatch`
         if: github.event.inputs.tag_name != ''
-        run: echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
+        run: |
+          echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
       
       - name: Modify CONTAINER_REPOSITORY_BRANCH if on `container_repository_branch` is set on `workflow_dispatch`
         if: github.event.inputs.container_repository_branch != ''
         run: |
           echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
 
-      - name: Set `FULL_TAG_NAME` wrt. apps
+      - name: Set `BUILD_TAG` wrt. apps
         run: |
-          echo "FULL_TAG_NAME=${{matrix.app.project}}-${{env.TAG_NAME}}" >> $GITHUB_ENV
           echo "BUILD_TAG=${{matrix.app.project}}" >> $GITHUB_ENV
 
       - name: Modify `BUILD_TAG` if dashboard
         if: env.BUILD_TAG != 'gis' && env.BUILD_TAG != 'manager'
         run: echo "BUILD_TAG=dashboards/${{env.BUILD_TAG}}" >> $GITHUB_ENV
     
+      - uses: extractions/setup-just@v4
 
       - name: Checkout code
         uses: actions/checkout@v6
@@ -198,22 +183,34 @@ jobs:
       - name: Build with podman
         run: |
           podman build \
-            --tag "geoengine-ui:${{env.FULL_TAG_NAME}}" \
+            --tag "${{matrix.app.name}}:${{env.TAG_NAME}}" \
             --build-arg GEOENGINE_UI_PROJECT="${{env.BUILD_TAG}}" \
             -f container/geoengine-ui/Dockerfile \
             .
 
       - name: Push image to quay.io
-        run: podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}
+        if: env.TAG_NAME != 'latest'
+        run: podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:${{env.TAG_NAME}}
 
-      - name: Push nightly with date
-        if: env.TAG_NAME == 'nightly'
-        run: podman push geoengine-ui:${{env.FULL_TAG_NAME}} quay.io/geoengine/geoengine-ui:${{env.FULL_TAG_NAME}}-$(date +'%Y-%m-%d')
-  
-  notify-slack-on-ui-failure:
+      - name: Push latest with version number to quay.io
+        if: env.TAG_NAME == 'latest'
+        working-directory: geoengine
+        run: |
+          if `just repo is-container-already-published ${{matrix.app.name}} $(just repo::print-version-number)`; then
+            echo "Version is already published, skipping publish step."
+            exit 0
+          fi
+
+          podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:${{env.TAG_NAME}}
+          podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:`just repo print-version-tag`
+
+  notify-slack-on-failure:
     name: Post to a Slack channel in case of failure
-    needs: create-ui-container
+    needs:
+      - create-backend-container
+      - create-ui-container
     if: always()
+
     runs-on: ubuntu-24.04
 
     permissions:
@@ -221,7 +218,7 @@ jobs:
 
     steps:
       - name: Post to a Slack channel
-        if: ${{ needs.create-ui-container.result == 'failure' }}
+        if: ${{ needs.create-backend-container.result == 'failure' || needs.create-ui-container.result == 'failure' }}
         id: slack
         uses: slackapi/slack-github-action@v1.23.0
         with:

@@ -3,6 +3,9 @@ name: CI
 on:
   pull_request:
   merge_group:
+  push:
+    branches:
+      - main # For generating code coverage on main branch
   # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
@@ -16,6 +19,9 @@ jobs:
   geoengine-test:
     name: "geoengine / test"
     runs-on: ubuntu-24.04
+
+    outputs:
+      coverage-artifact-id: ${{ steps.upload-coverage-artifact.outputs.artifact-id }}
 
     permissions:
       contents: read
@@ -48,15 +54,14 @@ jobs:
       #     key: ci_test_
       - name: Testsuite
         uses: ./.github/actions/test
-      - name: Adjust lcov.info
-        # The lcov file is generated in the container and contains absolute paths, so we need to adjust them.
-        run: sed -i 's|/github/workspace/||g' geoengine/lcov.info
-      - name: Upload coverage to Coveralls
-        uses: coverallsapp/github-action@v2
+      - id: upload-coverage-artifact
+        uses: actions/upload-artifact@v7
         with:
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          file: geoengine/lcov.info
-          fail-on-error: false # do not fail the workflow if the upload fails
+          name: lcov-report-backend-${{ github.run_id }}-${{ github.run_attempt }}
+          path: geoengine/lcov.info
+          compression-level: 9
+          retention-days: 3
+          if-no-files-found: error
 
   geoengine-lint:
     name: "geoengine / lint"
@@ -70,7 +75,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
@@ -109,7 +113,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Init rustup toolchain
         # somehow rustup show will take care to initialize the version based on the toolchain file
         run: rustup show
@@ -135,6 +138,9 @@ jobs:
     permissions:
       contents: read
 
+    outputs:
+      coverage-artifact-id: ${{ steps.upload-coverage-artifact.outputs.artifact-id }}
+
     strategy:
       fail-fast: false
       matrix:
@@ -155,7 +161,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v6
         with:
@@ -191,18 +196,15 @@ jobs:
           just python run-examples
           --build-type=release
           ${{ matrix.coverage && '--coverage' || '' }}
-      - name: Report coverage to Coveralls
+      - id: upload-coverage-artifact
         if: ${{ matrix.coverage }}
-        # 1. We need to adjust the paths in the lcov file to match the repository structure.
-        # 2. We need to download the coveralls script and upload the report.
-        run: |
-          sed -i 's|SF:geoengine/|SF:|' ../coverage.lcov
-          curl -sL https://coveralls.io/coveralls-linux.tar.gz | tar -xz
-          ./coveralls report ../coverage.lcov
-        # If we don't run it in the code folder, the paths in the report will prefixed with `library/geoengine/`.
-        working-directory: python/geoengine
-        env:
-          COVERALLS_REPO_TOKEN: ${{ github.token }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: lcov-report-python-${{ github.run_id }}-${{ github.run_attempt }}
+          path: python/coverage.lcov
+          compression-level: 9
+          retention-days: 1
+          if-no-files-found: error
   
   www:
     runs-on: ubuntu-24.04
@@ -214,7 +216,6 @@ jobs:
     steps:
         - name: Checkout code
           uses: actions/checkout@v6
-        - uses: extractions/setup-just@v4
         - name: Install
           run: just www install
         - name: Check formatting and lints
@@ -241,7 +242,6 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Set up Python ${{ matrix.python-version }}
         uses: actions/setup-python@v4
         with:
@@ -264,7 +264,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Use Node.js ${{ matrix.node-version }}
         uses: actions/setup-node@v4
         with:
@@ -282,8 +281,7 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v5
-      - uses: extractions/setup-just@v4
+      - uses: actions/checkout@v6
       - uses: actions-rust-lang/setup-rust-toolchain@v1
         with:
           toolchain: stable
@@ -301,7 +299,6 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Install Java (OpenAPI Generator requires Java to run)
         run: |
           # deleted in devcontainer image, but required by java installer
@@ -336,8 +333,7 @@ jobs:
           - dashboards/esg-indicator-service
     
     steps:
-      - uses: actions/checkout@v5
-      - uses: extractions/setup-just@v4
+      - uses: actions/checkout@v6
       - name: Install Dependencies
         run: just ui install
       - name: Build app ${{ matrix.app }}
@@ -354,13 +350,13 @@ jobs:
       contents: read
 
     steps:
-      - uses: actions/checkout@v5
-      - uses: extractions/setup-just@v4
+      - uses: actions/checkout@v6
       - name: Install Dependencies
         run: just ui install --with-deps
       - run: just ui test --ci
         env:
           CI: true
+      # TODO: coverage for UI tests
 
   ui-lint:
     name: "ui / lint"
@@ -373,8 +369,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
-      - uses: extractions/setup-just@v4
+        uses: actions/checkout@v6
       - name: Install Dependencies
         run: just ui install
       - name: Code Format Check with Prettier
@@ -397,6 +392,39 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - uses: extractions/setup-just@v4
       - name: Lint repository-wide formats & versions
         run: just ci repo
+
+  repository-coverage:
+    name: "repository / coverage"
+
+    needs: 
+      - geoengine-test
+      - python
+
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      - name: Download Backend Coverage Report
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.geoengine-test.outputs.coverage-artifact-id }}
+          path: geoengine/
+      - name: Download Python Coverage Report
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ needs.python.outputs.coverage-artifact-id }}
+          path: python/
+      - name: Modify lcov paths
+        run: |
+          sed -i 's|/github/workspace/geoengine/||g' geoengine/lcov.info
+      - name: Upload coverage to Coveralls
+        uses: coverallsapp/github-action@v2
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          fail-on-error: false # do not fail the workflow if the upload fails

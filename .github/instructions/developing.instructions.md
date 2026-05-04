@@ -23,8 +23,9 @@ These instructions are for contributors working on the codebase.
 
 - Project README: [README.md](../../README.md)
 - Justfile (tasks): [justfile](../../justfile)
+- What Geo Engine operators exist: [docs/operators](../../www/src/content/docs/docs/operators/)
+- What Geo Engine plots exist: [docs/plots](../../www/src/content/docs/docs/plots/)
 
 ## Notes for Copilot / Assistant
 
 - Use this document as the primary source when answering developer questions about codebase workflows and conventions.
-- If asked to change coding conventions, validate against this file and [`CODESTYLE.md`](../../CODESTYLE.md).

@@ -11,10 +11,7 @@ install:
 
 # Build all API clients by executing the build steps for each language.
 [group('build')]
-build: common::_clear \
-    _build-python-preprocess _build-rust-preprocess _build-typescript-preprocess \
-    _build_call \
-    _build-python-postprocess _build-rust-postprocess _build-typescript-postprocess
+build: common::_clear _build-python-preprocess _build-rust-preprocess _build-typescript-preprocess _build_call _build-python-postprocess _build-rust-postprocess _build-typescript-postprocess
 
 _build_call generator="":
     {{ OPENAPI_GENERATOR_CLI }} generate {{ if generator == "" { "" } else { "--generator-key " + generator } }}
@@ -33,12 +30,22 @@ _build-python-preprocess:
 
 _build-python-postprocess:
     .generation/post-process/python.py
+    find ./python -name "*.py" -exec sed -i '/The version of the OpenAPI document/d' {} +
     rm -rf \
         python/docs \
         python/git_push.sh \
         python/.travis.yml \
         python/.gitlab-ci.yml \
         python/.github
+
+# Build the Python distribution by creating source and wheel distributions.
+[group('build')]
+[working-directory("python")]
+build-python-dist: common::_clear
+    python -m pip install --upgrade pip build
+    pip install -r requirements.txt
+    pip install -r test-requirements.txt
+    python3 -m build
 
 # Build the API clients for TypeScript by generating code with the OpenAPI Generator and applying post-processing steps. Also install npm dependencies and set up .gitignore.
 [group('build')]
@@ -57,10 +64,18 @@ _build-typescript-postprocess:
     echo "wwwroot/*.js" > typescript/.gitignore
     echo "node_modules" > typescript/.gitignore
     echo "typings" > typescript/.gitignore
+    find ./typescript -name "*.ts" -exec sed -i '/The version of the OpenAPI document/d' {} +
     cd typescript && npm install
     rm \
         typescript/.openapi-generator/FILES \
         typescript/package-lock.json
+
+# Build the TypeScript distribution by creating source and wheel distributions.
+[group('build')]
+[working-directory("typescript")]
+build-typescript-dist: common::_clear
+    npm install
+    npm run build
 
 # Build the API clients for Rust by generating code with the OpenAPI Generator and applying post-processing steps.
 [group('build')]
@@ -72,10 +87,17 @@ _build-rust-preprocess:
 
 _build-rust-postprocess:
     .generation/post-process/rust.py
+    find ./rust -name "*.rs" -exec sed -i '/The version of the OpenAPI document/d' {} +
 
     rm -rf \
         rust/git_push.sh \
         rust/.travis.yml
+
+# Build the Rust distribution by creating source and wheel distributions.
+[group('build')]
+[working-directory("rust")]
+build-rust-dist: common::_clear
+    cargo fetch
 
 lint: lint-openapi-spec
 
@@ -86,7 +108,8 @@ lint-openapi-spec: common::_clear
         --recommend
 
 # Generate the OpenAPI Generator configuration files from the config.ini.
-[group('config'), script("python3")]
+[group('config')]
+[script("python3")]
 update-generator-configs:
     import configparser
     import json
@@ -119,13 +142,14 @@ update-generator-configs:
 
     with open('openapitools.json', 'w', encoding='utf-8') as f:
         json.dump(generator_config, f, indent=spaces)
+        f.write('\n')
 
     print("Generated OpenAPI Generator configuration for TypeScript, Python, and Rust.")
 
 # Update the backend commit in the config.ini and increment the version.
-[group('config')]
 [arg("version", long="version", help="The version number to set in the config.ini.")]
-update-config version: (_update-config version) update-generator-configs lint-openapi-spec
+[group('config')]
+update-config version: (_update-config version) update-generator-configs lint-openapi-spec build
 
 [script("python3")]
 _update-config version:
@@ -152,11 +176,11 @@ test: common::_clear test-python test-rust test-typescript
 test-python: common::_clear
     #!/usr/bin/env bash
     python3 -m venv .venv && source .venv/bin/activate || source .venv/bin/activate
-    
+
     python -m pip install --upgrade pip
     if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
     if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
-    
+
     pytest
 
 [group('test')]
@@ -170,3 +194,24 @@ test-rust: common::_clear
 test-typescript: common::_clear
     npm install
     npm run build
+
+# Publish the Python API client to PyPI. Usage: `just repo publish-python`. Use the `--dry-run` flag to publish to TestPyPI instead.
+[arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[group('publish')]
+[working-directory("python")]
+publish-python dry-run="false": common::_clear
+    python -m pip install --upgrade pip twine
+    python -m twine upload --repository {{ if dry-run == "true" { "testpypi" } else { "pypi" } }} dist/*
+
+# Publish the Rust API client to crates.io. Usage: `just repo publish-rust`. Use the `--dry-run` flag to not actually publish.
+[arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[group('rust')]
+[working-directory("rust")]
+publish-rust dry-run="false": common::_clear
+    cargo publish {{ if dry-run == "true" { "--dry-run" } else { "" } }}
+
+[arg("dry-run", long="dry-run", value="true", help="Whether to publish to testpypi instead.")]
+[group('typescript')]
+[working-directory("typescript")]
+publish-typescript dry-run="false": common::_clear
+    npm publish --access public {{ if dry-run == "true" { "--dry-run" } else { "" } }}

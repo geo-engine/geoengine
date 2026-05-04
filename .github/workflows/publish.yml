@@ -3,25 +3,31 @@
 name: Build & Publish
 
 on:
+  # run on push to main branch if any of the relevant files changed
+  push:
+    branches:
+      - main
+    paths:
+      - "api-clients/python/setup.py"
+      - "api-clients/typescript/package.json"
+      - "api-clients/rust/Cargo.toml"
+      - "python/pyproject.toml"
+      - "geoengine/Cargo.toml"
+  
+  # schedule manually
   workflow_dispatch:
-  workflow_run:
-    workflows: [Test]
-    types: [completed]
-    branches: [main]
+
+env:
+  python-version: "3.10" # use lowest supported Python version
+  node-version: "20.19.x" # use lowest supported Node version
+  rust-version: "1.85.1" # use lowest supported Rust version
 
 jobs:
-  python:
-    name: Publish Python Package
+  api-client-python:
+    name: Publish Python API Client Package
 
     runs-on: ubuntu-latest
-
-    strategy:
-      matrix:
-        python-version: ["3.10"] # use lowest supported Python version
-
-    defaults:
-      run:
-        working-directory: api-client/python
+    container: quay.io/geoengine/devcontainer:latest
 
     environment:
       name: pypi
@@ -33,79 +39,176 @@ jobs:
 
     steps:
       - uses: actions/checkout@v6
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v4
+      - name: Check if tag is already published
+        id: tag
+        run: echo "tag_already_published=$(just repo::is-api-client-python-already-published)" >> $GITHUB_OUTPUT
+      - name: Skip publish step if version is already published
+        if: steps.tag.outputs.tag_already_published == 'true'
+        run: echo "Version is already published, skipping publish step."
+      - name: Set up Python ${{ env.python-version }}
+        if: steps.tag.outputs.tag_already_published == 'false'
+        uses: actions/setup-python@v6
         with:
-          python-version: ${{ matrix.python-version }}
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-          if [ -f test-requirements.txt ]; then pip install -r test-requirements.txt; fi
-      - name: Build a binary wheel and a source tarball
-        run: |
-          pip install --upgrade build
-          python3 -m build
+          python-version: ${{ env.python-version }}
+      - name: Install dependencies, build a binary wheel & a source tarball
+        if: steps.tag.outputs.tag_already_published == 'false'
+        run: just api-clients build-python-dist
       - name: Publish package to PyPI
-        uses: pypa/gh-action-pypi-publish@release/v1
-        with:
-          packages-dir: python/dist/ # does not use `run.working-directory`
+        if: steps.tag.outputs.tag_already_published == 'false'
+        run: just api-clients publish-python
 
-  typescript:
-    name: Publish TypeScript Package
+  api-client-typescript:
+    name: Publish TypeScript API Client Package
 
     runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
 
     permissions:
       contents: read
-
-    strategy:
-      matrix:
-        node-version: [20.19.x] # use lowest supported Node version
-
-    defaults:
-      run:
-        working-directory: api-client/typescript
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
 
     steps:
       - uses: actions/checkout@v6
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Check if tag is already published
+        id: tag
+        run: echo "tag_already_published=$(just repo is-api-client-typescript-already-published)" >> $GITHUB_OUTPUT
+      - name: Skip publish step if version is already published
+        if: steps.tag.outputs.tag_already_published == 'true'
+        run: echo "Version is already published, skipping publish step."
+      - name: Use Node.js ${{ env.node-version }}
+        if: steps.tag.outputs.tag_already_published == 'false'
         uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version: ${{ env.node-version }}
           registry-url: "https://registry.npmjs.org"
-      - name: Install dependencies
-        run: npm install
-      - name: Build
-        run: npm run build
+      - name: Install dependencies & build
+        if: steps.tag.outputs.tag_already_published == 'false'
+        run: just api-clients build-typescript-dist
       - name: Publish
-        run: npm publish --access public
+        if: steps.tag.outputs.tag_already_published == 'false'
+        run: just api-clients publish-typescript
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  rust:
-    name: Publish Rust Package
+  api-client-rust:
+    name: Publish Rust API Client Package
 
     runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
 
     permissions:
       contents: read
-
-    strategy:
-      matrix:
-        rust-version: ["1.80.0"] # use lowest supported Rust version
-
-    defaults:
-      run:
-        working-directory: api-client/rust
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
 
     steps:
       - uses: actions/checkout@v6
-      - name: Set up Rust ${{ matrix.rust-version }}
+      - name: Set up Rust ${{ env.rust-version }}
         uses: actions-rs/toolchain@v1
         with:
-          toolchain: ${{ matrix.rust-version }}
+          toolchain: ${{ env.rust-version }}
+      - name: Check if tag is already published
+        id: tag
+        run: echo "tag_already_published=$(just repo is-api-client-rust-already-published)" >> $GITHUB_OUTPUT
+      - name: Skip publish step if version is already published
+        if: steps.tag.outputs.tag_already_published == 'true'
+        run: echo "Version is already published, skipping publish step."
       - name: Install dependencies
-        run: cargo fetch
+        if: steps.tag.outputs.tag_already_published == 'false'
+        run: just api-clients build-rust-dist
+      - uses: rust-lang/crates-io-auth-action@v1
+        if: steps.tag.outputs.tag_already_published == 'false'
+        id: auth
       - name: Publish
-        run: cargo publish --token ${{ secrets.CARGO_TOKEN }}
+        if: steps.tag.outputs.tag_already_published == 'false'
+        run: just api-clients publish-rust
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+
+  python:
+    name: Publish Python Package
+
+    runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
+
+    env:
+      python-version: "3.10" # use lowest supported Python version
+
+    environment:
+      name: pypi
+      url: https://pypi.org/p/geoengine
+
+    permissions:
+      contents: read
+      id-token: write # IMPORTANT: this permission is mandatory for trusted publishing
+
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check if tag is already published
+        id: tag
+        run: echo "tag_already_published=$(just repo is-python-library-already-published)" >> $GITHUB_OUTPUT
+      - name: Skip publish step if version is already published
+        if: steps.tag.outputs.tag_already_published == 'true'
+        run: echo "Version is already published, skipping publish step."
+      - name: Set up Python ${{ env.python-version }}
+        if: steps.tag.outputs.tag_already_published == 'false'
+        uses: actions/setup-python@v6
+        with:
+          python-version: ${{ env.python-version }}
+      - name: Install dependencies & build package
+        if: steps.tag.outputs.tag_already_published == 'false'
+        run: |
+          just python install
+          just python build
+      - name: Publish package to PyPI
+        if: steps.tag.outputs.tag_already_published == 'false'
+        run: just python publish
+
+  tag:
+    name: Publish Git Tag
+
+    runs-on: ubuntu-latest
+    container: quay.io/geoengine/devcontainer:latest
+
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-tags: true # we need to fetch tags to check if the tag already exists
+      - name: Store tag and check if tag is already published
+        id: tag
+        run: |
+          # Add the workspace to safe.directory to bypass the ownership check
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+          echo "tag_already_published=$(just repo is-tag-already-published)" >> $GITHUB_OUTPUT
+          echo "version_tag=$(just repo print-version-tag)" >> $GITHUB_OUTPUT
+      - name: Skip tag step if tag is already published
+        if: steps.tag.outputs.tag_already_published == 'true'
+        run: echo "Tag is already published, skipping tag step."
+      - name: Create and push git tag
+        if: steps.tag.outputs.tag_already_published == 'false'
+        uses: actions/github-script@v9
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const tagName = process.env.VERSION_TAG;
+
+            // Construct the URL to the changelog at this specific tag
+            const changelogUrl = `https://github.com/${owner}/${repo}/blob/${tagName}/CHANGELOG.md`;
+            const releaseBody = `## Release Notes\n\nFull changes for this version can be found in the [CHANGELOG.md](${changelogUrl}).`;
+
+            await github.rest.repos.createRelease({
+              owner,
+              repo,
+              tag_name: tagName,
+              target_commitish: context.sha,
+              name: tagName,
+              body: releaseBody,
+              draft: false,
+              prerelease: false,
+              generate_release_notes: false,
+            });
+        env:
+          VERSION_TAG: ${{ steps.tag.outputs.version_tag }}

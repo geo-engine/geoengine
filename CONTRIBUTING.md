@@ -34,7 +34,7 @@ You can visit [www.geoengine.de/cla](https://www.geoengine.de/cla/) to get more 
 
 ### Code style
 
-Please have a look at our [code style](CODESTYLE.md) where we collect some best practices your code should adhere to.
+Please have a look at our [instructions](.github/instructions) where we collect some best practices your code should adhere to.
 
 ### Code reviews
 
