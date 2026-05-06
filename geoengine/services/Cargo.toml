@@ -13,6 +13,11 @@ default-run = "geoengine-server"
 [lib]
 bench = false
 
+[features]
+default = []
+api-docs = []
+swagger-ui = ["api-docs", "dep:utoipa-swagger-ui"]
+
 [[bin]]
 name = "geoengine-server"
 path = "src/bin/geoengine-server.rs"
@@ -99,7 +104,7 @@ tracing-opentelemetry = { workspace = true }
 tracing-subscriber = { workspace = true }
 url = { workspace = true }
 utoipa = { workspace = true }
-utoipa-swagger-ui = { workspace = true }
+utoipa-swagger-ui = { workspace = true, optional = true }
 uuid = { workspace = true }
 validator = { workspace = true }
 walkdir = { workspace = true }

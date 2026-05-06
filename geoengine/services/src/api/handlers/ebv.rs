@@ -14,6 +14,7 @@ use crate::datasets::external::netcdfcf::{
 use crate::error::Result;
 use crate::layers::storage::LayerProviderDb;
 use crate::tasks::{Task, TaskContext, TaskId, TaskManager, TaskStatus, TaskStatusInfo};
+#[cfg(feature = "api-docs")]
 use crate::util::apidoc::OpenApiServerInfo;
 use crate::{contexts::SessionContext, datasets::external::netcdfcf::NetCdfCfDataProvider};
 use actix_web::{
@@ -27,13 +28,17 @@ use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use std::sync::Arc;
 use tracing::debug;
+#[cfg(feature = "api-docs")]
 use utoipa::openapi::security::{HttpAuthScheme, HttpBuilder, SecurityScheme};
-use utoipa::{IntoParams, Modify, OpenApi, ToSchema};
+use utoipa::{IntoParams, ToSchema};
+#[cfg(feature = "api-docs")]
+use utoipa::{Modify, OpenApi};
 
 pub const EBV_OVERVIEW_TASK_TYPE: &str = "ebv-overview";
 pub const EBV_MULTI_OVERVIEW_TASK_TYPE: &str = "ebv-multi-overview";
 pub const EBV_REMOVE_OVERVIEW_TASK_TYPE: &str = "ebv-remove-overview";
 
+#[cfg(feature = "api-docs")]
 #[derive(OpenApi)]
 #[openapi(
     paths(
@@ -56,8 +61,10 @@ pub const EBV_REMOVE_OVERVIEW_TASK_TYPE: &str = "ebv-remove-overview";
 )]
 pub struct ApiDoc;
 
+#[cfg(feature = "api-docs")]
 struct SecurityAddon;
 
+#[cfg(feature = "api-docs")]
 impl Modify for SecurityAddon {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         let Some(components) = openapi.components.as_mut() else {
@@ -79,8 +86,10 @@ impl Modify for SecurityAddon {
     }
 }
 
+#[cfg(feature = "api-docs")]
 struct ApiDocInfo;
 
+#[cfg(feature = "api-docs")]
 impl Modify for ApiDocInfo {
     fn modify(&self, openapi: &mut utoipa::openapi::OpenApi) {
         openapi.info.title = "Geo Engine EBV API".to_string();

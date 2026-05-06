@@ -1,9 +1,10 @@
 use clap::{Parser, Subcommand};
 use geoengine_services::cli::{
-    CheckSuccessfulStartup, ExpressionToolchainFile, Heartbeat, OpenAPIGenerate, StacImport,
-    TileImport, check_heartbeat, check_successful_startup, output_openapi_json,
-    output_toolchain_file, stac_import, tile_import,
+    CheckSuccessfulStartup, ExpressionToolchainFile, Heartbeat, StacImport, TileImport,
+    check_heartbeat, check_successful_startup, output_toolchain_file, stac_import, tile_import,
 };
+#[cfg(feature = "api-docs")]
+use geoengine_services::cli::{OpenAPIGenerate, output_openapi_json};
 
 /// CLI for Geo Engine Utilities
 #[derive(Debug, Parser)]
@@ -22,6 +23,7 @@ enum Commands {
     Heartbeat(Heartbeat),
 
     /// Outputs OpenAPI JSON
+    #[cfg(feature = "api-docs")]
     #[command(name = "openapi")]
     OpenAPI(OpenAPIGenerate),
 
@@ -41,6 +43,7 @@ impl Commands {
         match self {
             Commands::CheckSuccessfulStartup(params) => check_successful_startup(params).await,
             Commands::Heartbeat(params) => check_heartbeat(params).await,
+            #[cfg(feature = "api-docs")]
             Commands::OpenAPI(params) => output_openapi_json(params).await,
             Commands::StacImport(params) => stac_import(params).await,
             Commands::TileImport(params) => tile_import(params).await,
