@@ -298,9 +298,17 @@ impl GdalRasterLoader {
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
+        let config_options = if let Some(config_options) = &dataset_params.gdal_config_options {
+            // ensure that GDAL only uses a single thread because otherweise the thread local configs may not be used by all gdal threads
+            let mut options = config_options.clone();
+            options.push(("GDAL_NUM_THREADS".to_string(), "1".to_string()));
+            Some(options)
+        } else {
+            None
+        };
+
         // reverts the thread local configs on drop
-        let _thread_local_configs = dataset_params
-            .gdal_config_options
+        let _thread_local_configs = config_options
             .as_ref()
             .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
 
