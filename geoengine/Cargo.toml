@@ -86,7 +86,7 @@ arrow-array = "58.0"
 arrow-ord = "58.0"
 arrow-schema = { version = "58.0", features = ["serde"] }
 aruna-rust-api = "2.0.2"
-assert_cmd = "2.1"
+assert_cmd = "2.2"
 async-stream = "0.3"
 async-trait = "0.1"
 base64 = "0.22"
@@ -113,7 +113,7 @@ gdal = "0.19"
 gdal-sys = "0.12"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
 geo = "0.32.0"
-geo-types = "0.7.18"                                      # important for compatibility when linking expressions
+geo-types = "0.7.19"                                      # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
 image = "0.25"
@@ -174,7 +174,7 @@ serial_test = "3.4"
 sha2 = "0.10"
 snafu = "0.9"
 stac = "0.16"
-stac-extensions = "0.1.5"
+stac-extensions = "0.1.10"
 stream-cancel = "0.8"
 strum = { version = "0.28", features = ["derive"] }
 strum_macros = "0.28"
