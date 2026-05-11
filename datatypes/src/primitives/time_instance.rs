@@ -1,7 +1,9 @@
 use super::datetime::DateTimeError;
 use super::{DateTime, Duration};
-use crate::primitives::error;
-use crate::util::Result;
+use crate::{
+    primitives::error::{self},
+    util::Result,
+};
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
@@ -219,7 +221,12 @@ impl<'de> Deserialize<'de> for TimeInstance {
             }
         }
 
-        deserializer.deserialize_any(IsoStringOrUnixTimestamp)
+        if deserializer.is_human_readable() {
+            deserializer.deserialize_any(IsoStringOrUnixTimestamp)
+        } else {
+            let millis = i64::deserialize(deserializer)?;
+            TimeInstance::from_millis(millis).map_err(serde::de::Error::custom)
+        }
     }
 }
 

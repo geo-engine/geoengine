@@ -3,6 +3,7 @@ use geoengine_datatypes::raster::{
     GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
 };
 use num::Zero;
+use serde::{Deserialize, Serialize};
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
 /// The Workflow is as follows:
@@ -14,7 +15,7 @@ use num::Zero;
 ///    3.1 The `read_window_bounds` might be offset from the `bounds_of_target` or might have a different size.
 ///    Then, the data needs to be placed in the target pixel space accordingly. Other parts of the target pixel space should be filled with nodata.
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GdalReadAdvise {
     pub gdal_read_widow: GdalReadWindow,
     pub read_window_bounds: GridBoundingBox2D,
@@ -343,7 +344,7 @@ impl OverviewReaderState {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GdalReadWindow {
     start_x: isize, // pixelspace origin
     start_y: isize,

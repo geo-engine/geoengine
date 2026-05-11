@@ -1,5 +1,11 @@
 [workspace]
-members = ["datatypes", "expression", "macros", "operators", "services"]
+members = [
+    "datatypes",
+    "expression",
+    "macros",
+    "operators",
+    "services",
+]
 exclude = [
     "expression/deps-workspace", # Buggy, cf. https://github.com/rust-lang/cargo/issues/6745
     ".scripts",
@@ -97,7 +103,7 @@ clap = { version = "4.5", features = ["derive"] }
 clap_derive = "4.5"
 config = "0.15"
 convert_case = "0.11"
-criterion = "0.8"
+criterion = {version = "0.8", features = ["async_tokio"] }
 csv = "1.4"
 erased-serde = "0.4"
 fallible-iterator = "0.2" # only for postgres-protocol
@@ -112,6 +118,7 @@ geo = "0.32.0"
 geo-types = "0.7.18"                                      # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
+ipc-channel = "0.22.0"
 image = "0.25"
 indoc = "2.0"
 itertools = "0.14"

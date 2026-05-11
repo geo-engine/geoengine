@@ -1,15 +1,29 @@
-use super::{Grid2D, GridOrEmpty, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TypedGrid2D};
-use crate::{raster::RasterDataType, spatial_reference::SpatialReferenceOption, util::Result};
+use super::{Grid2D, GridOrEmpty2D, GridSize, Pixel, RasterTile2D, TypedGrid2D};
+use crate::{
+    error::{self},
+    primitives::{CacheHint, TimeInterval},
+    raster::{
+        FromPrimitive, GeoTransform, Grid, GridOrEmpty, GridShape, MaskedGrid, RasterDataType,
+        raster_properties,
+    },
+    spatial_reference::SpatialReferenceOption,
+    util::Result,
+};
 use arrow::{
     array::{Array, ArrayRef, PrimitiveBuilder},
     datatypes::{
         Field, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type, Schema,
         UInt8Type, UInt16Type, UInt32Type, UInt64Type,
     },
-    ipc::writer::{FileWriter, IpcWriteOptions},
+    ipc::{
+        reader::FileReader,
+        writer::{FileWriter, IpcWriteOptions},
+    },
     record_batch::RecordBatch,
 };
-use std::{collections::HashMap, sync::Arc};
+use arrow_array::PrimitiveArray;
+use arrow_schema::ArrowError;
+use std::{collections::HashMap, io::Cursor, sync::Arc};
 
 pub const RASTER_DATA_FIELD_NAME: &str = "data";
 pub const GEO_TRANSFORM_KEY: &str = "geoTransform";
@@ -18,6 +32,238 @@ pub const Y_SIZE_KEY: &str = "ySize";
 pub const TIME_KEY: &str = "time";
 pub const SPATIAL_REF_KEY: &str = "spatialReference";
 pub const BAND_KEY: &str = "band";
+pub const RASTER_PROPERTIES: &str = "rasterProperties";
+pub const TILE_POSITION: &str = "tilePosition";
+
+pub fn raster_tile_2d_to_arrow_ipc_file_for_ipc_channel<P: Pixel>(
+    tile: RasterTile2D<P>,
+) -> Result<Vec<u8>> {
+    let record_batch = raster_tile_2d_to_arrow_record_batch_for_ipc_channel(tile)?;
+
+    let mut file_writer = FileWriter::try_new_with_options(
+        Vec::new(),
+        &record_batch.schema(),
+        IpcWriteOptions::default(),
+    )?;
+    file_writer.write(&record_batch)?;
+    file_writer.finish()?;
+
+    Ok(file_writer.into_inner()?)
+}
+
+pub fn arrow_ipc_file_to_raster_tile_2d<P>(tile: Vec<u8>) -> Result<RasterTile2D<P>>
+where
+    P: Pixel,
+{
+    arrow_ipc_file_to_raster_tile_2d_impl(tile)
+}
+
+pub fn arrow_ipc_file_to_raster_tile_2d_for_ipc_channel<P>(tile: Vec<u8>) -> Result<RasterTile2D<P>>
+where
+    P: Pixel,
+{
+    arrow_ipc_file_to_raster_tile_2d_impl(tile)
+}
+
+fn arrow_ipc_file_to_raster_tile_2d_impl<P>(tile: Vec<u8>) -> Result<RasterTile2D<P>>
+where
+    P: Pixel,
+{
+    let cursor = Cursor::new(tile);
+    let reader = FileReader::try_new(cursor, None)?;
+
+    // the writer only writes one batch
+    if let Some(batch) = reader.flatten().next() {
+        let schema = batch.schema();
+        let metadata = schema.metadata();
+        let geo_transform: GeoTransform =
+            serde_json::from_str(metadata[GEO_TRANSFORM_KEY].as_str())
+                .expect("invalid geo transform");
+        let time: TimeInterval =
+            serde_json::from_str(metadata[TIME_KEY].as_str()).expect("invalid time");
+        let x_size: usize =
+            serde_json::from_str(metadata[X_SIZE_KEY].as_str()).expect("invalid x size");
+        let y_size: usize =
+            serde_json::from_str(metadata[Y_SIZE_KEY].as_str()).expect("invalid y size");
+
+        let band: usize = serde_json::from_str(metadata[BAND_KEY].as_str()).expect("invalid band");
+
+        let field_idx = schema
+            .fields()
+            .iter()
+            .position(|f| f.name() == RASTER_DATA_FIELD_NAME)
+            .expect("raster data field not found");
+        let arr = batch.column(field_idx);
+        let grid: GridOrEmpty2D<P> = arrow_array_to_grid_2d::<P>(arr, [y_size, x_size].into())?;
+
+        let tile_position = metadata
+            .get(TILE_POSITION)
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_else(|| [0, 0].into());
+
+        let properties = metadata
+            .get(RASTER_PROPERTIES)
+            .and_then(|s| serde_json::from_str(s).ok())
+            .unwrap_or_else(raster_properties::RasterProperties::default);
+
+        let cache_hint = CacheHint::default();
+
+        let raster_tile_2d = RasterTile2D::new_with_properties(
+            time,
+            tile_position,
+            band as u32,
+            geo_transform,
+            grid,
+            properties,
+            cache_hint,
+        );
+        return Ok(raster_tile_2d);
+    }
+
+    Err(error::Error::ArrowInternal {
+        source: ArrowError::IpcError("no record batch found in arrow ipc file".to_string()),
+    })
+}
+
+fn arrow_array_to_grid_2d<P>(
+    arr: &ArrayRef,
+    size: GridShape<[usize; 2]>,
+) -> Result<GridOrEmpty2D<P>>
+// {{{
+where
+    P: Pixel,
+{
+    // in case of empty array
+    if arr.null_count() == arr.len() {
+        return Ok(GridOrEmpty::new_empty_shape(size));
+    }
+
+    let (values, validity_mask) = arrow_array_ref_to_values_and_validity::<P>(arr);
+
+    let data = Grid::new(size, values)?;
+    let validity = Grid::new(size, validity_mask)?;
+
+    Ok(GridOrEmpty::new_grid(MaskedGrid::new(data, validity)?))
+}
+
+#[allow(clippy::too_many_lines)]
+#[allow(clippy::unwrap_used)]
+fn arrow_array_ref_to_values_and_validity<P: Pixel>(arr: &ArrayRef) -> (Vec<P>, Vec<bool>) {
+    let validity = (0..arr.len()).map(|i| arr.is_valid(i)).collect();
+    match arr.data_type() {
+        arrow::datatypes::DataType::UInt8 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::UInt8Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::UInt16 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::UInt16Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::UInt32 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::UInt32Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::UInt64 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::UInt64Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::Int8 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::Int8Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::Int16 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::Int16Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::Int32 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::Int32Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::Int64 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::Int64Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::Float32 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::Float32Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        arrow::datatypes::DataType::Float64 => {
+            let arr = arr
+                .as_any()
+                .downcast_ref::<PrimitiveArray<arrow::datatypes::Float64Type>>()
+                .unwrap();
+            let values = arr.values().to_vec();
+            (
+                values.iter().map(|x| FromPrimitive::from_(*x)).collect(),
+                validity,
+            )
+        }
+        _ => panic!("unsupported data type"), // remove panic and return some other type
+    }
+}
 
 pub fn raster_tile_2d_to_arrow_ipc_file<P: Pixel>(
     tile: RasterTile2D<P>,
@@ -40,7 +286,21 @@ fn raster_tile_2d_to_arrow_record_batch<P: Pixel>(
     tile: RasterTile2D<P>,
     spatial_ref: SpatialReferenceOption,
 ) -> Result<RecordBatch> {
-    let metadata: HashMap<String, String> = [
+    raster_tile_2d_to_arrow_record_batch_impl(tile, Some(spatial_ref), false)
+}
+
+fn raster_tile_2d_to_arrow_record_batch_for_ipc_channel<P: Pixel>(
+    tile: RasterTile2D<P>,
+) -> Result<RecordBatch> {
+    raster_tile_2d_to_arrow_record_batch_impl(tile, None, true)
+}
+
+fn raster_tile_2d_to_arrow_record_batch_impl<P: Pixel>(
+    tile: RasterTile2D<P>,
+    spatial_ref: Option<SpatialReferenceOption>,
+    include_ipc_metadata: bool,
+) -> Result<RecordBatch> {
+    let mut metadata: HashMap<String, String> = [
         (
             GEO_TRANSFORM_KEY.to_string(),
             serde_json::to_string(&tile.tile_geo_transform()).unwrap_or_default(),
@@ -57,10 +317,25 @@ fn raster_tile_2d_to_arrow_record_batch<P: Pixel>(
             TIME_KEY.to_string(),
             serde_json::to_string(&tile.time).unwrap_or_default(),
         ),
-        (SPATIAL_REF_KEY.to_string(), spatial_ref.to_string()),
         (BAND_KEY.to_string(), tile.band.to_string()),
     ]
     .into();
+
+    if let Some(spatial_ref) = spatial_ref {
+        metadata.insert(SPATIAL_REF_KEY.to_string(), spatial_ref.to_string());
+    }
+
+    if include_ipc_metadata {
+        metadata.insert(
+            RASTER_PROPERTIES.to_string(),
+            serde_json::to_string(&tile.properties)
+                .expect("tile properties should be mappable to serde"),
+        );
+        metadata.insert(
+            TILE_POSITION.to_string(),
+            serde_json::to_string(&tile.tile_position).unwrap_or_default(),
+        );
+    }
 
     let array = grid_2d_to_arrow_array(tile.grid_array);
 
@@ -314,7 +589,7 @@ mod tests {
             schema.metadata()[TIME_KEY],
             "{\"start\":-8334601228800000,\"end\":8210266876799999}"
         );
-        assert_eq!(schema.metadata()[SPATIAL_REF_KEY], "EPSG:4326");
+        assert_eq!(schema.metadata()[SPATIAL_REF_KEY], "EPSG:4326"); // TODO (low): Does this also crash?
 
         let data = reader.next().unwrap().unwrap();
 
@@ -328,5 +603,60 @@ mod tests {
         assert_eq!(nulls, 6);
 
         assert!(reader.next().is_none()); // only one batch
+    }
+
+    #[test]
+    fn test_arrow_ipc_file_to_raster_tile_2d_empty() {
+        let original = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [0, 0].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            0,
+            EmptyGrid2D::<f32>::new([3, 2].into()).into(),
+            CacheHint::default(),
+        );
+
+        let bytes = raster_tile_2d_to_arrow_ipc_file(
+            original.clone(),
+            SpatialReference::epsg_4326().into(),
+        )
+        .unwrap();
+        let restored: RasterTile2D<f32> = arrow_ipc_file_to_raster_tile_2d(bytes).unwrap();
+
+        assert!(restored.grid_array.is_empty());
+        assert_eq!(original.grid_array, restored.grid_array);
+        assert_eq!(original.properties, restored.properties);
+        assert_eq!(original.tile_position, restored.tile_position);
+    }
+
+    #[test]
+    fn test_arrow_ipc_file_to_raster_tile_2d_for_ipc_channel() {
+        let original = RasterTile2D::new_with_tile_info(
+            TimeInterval::default(),
+            TileInformation {
+                global_geo_transform: TestDefault::test_default(),
+                global_tile_position: [1, 2].into(),
+                tile_size_in_pixels: [3, 2].into(),
+            },
+            5,
+            Grid2D::new([3, 2].into(), vec![10_u8, 20, 30, 40, 50, 60])
+                .unwrap()
+                .into(),
+            CacheHint::default(),
+        );
+
+        let bytes = raster_tile_2d_to_arrow_ipc_file_for_ipc_channel(original.clone()).unwrap();
+        let restored: RasterTile2D<u8> =
+            arrow_ipc_file_to_raster_tile_2d_for_ipc_channel(bytes).unwrap();
+
+        assert_eq!(original.time, restored.time);
+        assert_eq!(original.band, restored.band);
+        assert_eq!(original.grid_array, restored.grid_array);
+
+        assert_eq!(original.properties, restored.properties);
+        assert_eq!(original.tile_position, restored.tile_position);
     }
 }
