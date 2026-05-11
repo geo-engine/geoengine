@@ -2,28 +2,31 @@ use std::path::PathBuf;
 use std::process::{Child, Command};
 use std::sync::{Arc, Mutex};
 
-use gdal::Dataset as GdalDataset;
-use geoengine_datatypes::primitives::{CacheHint, TimeInterval};
-use geoengine_datatypes::raster::{
-    Pixel, RasterDataType, RasterTile2D, TileInformation,
-    arrow_ipc_file_to_raster_tile_2d_for_ipc_channel,
-    raster_tile_2d_to_arrow_ipc_file_for_ipc_channel,
+use gdal::errors::GdalError;
+use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags};
+
+use geoengine_datatypes::raster::arrow_conversion::{
+    arrow_record_batch_to_grid_with_properties, bytes_to_record_batch,
+    grid_with_properties_to_arrow_record_batch, record_batch_to_bytes,
 };
+use geoengine_datatypes::raster::{
+    GridBoundingBox2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
+};
+
 use ipc_channel::{
     IpcError,
     ipc::{self, IpcReceiver, IpcSender},
 };
+use snafu::Snafu;
 
-use crate::error::Error;
-
-use super::{GdalDatasetParameters, GdalReadAdvise};
+use super::{GdalDatasetParameters, GdalReadAdvise, GdalSourceError};
+use crate::source::gdal_source::reader::GridAndProperties;
+use crate::util::TemporaryGdalThreadLocalConfigOptions;
+use crate::util::gdal::gdal_open_ex_gdal_error;
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct IpcChannelMessagePayload {
-    pub cache_hint: CacheHint,
     pub dataset_params: GdalDatasetParameters,
-    pub tile_information: TileInformation,
-    pub tile_time: TimeInterval,
     pub read_advise: GdalReadAdvise,
     /// We use this to know what type we serialize using the `arrow_conversion` functions
     pub data_type: RasterDataType,
@@ -35,74 +38,66 @@ pub struct TileData {
 }
 
 impl TileData {
-    pub fn new<P: Pixel>(tile: RasterTile2D<P>) -> Result<Self, Error> {
-        let as_vec = raster_tile_2d_to_arrow_ipc_file_for_ipc_channel(tile)
-            .map_err(|err| Error::DataType { source: err })?;
+    pub fn serialize_grid_with_props<P: Pixel>(
+        gp: GridAndProperties<P, GridBoundingBox2D>,
+    ) -> Result<Self, IpcProcessError> {
+        let as_vec = grid_with_properties_to_arrow_record_batch(gp.grid, &gp.properties)
+            .and_then(|rb| record_batch_to_bytes(&rb))
+            .map_err(|e| IpcProcessError::RasterArrowConversion {
+                conversion: e.to_string(),
+            })?;
+
         Ok(Self { tile: as_vec })
+    }
+
+    pub fn deserialize_grid_with_props<P: Pixel>(
+        &self,
+    ) -> Result<GridAndProperties<P, GridBoundingBox2D>, GdalSourceError> {
+        let rb = bytes_to_record_batch(&self.tile)
+            .map_err(|e| GdalSourceError::ArrowConversion { source: e })?;
+
+        let (grid, properties): (GridOrEmpty<GridBoundingBox2D, P>, RasterProperties) =
+            arrow_record_batch_to_grid_with_properties(&rb)
+                .map_err(|e| GdalSourceError::ArrowConversion { source: e })?;
+
+        Ok(GridAndProperties { grid, properties })
     }
 }
 
 // [`IpcError`] does not implement the serde traits, and thus cant be send
 // via the ipc_channels
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
+#[derive(Debug, Snafu, serde::Serialize, serde::Deserialize, Clone)]
 pub enum IpcProcessError {
-    SerializationError(String),
-    Io(String),
+    SerializationError { serde: String },
+    Io { io: String },
     Disconnected,
-    DataType(String),
-    Unknown(String),
+    DataType { datatype: String },
+    GdalError { gdal_error: String },
+    RasterArrowConversion { conversion: String },
+
+    IpcOther { ipc_error: String },
 }
 
 pub type IpcProcessRasterResult = std::result::Result<TileData, IpcProcessError>;
 
-impl From<Error> for IpcProcessError {
-    fn from(value: Error) -> Self {
-        match value {
-            Error::DataType { source } => IpcProcessError::DataType(source.to_string()),
-            err => IpcProcessError::Unknown(err.to_string()),
-        }
-    }
-}
-
 impl From<IpcError> for IpcProcessError {
     fn from(value: IpcError) -> Self {
         match value {
-            IpcError::SerializationError(error_kind) => {
-                IpcProcessError::SerializationError(error_kind.to_string())
-            }
-            IpcError::Io(error) => IpcProcessError::Io(error.to_string()),
+            IpcError::SerializationError(e) => IpcProcessError::SerializationError {
+                serde: e.to_string(),
+            },
+            IpcError::Io(e) => IpcProcessError::Io { io: e.to_string() },
             IpcError::Disconnected => IpcProcessError::Disconnected,
         }
     }
 }
 
-pub fn into_raster<P: Pixel>(
-    result: IpcProcessRasterResult,
-) -> std::result::Result<RasterTile2D<P>, crate::error::Error> {
-    result
-        .map_err(|err| match err {
-            IpcProcessError::SerializationError(error_kind) => Error::GdalSource {
-                source: crate::source::GdalSourceError::ProcessInternalBincodeError { error_kind },
-            },
-            IpcProcessError::Io(internal_error) => Error::GdalSource {
-                source: crate::source::GdalSourceError::ProcessInternalIoError { internal_error },
-            },
-            IpcProcessError::Disconnected => Error::GdalSource {
-                source: crate::source::GdalSourceError::ProcessIsDisconnected,
-            },
-            IpcProcessError::DataType(reason) => Error::GdalSource {
-                source: crate::source::GdalSourceError::IpcArrowConversionFailed { reason },
-            },
-            IpcProcessError::Unknown(err) => Error::GdalSource {
-                source: crate::source::GdalSourceError::UnknownErrorHappenedWhileReading {
-                    error: err,
-                },
-            },
-        })
-        .and_then(|td| {
-            arrow_ipc_file_to_raster_tile_2d_for_ipc_channel(td.tile)
-                .map_err(|err| Error::DataType { source: err })
-        })
+impl From<std::io::Error> for IpcProcessError {
+    fn from(value: std::io::Error) -> Self {
+        IpcProcessError::Io {
+            io: value.to_string(),
+        }
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
@@ -131,6 +126,8 @@ pub fn spawn_ipc_server_process<S, R>() -> (Child, IpcSender<S>, IpcReceiver<R>)
 
     let child = Command::new(path)
         .arg(token)
+        .arg("debug") // FIXME: paste log level here!
+        .stderr(std::process::Stdio::inherit()) // This sends child logs to the parent's stderr
         .spawn()
         .expect("failed to spawn ipc server process");
 
@@ -142,41 +139,19 @@ pub fn spawn_ipc_server_process<S, R>() -> (Child, IpcSender<S>, IpcReceiver<R>)
 /// sending the channels to the server, so that communication can be established.
 ///
 /// Assumes that the server is already running and listening for connections.
-pub fn setup_client<S, C>(token: String) -> crate::util::Result<(IpcSender<C>, IpcReceiver<S>)>
+pub fn setup_client<S, C>(
+    token: String,
+) -> crate::util::Result<(IpcSender<C>, IpcReceiver<S>), IpcProcessError>
 where
     S: for<'de> serde::Deserialize<'de> + serde::Serialize,
     C: for<'de> serde::Deserialize<'de> + serde::Serialize,
 {
-    let (server_sender, client_reciever) =
-        ipc::channel::<S>().map_err(|err| Error::GdalSource {
-            source: crate::source::GdalSourceError::ProcessSetupFailed {
-                reason: err.to_string(),
-            },
-        })?;
-    let (client_sender, server_reciever) =
-        ipc::channel::<C>().map_err(|err| Error::GdalSource {
-            source: crate::source::GdalSourceError::ProcessSetupFailed {
-                reason: err.to_string(),
-            },
-        })?;
+    let (server_sender, client_reciever) = ipc::channel::<S>()?;
+    let (client_sender, server_reciever) = ipc::channel::<C>()?;
 
-    let sender =
-        ipc::IpcSender::<(IpcSender<S>, IpcReceiver<C>)>::connect(token).map_err(|err| {
-            Error::GdalSource {
-                source: crate::source::GdalSourceError::ProcessSetupFailed {
-                    reason: err.to_string(),
-                },
-            }
-        })?;
+    let sender = ipc::IpcSender::<(IpcSender<S>, IpcReceiver<C>)>::connect(token)?;
 
-    sender
-        .send((server_sender, server_reciever))
-        .map_err(|error| Error::GdalSource {
-            source: crate::source::GdalSourceError::ProcessSetupFailed {
-                reason: crate::source::GdalSourceError::IpcSendError { error }.to_string(),
-            },
-        })?;
-
+    sender.send((server_sender, server_reciever))?;
     Ok((client_sender, client_reciever))
 }
 
@@ -215,28 +190,32 @@ impl ProcessData {
     pub fn send_recv_blocking<P: Pixel>(
         &self,
         message: IpcChannelMessage,
-    ) -> crate::util::Result<RasterTile2D<P>> {
-        let pair = self
-            .sender_receiver_pair
-            .lock()
-            .map_err(|err| Error::GdalSource {
-                source: crate::source::GdalSourceError::ProcessLockPoisoned {
-                    error: err.to_string(),
-                },
-            })?;
+    ) -> crate::util::Result<GridAndProperties<P, GridBoundingBox2D>, GdalSourceError> {
+        // TODO: solution for Mutex that does not pose performance complications
+        let pair = self.sender_receiver_pair.lock().map_err(|err| {
+            crate::source::GdalSourceError::ProcessLockPoisoned {
+                error: err.to_string(),
+            }
+        })?;
 
         let sender = &pair.0;
         let receiver = &pair.1;
 
-        sender.send(message).map_err(|error| Error::GdalSource {
-            source: crate::source::GdalSourceError::IpcSendError { error },
-        })?;
+        sender
+            .send(message)
+            .map_err(|error| crate::source::GdalSourceError::IpcSendError { error })?;
 
-        let result = receiver.recv().map_err(|error| Error::GdalSource {
-            source: crate::source::GdalSourceError::IpcReceiveError { error },
-        })?;
+        let result = receiver
+            .recv()
+            .map_err(|error| crate::source::GdalSourceError::IpcReceiveError { error })?;
 
-        into_raster::<P>(result)
+        // now we either got an error or a grid with props from the IPC loader. This helps to understand what went wrong in the IPC process.
+        let result =
+            result.map_err(|e| crate::source::GdalSourceError::IpcProcessError { source: e })?;
+
+        let g = result.deserialize_grid_with_props::<P>()?;
+        // TODO: do some logging here
+        Ok(g)
     }
 }
 
@@ -249,41 +228,86 @@ impl Drop for ProcessData {
 /// A simple, single-entry cache for an open GDAL dataset tile.
 #[derive(Default)]
 pub struct GdalDatasetCache {
-    path: Option<PathBuf>,
+    params: Option<GdalDatasetParameters>,
     dataset: Option<GdalDataset>,
+    thread_local: Option<TemporaryGdalThreadLocalConfigOptions>,
 }
 
 impl GdalDatasetCache {
     pub fn new() -> Self {
         Self {
-            path: None,
+            params: None,
             dataset: None,
+            thread_local: None,
         }
     }
 
-    pub fn cache(&mut self, path: PathBuf, dataset: GdalDataset) {
-        self.path = Some(path);
-        self.dataset = Some(dataset);
+    fn open_ex(
+        dataset_params: &GdalDatasetParameters,
+    ) -> Result<(GdalDataset, Option<TemporaryGdalThreadLocalConfigOptions>), GdalError> {
+        let options = dataset_params
+            .gdal_open_options
+            .as_ref()
+            .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
+
+        // reverts the thread local configs on drop
+        let thread_local_configs: Option<TemporaryGdalThreadLocalConfigOptions> = dataset_params
+            .gdal_config_options
+            .as_ref()
+            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options))
+            .transpose()
+            .expect("Thread local options must not fail");
+
+        let ds = gdal_open_ex_gdal_error(
+            &dataset_params.file_path,
+            DatasetOptions {
+                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
+                open_options: options.as_deref(),
+                ..DatasetOptions::default()
+            },
+        )?;
+
+        Ok((ds, thread_local_configs))
+    }
+
+    pub fn get(&mut self, params: &GdalDatasetParameters) -> Option<&mut GdalDataset> {
+        if Self::is_hit(self.params.as_ref(), params) {
+            self.dataset.as_mut()
+        } else {
+            None
+        }
+    }
+
+    pub fn get_or_open(&mut self, params: &GdalDatasetParameters) -> Result<&mut GdalDataset, ()> {
+        // FIXME: use error type here!
+        let hit = Self::is_hit(self.params.as_ref(), params);
+
+        if hit {
+            Ok(self.dataset.as_mut().expect("Dataset must be set"))
+        } else {
+            self.clear();
+
+            let (ds, tlo) = Self::open_ex(params).map_err(|_| ())?;
+
+            self.params = Some(params.clone());
+            self.dataset = Some(ds);
+            self.thread_local = tlo;
+
+            Ok(self.dataset.as_mut().expect("Dataset must be set"))
+        }
+    }
+
+    fn is_hit(params: Option<&GdalDatasetParameters>, other: &GdalDatasetParameters) -> bool {
+        matches!((params, other), (Some(cached_params), other_params) if cached_params.file_path == other_params.file_path)
     }
 
     pub fn clear(&mut self) {
-        self.path = None;
+        self.params = None;
         self.dataset = None;
+        self.thread_local = None;
     }
 
-    /// Moves the `GdalDataset` because it does not implement `clone()`
-    pub fn take(&mut self, input_path: &PathBuf) -> Option<GdalDataset> {
-        if let Some(path_ref) = self.path.as_ref()
-            && *path_ref == *input_path
-        {
-            return self.dataset.take();
-        }
-        None
-    }
-
-    pub fn contains(&self, input_path: &PathBuf) -> bool {
-        self.path
-            .as_ref()
-            .is_some_and(|path_ref| *path_ref == *input_path)
+    pub fn contains(&self, params: &GdalDatasetParameters) -> bool {
+        Self::is_hit(self.params.as_ref(), params)
     }
 }

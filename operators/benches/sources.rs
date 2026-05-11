@@ -13,17 +13,17 @@ use geoengine_datatypes::{
     util::test::TestDefault,
 };
 use geoengine_operators::engine::{MockExecutionContext, RasterResultDescriptor, TimeDescriptor};
-use geoengine_operators::source::ProcessData;
 
+use geoengine_operators::source::gdal_source::LazyGdalWorker;
 use geoengine_operators::{
     engine::{ChunkByteSize, RasterQueryProcessor},
     mock::MockRasterSourceProcessor,
     source::{GdalMetaDataRegular, GdalSourceProcessor},
     util::gdal::create_ndvi_meta_data,
 };
+use std::sync::Arc;
 use std::time::Instant;
 use std::{hint::black_box, marker::PhantomData};
-use std::sync::{Arc, LazyLock};
 
 fn setup_gdal_source(
     meta_data: GdalMetaDataRegular,
@@ -36,7 +36,7 @@ fn setup_gdal_source(
         meta_data: Box::new(meta_data),
         original_resolution_spatial_grid: None,
         _phantom_data: PhantomData,
-        process_data: Arc::new(LazyLock::new(ProcessData::spawn)),
+        process_data: Arc::new(LazyGdalWorker::new()),
     }
 }
 

@@ -1,6 +1,6 @@
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty2D, GridShape2D,
-    GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
+    ChangeGridBounds, GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty,
+    GridShape2D, GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
 };
 use num::Zero;
 use serde::{Deserialize, Serialize};
@@ -371,9 +371,21 @@ impl GdalReadWindow {
     }
 }
 
-pub struct GridAndProperties<T> {
-    pub grid: GridOrEmpty2D<T>,
+pub struct GridAndProperties<T, D = GridShape2D> {
+    pub grid: GridOrEmpty<D, T>,
     pub properties: RasterProperties,
+}
+
+impl<T> From<GridAndProperties<T, GridBoundingBox2D>> for GridAndProperties<T, GridShape2D>
+where
+    T: Copy,
+{
+    fn from(value: GridAndProperties<T, GridBoundingBox2D>) -> Self {
+        GridAndProperties {
+            grid: value.grid.unbounded(),
+            properties: value.properties,
+        }
+    }
 }
 
 #[cfg(test)]

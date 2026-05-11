@@ -8,8 +8,8 @@ pub use self::grid::{
     Grid, Grid1D, Grid2D, Grid3D, GridShape, GridShape1D, GridShape2D, GridShape3D,
 };
 pub use self::grid_bounds::{
-    grid_idx_iter_2d, GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D,
-    GridBoundingBoxExt, GridIdx2DIter,
+    GridBoundingBox, GridBoundingBox1D, GridBoundingBox2D, GridBoundingBox3D, GridBoundingBoxExt,
+    GridIdx2DIter, grid_idx_iter_2d,
 };
 pub use self::grid_index::{GridIdx, GridIdx1D, GridIdx2D, GridIdx3D};
 pub use self::grid_or_empty::{GridOrEmpty, GridOrEmpty1D, GridOrEmpty2D, GridOrEmpty3D};
@@ -24,17 +24,13 @@ pub use self::operations::{
     interpolation::NearestNeighbor,
 };
 pub use self::raster_tile::{
-    display_raster_tile_2d, BaseTile, MaterializedRasterTile, MaterializedRasterTile2D,
-    MaterializedRasterTile3D, RasterTile, RasterTile2D, RasterTile3D, TilesEqualIgnoringCacheHint,
+    BaseTile, MaterializedRasterTile, MaterializedRasterTile2D, MaterializedRasterTile3D,
+    RasterTile, RasterTile2D, RasterTile3D, TilesEqualIgnoringCacheHint, display_raster_tile_2d,
 };
 pub use self::tiling::{TileInformation, TileInformationIter, TilingSpecification, TilingStrategy};
 pub use self::typed_raster_conversion::TypedRasterConversion;
 pub use self::typed_raster_tile::{TypedRasterTile2D, TypedRasterTile3D};
 pub use self::{grid_traits::ChangeGridBounds, grid_traits::GridShapeAccess};
-pub use arrow_conversion::arrow_ipc_file_to_raster_tile_2d;
-pub use arrow_conversion::arrow_ipc_file_to_raster_tile_2d_for_ipc_channel;
-pub use arrow_conversion::raster_tile_2d_to_arrow_ipc_file;
-pub use arrow_conversion::raster_tile_2d_to_arrow_ipc_file_for_ipc_channel;
 pub use db_types::GridBoundingBox2DDbType;
 pub use grid_spatial::{SpatialGridDefinition, TilingSpatialGridDefinition};
 pub use masked_grid::{MaskedGrid, MaskedGrid1D, MaskedGrid2D, MaskedGrid3D};
@@ -59,7 +55,7 @@ pub use raster_properties::{
 pub use raster_traits::{CoordinatePixelAccess, GeoTransformAccess, Raster};
 pub use util::{TileIdxBandCrossProductIter, TileInformationBandCrossProductIter};
 
-mod arrow_conversion;
+pub mod arrow_conversion;
 mod band_names;
 mod data_type;
 mod db_types;
