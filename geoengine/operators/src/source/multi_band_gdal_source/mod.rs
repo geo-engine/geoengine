@@ -894,12 +894,15 @@ where
 {
     let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
 
+    let start = std::time::Instant::now();
     let buffer = rasterband.read_as::<T>(
         read_window.gdal_window_start(), // pixelspace origin
         read_window.gdal_window_size(),  // pixelspace size
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
+    debug!("read raster band in {:?} s", start.elapsed().as_secs_f64());
+
     let (_, buffer_data) = buffer.into_shape_and_vec();
     let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
 

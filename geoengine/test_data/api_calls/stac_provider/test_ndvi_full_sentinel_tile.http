@@ -21,7 +21,7 @@ Authorization: Bearer {{anonymousSession.response.body.$.id}}
 Content-Type: application/json
 
 
-< workflow.json
+< ndvi-workflow.json
 
 ###
 
@@ -33,9 +33,9 @@ Authorization: Bearer {{anonymousSession.response.body.$.id}}
 
 @workflowId = {{workflow.response.body.$.id}}
 @crs = EPSG:32632
-@width = 1830
-@height = 1830
-@time = 2026-01-15T00%3A00%3A00.000Z
+@width = 10980
+@height = 10980
+@time = 2026-01-01T00%3A00%3A00.000Z
 
 @minx = 399960.0000000000000000
 @miny = 5590200.0000000000000000
