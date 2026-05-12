@@ -1,5 +1,12 @@
-use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
+use std::io;
+
+use geoengine_datatypes::raster::{
+    GridBoundingBox2D, RasterDataType, arrow_conversion::RasterArrowConversionError,
+};
+use ipc_channel::IpcError;
 use snafu::Snafu;
+
+use crate::source::IpcProcessError;
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -10,4 +17,25 @@ pub enum GdalSourceError {
 
     #[snafu(display("Unsupported spatial query: {spatial_query:?}"))]
     IncompatibleSpatialQuery { spatial_query: GridBoundingBox2D },
+
+    #[snafu(display("GdalProcess with an unknown error: {error}"))]
+    UnknownErrorHappenedWhileReading { error: String },
+
+    #[snafu(display("Encountered a poisoned ProcessData Mutex"))]
+    ProcessLockPoisoned { error: String },
+
+    #[snafu(display("Error while sending data through ipc_channel: {error}"))]
+    IpcSendError { error: IpcError },
+
+    #[snafu(display("Error while receiving data through ipc_channel: {error}"))]
+    IpcReceiveError { error: IpcError },
+
+    #[snafu(display("Error while setting up the GdalSource reading process: {reason}"))]
+    ProcessSetupFailed { reason: io::Error },
+
+    #[snafu(display("Error in the GdalSource reading process: {source}"))]
+    IpcProcessError { source: IpcProcessError },
+
+    #[snafu(display("Error in Arrow Conversion: {source}"))]
+    ArrowConversion { source: RasterArrowConversionError },
 }

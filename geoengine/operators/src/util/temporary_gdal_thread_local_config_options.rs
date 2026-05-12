@@ -36,3 +36,28 @@ impl Drop for TemporaryGdalThreadLocalConfigOptions {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn it_reverts_config_options() {
+        let config_options = vec![("foo".to_owned(), "bar".to_owned())];
+
+        {
+            let _config =
+                TemporaryGdalThreadLocalConfigOptions::new(config_options.as_slice()).unwrap();
+
+            assert_eq!(
+                gdal::config::get_config_option("foo", "default").unwrap(),
+                "bar".to_owned()
+            );
+        }
+
+        assert_eq!(
+            gdal::config::get_config_option("foo", "").unwrap(),
+            String::new()
+        );
+    }
+}

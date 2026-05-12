@@ -565,7 +565,6 @@ mod tests {
     use geoengine_operators::source::GdalSourceProcessor;
     use geoengine_operators::util::gdal::create_ndvi_meta_data;
     use std::convert::TryInto;
-    use std::marker::PhantomData;
     use tokio_postgres::NoTls;
     use xml::ParserConfig;
 
@@ -695,14 +694,11 @@ mod tests {
 
         let meta_data = create_ndvi_meta_data();
 
-        let gdal_source = GdalSourceProcessor::<u8> {
-            produced_result_descriptor: meta_data.result_descriptor.clone(),
-            tiling_specification: exe_ctx.tiling_specification(),
-            overview_level: 0,
-            meta_data: Box::new(meta_data),
-            original_resolution_spatial_grid: None,
-            _phantom_data: PhantomData,
-        };
+        let gdal_source = GdalSourceProcessor::<u8>::new_no_overview(
+            meta_data.result_descriptor.clone(),
+            exe_ctx.tiling_specification(),
+            Box::new(meta_data),
+        );
 
         let (image_bytes, _) = raster_stream_to_png_bytes(
             gdal_source.boxed(),

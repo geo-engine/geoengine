@@ -42,6 +42,30 @@ where
     result
 }
 
+pub fn retry_sync<F, T, E>(
+    mut max_retries: usize,
+    initial_delay_ms: u64,
+    exponential_backoff_factor: f64,
+    max_delay_ms: Option<u64>,
+    mut f: F,
+) -> std::result::Result<T, E>
+where
+    F: FnMut() -> std::result::Result<T, E>,
+{
+    let mut result = f();
+    let mut sleep_delay = initial_delay_ms as f64;
+    while result.is_err() && max_retries > 0 {
+        std::thread::sleep(Duration::from_millis(sleep_delay as u64));
+        result = f();
+        max_retries -= 1;
+        sleep_delay *= exponential_backoff_factor;
+        if let Some(max_delay_ms) = max_delay_ms {
+            sleep_delay = sleep_delay.min(max_delay_ms as f64);
+        }
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use std::sync::Arc;
