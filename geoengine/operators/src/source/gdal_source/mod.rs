@@ -62,7 +62,7 @@ use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::{OnceLock, mpsc};
+use std::sync::{LazyLock, mpsc};
 use std::time::Instant;
 use tokio::sync::oneshot;
 use tracing::{debug, warn};
@@ -83,13 +83,20 @@ struct GdalSourceChannelRequest {
 }
 
 pub struct LazyGdalWorker {
-    worker_init: Arc<OnceLock<mpsc::Sender<GdalSourceChannelRequest>>>,
+    worker_init: LazyLock<mpsc::Sender<GdalSourceChannelRequest>>,
 }
 
 impl LazyGdalWorker {
     pub fn new() -> Self {
         Self {
-            worker_init: Arc::new(OnceLock::new()),
+            worker_init: LazyLock::new(|| {
+                // This block runs ONLY when the first read is requested
+                let (tx, rx) = mpsc::channel::<GdalSourceChannelRequest>(); // FIXME: bounds?
+                tracing::debug!("creating worker");
+                tokio::task::spawn_blocking(move || Self::gdal_worker(rx));
+
+                tx
+            }),
         }
     }
 
@@ -99,27 +106,32 @@ impl LazyGdalWorker {
             spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>();
 
         // This loop ensures ordered, sequential access to the IPC process
-        while let Some(request) = receiver.recv().ok() {
+        while let Ok(request) = receiver.recv() {
             // FIXME: handle errors?
             tracing::debug!(
                 "Worker: Processing request for {:?}",
                 request.params.0.dataset_params.file_path
             );
 
-            let send_res = ipc_sender
-                .send(request.params)
-                .map_err(|error| crate::source::GdalSourceError::IpcSendError { error });
+            if let Err(e) = ipc_sender.send(request.params) {
+                tracing::error!("IPC process died; exiting worker thread");
+                let _ =
+                    request
+                        .respond_to
+                        .send(Err(crate::source::GdalSourceError::IpcSendError {
+                            error: e,
+                        }));
+                break;
+            };
 
             let rec_result = ipc_receiver
                 .recv()
                 .map_err(|error| crate::source::GdalSourceError::IpcReceiveError { error });
 
             // now we either got an error or a grid with props from the IPC loader. This helps to understand what went wrong in the IPC process.
-            let result = send_res
-                .and_then(|_| {
-                    rec_result.map(|e| {
-                        e.map_err(|e| crate::source::GdalSourceError::IpcProcessError { source: e })
-                    })
+            let result = rec_result
+                .map(|e| {
+                    e.map_err(|e| crate::source::GdalSourceError::IpcProcessError { source: e })
                 })
                 .flatten();
 
@@ -130,14 +142,7 @@ impl LazyGdalWorker {
 
     /// This is where the lazy magic happens
     fn get_worker(&self) -> &mpsc::Sender<GdalSourceChannelRequest> {
-        self.worker_init.get_or_init(|| {
-            // This block runs ONLY when the first read is requested
-            let (tx, rx) = mpsc::channel::<GdalSourceChannelRequest>(); // FIXME: bounds?
-            tracing::debug!("creating worker");
-            tokio::task::spawn_blocking(move || Self::gdal_worker(rx));
-
-            tx
-        })
+        &self.worker_init
     }
 
     pub fn create_instance(self: &Arc<Self>, name: String) -> LazyGdalWorkerInstance {
@@ -146,6 +151,12 @@ impl LazyGdalWorker {
             // Now we can safely clone the pointer to the parent
             context: Arc::clone(self),
         }
+    }
+}
+
+impl Drop for LazyGdalWorker {
+    fn drop(&mut self) {
+        tracing::info!("LazyGdalWorker is being dropped. Shutting down worker thread...");
     }
 }
 
@@ -692,7 +703,7 @@ impl GdalRasterLoader {
                 .map(Result::Ok)
             })
             .try_flatten()
-            .try_buffered(16) // TODO: make this configurable
+            .try_buffered(8) // TODO: make this configurable
     }
 }
 
@@ -1798,7 +1809,7 @@ mod tests {
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
 
-        let (mut child, sender, receiver) =
+        let (_child_guard, sender, receiver) =
             spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>();
 
         sender.send(msg).unwrap();
@@ -1812,8 +1823,6 @@ mod tests {
 
         assert_eq!(grid.inner_grid.data.len(), 64);
         assert_eq!(grid.validity_mask.data.len(), 64);
-
-        let _ = child.kill();
     }
 
     // TODO (low): name / test

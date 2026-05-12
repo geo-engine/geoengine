@@ -78,20 +78,7 @@ fn run(token: Token) -> Result<(), IpcProcessError> {
     };
     let mut dataset_cache = GdalDatasetCache::new();
 
-    loop {
-        let message = match receiver.recv() {
-            Ok(msg) => msg,
-            Err(err) => {
-                if let Err(err) = sender.send(Err(IpcProcessError::from(err))) {
-                    // error while sending error... Try once again to send this error
-                    let _ = sender.send(Err(IpcProcessError::IpcOther {
-                        ipc_error: err.to_string(),
-                    }));
-                }
-                continue;
-            }
-        };
-
+    while let Ok(message) = receiver.recv() {
         let payload = message.0;
         let result = match payload.data_type {
             geoengine_datatypes::raster::RasterDataType::U8 => {
@@ -125,18 +112,19 @@ fn run(token: Token) -> Result<(), IpcProcessError> {
                 handle::<f64>(payload, &mut dataset_cache, &sender)
             }
         };
-        // if result is an error, the handler could either not send the payload or the original error. If that happens, we send a more generic error here!
-        if let Err(err) = result
-            && let Err(err) = sender.send(Err(IpcProcessError::IpcOther {
+
+        if let Err(err) = result {
+            // Attempt to notify the parent, but if the sender is also dead, just exit
+            if let Err(_) = sender.send(Err(IpcProcessError::IpcOther {
                 ipc_error: err.to_string(),
-            }))
-        {
-            // maybe this is to much since we alredy tried to send the error about not being able to send before
-            sender.send(Err(IpcProcessError::IpcOther {
-                ipc_error: err.to_string(),
-            }))?;
+            })) {
+                eprintln!("IPC Receiver error: {:?}. Exiting worker.", err);
+                break;
+            }
         }
     }
+
+    Ok(())
 }
 
 fn handle<P: FromPrimitive + Pixel + GdalType>(
