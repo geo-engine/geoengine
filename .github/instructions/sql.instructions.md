@@ -1,8 +1,9 @@
 ---
+name: SQL Coding Instructions
 applyTo: "**/*.sql"
 ---
 
-# Copilot Instructions for SQL Files
+# SQL Development Instructions
 
 ## Coding Style
 

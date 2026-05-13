@@ -6,7 +6,7 @@ import {DataSelectionService} from './app/data-selection.service';
 import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
 import {provideAnimations} from '@angular/platform-browser/animations';
 import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
-import {withHashLocation, provideRouter} from '@angular/router';
+import {provideRouter} from '@angular/router';
 import {AppComponent} from './app/app.component';
 import {PortalModule} from '@angular/cdk/portal';
 import {NgxMatSelectSearchModule} from 'ngx-mat-select-search';
@@ -43,6 +43,6 @@ bootstrapApplication(AppComponent, {
         UserService,
         provideHttpClient(withInterceptorsFromDi()),
         provideAnimations(),
-        provideRouter([{path: '**', component: AppComponent}], withHashLocation()),
+        provideRouter([{path: '**', component: AppComponent}]),
     ],
 }).catch((err) => console.error(err));

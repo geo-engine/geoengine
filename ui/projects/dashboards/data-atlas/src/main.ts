@@ -15,7 +15,7 @@ import {AppDatasetService} from './app/app-dataset.service';
 import {provideHttpClient, withInterceptorsFromDi} from '@angular/common/http';
 import {provideAnimations} from '@angular/platform-browser/animations';
 import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
-import {withHashLocation, provideRouter} from '@angular/router';
+import {provideRouter} from '@angular/router';
 import {AppComponent} from './app/app.component';
 import {PortalModule} from '@angular/cdk/portal';
 import {AppRoutingModule} from './app/app-routing.module';
@@ -52,6 +52,6 @@ bootstrapApplication(AppComponent, {
         UserService,
         provideHttpClient(withInterceptorsFromDi()),
         provideAnimations(),
-        provideRouter([{path: '**', component: AppComponent}], withHashLocation()),
+        provideRouter([{path: '**', component: AppComponent}]),
     ],
 }).catch((err) => console.error(err));

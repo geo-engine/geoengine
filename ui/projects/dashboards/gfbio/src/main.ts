@@ -17,7 +17,7 @@ import {provideAnimations} from '@angular/platform-browser/animations';
 import {BrowserModule, bootstrapApplication} from '@angular/platform-browser';
 import {MatTableModule} from '@angular/material/table';
 import {MatButtonModule} from '@angular/material/button';
-import {withHashLocation, provideRouter} from '@angular/router';
+import {provideRouter} from '@angular/router';
 import {AppComponent} from './app/app.component';
 
 bootstrapApplication(AppComponent, {
@@ -52,6 +52,6 @@ bootstrapApplication(AppComponent, {
         TabsService,
         provideHttpClient(withInterceptorsFromDi()),
         provideAnimations(),
-        provideRouter([{path: '**', component: AppComponent}], withHashLocation()),
+        provideRouter([{path: '**', component: AppComponent}]),
     ],
 }).catch((err) => console.error(err));
