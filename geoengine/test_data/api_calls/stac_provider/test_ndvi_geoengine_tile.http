@@ -25,7 +25,6 @@ Content-Type: application/json
 
 ###
 
-# Trigger metadata loading for easier debugging
 GET http://localhost:3030/api/workflow/{{workflow.response.body.$.id}}/metadata
 Authorization: Bearer {{anonymousSession.response.body.$.id}}
 
@@ -35,16 +34,15 @@ Authorization: Bearer {{anonymousSession.response.body.$.id}}
 @crs = EPSG:32632
 @width = 512
 @height = 512
-@time = 2026-01-01T00%3A00%3A00.000Z
+@time = 2020-08-07T00:00:00.000000Z
 
 @minx = 399960.0000000000000000
-@miny = 5590200.0000000000000000
+@miny = 5592480.0000000000000000
 
 @maxx = 405080.0000000000000000
-@maxy = 5595320.0000000000000000
+@maxy = 5597600.0000000000000000
 
-@styles = custom%3A%7B%22type%22%3A%22singleBand%22%2C%22band%22%3A0%2C%22bandColorizer%22%3A%7B%22type%22%3A%22linearGradient%22%2C%22breakpoints%22%3A%5B%7B%22value%22%3A-0.1%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A0.8%2C%22color%22%3A%5B255%2C255%2C255%2C255%5D%7D%5D%2C%22noDataColor%22%3A%5B0%2C0%2C0%2C0%5D%2C%22overColor%22%3A%5B246%2C250%2C254%2C255%5D%2C%22underColor%22%3A%5B247%2C251%2C255%2C255%5D%7D%7D
+@styles = custom%3A%7B%22type%22%3A%22singleBand%22%2C%22band%22%3A0%2C%22bandColorizer%22%3A%7B%22type%22%3A%22linearGradient%22%2C%22breakpoints%22%3A%5B%7B%22value%22%3A-0.1%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A0.8%2C%22color%22%3A%5B0%2C255%2C0%2C255%5D%7D%5D%2C%22noDataColor%22%3A%5B0%2C0%2C0%2C0%5D%2C%22overColor%22%3A%5B246%2C250%2C254%2C255%5D%2C%22underColor%22%3A%5B247%2C251%2C255%2C255%5D%7D%7D
 
-# January 2026 NDVI request based on provider channels B08 and B04
 GET http://localhost:3030/api/wms/{{workflowId}}?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image%2Fpng&STYLES={{styles}}&TRANSPARENT=true&layers={{workflowId}}&time={{time}}&EXCEPTIONS=application%2Fjson&WIDTH={{width}}&HEIGHT={{height}}&CRS={{crs}}&BBOX={{minx}}%2C{{miny}}%2C{{maxx}}%2C{{maxy}}
 Authorization: Bearer {{anonymousSession.response.body.$.id}}

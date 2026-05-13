@@ -1,0 +1,56 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/raster/v2.0.0/schema.json"
+      ],
+      "id": "S2B_MSIL2A_20260128T103209_N0511_R108_T32UMB_20260128T141930",
+      "bbox": [8.766, 50.802, 8.767, 50.803],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [8.766, 50.802],
+            [8.767, 50.802],
+            [8.767, 50.803],
+            [8.766, 50.803],
+            [8.766, 50.802]
+          ]
+        ]
+      },
+      "properties": {
+        "datetime": "2026-01-28T10:32:09Z",
+        "updated": "2026-01-29T14:19:30Z",
+        "proj:code": "EPSG:32632"
+      },
+      "assets": {
+        "B02_10m": {
+          "data_type": "uint16",
+          "proj:shape": [10980, 10980],
+          "proj:code": "EPSG:32632",
+          "proj:transform": [10, 0, 399960, 0, -10, 5700000],
+          "bands": [
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:common_name": "blue"
+            }
+          ],
+          "title": "Blue (band 2) - 10m",
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/01/28/example/B02_10m.jp2",
+          "type": "image/jp2",
+          "gsd": 10
+        }
+      },
+      "links": []
+    }
+  ],
+  "links": [],
+  "numberReturned": 1,
+  "numberMatched": 1
+}

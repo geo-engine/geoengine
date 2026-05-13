@@ -10,7 +10,7 @@ use std::{
 
 use anyhow::Context;
 use chrono::Timelike;
-use clap::Parser;
+use clap::{Parser, ValueEnum};
 use futures::StreamExt;
 use geoengine_datatypes::{
     primitives::{DateTime, TimeInstance, TimeInterval},
@@ -60,13 +60,17 @@ use geoengine_operators::{
     source::{MultiBandGdalSource, MultiBandGdalSourceParameters},
 };
 
-const EXTERNAL_VOLUME_NAME: &str = "external";
 const MAX_RETRIES: u32 = 10;
 const INITIAL_RETRY_DELAY_MS: u64 = 1000;
 
 // TODO: make the filter depend on stac version and stac extension versions?
 // TODO: also filter fields of collections api?
 const STAC_ITEMS_FIELDS_FILTER: &[&str] = &[
+    "id",
+    "type",
+    "geometry",
+    "bbox",
+    "links",
     "stac_version",
     "stac_extensions",
     "properties.datetime",
@@ -79,6 +83,8 @@ const STAC_ITEMS_FIELDS_FILTER: &[&str] = &[
     "assets.*.gsd",
     "assets.*.href",
     "assets.*.bands",
+    "assets.*.eo:bands",
+    "assets.*.raster:bands",
     "assets.*.proj:epsg",
     "assets.*.proj:transform",
     "assets.*.proj:shape",
@@ -89,7 +95,7 @@ const STAC_ITEMS_FIELDS_FILTER: &[&str] = &[
 #[derive(Debug, Parser)]
 pub struct StacImport {
     /// STAC API URL
-    #[arg(long, default_value = "https://earth-search.aws.element84.com/v1")]
+    #[arg(long)]
     stac_url: String,
 
     // collection to import from
@@ -169,6 +175,12 @@ pub struct StacImport {
     #[arg(long)]
     s3_secret_key: Option<String>,
 
+    /// File types to import from STAC assets.
+    /// Supported values: cog, jp2.
+    /// Defaults to COG only.
+    #[arg(long, value_enum, num_args = 1.., value_delimiter = ' ', default_values_t = [ImportFileType::Cog])]
+    file_types: Vec<ImportFileType>,
+
     /// if true, filter the stac item fields in the query to only fetch the fields required for the import, which may reduce the response size and speed up the import.
     #[arg(long, default_value_t = false)]
     filter_item_fields: bool,
@@ -186,7 +198,30 @@ pub struct StacImport {
 }
 
 /// Example call for Sentinel 2 from Element 84:
-/// `cargo run --bin geoengine-cli stac-import --limit 267 --verbose`
+/// ```
+/// cargo run --bin geoengine-cli stac-import \
+/// --verbose \
+/// --limit 267 \
+/// --bbox "8.766 50.802 8.767 50.803" \
+/// --time-start 2020-08-01T00:00:00Z \
+/// --time-end 2020-08-31T23:59:59Z \
+/// --stac-url https://earth-search.aws.element84.com/v1
+/// ````
+///
+/// Example call for Sentinel 2 from CODE-DE:
+/// ```
+/// cargo run --bin geoengine-cli stac-import \
+/// --verbose \
+/// --limit 100 \
+/// --bbox "8.766 50.802 8.767 50.803" \
+/// --time-start 2020-08-01T00:00:00Z \
+/// --time-end 2020-08-31T23:59:59Z \
+/// --stac-url https://stac.nsiscloud.polsa.gov.pl/v1 \
+/// --s3-endpoint eodata.nsiscloud.polsa.gov.pl \
+/// --s3-access-key XXX \
+/// --s3-secret-key YYY \
+/// --file-types jp2
+/// ```
 pub async fn stac_import(params: StacImport) -> Result<(), anyhow::Error> {
     let mut importer = StacImporter::new(params).await?;
     importer.run().await
@@ -481,10 +516,7 @@ impl StacImporter {
         };
 
         for (asset_key, asset) in &item.assets {
-            if asset.r#type
-                != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
-                && asset.r#type != Some("image/jp2".to_string())
-            {
+            if !matches_selected_file_types(asset.r#type.as_deref(), &self.params.file_types) {
                 println!(
                     "[DEBUG] skipping {asset_key}: unsupported asset type: {:?}",
                     asset.r#type
@@ -564,6 +596,21 @@ impl StacImporter {
             resolution: geo_transform.x_pixel_size().into(),
         };
 
+        let partial_key = PartialDatasetKey {
+            data_type: dataset_key.data_type,
+            resolution: dataset_key.resolution,
+        };
+
+        if !self.bands.contains_key(&partial_key) {
+            if self.params.verbose {
+                println!(
+                    "[DEBUG] skipping asset {}: no scanned dataset definition for {:?}",
+                    asset.href, dataset_key
+                );
+            }
+            return Ok(Vec::new());
+        }
+
         if !self.known_datasets.contains(&dataset_key) {
             let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
             let dataset_exists = self
@@ -581,29 +628,19 @@ impl StacImporter {
             self.known_datasets.insert(dataset_key.clone());
         }
 
-        let eo_bands: Result<Vec<EoBand>, _> = asset
-            .additional_fields
-            .get("eo:bands")
-            .ok_or(anyhow::anyhow!("Missing eo:bands in asset"))
-            .and_then(|eo_bands| {
-                serde_json::from_value(eo_bands.clone())
-                    .map_err(|e| anyhow::anyhow!("invalid eo:bands: {e}"))
-            });
-
-        let eo_bands = eo_bands?;
+        let eo_bands = asset.additional_fields.get("eo:bands");
+        let band_count = if let Some(eo_bands_value) = eo_bands {
+            let parsed_eo_bands: Vec<EoBand> = serde_json::from_value(eo_bands_value.clone())
+                .map_err(|e| anyhow::anyhow!("invalid eo:bands: {e}"))?;
+            Some(parsed_eo_bands)
+        } else {
+            None
+        };
 
         let dataset_bands = self
             .bands
-            .get(&PartialDatasetKey {
-                data_type: dataset_key.data_type,
-                resolution: dataset_key.resolution,
-            })
+            .get(&partial_key)
             .ok_or(anyhow::anyhow!("unknown dataset key: {dataset_key:?}"))?;
-
-        let asset_title = asset
-            .title
-            .as_deref()
-            .ok_or(anyhow::anyhow!("Missing title in asset metadata"))?;
 
         let processor = AssetBandProcessor {
             asset,
@@ -615,17 +652,27 @@ impl StacImporter {
         };
 
         let mut tiles = Vec::new();
-        for (band_idx, eo_band) in eo_bands.iter().enumerate() {
-            let band_name = if eo_bands.len() > 1 {
-                format!("{asset_title} [{}]", eo_band.name)
-            } else {
-                asset_title.to_string()
-            };
+        match band_count {
+            Some(eo_bands) => {
+                // Asset has both raster:bands and eo:bands
+                for (band_idx, eo_band) in eo_bands.iter().enumerate() {
+                    let band_name =
+                        v1_0_0_band_name(asset.title.as_deref(), Some(eo_band), eo_bands.len());
 
-            let tile = processor
-                .process_band_v1_0_0(band_idx, &band_name)
-                .context(format!("Failed to process band {}", eo_band.name))?;
-            tiles.push((dataset_key.clone(), tile));
+                    let tile = processor
+                        .process_band_v1_0_0(band_idx, &band_name)
+                        .context(format!("Failed to process band {}", eo_band.name))?;
+                    tiles.push((dataset_key.clone(), tile));
+                }
+            }
+            None => {
+                // Asset has only raster:bands (no eo:bands) - single-band asset
+                let band_name = v1_0_0_band_name(asset.title.as_deref(), None, 1);
+                let tile = processor
+                    .process_band_v1_0_0(0, &band_name)
+                    .context("Failed to process single-band asset")?;
+                tiles.push((dataset_key.clone(), tile));
+            }
         }
 
         Ok(tiles)
@@ -654,6 +701,21 @@ impl StacImporter {
             resolution: geo_transform.x_pixel_size().into(),
         };
 
+        let partial_key = PartialDatasetKey {
+            data_type: dataset_key.data_type,
+            resolution: dataset_key.resolution,
+        };
+
+        if !self.bands.contains_key(&partial_key) {
+            if self.params.verbose {
+                println!(
+                    "[DEBUG] skipping asset {}: no scanned dataset definition for {:?}",
+                    asset.href, dataset_key
+                );
+            }
+            return Ok(Vec::new());
+        }
+
         if !self.known_datasets.contains(&dataset_key) {
             let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
             let dataset_exists = self
@@ -675,10 +737,7 @@ impl StacImporter {
 
         let dataset_bands = self
             .bands
-            .get(&PartialDatasetKey {
-                data_type: dataset_key.data_type,
-                resolution: dataset_key.resolution,
-            })
+            .get(&partial_key)
             .ok_or(anyhow::anyhow!("unknown dataset key: {dataset_key:?}"))?;
 
         let processor = AssetBandProcessor {
@@ -753,7 +812,7 @@ impl StacImporter {
             .context(format!("Failed to get bands for dataset: {dataset_key:?}"))?;
 
         let create_dataset = CreateDataset {
-            data_path: DataPath::Volume(VolumeName(EXTERNAL_VOLUME_NAME.to_string())),
+            data_path: DataPath::Volume(VolumeName(self.params.volume_name.clone())),
             definition: DatasetDefinition {
                 properties: AddDataset {
                     name: Some(
@@ -1803,7 +1862,9 @@ fn create_query_params(params: &StacImport) -> Vec<(String, String)> {
     }
 
     // TODO: only filter if server supports it? check via `conformance` field in API?
-    query_params.push(("fields".to_owned(), STAC_ITEMS_FIELDS_FILTER.join(",")));
+    if params.filter_item_fields {
+        query_params.push(("fields".to_owned(), STAC_ITEMS_FIELDS_FILTER.join(",")));
+    }
 
     query_params
 }
@@ -1892,8 +1953,118 @@ impl From<ProjTransform> for crate::api::model::datatypes::GeoTransform {
 #[derive(Debug, Deserialize)]
 struct EoBand {
     name: String,
+    #[serde(default)]
+    common_name: Option<String>,
     // description: String,
     // ...
+}
+
+fn normalize_label(value: &str) -> String {
+    value
+        .trim()
+        .to_lowercase()
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join("_")
+}
+
+fn title_fallback_label(title: Option<&str>) -> String {
+    if let Some(title) = title {
+        // Prefer concise acronym-like labels in parentheses, e.g. "Scene classification map (SCL)".
+        if let (Some(start), Some(end)) = (title.rfind('('), title.rfind(')'))
+            && start < end
+        {
+            let short = title[start + 1..end].trim();
+            if !short.is_empty()
+                && short.len() <= 32
+                && short
+                    .chars()
+                    .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
+            {
+                return short.to_lowercase();
+            }
+        }
+
+        let normalized = normalize_label(title);
+        if !normalized.is_empty() {
+            return normalized;
+        }
+    }
+
+    "band".to_string()
+}
+
+fn rededge_variant_from_metadata(eo_name: &str, title: Option<&str>) -> Option<&'static str> {
+    let eo = eo_name.to_lowercase();
+    let title_lower = title.map(|t| t.to_lowercase()).unwrap_or_default();
+
+    if eo.contains("b05")
+        || eo.contains("band_5")
+        || title_lower.contains("band 5")
+        || title_lower.contains("b05")
+    {
+        return Some("rededge1");
+    }
+    if eo.contains("b06")
+        || eo.contains("band_6")
+        || title_lower.contains("band 6")
+        || title_lower.contains("b06")
+    {
+        return Some("rededge2");
+    }
+    if eo.contains("b07")
+        || eo.contains("band_7")
+        || title_lower.contains("band 7")
+        || title_lower.contains("b07")
+    {
+        return Some("rededge3");
+    }
+
+    None
+}
+
+fn v1_0_0_band_name(title: Option<&str>, eo_band: Option<&EoBand>, band_count: usize) -> String {
+    let eo_name = eo_band.and_then(|band| {
+        let eo_name = band.name.to_lowercase();
+        let common_name = band.common_name.as_ref().map(|name| name.to_lowercase());
+
+        match common_name.as_deref() {
+            // `rededge` is used for multiple Sentinel-2 bands (B05/B06/B07).
+            // Keep stable, unique names to avoid band collisions.
+            Some("rededge") => rededge_variant_from_metadata(&eo_name, title)
+                .map(|name| name.to_string())
+                .or_else(|| Some(format!("rededge[{eo_name}]"))),
+            Some(common_name) => Some(common_name.to_string()),
+            None => Some(eo_name),
+        }
+    });
+
+    if band_count > 1 {
+        let asset_label = title_fallback_label(title);
+        let eo_name = eo_name.unwrap_or_else(|| "band".to_string());
+        return format!("{asset_label}[{eo_name}]");
+    }
+
+    if let Some(eo_name) = eo_name {
+        return eo_name;
+    }
+
+    title_fallback_label(title)
+}
+
+fn is_cog_media_type(media_type: Option<&str>) -> bool {
+    media_type == Some("image/tiff; application=geotiff; profile=cloud-optimized")
+}
+
+fn is_jp2_media_type(media_type: Option<&str>) -> bool {
+    media_type == Some("image/jp2")
+}
+
+fn matches_selected_file_types(media_type: Option<&str>, file_types: &[ImportFileType]) -> bool {
+    file_types.iter().any(|file_type| match file_type {
+        ImportFileType::Cog => is_cog_media_type(media_type),
+        ImportFileType::Jp2 => is_jp2_media_type(media_type),
+    })
 }
 
 async fn scan_collection(
@@ -1924,10 +2095,7 @@ async fn scan_collection(
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
     for (asset_key, asset) in &collection.item_assets {
-        if asset.r#type
-            != Some("image/tiff; application=geotiff; profile=cloud-optimized".to_string())
-            && asset.r#type != Some("image/jp2".to_string())
-        {
+        if !matches_selected_file_types(asset.r#type.as_deref(), &params.file_types) {
             println!(
                 "[DEBUG] Skipping asset {asset_key} with unsupported media type: {:?}",
                 asset.r#type
@@ -1995,37 +2163,32 @@ fn scan_item_asset_v1_0_0(
 ) -> anyhow::Result<Option<HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>>>> {
     let mut dataset_bands: HashMap<PartialDatasetKey, Vec<RasterBandDescriptor>> = HashMap::new();
 
-    let raster_bands: anyhow::Result<Vec<stac_extensions::raster::Band>> = asset
-        .additional_fields
-        .get("raster:bands")
-        .ok_or(anyhow::anyhow!("Missing raster:bands"))
-        .and_then(|bands| {
-            serde_json::from_value(bands.clone())
-                .map_err(|e| anyhow::anyhow!("invalid raster:bands: {e}",))
-        });
+    let Some(raster_bands) = asset.additional_fields.get("raster:bands") else {
+        return Ok(None);
+    };
+    let raster_bands: Vec<stac_extensions::raster::Band> =
+        serde_json::from_value(raster_bands.clone())
+            .map_err(|e| anyhow::anyhow!("invalid raster:bands: {e}",))?;
 
-    let eo_bands: anyhow::Result<Vec<EoBand>> = asset
-        .additional_fields
-        .get("eo:bands")
-        .ok_or(anyhow::anyhow!("Missing eo:bands in asset"))
-        .and_then(|eo_bands| {
-            serde_json::from_value(eo_bands.clone())
-                .map_err(|e| anyhow::anyhow!("invalid eo:bands: {e}"))
-        });
-
-    let (raster_bands, eo_bands) = (raster_bands?, eo_bands?);
     let band_count = raster_bands.len();
 
-    if band_count != eo_bands.len() {
-        anyhow::bail!("Skipping asset with mismatched raster:bands and eo:bands length",);
+    // Try to get eo:bands (optional)
+    let eo_bands = asset
+        .additional_fields
+        .get("eo:bands")
+        .and_then(|v| serde_json::from_value::<Vec<EoBand>>(v.clone()).ok());
+
+    // If eo:bands is present, it must match raster:bands length
+    if let Some(ref eo_bands_vec) = eo_bands {
+        if band_count != eo_bands_vec.len() {
+            return Ok(None);
+        }
+    } else if band_count != 1 {
+        // If eo:bands is missing, only support single-band assets
+        return Ok(None);
     }
 
-    let asset_title = asset
-        .title
-        .as_deref()
-        .ok_or(anyhow::anyhow!("Missing title in asset metadata"))?;
-
-    for (raster_band, eo_band) in raster_bands.into_iter().zip(eo_bands.into_iter()) {
+    for (index, raster_band) in raster_bands.into_iter().enumerate() {
         let data_type = raster_band
             .data_type
             .ok_or(anyhow::anyhow!("Missing data_type in raster band"))?;
@@ -2035,10 +2198,16 @@ fn scan_item_asset_v1_0_0(
             .ok_or(anyhow::anyhow!("missing proj:transform"))?;
         let resolution = geo_transform.x_pixel_size().into();
 
-        let band_name = if band_count > 1 {
-            format!("{asset_title} [{}]", eo_band.name)
+        let band_name = if let Some(ref eo_bands_vec) = eo_bands {
+            // Use eo:bands metadata if available
+            v1_0_0_band_name(
+                asset.title.as_deref(),
+                Some(&eo_bands_vec[index]),
+                band_count,
+            )
         } else {
-            asset_title.to_string()
+            // For single-band assets without eo:bands, derive a stable name from title metadata.
+            v1_0_0_band_name(asset.title.as_deref(), None, 1)
         };
 
         dataset_bands
@@ -2323,6 +2492,12 @@ enum StacExtensionMajorVersion {
     V2,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
+enum ImportFileType {
+    Cog,
+    Jp2,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct StacExtensionVersions {
     projection: StacExtensionMajorVersion,
@@ -2439,50 +2614,347 @@ fn stac_extension_version_from_str(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use httptest::{
+        Expectation, Server, all_of,
+        matchers::{self, request},
+        responders,
+    };
+    use std::path::PathBuf;
 
-    #[test]
-    fn it_parses_raster_bands() {
-        let json = r#" [
-            {
-              "nodata": 0,
-              "data_type": "uint16",
-              "bits_per_sample": 15,
-              "spatial_resolution": 20,
-              "unit": "cm",
-              "scale": 0.001,
-              "offset": 0
-            }
-          ]"#;
-
-        let _raster_bands: Vec<stac_extensions::raster::Band> =
-            serde_json::from_str(json).expect("Failed to parse raster bands");
+    fn stac_params(stac_url: String, geo_engine_url: String) -> StacImport {
+        StacImport {
+            stac_url,
+            stac_collection: "sentinel-2-l2a".to_string(),
+            limit: Some(10),
+            time_start: Some("2026-01-01T00:00:00Z".to_string()),
+            time_end: Some("2026-01-31T23:59:59Z".to_string()),
+            bbox: Some(vec![8.766, 50.802, 8.767, 50.803]),
+            geo_engine_url,
+            geo_engine_email: "admin@localhost".to_string(),
+            geo_engine_password: "adminadmin".to_string(),
+            volume_name: "geodata-test".to_string(),
+            dataset_name_prefix: "Sentinel2".to_string(),
+            verbose: false,
+            prefetch_pages: 1,
+            epsgs: vec![],
+            z_index_property_name: Some("updated".to_string()),
+            s3_endpoint: None,
+            s3_access_key: None,
+            s3_secret_key: None,
+            file_types: vec![ImportFileType::Cog],
+            filter_item_fields: false,
+        }
     }
 
-    #[test]
-    fn it_parses_extension_versions_from_collection() {
-        let collection_json =
-            include_str!("../../../test_data/stac_responses/collections/code-de.json");
-        let collection: stac::Collection =
-            serde_json::from_str(collection_json).expect("collection fixture should parse");
+    #[tokio::test]
+    async fn test_element84_stac_v1_0_0_creates_expected_dataset_and_tiles() {
+        let stac_server = Server::run();
+        let geo_server = Server::run();
 
-        let versions = StacExtensionVersions::try_from(&collection).expect("versions should parse");
+        stac_server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/sentinel-2-l2a"))
+                .respond_with(responders::json_encoded(
+                    serde_json::from_str::<serde_json::Value>(include_str!(
+                        "../../../test_data/stac_responses/collections/element84.json"
+                    ))
+                    .expect("valid element84 collection fixture"),
+                )),
+        );
 
-        assert_eq!(versions.projection, StacExtensionMajorVersion::V2);
-        assert_eq!(versions.raster, StacExtensionMajorVersion::V2);
-        assert_eq!(versions.eo, StacExtensionMajorVersion::V2);
+        stac_server.expect(
+            Expectation::matching(all_of![
+                request::method("GET"),
+                request::path("/collections/sentinel-2-l2a/items"),
+                request::query(matchers::url_decoded(matchers::contains((
+                    "bbox",
+                    "8.766,50.802,8.767,50.803"
+                )))),
+                request::query(matchers::url_decoded(matchers::contains((
+                    "datetime",
+                    "2026-01-01T00:00:00Z/2026-01-31T23:59:59Z"
+                )))),
+                request::query(matchers::url_decoded(matchers::contains(("limit", "10")))),
+            ])
+            .respond_with(responders::json_encoded(
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../test_data/stac_responses/items/element84-marburg-minimal.json"
+                ))
+                .expect("valid element84 items fixture"),
+            )),
+        );
+
+        geo_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/login")).respond_with(
+                responders::json_encoded(serde_json::json!({ "id": "test-session" })),
+            ),
+        );
+
+        geo_server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/api/dataset/sentinel-2-l2a_EPSG32632_U16_10",
+            ))
+            .respond_with(
+                responders::status_code(400)
+                    .append_header("Content-Type", "application/json")
+                    .body(
+                        serde_json::json!({
+                            "error": "CannotLoadDataset",
+                            "message": "Dataset not found"
+                        })
+                        .to_string(),
+                    ),
+            ),
+        );
+
+        geo_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/dataset")).respond_with(
+                responders::json_encoded(serde_json::json!({
+                    "datasetName": "sentinel-2-l2a_EPSG32632_U16_10"
+                })),
+            ),
+        );
+
+        geo_server.expect(
+            Expectation::matching(request::method_path("PUT", "/api/permissions"))
+                .times(2)
+                .respond_with(responders::status_code(200)),
+        );
+
+        let mut importer = StacImporter::new(stac_params(
+            stac_server.url_str("").trim_end_matches('/').to_string(),
+            geo_server.url_str("/api").trim_end_matches('/').to_string(),
+        ))
+        .await
+        .expect("importer should initialize");
+
+        let query_state = QueryState::FirstPage {
+            query_url: format!(
+                "{}/collections/{}/items",
+                importer.params.stac_url, importer.params.stac_collection
+            ),
+            query_params: create_query_params(&importer.params),
+        };
+
+        let (item_collection, query_state) = query_item_collection(&importer.client, &query_state)
+            .await
+            .expect("items should be fetched");
+        assert!(matches!(query_state, QueryState::Finished));
+
+        let dataset_tiles = importer
+            .process_items(item_collection)
+            .await
+            .expect("item processing should succeed");
+
+        assert_eq!(dataset_tiles.len(), 1);
+
+        let partial_key = PartialDatasetKey {
+            data_type: RasterDataType::U16,
+            resolution: OrderedFloat(10.),
+        };
+
+        let expected_band_idx = importer
+            .bands
+            .get(&partial_key)
+            .expect("10m U16 dataset should be present")
+            .iter()
+            .position(|band| band.name == "blue")
+            .expect("blue band should exist") as u32;
+
+        let (dataset_key, tiles) = dataset_tiles
+            .iter()
+            .next()
+            .expect("exactly one dataset key should be present");
+
+        assert_eq!(dataset_key.epsg, 32632);
+        assert_eq!(dataset_key.data_type, RasterDataType::U16);
+        assert_eq!(dataset_key.resolution, OrderedFloat(10.));
+        assert_eq!(tiles.len(), 1);
+
+        let tile = &tiles[0];
+        assert_eq!(tile.band, expected_band_idx);
+        assert_eq!(tile.params.rasterband_channel, 1);
+        assert_eq!(tile.params.width, 10_980);
+        assert_eq!(tile.params.height, 10_980);
+        assert_eq!(
+            tile.params.file_path,
+            PathBuf::from(
+                "/vsicurl/https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2026/1/S2B_32UMB_20260128_0_L2A/B02.tif"
+            )
+        );
+
+        let expected_z_index = chrono::DateTime::parse_from_rfc3339("2026-01-29T21:55:06.896Z")
+            .expect("valid updated datetime")
+            .timestamp_millis();
+        assert_eq!(tile.z_index, expected_z_index);
     }
 
-    #[test]
-    fn it_infers_missing_collection_projection_extension_for_v1() {
-        let collection_json =
-            include_str!("../../../test_data/stac_responses/collections/element84.json");
-        let collection: stac::Collection =
-            serde_json::from_str(collection_json).expect("collection fixture should parse");
+    #[tokio::test]
+    async fn test_polsa_stac_v1_1_0_creates_expected_dataset_and_tiles() {
+        let stac_server = Server::run();
+        let geo_server = Server::run();
 
-        let versions = StacExtensionVersions::try_from(&collection).expect("versions should parse");
+        stac_server.expect(
+            Expectation::matching(request::method_path("GET", "/collections/sentinel-2-l2a"))
+                .respond_with(responders::json_encoded(
+                    serde_json::from_str::<serde_json::Value>(include_str!(
+                        "../../../test_data/stac_responses/collections/code-de.json"
+                    ))
+                    .expect("valid code-de collection fixture"),
+                )),
+        );
 
-        assert_eq!(versions.projection, StacExtensionMajorVersion::V1);
-        assert_eq!(versions.raster, StacExtensionMajorVersion::V1);
-        assert_eq!(versions.eo, StacExtensionMajorVersion::V1);
+        stac_server.expect(
+            Expectation::matching(all_of![
+                request::method("GET"),
+                request::path("/collections/sentinel-2-l2a/items"),
+                request::query(matchers::url_decoded(matchers::contains((
+                    "bbox",
+                    "8.766,50.802,8.767,50.803"
+                )))),
+                request::query(matchers::url_decoded(matchers::contains((
+                    "datetime",
+                    "2026-01-01T00:00:00Z/2026-01-31T23:59:59Z"
+                )))),
+                request::query(matchers::url_decoded(matchers::contains(("limit", "10")))),
+            ])
+            .respond_with(responders::json_encoded(
+                serde_json::from_str::<serde_json::Value>(include_str!(
+                    "../../../test_data/stac_responses/items/polsa-marburg-minimal.json"
+                ))
+                .expect("valid polsa items fixture"),
+            )),
+        );
+
+        geo_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/login")).respond_with(
+                responders::json_encoded(serde_json::json!({ "id": "test-session" })),
+            ),
+        );
+
+        geo_server.expect(
+            Expectation::matching(request::method_path(
+                "GET",
+                "/api/dataset/sentinel-2-l2a_EPSG32632_U16_10",
+            ))
+            .respond_with(
+                responders::status_code(400)
+                    .append_header("Content-Type", "application/json")
+                    .body(
+                        serde_json::json!({
+                            "error": "CannotLoadDataset",
+                            "message": "Dataset not found"
+                        })
+                        .to_string(),
+                    ),
+            ),
+        );
+
+        geo_server.expect(
+            Expectation::matching(request::method_path("POST", "/api/dataset")).respond_with(
+                responders::json_encoded(serde_json::json!({
+                    "datasetName": "sentinel-2-l2a_EPSG32632_U16_10"
+                })),
+            ),
+        );
+
+        geo_server.expect(
+            Expectation::matching(request::method_path("PUT", "/api/permissions"))
+                .times(2)
+                .respond_with(responders::status_code(200)),
+        );
+
+        let mut params = stac_params(
+            stac_server.url_str("").trim_end_matches('/').to_string(),
+            geo_server.url_str("/api").trim_end_matches('/').to_string(),
+        );
+        params.s3_endpoint = Some("localhost:9000".to_string());
+        params.s3_access_key = Some("mock-access-key".to_string());
+        params.s3_secret_key = Some("mock-secret-key".to_string());
+        params.file_types = vec![ImportFileType::Jp2];
+
+        let mut importer = StacImporter::new(params)
+            .await
+            .expect("importer should initialize");
+
+        let query_state = QueryState::FirstPage {
+            query_url: format!(
+                "{}/collections/{}/items",
+                importer.params.stac_url, importer.params.stac_collection
+            ),
+            query_params: create_query_params(&importer.params),
+        };
+
+        let (item_collection, query_state) = query_item_collection(&importer.client, &query_state)
+            .await
+            .expect("items should be fetched");
+        assert!(matches!(query_state, QueryState::Finished));
+
+        let dataset_tiles = importer
+            .process_items(item_collection)
+            .await
+            .expect("item processing should succeed");
+
+        assert_eq!(dataset_tiles.len(), 1);
+
+        let partial_key = PartialDatasetKey {
+            data_type: RasterDataType::U16,
+            resolution: OrderedFloat(10.),
+        };
+
+        let expected_band_idx = importer
+            .bands
+            .get(&partial_key)
+            .expect("10m U16 dataset should be present")
+            .iter()
+            .position(|band| band.name == "Blue (band 2) - 10m")
+            .expect("blue band should exist") as u32;
+
+        let (dataset_key, tiles) = dataset_tiles
+            .iter()
+            .next()
+            .expect("exactly one dataset key should be present");
+
+        assert_eq!(dataset_key.epsg, 32632);
+        assert_eq!(dataset_key.data_type, RasterDataType::U16);
+        assert_eq!(dataset_key.resolution, OrderedFloat(10.));
+        assert_eq!(tiles.len(), 1);
+
+        let tile = &tiles[0];
+        assert_eq!(tile.band, expected_band_idx);
+        assert_eq!(tile.params.rasterband_channel, 1);
+        assert_eq!(tile.params.width, 10_980);
+        assert_eq!(tile.params.height, 10_980);
+        assert_eq!(
+            tile.params.file_path,
+            PathBuf::from("/vsis3/eodata/Sentinel-2/MSI/L2A/2026/01/28/example/B02_10m.jp2")
+        );
+
+        let expected_z_index = chrono::DateTime::parse_from_rfc3339("2026-01-29T14:19:30Z")
+            .expect("valid updated datetime")
+            .timestamp_millis();
+        assert_eq!(tile.z_index, expected_z_index);
+
+        let gdal_options = tile
+            .params
+            .gdal_config_options
+            .as_ref()
+            .expect("s3 tiles should include gdal config options");
+
+        assert!(
+            gdal_options
+                .iter()
+                .any(|opt| opt.0.0 == "AWS_S3_ENDPOINT" && opt.0.1 == "localhost:9000")
+        );
+        assert!(
+            gdal_options
+                .iter()
+                .any(|opt| opt.0.0 == "AWS_ACCESS_KEY_ID" && opt.0.1 == "mock-access-key")
+        );
+        assert!(
+            gdal_options
+                .iter()
+                .any(|opt| { opt.0.0 == "AWS_SECRET_ACCESS_KEY" && opt.0.1 == "mock-secret-key" })
+        );
     }
 }
