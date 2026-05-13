@@ -912,7 +912,7 @@ impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProvide
     fn from(value: crate::datasets::external::stac::StacProviderS3Config) -> Self {
         Self {
             endpoint: value.endpoint,
-            access_key: value.access_key,
+            access_key: value.access_key.map(|_| SECRET_REPLACEMENT.to_string()),
             secret_key: value.secret_key.map(|_| SECRET_REPLACEMENT.to_string()),
         }
     }
@@ -1423,8 +1423,10 @@ impl From<crate::machine_learning::MlModel> for MlModel {
 #[cfg(test)]
 mod tests {
     use super::{
-        StacDataProviderDefinition, StacProviderDatasetResolution, TypedDataProviderDefinition,
+        StacDataProviderDefinition, StacProviderDatasetResolution, StacProviderS3Config,
+        TypedDataProviderDefinition,
     };
+    use crate::api::model::services::SECRET_REPLACEMENT;
     use geoengine_datatypes::test_data;
     use std::fs;
 
@@ -1454,5 +1456,20 @@ mod tests {
             definition.datasets[0].resolution,
             StacProviderDatasetResolution::Uniform(value) if value == 10.
         ));
+    }
+
+    #[test]
+    fn stac_s3_credentials_are_redacted_in_api_conversion() {
+        let internal = crate::datasets::external::stac::StacProviderS3Config {
+            endpoint: "https://example-s3.local".to_owned(),
+            access_key: Some("my-access-key".to_owned()),
+            secret_key: Some("my-secret-key".to_owned()),
+        };
+
+        let api: StacProviderS3Config = internal.into();
+
+        assert_eq!(api.endpoint, "https://example-s3.local");
+        assert_eq!(api.access_key.as_deref(), Some(SECRET_REPLACEMENT));
+        assert_eq!(api.secret_key.as_deref(), Some(SECRET_REPLACEMENT));
     }
 }
