@@ -1,6 +1,7 @@
+use crate::api::model::services::SECRET_REPLACEMENT;
 use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
-use crate::layers::external::{DataProvider, DataProviderDefinition};
+use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use async_trait::async_trait;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{SpatialResolution, TimeDimension};
@@ -97,6 +98,31 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
 
     fn priority(&self) -> i16 {
         self.priority.unwrap_or(0)
+    }
+
+    async fn update(
+        &self,
+        new: TypedDataProviderDefinition,
+    ) -> crate::error::Result<TypedDataProviderDefinition>
+    where
+        Self: Sized,
+    {
+        Ok(match new {
+            TypedDataProviderDefinition::StacDataProviderDefinition(mut new) => {
+                if let (Some(current_s3), Some(new_s3)) = (&self.s3_config, &mut new.s3_config) {
+                    if new_s3.access_key.as_deref() == Some(SECRET_REPLACEMENT) {
+                        new_s3.access_key.clone_from(&current_s3.access_key);
+                    }
+
+                    if new_s3.secret_key.as_deref() == Some(SECRET_REPLACEMENT) {
+                        new_s3.secret_key.clone_from(&current_s3.secret_key);
+                    }
+                }
+
+                TypedDataProviderDefinition::StacDataProviderDefinition(new)
+            }
+            _ => new,
+        })
     }
 }
 
