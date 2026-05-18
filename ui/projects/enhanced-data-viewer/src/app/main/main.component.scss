@@ -1,0 +1,171 @@
+@use '@angular/material' as mat;
+
+mat-toolbar {
+    .logo {
+        height: 67%;
+        width: auto;
+        margin: 0 1rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .space {
+        flex: 1;
+    }
+
+    border-bottom: 1px solid var(--geoengine-divider-color);
+}
+
+mat-drawer {
+    width: 360px;
+
+    .drawer-container {
+        display: flex;
+        flex-direction: row;
+        height: 100%;
+
+        mat-nav-list {
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--geoengine-divider-color);
+
+            mat-list-item span {
+                text-align: center;
+            }
+
+            .geoengine-logo {
+                height: 1.5rem;
+                width: auto;
+            }
+
+            .spacer {
+                flex: 1;
+            }
+        }
+
+        .drawer-main {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+
+            > div {
+                padding: 0 0.5rem;
+                // width: 100%;
+            }
+
+            .data-sources {
+                // display: flex;
+                // flex-direction: row;
+                // flex-wrap: wrap;
+                /* Use gap to create consistent spacing between buttons */
+                // gap: 0.5rem;
+
+                // width: 100%;
+                // width: 10rem;
+                // display: block;
+
+                mat-radio-button {
+                    display: inline-block;
+                    // display: block;
+                }
+            }
+
+            .time-selection {
+                div {
+                    display: flex;
+                    flex-direction: row;
+                    align-items: center;
+                    gap: 0.5rem;
+                }
+                input,
+                mat-datepicker {
+                    visibility: hidden;
+                    height: 0px;
+                    width: 0px;
+                    padding: 0;
+                    margin: 0;
+                    border: none;
+                }
+                .calendar-open {
+                    flex: 1;
+                }
+            }
+
+            .visualization-presets {
+                display: flex;
+                flex-direction: row;
+                flex-wrap: wrap;
+                gap: 1rem;
+
+                width: 100%;
+                border: none;
+
+                mat-list-item {
+                    width: 46%;
+                    text-align: center;
+                    padding: 0;
+
+                    img {
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                        border-radius: 4px;
+                    }
+
+                    span {
+                        color: white;
+                        text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
+                        transform: translateY(-1rem);
+                    }
+                }
+            }
+
+            geoengine-small-time-interaction ::ng-deep {
+                // TODO: fix this in the component itself
+
+                button:not(:first-child):not(:last-child) {
+                    font-size: 0.65rem;
+                }
+
+                button:first-child {
+                    width: 1rem;
+                    height: 1rem;
+                    margin-left: -1rem;
+                    margin-right: 1rem;
+                }
+
+                button:last-child {
+                    width: 1rem;
+                    height: 1rem;
+                }
+            }
+        }
+    }
+}
+
+.side-buttons {
+    position: absolute;
+    right: 1rem;
+    top: 1rem;
+
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    align-items: center;
+
+    mat-button-toggle-group {
+        // width: 40px;
+        mat-button-toggle:first-child {
+            border-top-left-radius: 50%;
+            border-top-right-radius: 50%;
+        }
+        mat-button-toggle:last-child {
+            border-bottom-left-radius: 50%;
+            border-bottom-right-radius: 50%;
+        }
+    }
+
+    button {
+        width: 48px; // adjust to toggle button size
+        height: 48px; // adjust to toggle button size
+    }
+}
