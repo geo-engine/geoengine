@@ -23,7 +23,7 @@ use geoengine_operators::source::{
     OgrSourceDataset, TileFile,
 };
 use serde_json::Value;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
 use tracing::debug;
@@ -93,8 +93,9 @@ async fn query_stac_item_collection(
                 .iter()
                 .find(|link| link.rel == "next")
                 .and_then(|link| Url::parse(&link.href).ok())
-                .map(|next_url| StacQueryState::NextPage { next_url })
-                .unwrap_or(StacQueryState::Finished);
+                .map_or(StacQueryState::Finished, |next_url| {
+                    StacQueryState::NextPage { next_url }
+                });
 
             Ok((item_collection, next_state))
         }
@@ -130,8 +131,9 @@ async fn query_stac_item_collection(
                 .iter()
                 .find(|link| link.rel == "next")
                 .and_then(|link| Url::parse(&link.href).ok())
-                .map(|next_url| StacQueryState::NextPage { next_url })
-                .unwrap_or(StacQueryState::Finished);
+                .map_or(StacQueryState::Finished, |next_url| {
+                    StacQueryState::NextPage { next_url }
+                });
 
             Ok((item_collection, next_state))
         }
@@ -151,6 +153,7 @@ impl
         MultiBandGdalLoadingInfoQueryRectangle,
     > for StacMultiBandMetaData
 {
+    #[allow(clippy::too_many_lines)]
     async fn loading_info(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
@@ -239,8 +242,10 @@ impl
                     .updated
                     .as_deref()
                     .and_then(|updated| ChronoDateTime::parse_from_rfc3339(updated).ok())
-                    .map(|updated| updated.timestamp_millis())
-                    .unwrap_or_else(|| item_datetime.timestamp_millis());
+                    .map_or_else(
+                        || item_datetime.timestamp_millis(),
+                        |updated| updated.timestamp_millis(),
+                    );
 
                 let item_time = TimeInstance::from_millis(item_datetime.timestamp_millis())
                     .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
@@ -436,7 +441,7 @@ impl
                 bounds: None,
                 dimension: self.time_dimension,
             },
-            spatial_grid: self.dataset.spatial_grid.clone().into(),
+            spatial_grid: self.dataset.spatial_grid,
             bands: RasterBandDescriptors::new_multiple_bands(self.dataset.bands.len() as u32),
         })
     }
@@ -507,10 +512,7 @@ impl
 }
 
 impl StacMultiBandMetaData {
-    fn gdal_config_options_for_file_path(
-        &self,
-        file_path: &PathBuf,
-    ) -> Option<Vec<(String, String)>> {
+    fn gdal_config_options_for_file_path(&self, file_path: &Path) -> Option<Vec<(String, String)>> {
         let file_path_str = file_path.to_string_lossy();
         let is_vsi_s3 = file_path_str.starts_with("/vsis3/");
         let is_vsi_curl = file_path_str.starts_with("/vsicurl/");
@@ -885,8 +887,7 @@ mod tests {
         let time_steps = loading_info.time_steps();
         assert!(
             time_steps.iter().any(|ts| ts == &expected_time),
-            "loading_info should contain time step for 2026-01-03, got {:?}",
-            time_steps
+            "loading_info should contain time step for 2026-01-03, got {time_steps:?}"
         );
 
         let tile_geo_transform = GeoTransform::new((499_980.0, 5_800_020.0).into(), 10.0, -10.0);
@@ -902,13 +903,11 @@ mod tests {
 
             assert!(
                 !b08_params.is_empty(),
-                "Should have B08 (NIR) band files for {}",
-                time_step
+                "Should have B08 (NIR) band files for {time_step}"
             );
             assert!(
                 !b04_params.is_empty(),
-                "Should have B04 (Red) band files for {}",
-                time_step
+                "Should have B04 (Red) band files for {time_step}"
             );
 
             for param in &b08_params {
@@ -1012,7 +1011,7 @@ mod tests {
         let workflow_json_with_provider = ndvi_workflow_json
             .replace(
                 "_:b274275c-373d-4a3f-8b45-9b48e9614329",
-                &format!("_:{}", provider_id),
+                &format!("_:{provider_id}"),
             )
             .replace("\"bands\": [1]", "\"bands\": [0]")
             .replace("\"bands\": [3, 4]", "\"bands\": [0, 1]");

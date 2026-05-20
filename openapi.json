@@ -10895,6 +10895,24 @@
           }
         }
       },
+      "SpatialResolution": {
+        "type": "object",
+        "description": "The spatial resolution in SRS units",
+        "required": [
+          "x",
+          "y"
+        ],
+        "properties": {
+          "x": {
+            "type": "number",
+            "format": "double"
+          },
+          "y": {
+            "type": "number",
+            "format": "double"
+          }
+        }
+      },
       "StacApiRetries": {
         "type": "object",
         "required": [
@@ -10915,6 +10933,157 @@
           "numberOfRetries": {
             "type": "integer",
             "minimum": 0
+          }
+        }
+      },
+      "StacDataProviderDefinition": {
+        "type": "object",
+        "required": [
+          "type",
+          "name",
+          "id",
+          "description",
+          "apiUrl",
+          "collectionName",
+          "timeDimension",
+          "datasets"
+        ],
+        "properties": {
+          "apiUrl": {
+            "type": "string"
+          },
+          "collectionName": {
+            "type": "string"
+          },
+          "datasets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StacProviderDataset"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "$ref": "#/components/schemas/DataProviderId"
+          },
+          "name": {
+            "type": "string"
+          },
+          "priority": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "format": "int32"
+          },
+          "s3Config": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/StacProviderS3Config"
+              }
+            ]
+          },
+          "timeDimension": {
+            "$ref": "#/components/schemas/TimeDimension"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "StacProviderDefinition"
+            ]
+          }
+        }
+      },
+      "StacProviderDataset": {
+        "type": "object",
+        "required": [
+          "name",
+          "description",
+          "dataType",
+          "resolution",
+          "projection",
+          "spatialGrid",
+          "bands"
+        ],
+        "properties": {
+          "bands": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StacProviderDatasetBand"
+            }
+          },
+          "dataType": {
+            "$ref": "#/components/schemas/RasterDataType"
+          },
+          "description": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "projection": {
+            "type": "string"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/StacProviderDatasetResolution"
+          },
+          "spatialGrid": {
+            "$ref": "#/components/schemas/SpatialGridDescriptor"
+          }
+        }
+      },
+      "StacProviderDatasetBand": {
+        "type": "object",
+        "required": [
+          "assetTitle"
+        ],
+        "properties": {
+          "assetTitle": {
+            "type": "string"
+          },
+          "bandName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        }
+      },
+      "StacProviderDatasetResolution": {
+        "oneOf": [
+          {
+            "type": "number",
+            "format": "double"
+          },
+          {
+            "$ref": "#/components/schemas/SpatialResolution"
+          }
+        ]
+      },
+      "StacProviderS3Config": {
+        "type": "object",
+        "required": [
+          "endpoint"
+        ],
+        "properties": {
+          "accessKey": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "endpoint": {
+            "type": "string"
+          },
+          "secretKey": {
+            "type": [
+              "string",
+              "null"
+            ]
           }
         }
       },
@@ -11573,6 +11742,9 @@
             "$ref": "#/components/schemas/SentinelS2L2ACogsProviderDefinition"
           },
           {
+            "$ref": "#/components/schemas/StacDataProviderDefinition"
+          },
+          {
             "$ref": "#/components/schemas/WildliveDataConnectorDefinition"
           }
         ],
@@ -11590,6 +11762,7 @@
             "NetCdfCf": "#/components/schemas/NetCdfCfDataProviderDefinition",
             "Pangaea": "#/components/schemas/PangaeaDataProviderDefinition",
             "SentinelS2L2ACogs": "#/components/schemas/SentinelS2L2ACogsProviderDefinition",
+            "StacProviderDefinition": "#/components/schemas/StacDataProviderDefinition",
             "WildLIVE!": "#/components/schemas/WildliveDataConnectorDefinition"
           }
         }

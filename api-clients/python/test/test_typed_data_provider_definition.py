@@ -107,6 +107,41 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                     exponential_backoff_factor = 1.337, 
                     initial_delay_ms = 0, 
                     number_of_retries = 0, ),
+                collection_name = '',
+                datasets = [
+                    geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
+                        bands = [
+                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
+                                asset_title = '', 
+                                band_name = '', )
+                            ], 
+                        data_type = 'U8', 
+                        description = '', 
+                        name = '', 
+                        projection = '', 
+                        resolution = null, 
+                        spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
+                            descriptor = 'source', 
+                            spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
+                                geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
+                                    origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                                        x = 1.337, 
+                                        y = 1.337, ), 
+                                    x_pixel_size = 1.337, 
+                                    y_pixel_size = 1.337, ), 
+                                grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
+                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                        x_idx = 56, 
+                                        y_idx = 56, ), 
+                                    top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                        x_idx = 56, 
+                                        y_idx = 56, ), ), ), ), )
+                    ],
+                s3_config = geoengine_api_client.models.stac_provider_s3_config.StacProviderS3Config(
+                    access_key = '', 
+                    endpoint = '', 
+                    secret_key = '', ),
+                time_dimension = None,
                 expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
                 refresh_token = '',
                 user = ''
@@ -163,6 +198,37 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 collection_api_auth_token = '',
                 collection_api_url = '',
                 pangaea_url = '',
+                collection_name = '',
+                datasets = [
+                    geoengine_api_client.models.stac_provider_dataset.StacProviderDataset(
+                        bands = [
+                            geoengine_api_client.models.stac_provider_dataset_band.StacProviderDatasetBand(
+                                asset_title = '', 
+                                band_name = '', )
+                            ], 
+                        data_type = 'U8', 
+                        description = '', 
+                        name = '', 
+                        projection = '', 
+                        resolution = null, 
+                        spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
+                            descriptor = 'source', 
+                            spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
+                                geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
+                                    origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                                        x = 1.337, 
+                                        y = 1.337, ), 
+                                    x_pixel_size = 1.337, 
+                                    y_pixel_size = 1.337, ), 
+                                grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
+                                    bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                        x_idx = 56, 
+                                        y_idx = 56, ), 
+                                    top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                        x_idx = 56, 
+                                        y_idx = 56, ), ), ), ), )
+                    ],
+                time_dimension = None,
         )
         """
 
