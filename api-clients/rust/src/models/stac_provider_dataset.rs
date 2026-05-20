@@ -23,13 +23,13 @@ pub struct StacProviderDataset {
     #[serde(rename = "projection")]
     pub projection: String,
     #[serde(rename = "resolution")]
-    pub resolution: Box<models::StacProviderDatasetResolution>,
+    pub resolution: Box<models::SpatialResolution>,
     #[serde(rename = "spatialGrid")]
     pub spatial_grid: Box<models::SpatialGridDescriptor>,
 }
 
 impl StacProviderDataset {
-    pub fn new(bands: Vec<models::StacProviderDatasetBand>, data_type: models::RasterDataType, description: String, name: String, projection: String, resolution: models::StacProviderDatasetResolution, spatial_grid: models::SpatialGridDescriptor) -> StacProviderDataset {
+    pub fn new(bands: Vec<models::StacProviderDatasetBand>, data_type: models::RasterDataType, description: String, name: String, projection: String, resolution: models::SpatialResolution, spatial_grid: models::SpatialGridDescriptor) -> StacProviderDataset {
         StacProviderDataset {
             bands,
             data_type,

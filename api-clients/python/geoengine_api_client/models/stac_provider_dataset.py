@@ -21,8 +21,8 @@ from pydantic import BaseModel, ConfigDict, Field, StrictStr
 from typing import Any, ClassVar, Dict, List
 from geoengine_api_client.models.raster_data_type import RasterDataType
 from geoengine_api_client.models.spatial_grid_descriptor import SpatialGridDescriptor
+from geoengine_api_client.models.spatial_resolution import SpatialResolution
 from geoengine_api_client.models.stac_provider_dataset_band import StacProviderDatasetBand
-from geoengine_api_client.models.stac_provider_dataset_resolution import StacProviderDatasetResolution
 from typing import Optional, Set
 from typing_extensions import Self
 
@@ -35,7 +35,7 @@ class StacProviderDataset(BaseModel):
     description: StrictStr
     name: StrictStr
     projection: StrictStr
-    resolution: StacProviderDatasetResolution
+    resolution: SpatialResolution
     spatial_grid: SpatialGridDescriptor = Field(alias="spatialGrid")
     __properties: ClassVar[List[str]] = ["bands", "dataType", "description", "name", "projection", "resolution", "spatialGrid"]
 
@@ -108,7 +108,7 @@ class StacProviderDataset(BaseModel):
             "description": obj.get("description"),
             "name": obj.get("name"),
             "projection": obj.get("projection"),
-            "resolution": StacProviderDatasetResolution.from_dict(obj["resolution"]) if obj.get("resolution") is not None else None,
+            "resolution": SpatialResolution.from_dict(obj["resolution"]) if obj.get("resolution") is not None else None,
             "spatialGrid": SpatialGridDescriptor.from_dict(obj["spatialGrid"]) if obj.get("spatialGrid") is not None else None
         })
         return _obj

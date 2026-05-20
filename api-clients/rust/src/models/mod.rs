@@ -478,8 +478,6 @@ pub mod stac_provider_dataset;
 pub use self::stac_provider_dataset::StacProviderDataset;
 pub mod stac_provider_dataset_band;
 pub use self::stac_provider_dataset_band::StacProviderDatasetBand;
-pub mod stac_provider_dataset_resolution;
-pub use self::stac_provider_dataset_resolution::StacProviderDatasetResolution;
 pub mod stac_provider_s3_config;
 pub use self::stac_provider_s3_config::StacProviderS3Config;
 pub mod stac_query_buffer;

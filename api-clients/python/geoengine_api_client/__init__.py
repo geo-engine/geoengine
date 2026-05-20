@@ -283,7 +283,6 @@ __all__ = [
     "StacDataProviderDefinition",
     "StacProviderDataset",
     "StacProviderDatasetBand",
-    "StacProviderDatasetResolution",
     "StacProviderS3Config",
     "StacQueryBuffer",
     "StaticColor",
@@ -633,7 +632,6 @@ from geoengine_api_client.models.stac_api_retries import StacApiRetries as StacA
 from geoengine_api_client.models.stac_data_provider_definition import StacDataProviderDefinition as StacDataProviderDefinition
 from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset as StacProviderDataset
 from geoengine_api_client.models.stac_provider_dataset_band import StacProviderDatasetBand as StacProviderDatasetBand
-from geoengine_api_client.models.stac_provider_dataset_resolution import StacProviderDatasetResolution as StacProviderDatasetResolution
 from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config as StacProviderS3Config
 from geoengine_api_client.models.stac_query_buffer import StacQueryBuffer as StacQueryBuffer
 from geoengine_api_client.models.static_color import StaticColor as StaticColor

@@ -119,7 +119,9 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                         description = '', 
                         name = '', 
                         projection = '', 
-                        resolution = null, 
+                        resolution = geoengine_api_client.models.spatial_resolution.SpatialResolution(
+                            x = 1.337, 
+                            y = 1.337, ), 
                         spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
                             descriptor = 'source', 
                             spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
@@ -210,7 +212,9 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                         description = '', 
                         name = '', 
                         projection = '', 
-                        resolution = null, 
+                        resolution = geoengine_api_client.models.spatial_resolution.SpatialResolution(
+                            x = 1.337, 
+                            y = 1.337, ), 
                         spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
                             descriptor = 'source', 
                             spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(

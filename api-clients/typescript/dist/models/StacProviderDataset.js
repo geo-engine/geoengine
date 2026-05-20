@@ -17,7 +17,7 @@ exports.StacProviderDatasetFromJSON = StacProviderDatasetFromJSON;
 exports.StacProviderDatasetFromJSONTyped = StacProviderDatasetFromJSONTyped;
 exports.StacProviderDatasetToJSON = StacProviderDatasetToJSON;
 exports.StacProviderDatasetToJSONTyped = StacProviderDatasetToJSONTyped;
-const StacProviderDatasetResolution_1 = require("./StacProviderDatasetResolution");
+const SpatialResolution_1 = require("./SpatialResolution");
 const StacProviderDatasetBand_1 = require("./StacProviderDatasetBand");
 const SpatialGridDescriptor_1 = require("./SpatialGridDescriptor");
 const RasterDataType_1 = require("./RasterDataType");
@@ -54,7 +54,7 @@ function StacProviderDatasetFromJSONTyped(json, ignoreDiscriminator) {
         'description': json['description'],
         'name': json['name'],
         'projection': json['projection'],
-        'resolution': (0, StacProviderDatasetResolution_1.StacProviderDatasetResolutionFromJSON)(json['resolution']),
+        'resolution': (0, SpatialResolution_1.SpatialResolutionFromJSON)(json['resolution']),
         'spatialGrid': (0, SpatialGridDescriptor_1.SpatialGridDescriptorFromJSON)(json['spatialGrid']),
     };
 }
@@ -71,7 +71,7 @@ function StacProviderDatasetToJSONTyped(value, ignoreDiscriminator = false) {
         'description': value['description'],
         'name': value['name'],
         'projection': value['projection'],
-        'resolution': (0, StacProviderDatasetResolution_1.StacProviderDatasetResolutionToJSON)(value['resolution']),
+        'resolution': (0, SpatialResolution_1.SpatialResolutionToJSON)(value['resolution']),
         'spatialGrid': (0, SpatialGridDescriptor_1.SpatialGridDescriptorToJSON)(value['spatialGrid']),
     };
 }

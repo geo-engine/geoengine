@@ -254,7 +254,6 @@ docs/StacApiRetries.md
 docs/StacDataProviderDefinition.md
 docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
-docs/StacProviderDatasetResolution.md
 docs/StacProviderS3Config.md
 docs/StacQueryBuffer.md
 docs/StaticColor.md
@@ -597,7 +596,6 @@ src/models/stac_api_retries.rs
 src/models/stac_data_provider_definition.rs
 src/models/stac_provider_dataset.rs
 src/models/stac_provider_dataset_band.rs
-src/models/stac_provider_dataset_resolution.rs
 src/models/stac_provider_s3_config.rs
 src/models/stac_query_buffer.rs
 src/models/static_color.rs

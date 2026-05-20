@@ -255,7 +255,6 @@ docs/StacApiRetries.md
 docs/StacDataProviderDefinition.md
 docs/StacProviderDataset.md
 docs/StacProviderDatasetBand.md
-docs/StacProviderDatasetResolution.md
 docs/StacProviderS3Config.md
 docs/StacQueryBuffer.md
 docs/StaticColor.md
@@ -600,7 +599,6 @@ geoengine_api_client/models/stac_api_retries.py
 geoengine_api_client/models/stac_data_provider_definition.py
 geoengine_api_client/models/stac_provider_dataset.py
 geoengine_api_client/models/stac_provider_dataset_band.py
-geoengine_api_client/models/stac_provider_dataset_resolution.py
 geoengine_api_client/models/stac_provider_s3_config.py
 geoengine_api_client/models/stac_query_buffer.py
 geoengine_api_client/models/static_color.py
@@ -939,7 +937,6 @@ test/test_stac_api_retries.py
 test/test_stac_data_provider_definition.py
 test/test_stac_provider_dataset.py
 test/test_stac_provider_dataset_band.py
-test/test_stac_provider_dataset_resolution.py
 test/test_stac_provider_s3_config.py
 test/test_stac_query_buffer.py
 test/test_static_color.py

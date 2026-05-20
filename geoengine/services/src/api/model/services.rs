@@ -944,37 +944,13 @@ impl From<crate::datasets::external::stac::StacProviderDatasetBand> for StacProv
     }
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
-#[serde(untagged)]
-pub enum StacProviderDatasetResolution {
-    Uniform(f64),
-    Spatial(SpatialResolution),
-}
-
-impl From<geoengine_datatypes::primitives::SpatialResolution> for StacProviderDatasetResolution {
-    fn from(value: geoengine_datatypes::primitives::SpatialResolution) -> Self {
-        Self::Spatial(value.into())
-    }
-}
-
-impl From<StacProviderDatasetResolution> for geoengine_datatypes::primitives::SpatialResolution {
-    fn from(value: StacProviderDatasetResolution) -> Self {
-        match value {
-            StacProviderDatasetResolution::Uniform(value) => {
-                geoengine_datatypes::primitives::SpatialResolution::new_unchecked(value, value)
-            }
-            StacProviderDatasetResolution::Spatial(value) => value.into(),
-        }
-    }
-}
-
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StacProviderDataset {
     pub name: String,
     pub description: String,
     pub data_type: RasterDataType,
-    pub resolution: StacProviderDatasetResolution,
+    pub resolution: SpatialResolution,
     #[schema(value_type = String)]
     pub projection: SpatialReference,
     pub spatial_grid: SpatialGridDescriptor,
@@ -1413,7 +1389,7 @@ impl From<crate::machine_learning::MlModel> for MlModel {
 #[cfg(test)]
 mod tests {
     use super::{
-        StacDataProviderDefinition, StacProviderDatasetResolution, StacProviderS3Config,
+        SpatialResolution, StacDataProviderDefinition, StacProviderS3Config,
         TypedDataProviderDefinition,
     };
     use crate::api::model::services::SECRET_REPLACEMENT;
@@ -1432,7 +1408,7 @@ mod tests {
         assert_eq!(stac_definition.collection_name, "sentinel-2-l2a");
         assert!(matches!(
             stac_definition.datasets[0].resolution,
-            StacProviderDatasetResolution::Uniform(value) if value == 10.
+            SpatialResolution { x, y } if x == 10. && y == 10.
         ));
 
         let definition: TypedDataProviderDefinition =
@@ -1445,7 +1421,7 @@ mod tests {
         assert_eq!(definition.collection_name, "sentinel-2-l2a");
         assert!(matches!(
             definition.datasets[0].resolution,
-            StacProviderDatasetResolution::Uniform(value) if value == 10.
+            SpatialResolution { x, y } if x == 10. && y == 10.
         ));
     }
 
