@@ -12,13 +12,13 @@
  */
 
 import { mapValues } from '../runtime';
-import type { StacProviderDatasetResolution } from './StacProviderDatasetResolution';
+import type { SpatialResolution } from './SpatialResolution';
 import {
-    StacProviderDatasetResolutionFromJSON,
-    StacProviderDatasetResolutionFromJSONTyped,
-    StacProviderDatasetResolutionToJSON,
-    StacProviderDatasetResolutionToJSONTyped,
-} from './StacProviderDatasetResolution';
+    SpatialResolutionFromJSON,
+    SpatialResolutionFromJSONTyped,
+    SpatialResolutionToJSON,
+    SpatialResolutionToJSONTyped,
+} from './SpatialResolution';
 import type { StacProviderDatasetBand } from './StacProviderDatasetBand';
 import {
     StacProviderDatasetBandFromJSON,
@@ -79,10 +79,10 @@ export interface StacProviderDataset {
     projection: string;
     /**
      * 
-     * @type {StacProviderDatasetResolution}
+     * @type {SpatialResolution}
      * @memberof StacProviderDataset
      */
-    resolution: StacProviderDatasetResolution;
+    resolution: SpatialResolution;
     /**
      * 
      * @type {SpatialGridDescriptor}
@@ -122,7 +122,7 @@ export function StacProviderDatasetFromJSONTyped(json: any, ignoreDiscriminator:
         'description': json['description'],
         'name': json['name'],
         'projection': json['projection'],
-        'resolution': StacProviderDatasetResolutionFromJSON(json['resolution']),
+        'resolution': SpatialResolutionFromJSON(json['resolution']),
         'spatialGrid': SpatialGridDescriptorFromJSON(json['spatialGrid']),
     };
 }
@@ -143,7 +143,7 @@ export function StacProviderDatasetToJSONTyped(value?: StacProviderDataset | nul
         'description': value['description'],
         'name': value['name'],
         'projection': value['projection'],
-        'resolution': StacProviderDatasetResolutionToJSON(value['resolution']),
+        'resolution': SpatialResolutionToJSON(value['resolution']),
         'spatialGrid': SpatialGridDescriptorToJSON(value['spatialGrid']),
     };
 }

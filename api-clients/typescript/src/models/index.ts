@@ -240,7 +240,6 @@ export * from './StacApiRetries';
 export * from './StacDataProviderDefinition';
 export * from './StacProviderDataset';
 export * from './StacProviderDatasetBand';
-export * from './StacProviderDatasetResolution';
 export * from './StacProviderS3Config';
 export * from './StacQueryBuffer';
 export * from './StaticColor';

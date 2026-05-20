@@ -11029,7 +11029,7 @@
             "type": "string"
           },
           "resolution": {
-            "$ref": "#/components/schemas/StacProviderDatasetResolution"
+            "$ref": "#/components/schemas/SpatialResolution"
           },
           "spatialGrid": {
             "$ref": "#/components/schemas/SpatialGridDescriptor"
@@ -11052,17 +11052,6 @@
             ]
           }
         }
-      },
-      "StacProviderDatasetResolution": {
-        "oneOf": [
-          {
-            "type": "number",
-            "format": "double"
-          },
-          {
-            "$ref": "#/components/schemas/SpatialResolution"
-          }
-        ]
       },
       "StacProviderS3Config": {
         "type": "object",

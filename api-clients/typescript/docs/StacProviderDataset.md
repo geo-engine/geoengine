@@ -11,7 +11,7 @@ Name | Type
 `description` | string
 `name` | string
 `projection` | string
-`resolution` | [StacProviderDatasetResolution](StacProviderDatasetResolution.md)
+`resolution` | [SpatialResolution](SpatialResolution.md)
 `spatialGrid` | [SpatialGridDescriptor](SpatialGridDescriptor.md)
 
 ## Example

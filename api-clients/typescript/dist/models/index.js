@@ -256,7 +256,6 @@ __exportStar(require("./StacApiRetries"), exports);
 __exportStar(require("./StacDataProviderDefinition"), exports);
 __exportStar(require("./StacProviderDataset"), exports);
 __exportStar(require("./StacProviderDatasetBand"), exports);
-__exportStar(require("./StacProviderDatasetResolution"), exports);
 __exportStar(require("./StacProviderS3Config"), exports);
 __exportStar(require("./StacQueryBuffer"), exports);
 __exportStar(require("./StaticColor"), exports);

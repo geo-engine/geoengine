@@ -10,7 +10,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import { StacProviderDatasetResolutionFromJSON, StacProviderDatasetResolutionToJSON, } from './StacProviderDatasetResolution';
+import { SpatialResolutionFromJSON, SpatialResolutionToJSON, } from './SpatialResolution';
 import { StacProviderDatasetBandFromJSON, StacProviderDatasetBandToJSON, } from './StacProviderDatasetBand';
 import { SpatialGridDescriptorFromJSON, SpatialGridDescriptorToJSON, } from './SpatialGridDescriptor';
 import { RasterDataTypeFromJSON, RasterDataTypeToJSON, } from './RasterDataType';
@@ -47,7 +47,7 @@ export function StacProviderDatasetFromJSONTyped(json, ignoreDiscriminator) {
         'description': json['description'],
         'name': json['name'],
         'projection': json['projection'],
-        'resolution': StacProviderDatasetResolutionFromJSON(json['resolution']),
+        'resolution': SpatialResolutionFromJSON(json['resolution']),
         'spatialGrid': SpatialGridDescriptorFromJSON(json['spatialGrid']),
     };
 }
@@ -64,7 +64,7 @@ export function StacProviderDatasetToJSONTyped(value, ignoreDiscriminator = fals
         'description': value['description'],
         'name': value['name'],
         'projection': value['projection'],
-        'resolution': StacProviderDatasetResolutionToJSON(value['resolution']),
+        'resolution': SpatialResolutionToJSON(value['resolution']),
         'spatialGrid': SpatialGridDescriptorToJSON(value['spatialGrid']),
     };
 }

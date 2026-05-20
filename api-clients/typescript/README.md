@@ -392,7 +392,6 @@ All URIs are relative to *https://geoengine.io/api*
 - [StacDataProviderDefinition](docs/StacDataProviderDefinition.md)
 - [StacProviderDataset](docs/StacProviderDataset.md)
 - [StacProviderDatasetBand](docs/StacProviderDatasetBand.md)
-- [StacProviderDatasetResolution](docs/StacProviderDatasetResolution.md)
 - [StacProviderS3Config](docs/StacProviderS3Config.md)
 - [StacQueryBuffer](docs/StacQueryBuffer.md)
 - [StaticColor](docs/StaticColor.md)

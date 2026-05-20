@@ -8,7 +8,7 @@
  * https://openapi-generator.tech
  * Do not edit the class manually.
  */
-import type { StacProviderDatasetResolution } from './StacProviderDatasetResolution';
+import type { SpatialResolution } from './SpatialResolution';
 import type { StacProviderDatasetBand } from './StacProviderDatasetBand';
 import type { SpatialGridDescriptor } from './SpatialGridDescriptor';
 import type { RasterDataType } from './RasterDataType';
@@ -50,10 +50,10 @@ export interface StacProviderDataset {
     projection: string;
     /**
      *
-     * @type {StacProviderDatasetResolution}
+     * @type {SpatialResolution}
      * @memberof StacProviderDataset
      */
-    resolution: StacProviderDatasetResolution;
+    resolution: SpatialResolution;
     /**
      *
      * @type {SpatialGridDescriptor}
