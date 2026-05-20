@@ -963,40 +963,70 @@ mod tests {
                     step: 1,
                 },
             )),
-            datasets: vec![crate::datasets::external::stac::StacProviderDataset {
-                name: "Sentinel-2 L2A EPSG:32632 U16 10m".to_owned(),
-                description: String::new(),
-                data_type: geoengine_datatypes::raster::RasterDataType::U16,
-                resolution: SpatialResolution::new_unchecked(10.0, 10.0),
-                projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
-                spatial_grid: SpatialGridDescriptor::source_from_parts(
-                    GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
-                    GridBoundingBox2D::new(GridIdx2D::new([0, 0]), GridIdx2D::new([10979, 10979]))
+            datasets: vec![
+                crate::datasets::external::stac::StacProviderDataset {
+                    name: "Sentinel-2 L2A EPSG:32632 U16 10m".to_owned(),
+                    description: String::new(),
+                    data_type: geoengine_datatypes::raster::RasterDataType::U16,
+                    resolution: SpatialResolution::new_unchecked(10.0, 10.0),
+                    projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((399_960.0, 5_700_000.0).into(), 10.0, -10.0),
+                        GridBoundingBox2D::new(
+                            GridIdx2D::new([0, 0]),
+                            GridIdx2D::new([10979, 10979]),
+                        )
                         .unwrap(),
-                ),
-                bands: vec![
-                    crate::datasets::external::stac::StacProviderDatasetBand {
-                        asset_title: "Blue (band 2) - 10m".to_owned(),
-                        band_name: Some("B02".to_owned()),
-                    },
-                    crate::datasets::external::stac::StacProviderDatasetBand {
-                        asset_title: "Green (band 3) - 10m".to_owned(),
-                        band_name: Some("B03".to_owned()),
-                    },
-                    crate::datasets::external::stac::StacProviderDatasetBand {
-                        asset_title: "Water vapour (WVP) - 10m".to_owned(),
-                        band_name: Some("WVP".to_owned()),
-                    },
-                    crate::datasets::external::stac::StacProviderDatasetBand {
-                        asset_title: "NIR 1 (band 8) - 10m".to_owned(),
-                        band_name: Some("B08".to_owned()),
-                    },
-                    crate::datasets::external::stac::StacProviderDatasetBand {
-                        asset_title: "Red (band 4) - 10m".to_owned(),
-                        band_name: Some("B04".to_owned()),
-                    },
-                ],
-            }],
+                    ),
+                    bands: vec![
+                        crate::datasets::external::stac::StacProviderDatasetBand {
+                            asset_title: "Blue (band 2) - 10m".to_owned(),
+                            band_name: Some("B02".to_owned()),
+                        },
+                        crate::datasets::external::stac::StacProviderDatasetBand {
+                            asset_title: "Green (band 3) - 10m".to_owned(),
+                            band_name: Some("B03".to_owned()),
+                        },
+                        crate::datasets::external::stac::StacProviderDatasetBand {
+                            asset_title: "Water vapour (WVP) - 10m".to_owned(),
+                            band_name: Some("WVP".to_owned()),
+                        },
+                        crate::datasets::external::stac::StacProviderDatasetBand {
+                            asset_title: "NIR 1 (band 8) - 10m".to_owned(),
+                            band_name: Some("B08".to_owned()),
+                        },
+                        crate::datasets::external::stac::StacProviderDatasetBand {
+                            asset_title: "Red (band 4) - 10m".to_owned(),
+                            band_name: Some("B04".to_owned()),
+                        },
+                    ],
+                },
+                crate::datasets::external::stac::StacProviderDataset {
+                    name: "Sentinel-2 L2A EPSG:32632 U8 20m".to_owned(),
+                    description: String::new(),
+                    data_type: geoengine_datatypes::raster::RasterDataType::U8,
+                    resolution: SpatialResolution::new_unchecked(20.0, 20.0),
+                    projection: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632),
+                    spatial_grid: SpatialGridDescriptor::source_from_parts(
+                        GeoTransform::new((399_960.0, 5_700_000.0).into(), 20.0, -20.0),
+                        GridBoundingBox2D::new(
+                            GridIdx2D::new([0, 0]),
+                            GridIdx2D::new([5489, 5489]),
+                        )
+                        .unwrap(),
+                    ),
+                    bands: vec![
+                        crate::datasets::external::stac::StacProviderDatasetBand {
+                            asset_title: "Aerosol optical thickness (AOT) - 20m".to_owned(),
+                            band_name: Some("AOT".to_owned()),
+                        },
+                        crate::datasets::external::stac::StacProviderDatasetBand {
+                            asset_title: "Scene classification map (SCL) - 20m".to_owned(),
+                            band_name: Some("SCL".to_owned()),
+                        },
+                    ],
+                },
+            ],
         };
 
         admin_ctx
@@ -1008,13 +1038,10 @@ mod tests {
         let ndvi_workflow_json =
             include_str!("../../../../../test_data/api_calls/stac_provider/ndvi-workflow.json");
 
-        let workflow_json_with_provider = ndvi_workflow_json
-            .replace(
-                "_:b274275c-373d-4a3f-8b45-9b48e9614329",
-                &format!("_:{provider_id}"),
-            )
-            .replace("\"bands\": [1]", "\"bands\": [0]")
-            .replace("\"bands\": [3, 4]", "\"bands\": [0, 1]");
+        let workflow_json_with_provider = ndvi_workflow_json.replace(
+            "_:b274275c-373d-4a3f-8b45-9b48e9614329",
+            &format!("_:{provider_id}"),
+        );
 
         let workflow: crate::workflows::workflow::Workflow =
             serde_json::from_str(&workflow_json_with_provider)
