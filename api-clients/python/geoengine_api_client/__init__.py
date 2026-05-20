@@ -278,7 +278,13 @@ __all__ = [
     "SpatialGridDescriptorState",
     "SpatialPartition2D",
     "SpatialReferenceSpecification",
+    "SpatialResolution",
     "StacApiRetries",
+    "StacDataProviderDefinition",
+    "StacProviderDataset",
+    "StacProviderDatasetBand",
+    "StacProviderDatasetResolution",
+    "StacProviderS3Config",
     "StacQueryBuffer",
     "StaticColor",
     "StaticNumber",
@@ -622,7 +628,13 @@ from geoengine_api_client.models.spatial_grid_descriptor import SpatialGridDescr
 from geoengine_api_client.models.spatial_grid_descriptor_state import SpatialGridDescriptorState as SpatialGridDescriptorState
 from geoengine_api_client.models.spatial_partition2_d import SpatialPartition2D as SpatialPartition2D
 from geoengine_api_client.models.spatial_reference_specification import SpatialReferenceSpecification as SpatialReferenceSpecification
+from geoengine_api_client.models.spatial_resolution import SpatialResolution as SpatialResolution
 from geoengine_api_client.models.stac_api_retries import StacApiRetries as StacApiRetries
+from geoengine_api_client.models.stac_data_provider_definition import StacDataProviderDefinition as StacDataProviderDefinition
+from geoengine_api_client.models.stac_provider_dataset import StacProviderDataset as StacProviderDataset
+from geoengine_api_client.models.stac_provider_dataset_band import StacProviderDatasetBand as StacProviderDatasetBand
+from geoengine_api_client.models.stac_provider_dataset_resolution import StacProviderDatasetResolution as StacProviderDatasetResolution
+from geoengine_api_client.models.stac_provider_s3_config import StacProviderS3Config as StacProviderS3Config
 from geoengine_api_client.models.stac_query_buffer import StacQueryBuffer as StacQueryBuffer
 from geoengine_api_client.models.static_color import StaticColor as StaticColor
 from geoengine_api_client.models.static_number import StaticNumber as StaticNumber

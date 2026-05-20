@@ -1,12 +1,13 @@
 use super::datatypes::{
     CacheTtlSeconds, DataId, DataProviderId, DatasetId, GdalConfigOption, RasterDataType,
-    SpatialReference, SpatialResolution, TimeGranularity, TimeInstance,
+    SpatialReference, SpatialResolution, TimeGranularity,
 };
 use super::operators::TypedResultDescriptor;
 use crate::api::model::datatypes::MlModelName;
 use crate::api::model::operators::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
-    MlModelMetadata, MockMetaData, OgrMetaData, SpatialGridDescriptor,
+    MlModelMetadata, MockMetaData, OgrMetaData, RegularTimeDimension, SpatialGridDescriptor,
+    TimeDimension,
 };
 use crate::datasets::DatasetName;
 use crate::datasets::external::{GdalRetries, WildliveDataConnectorAuth};
@@ -1008,11 +1009,12 @@ impl From<crate::datasets::external::stac::StacProviderDataset> for StacProvider
     }
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn api_time_dimension_to_datatypes(
-    value: StacTimeDimension,
+    value: TimeDimension,
 ) -> geoengine_datatypes::primitives::TimeDimension {
     match value {
-        StacTimeDimension::Regular { origin, step } => {
+        TimeDimension::Regular(RegularTimeDimension { origin, step }) => {
             geoengine_datatypes::primitives::TimeDimension::Regular(
                 geoengine_datatypes::primitives::RegularTimeDimension {
                     origin: origin.into(),
@@ -1020,21 +1022,21 @@ fn api_time_dimension_to_datatypes(
                 },
             )
         }
-        StacTimeDimension::Irregular => geoengine_datatypes::primitives::TimeDimension::Irregular,
+        TimeDimension::Irregular => geoengine_datatypes::primitives::TimeDimension::Irregular,
     }
 }
 
 fn datatypes_time_dimension_to_api(
     value: geoengine_datatypes::primitives::TimeDimension,
-) -> StacTimeDimension {
+) -> TimeDimension {
     match value {
         geoengine_datatypes::primitives::TimeDimension::Regular(
             geoengine_datatypes::primitives::RegularTimeDimension { origin, step },
-        ) => StacTimeDimension::Regular {
+        ) => TimeDimension::Regular(RegularTimeDimension {
             origin: origin.into(),
             step: step.into(),
-        },
-        geoengine_datatypes::primitives::TimeDimension::Irregular => StacTimeDimension::Irregular,
+        }),
+        geoengine_datatypes::primitives::TimeDimension::Irregular => TimeDimension::Irregular,
     }
 }
 
@@ -1063,18 +1065,6 @@ impl From<geoengine_datatypes::primitives::TimeStep> for StacTimeStep {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
-#[serde(rename_all = "camelCase", tag = "type")]
-pub enum StacTimeDimension {
-    #[schema(title = "Regular")]
-    Regular {
-        origin: TimeInstance,
-        step: StacTimeStep,
-    },
-    #[schema(title = "Irregular")]
-    Irregular,
-}
-
 #[type_tag(value = "StacProviderDefinition")]
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
@@ -1086,7 +1076,7 @@ pub struct StacDataProviderDefinition {
     pub api_url: String,
     pub collection_name: String,
     pub s3_config: Option<StacProviderS3Config>,
-    pub time_dimension: StacTimeDimension,
+    pub time_dimension: TimeDimension,
     pub datasets: Vec<StacProviderDataset>,
 }
 
@@ -1431,6 +1421,7 @@ mod tests {
     use std::fs;
 
     #[test]
+    #[allow(clippy::float_cmp)]
     fn stac_fixture_deserializes_to_api_type() {
         let fixture = fs::read_to_string(test_data!("provider_defs_api/stac_sentinel2.json"))
             .expect("failed to read stac fixture");

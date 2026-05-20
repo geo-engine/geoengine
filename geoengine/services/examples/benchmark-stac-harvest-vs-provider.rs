@@ -1,3 +1,5 @@
+#![allow(clippy::print_stdout, clippy::print_stderr)]
+
 use anyhow::{Context, Result, anyhow, bail};
 use geoengine_api_client::apis;
 use geoengine_api_client::apis::configuration::Configuration;
@@ -182,7 +184,7 @@ async fn main() -> Result<()> {
             &mut gdal_access_writer,
             run,
             "harvest",
-            &log_dir.join(format!("server_{}_harvest.log", run)),
+            &log_dir.join(format!("server_{run}_harvest.log")),
         )?;
         records.push(harvest);
 
@@ -196,7 +198,7 @@ async fn main() -> Result<()> {
             &mut gdal_access_writer,
             run,
             "provider",
-            &log_dir.join(format!("server_{}_provider.log", run)),
+            &log_dir.join(format!("server_{run}_provider.log")),
         )?;
         records.push(provider);
 
@@ -208,7 +210,7 @@ async fn main() -> Result<()> {
             &mut gdal_access_writer,
             run,
             "ndvi-harvest",
-            &log_dir.join(format!("server_{}_ndvi_harvest.log", run)),
+            &log_dir.join(format!("server_{run}_ndvi_harvest.log")),
         )?;
         records.push(ndvi_harvest);
 
@@ -223,7 +225,7 @@ async fn main() -> Result<()> {
             &mut gdal_access_writer,
             run,
             "ndvi-provider",
-            &log_dir.join(format!("server_{}_ndvi_provider.log", run)),
+            &log_dir.join(format!("server_{run}_ndvi_provider.log")),
         )?;
         records.push(ndvi_provider);
     }
@@ -254,7 +256,7 @@ async fn run_harvest_benchmark(
     png_dir: &Path,
 ) -> Result<BenchRecord> {
     let base_url = config.base_url();
-    let log_file = log_dir.join(format!("server_{}_harvest.log", run));
+    let log_file = log_dir.join(format!("server_{run}_harvest.log"));
     let _server = ServerHandle::start(root_dir, &log_file, &base_url).await?;
 
     let mut api = api_configuration(&base_url);
@@ -309,7 +311,7 @@ async fn run_harvest_benchmark(
         .await
         .context("reading harvest WMS response body")?;
     require_http_200(status, "harvest WMS")?;
-    fs::write(png_dir.join(format!("harvest_run_{}.png", run)), png_bytes)
+    fs::write(png_dir.join(format!("harvest_run_{run}.png")), png_bytes)
         .context("writing harvest PNG")?;
     let wms_ms = wms_start.elapsed().as_millis();
     let loading_info_ms = wait_for_loading_info_ms(&log_file).await?;
@@ -333,7 +335,7 @@ async fn run_provider_benchmark(
     png_dir: &Path,
 ) -> Result<BenchRecord> {
     let base_url = config.base_url();
-    let log_file = log_dir.join(format!("server_{}_provider.log", run));
+    let log_file = log_dir.join(format!("server_{run}_provider.log"));
     let _server = ServerHandle::start(root_dir, &log_file, &base_url).await?;
 
     let mut api = api_configuration(&base_url);
@@ -392,7 +394,7 @@ async fn run_provider_benchmark(
         .await
         .context("reading provider WMS response body")?;
     require_http_200(status, "provider WMS")?;
-    fs::write(png_dir.join(format!("provider_run_{}.png", run)), png_bytes)
+    fs::write(png_dir.join(format!("provider_run_{run}.png")), png_bytes)
         .context("writing provider PNG")?;
     let wms_ms = wms_start.elapsed().as_millis();
     let loading_info_ms = wait_for_loading_info_ms(&log_file).await?;
@@ -444,7 +446,7 @@ fn extract_latest_loading_info_ms(log_file: &Path) -> Result<Option<u128>> {
         let digits: String = rest
             .chars()
             .skip_while(|c| !c.is_ascii_digit())
-            .take_while(|c| c.is_ascii_digit())
+            .take_while(char::is_ascii_digit)
             .collect();
 
         if digits.is_empty() {
@@ -513,7 +515,7 @@ async fn trigger_workflow_metadata_fallback(api: &Configuration, workflow_id: Uu
         .context("reading workflow metadata response")?;
 
     if !status.is_success() {
-        bail!("provider metadata failed: status={} body={}", status, body);
+        bail!("provider metadata failed: status={status} body={body}");
     }
 
     let _: Value = serde_json::from_str(&body).context("decoding workflow metadata JSON")?;
@@ -631,11 +633,7 @@ async fn register_workflow_raw(api: &Configuration, typed_operator: Value) -> Re
         .context("reading workflow registration response")?;
 
     if !status.is_success() {
-        bail!(
-            "workflow registration failed: status={} body={}",
-            status,
-            body
-        );
+        bail!("workflow registration failed: status={status} body={body}");
     }
 
     let id_response: models::IdResponse =
@@ -652,7 +650,7 @@ async fn run_ndvi_harvest_benchmark(
     png_dir: &Path,
 ) -> Result<BenchRecord> {
     let base_url = config.base_url();
-    let log_file = log_dir.join(format!("server_{}_ndvi_harvest.log", run));
+    let log_file = log_dir.join(format!("server_{run}_ndvi_harvest.log"));
     let _server = ServerHandle::start(root_dir, &log_file, &base_url).await?;
 
     let mut api = api_configuration(&base_url);
@@ -710,7 +708,7 @@ async fn run_ndvi_harvest_benchmark(
         .context("reading ndvi harvest WMS response body")?;
     require_http_200(status, "ndvi harvest WMS")?;
     fs::write(
-        png_dir.join(format!("ndvi_harvest_run_{}.png", run)),
+        png_dir.join(format!("ndvi_harvest_run_{run}.png")),
         png_bytes,
     )
     .context("writing ndvi harvest PNG")?;
@@ -736,7 +734,7 @@ async fn run_ndvi_provider_benchmark(
     png_dir: &Path,
 ) -> Result<BenchRecord> {
     let base_url = config.base_url();
-    let log_file = log_dir.join(format!("server_{}_ndvi_provider.log", run));
+    let log_file = log_dir.join(format!("server_{run}_ndvi_provider.log"));
     let _server = ServerHandle::start(root_dir, &log_file, &base_url).await?;
 
     let mut api = api_configuration(&base_url);
@@ -751,11 +749,8 @@ async fn run_ndvi_provider_benchmark(
 
     let provider_id = register_stac_provider_fallback(&api, provider_definition).await?;
 
-    let data_scl_20 = Value::String(format!("_:{}:`dataset/{}`", provider_id, scl_dataset_idx));
-    let data_nir_red_10 = Value::String(format!(
-        "_:{}:`dataset/{}`",
-        provider_id, nir_red_dataset_idx
-    ));
+    let data_scl_20 = Value::String(format!("_:{provider_id}:`dataset/{scl_dataset_idx}`"));
+    let data_nir_red_10 = Value::String(format!("_:{provider_id}:`dataset/{nir_red_dataset_idx}`"));
     let typed_operator = build_ndvi_workflow_operator(root_dir, data_scl_20, data_nir_red_10)?;
     let workflow_id = register_workflow_raw(&api, typed_operator).await?;
     trigger_workflow_metadata_fallback(&api, workflow_id).await?;
@@ -799,7 +794,7 @@ async fn run_ndvi_provider_benchmark(
         .context("reading ndvi provider WMS response body")?;
     require_http_200(status, "ndvi provider WMS")?;
     fs::write(
-        png_dir.join(format!("ndvi_provider_run_{}.png", run)),
+        png_dir.join(format!("ndvi_provider_run_{run}.png")),
         png_bytes,
     )
     .context("writing ndvi provider PNG")?;
@@ -881,11 +876,7 @@ fn provider_dataset_index(
                 && dataset["resolution"].as_f64() == Some(resolution)
         })
         .ok_or_else(|| {
-            anyhow!(
-                "could not find dataset index for dataType={} resolution={}",
-                data_type,
-                resolution
-            )
+            anyhow!("could not find dataset index for dataType={data_type} resolution={resolution}")
         })
 }
 
@@ -913,11 +904,7 @@ async fn register_stac_provider_fallback(
         .context("reading provider registration response")?;
 
     if !status.is_success() {
-        bail!(
-            "provider registration failed: status={} body={}",
-            status,
-            body
-        );
+        bail!("provider registration failed: status={status} body={body}");
     }
 
     let id_response: models::IdResponse =
@@ -936,13 +923,13 @@ fn map_api_error<T: std::fmt::Debug + Send + Sync + 'static>(
             content.status,
             content.content
         ),
-        other => anyhow!("{} failed: {}", context_msg, other),
+        other => anyhow!("{context_msg} failed: {other}"),
     }
 }
 
 fn require_http_200(status: reqwest::StatusCode, what: &str) -> Result<()> {
     if status != reqwest::StatusCode::OK {
-        bail!("Unexpected HTTP status for {what}: {}", status);
+        bail!("Unexpected HTTP status for {what}: {status}");
     }
 
     Ok(())
@@ -1065,7 +1052,7 @@ fn generate_gdal_file_comparison(input_file: &Path, output_file: &Path) -> Resul
         let access_count = parts[3].parse::<u32>().unwrap_or(0);
 
         data.entry(file_path.to_owned())
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(scenario.to_owned(), access_count);
     }
 
@@ -1087,7 +1074,7 @@ fn generate_gdal_file_comparison(input_file: &Path, output_file: &Path) -> Resul
     // Write header
     write!(output, "file_path")?;
     for scenario in &scenarios {
-        write!(output, ",{}", scenario)?;
+        write!(output, ",{scenario}")?;
     }
     writeln!(output)?;
 
@@ -1096,11 +1083,11 @@ fn generate_gdal_file_comparison(input_file: &Path, output_file: &Path) -> Resul
     file_paths.sort();
 
     for file_path in file_paths {
-        write!(output, "{}", file_path)?;
+        write!(output, "{file_path}")?;
         if let Some(file_data) = data.get(&file_path) {
             for scenario in &scenarios {
                 let count = file_data.get(scenario).copied().unwrap_or(0);
-                write!(output, ",{}", count)?;
+                write!(output, ",{count}")?;
             }
         } else {
             for _ in &scenarios {
@@ -1167,6 +1154,7 @@ impl Config {
     }
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn env_or_default(key: &str, default: &str) -> Result<String> {
     Ok(env::var(key).unwrap_or_else(|_| default.to_owned()))
 }

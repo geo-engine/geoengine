@@ -38,6 +38,10 @@ Name | Type
 `gdalRetries` | number
 `queryBuffer` | [StacQueryBuffer](StacQueryBuffer.md)
 `stacApiRetries` | [StacApiRetries](StacApiRetries.md)
+`collectionName` | string
+`datasets` | [Array&lt;StacProviderDataset&gt;](StacProviderDataset.md)
+`s3Config` | [StacProviderS3Config](StacProviderS3Config.md)
+`timeDimension` | [TimeDimension](TimeDimension.md)
 `expiryDate` | Date
 `refreshToken` | string
 `user` | string
@@ -81,6 +85,10 @@ const example = {
   "gdalRetries": null,
   "queryBuffer": null,
   "stacApiRetries": null,
+  "collectionName": null,
+  "datasets": null,
+  "s3Config": null,
+  "timeDimension": null,
   "expiryDate": null,
   "refreshToken": null,
   "user": null,

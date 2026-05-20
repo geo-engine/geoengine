@@ -35,6 +35,8 @@ pub enum TypedDataProviderDefinition {
     Pangaea(Box<models::PangaeaDataProviderDefinition>),
     #[serde(rename="SentinelS2L2ACogs")]
     SentinelS2L2ACogs(Box<models::SentinelS2L2ACogsProviderDefinition>),
+    #[serde(rename="StacProviderDefinition")]
+    StacProviderDefinition(Box<models::StacDataProviderDefinition>),
     #[serde(rename="WildLIVE!")]
     WildLiveExclamation(Box<models::WildliveDataConnectorDefinition>),
 }

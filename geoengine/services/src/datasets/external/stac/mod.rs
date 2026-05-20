@@ -139,6 +139,7 @@ pub struct StacDataProvider {
 }
 
 impl StacDataProvider {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         id: DataProviderId,
         name: String,

@@ -401,7 +401,7 @@ impl StacImporter {
             }
 
             self.items_processed_total += number_returned;
-            let _ = self.print_progress(&item_collection);
+            self.print_progress(&item_collection);
         }
 
         Ok(())
@@ -426,6 +426,7 @@ impl StacImporter {
         Ok(dataset_tiles)
     }
 
+    #[allow(clippy::too_many_lines)]
     async fn process_item(
         &mut self,
         item: stac::Item,
@@ -508,7 +509,7 @@ impl StacImporter {
                     ))
                 })
                 .and_then(|updated| {
-                    chrono::DateTime::parse_from_rfc3339(&updated)
+                    chrono::DateTime::parse_from_rfc3339(updated)
                         .context(format!("Failed to parse '{property}' datetime"))
                 })?
                 .timestamp_millis(),
@@ -586,7 +587,7 @@ impl StacImporter {
         let data_type = data_type_from_asset(stac::Version::v1_0_0, asset)
             .context("Failed to determine data type from asset")?;
 
-        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V1, &asset.additional_fields)?
+        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V1, &asset.additional_fields)
             .or(epsg)
             .ok_or(anyhow::anyhow!("Failed to determine EPSG code from asset"))?;
 
@@ -691,7 +692,7 @@ impl StacImporter {
         let data_type = data_type_from_asset(stac::Version::v1_1_0, asset)
             .context("Failed to determine data type from asset")?;
 
-        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V2, &asset.additional_fields)?
+        let epsg = epsg_code_from_fields(StacExtensionMajorVersion::V2, &asset.additional_fields)
             .or(epsg)
             .ok_or(anyhow::anyhow!("Failed to determine EPSG code from asset"))?;
 
@@ -733,7 +734,7 @@ impl StacImporter {
             self.known_datasets.insert(dataset_key.clone());
         }
 
-        let asset_bands = band_names_from_asset_v1_1_0(&asset)?;
+        let asset_bands = band_names_from_asset_v1_1_0(asset)?;
 
         let dataset_bands = self
             .bands
@@ -753,7 +754,7 @@ impl StacImporter {
         for (band_idx, band_name) in asset_bands.iter().enumerate() {
             let tile = processor
                 .process_band_v1_1_0(band_idx, band_name)
-                .context(format!("Failed to process band {}", band_name))?;
+                .context(format!("Failed to process band {band_name}"))?;
             tiles.push((dataset_key.clone(), tile));
         }
 
@@ -958,7 +959,7 @@ impl StacImporter {
         Ok(())
     }
 
-    fn print_progress(&self, item_collection: &stac::ItemCollection) -> anyhow::Result<()> {
+    fn print_progress(&self, item_collection: &stac::ItemCollection) {
         let elapsed_secs = self.import_start_time.elapsed().as_secs_f64();
         let items_per_sec = if elapsed_secs > 0.0 {
             self.items_processed_total as f64 / elapsed_secs
@@ -969,7 +970,7 @@ impl StacImporter {
         if let Some(number_matched) = item_collection
             .additional_fields
             .get("numberMatched")
-            .and_then(|v| v.as_u64())
+            .and_then(serde_json::Value::as_u64)
         {
             let progress = (self.items_processed_total as f64 / number_matched as f64 * 100.0)
                 .clamp(0.0, 100.0);
@@ -997,8 +998,6 @@ impl StacImporter {
                 self.items_processed_total, items_per_sec
             );
         }
-
-        Ok(())
     }
 
     async fn create_collections_and_layers(&self) -> anyhow::Result<()> {
@@ -1448,7 +1447,7 @@ fn format_duration(secs: u64) -> String {
 fn epsg_code_from_fields(
     proj_extension_version: StacExtensionMajorVersion,
     fields: &serde_json::Map<String, serde_json::Value>,
-) -> Result<Option<u32>, anyhow::Error> {
+) -> Option<u32> {
     let proj_epsg = fields.get("proj:epsg").and_then(|value| {
         value
             .as_u64()
@@ -1461,18 +1460,19 @@ fn epsg_code_from_fields(
         .and_then(serde_json::Value::as_str)
         .and_then(parse_epsg_from_proj_code);
 
-    Ok(match proj_extension_version {
+    match proj_extension_version {
         StacExtensionMajorVersion::V1 => proj_epsg.or(proj_code),
         StacExtensionMajorVersion::V2 => proj_code.or(proj_epsg),
-    })
+    }
 }
 
+#[allow(clippy::unnecessary_wraps)]
 fn epsg_code_from_item(
     item: &stac::Item,
     proj_extension_version: StacExtensionMajorVersion,
 ) -> Result<Option<u32>, anyhow::Error> {
     let from_additional =
-        epsg_code_from_fields(proj_extension_version, &item.properties.additional_fields)?;
+        epsg_code_from_fields(proj_extension_version, &item.properties.additional_fields);
     if from_additional.is_some() {
         return Ok(from_additional);
     }
@@ -1485,7 +1485,7 @@ fn epsg_code_from_item(
         return Ok(None);
     };
 
-    let from_properties = epsg_code_from_fields(proj_extension_version, &properties)?;
+    let from_properties = epsg_code_from_fields(proj_extension_version, &properties);
     if from_properties.is_some() {
         return Ok(from_properties);
     }
@@ -1495,7 +1495,7 @@ fn epsg_code_from_item(
         StacExtensionMajorVersion::V2 => StacExtensionMajorVersion::V1,
     };
 
-    epsg_code_from_fields(fallback_version, &properties)
+    Ok(epsg_code_from_fields(fallback_version, &properties))
 }
 
 fn parse_epsg_from_proj_code(code: &str) -> Option<u32> {
@@ -1657,12 +1657,9 @@ impl AssetBandProcessor<'_> {
             }
 
             Some(vec![
-                StringPair(("AWS_S3_ENDPOINT".to_string(), s3_endpoint.to_string())),
-                StringPair(("AWS_ACCESS_KEY_ID".to_string(), s3_access_key.to_string())),
-                StringPair((
-                    "AWS_SECRET_ACCESS_KEY".to_string(),
-                    s3_secret_key.to_string(),
-                )),
+                StringPair(("AWS_S3_ENDPOINT".to_string(), s3_endpoint.clone())),
+                StringPair(("AWS_ACCESS_KEY_ID".to_string(), s3_access_key.clone())),
+                StringPair(("AWS_SECRET_ACCESS_KEY".to_string(), s3_secret_key.clone())),
                 // StringPair(("AWS_HTTPS".to_string(), "YES".to_string())), // TODO: make configurable?
                 StringPair(("AWS_VIRTUAL_HOSTING".to_string(), "FALSE".to_string())), // TODO: make configurable?
             ])
@@ -1752,7 +1749,7 @@ fn gdal_file_path(asset: &Asset) -> anyhow::Result<GdalFilePath> {
     if asset.href.starts_with("http") {
         Ok(GdalFilePath::Http(format!("/vsicurl/{}", asset.href)))
     } else if let Some(s3_url) = asset.href.strip_prefix("s3://") {
-        Ok(GdalFilePath::S3(format!("/vsis3/{}", s3_url)))
+        Ok(GdalFilePath::S3(format!("/vsis3/{s3_url}")))
     } else {
         anyhow::bail!("Unsupported asset href format for GDAL: {}", asset.href);
     }
@@ -1766,8 +1763,7 @@ enum GdalFilePath {
 impl GdalFilePath {
     fn into(self) -> PathBuf {
         match self {
-            GdalFilePath::Http(path) => PathBuf::from(path),
-            GdalFilePath::S3(path) => PathBuf::from(path),
+            GdalFilePath::Http(path) | GdalFilePath::S3(path) => PathBuf::from(path),
         }
     }
 }
@@ -1834,16 +1830,16 @@ fn create_query_params(params: &StacImport) -> Vec<(String, String)> {
     let mut query_params: Vec<(String, String)> = Vec::new();
 
     // Add bbox if provided
-    if let Some(bbox) = &params.bbox {
-        if bbox.len() == 4 {
-            query_params.push((
-                "bbox".to_owned(),
-                format!(
-                    "{},{},{},{}", // array-brackets are not used in standard but required here for unknkown reason
-                    bbox[0], bbox[1], bbox[2], bbox[3]
-                ),
-            )); // TODO: order coordinates depending on projection
-        }
+    if let Some(bbox) = &params.bbox
+        && bbox.len() == 4
+    {
+        query_params.push((
+            "bbox".to_owned(),
+            format!(
+                "{},{},{},{}", // array-brackets are not used in standard but required here for unknkown reason
+                bbox[0], bbox[1], bbox[2], bbox[3]
+            ),
+        )); // TODO: order coordinates depending on projection
     }
 
     if params.time_start.is_some() || params.time_end.is_some() {
@@ -1996,7 +1992,7 @@ fn title_fallback_label(title: Option<&str>) -> String {
 
 fn rededge_variant_from_metadata(eo_name: &str, title: Option<&str>) -> Option<&'static str> {
     let eo = eo_name.to_lowercase();
-    let title_lower = title.map(|t| t.to_lowercase()).unwrap_or_default();
+    let title_lower = title.map(str::to_lowercase).unwrap_or_default();
 
     if eo.contains("b05")
         || eo.contains("band_5")
@@ -2032,7 +2028,7 @@ fn v1_0_0_band_name(title: Option<&str>, eo_band: Option<&EoBand>, band_count: u
             // `rededge` is used for multiple Sentinel-2 bands (B05/B06/B07).
             // Keep stable, unique names to avoid band collisions.
             Some("rededge") => rededge_variant_from_metadata(&eo_name, title)
-                .map(|name| name.to_string())
+                .map(std::string::ToString::to_string)
                 .or_else(|| Some(format!("rededge[{eo_name}]"))),
             Some(common_name) => Some(common_name.to_string()),
             None => Some(eo_name),
@@ -2137,7 +2133,7 @@ async fn scan_collection(
         }
     }
 
-    for (_partial_key, bands) in &mut dataset_bands {
+    for bands in dataset_bands.values_mut() {
         bands.sort_by(|a: &RasterBandDescriptor, b| a.name.cmp(&b.name));
     }
     Ok(dataset_bands)
@@ -2242,7 +2238,7 @@ fn scan_item_asset_v1_1_0(
         .ok_or(anyhow::anyhow!("data_type is not a string"))?;
 
     let data_type = raster_data_type_from_stac_data_type_str(data_type)
-        .context(format!("Unsupported data_type: {}", data_type))?;
+        .context(format!("Unsupported data_type: {data_type}"))?;
 
     // in STAC 1.1.0 `raster:bands` and `eo:bands` are merged into common metadata `bands`
     let band_names = band_names_from_item_asset_v1_1_0(asset)?;
@@ -2262,7 +2258,7 @@ fn scan_item_asset_v1_1_0(
             })
             .or_default()
             .push(RasterBandDescriptor {
-                name: band_name.to_string(),
+                name: band_name.clone(),
                 // TODO: unit from raster_band.unit
                 measurement: Measurement::Unitless(UnitlessMeasurement { r#type: crate::api::model::datatypes::UnitlessMeasurementTypeTag::UnitlessMeasurementTypeTag }),
             });
@@ -2355,6 +2351,7 @@ fn geo_transform_from_fields(
     Some(geo_transform)
 }
 
+#[allow(clippy::needless_pass_by_value)]
 fn data_type_from_asset(
     stac_version: stac::Version,
     asset: &Asset,
@@ -2378,7 +2375,7 @@ fn data_type_from_asset(
                 .as_ref()
                 .ok_or(anyhow::anyhow!("Missing data_type in asset"))?;
 
-            raster_data_type_from_stac_data_type(&data_type)
+            raster_data_type_from_stac_data_type(data_type)
         }
         _ => {
             anyhow::bail!("Unsupported STAC version: {stac_version}");
@@ -2511,9 +2508,10 @@ fn parse_stac_extension_versions(extensions: &[String]) -> anyhow::Result<StacEx
     let mut eo = None;
 
     for extension in ["projection", "raster", "eo"] {
-        if let Some(ext_str) = extensions.iter().find(|ext| {
-            ext.starts_with(&format!("https://stac-extensions.github.io/{}", extension))
-        }) {
+        if let Some(ext_str) = extensions
+            .iter()
+            .find(|ext| ext.starts_with(&format!("https://stac-extensions.github.io/{extension}")))
+        {
             let version =
                 stac_extension_version_from_str(ext_str, extension).with_context(|| {
                     format!("Failed to parse version for {extension} extension {ext_str}")
@@ -2594,19 +2592,16 @@ fn stac_extension_version_from_str(
 ) -> anyhow::Result<StacExtensionMajorVersion> {
     let version_str = extension_str
         .strip_prefix(&format!(
-            "https://stac-extensions.github.io/{}/v",
-            extension_name
+            "https://stac-extensions.github.io/{extension_name}/v"
         ))
         .and_then(|rem| rem.strip_suffix("/schema.json"))
-        .ok_or_else(|| anyhow::anyhow!("Unknown version for extension {}", extension_name))?;
+        .ok_or_else(|| anyhow::anyhow!("Unknown version for extension {extension_name}"))?;
 
     match version_str.split('.').next() {
         Some("1") => Ok(StacExtensionMajorVersion::V1),
         Some("2") => Ok(StacExtensionMajorVersion::V2),
         _ => Err(anyhow::anyhow!(
-            "Unknown version '{}' for extension {}",
-            version_str,
-            extension_name
+            "Unknown version '{version_str}' for extension {extension_name}"
         )),
     }
 }
@@ -2647,6 +2642,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_element84_stac_v1_0_0_creates_expected_dataset_and_tiles() {
         let stac_server = Server::run();
         let geo_server = Server::run();
@@ -2790,6 +2786,7 @@ mod tests {
     }
 
     #[tokio::test]
+    #[allow(clippy::too_many_lines)]
     async fn test_polsa_stac_v1_1_0_creates_expected_dataset_and_tiles() {
         let stac_server = Server::run();
         let geo_server = Server::run();

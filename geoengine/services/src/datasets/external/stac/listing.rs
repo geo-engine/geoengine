@@ -183,6 +183,238 @@ impl StacDataProvider {
             .take(options.limit as usize)
             .collect()
     }
+
+    fn collection_items_for_path(
+        &self,
+        collection: &LayerCollectionId,
+        collection_path: &str,
+    ) -> error::Result<Vec<CollectionItem>> {
+        if collection_path == ROOT_COLLECTION_ID {
+            return Ok(self.root_collection_items());
+        }
+
+        let parts = collection_path.split('/').collect::<Vec<_>>();
+
+        match parts.as_slice() {
+            [first_dimension_id] => self.items_by_first_dimension(collection, first_dimension_id),
+            [first_dimension_id, first_value] => self.items_for_second_dimension_selector(
+                collection,
+                first_dimension_id,
+                first_value,
+            ),
+            [first_dimension_id, first_value, second_dimension_id] => self
+                .items_by_second_dimension(
+                    collection,
+                    first_dimension_id,
+                    first_value,
+                    second_dimension_id,
+                ),
+            [
+                first_dimension_id,
+                first_value,
+                second_dimension_id,
+                second_value,
+            ] => self.layer_items_for_two_dimension_filters(
+                collection,
+                first_dimension_id,
+                first_value,
+                second_dimension_id,
+                second_value,
+            ),
+            _ => Err(error::Error::UnknownLayerCollectionId {
+                id: collection.clone(),
+            }),
+        }
+    }
+
+    fn root_collection_items(&self) -> Vec<CollectionItem> {
+        GroupingDimension::all()
+            .into_iter()
+            .map(|dimension| {
+                CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
+                    id: ProviderLayerCollectionId {
+                        provider_id: self.id,
+                        collection_id: LayerCollectionId(dimension.id().to_owned()),
+                    },
+                    name: format!("By {}", dimension.label()),
+                    description: format!("Browse datasets by {}", dimension.label()),
+                    properties: vec![],
+                })
+            })
+            .collect::<Vec<_>>()
+    }
+
+    fn parse_dimension_or_err(
+        collection: &LayerCollectionId,
+        dimension_id: &str,
+    ) -> error::Result<GroupingDimension> {
+        GroupingDimension::from_id(dimension_id).ok_or(error::Error::UnknownLayerCollectionId {
+            id: collection.clone(),
+        })
+    }
+
+    fn items_by_first_dimension(
+        &self,
+        collection: &LayerCollectionId,
+        first_dimension_id: &str,
+    ) -> error::Result<Vec<CollectionItem>> {
+        let first_dimension = Self::parse_dimension_or_err(collection, first_dimension_id)?;
+
+        Ok(self
+            .available_values(first_dimension, &[])
+            .into_iter()
+            .map(|(slug, display)| {
+                CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
+                    id: ProviderLayerCollectionId {
+                        provider_id: self.id,
+                        collection_id: LayerCollectionId(format!(
+                            "{}/{slug}",
+                            first_dimension.id(),
+                        )),
+                    },
+                    name: display.clone(),
+                    description: format!("Datasets with {} {}", first_dimension.label(), display,),
+                    properties: vec![],
+                })
+            })
+            .collect::<Vec<_>>())
+    }
+
+    fn items_for_second_dimension_selector(
+        &self,
+        collection: &LayerCollectionId,
+        first_dimension_id: &str,
+        first_value: &str,
+    ) -> error::Result<Vec<CollectionItem>> {
+        let first_dimension = Self::parse_dimension_or_err(collection, first_dimension_id)?;
+
+        Ok(GroupingDimension::all()
+            .into_iter()
+            .filter(|dimension| *dimension != first_dimension)
+            .filter(|dimension| {
+                !self
+                    .available_values(*dimension, &[(first_dimension, first_value)])
+                    .is_empty()
+            })
+            .map(|dimension| {
+                CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
+                    id: ProviderLayerCollectionId {
+                        provider_id: self.id,
+                        collection_id: LayerCollectionId(format!(
+                            "{}/{first_value}/{}",
+                            first_dimension.id(),
+                            dimension.id()
+                        )),
+                    },
+                    name: format!("By {}", dimension.label()),
+                    description: format!(
+                        "Filter datasets by {} with {} {}",
+                        dimension.label(),
+                        first_dimension.label(),
+                        first_value,
+                    ),
+                    properties: vec![],
+                })
+            })
+            .collect::<Vec<_>>())
+    }
+
+    fn items_by_second_dimension(
+        &self,
+        collection: &LayerCollectionId,
+        first_dimension_id: &str,
+        first_value: &str,
+        second_dimension_id: &str,
+    ) -> error::Result<Vec<CollectionItem>> {
+        let first_dimension = Self::parse_dimension_or_err(collection, first_dimension_id)?;
+        let second_dimension = Self::parse_dimension_or_err(collection, second_dimension_id)?;
+
+        ensure!(
+            first_dimension != second_dimension,
+            error::UnknownLayerCollectionId {
+                id: collection.clone(),
+            }
+        );
+
+        Ok(self
+            .available_values(second_dimension, &[(first_dimension, first_value)])
+            .into_iter()
+            .map(|(slug, display)| {
+                CollectionItem::Collection(LayerCollectionListing {
+                    r#type: Default::default(),
+                    id: ProviderLayerCollectionId {
+                        provider_id: self.id,
+                        collection_id: LayerCollectionId(format!(
+                            "{}/{first_value}/{}/{slug}",
+                            first_dimension.id(),
+                            second_dimension.id(),
+                        )),
+                    },
+                    name: display.clone(),
+                    description: format!(
+                        "Datasets with {} {} and {} {}",
+                        first_dimension.label(),
+                        first_value,
+                        second_dimension.label(),
+                        display,
+                    ),
+                    properties: vec![],
+                })
+            })
+            .collect::<Vec<_>>())
+    }
+
+    fn layer_items_for_two_dimension_filters(
+        &self,
+        collection: &LayerCollectionId,
+        first_dimension_id: &str,
+        first_value: &str,
+        second_dimension_id: &str,
+        second_value: &str,
+    ) -> error::Result<Vec<CollectionItem>> {
+        let first_dimension = Self::parse_dimension_or_err(collection, first_dimension_id)?;
+        let second_dimension = Self::parse_dimension_or_err(collection, second_dimension_id)?;
+
+        ensure!(
+            first_dimension != second_dimension,
+            error::UnknownLayerCollectionId {
+                id: collection.clone(),
+            }
+        );
+
+        let mut items = self
+            .datasets
+            .iter()
+            .filter(|dataset| {
+                Self::dataset_matches(
+                    dataset,
+                    &[
+                        (first_dimension, first_value),
+                        (second_dimension, second_value),
+                    ],
+                )
+            })
+            .map(|dataset| {
+                CollectionItem::Layer(LayerListing {
+                    r#type: Default::default(),
+                    id: ProviderLayerId {
+                        provider_id: self.id,
+                        layer_id: Self::dataset_layer_id(dataset),
+                    },
+                    name: dataset.name.clone(),
+                    description: dataset.description.clone(),
+                    properties: vec![],
+                })
+            })
+            .collect::<Vec<_>>();
+
+        items.sort_by_key(|item| item.name().to_owned());
+
+        Ok(items)
+    }
 }
 
 #[async_trait]
@@ -208,195 +440,7 @@ impl LayerCollectionProvider for StacDataProvider {
         options: LayerCollectionListOptions,
     ) -> error::Result<LayerCollection> {
         let collection_path = collection.0.trim_start_matches('/');
-
-        let items =
-            if collection_path == ROOT_COLLECTION_ID {
-                GroupingDimension::all()
-                    .into_iter()
-                    .map(|dimension| {
-                        CollectionItem::Collection(LayerCollectionListing {
-                            r#type: Default::default(),
-                            id: ProviderLayerCollectionId {
-                                provider_id: self.id,
-                                collection_id: LayerCollectionId(dimension.id().to_owned()),
-                            },
-                            name: format!("By {}", dimension.label()),
-                            description: format!("Browse datasets by {}", dimension.label()),
-                            properties: vec![],
-                        })
-                    })
-                    .collect::<Vec<_>>()
-            } else {
-                let parts = collection_path.split('/').collect::<Vec<_>>();
-
-                match parts.as_slice() {
-                    [first_dimension_id] => {
-                        let first_dimension = GroupingDimension::from_id(first_dimension_id)
-                            .ok_or(error::Error::UnknownLayerCollectionId {
-                                id: collection.clone(),
-                            })?;
-
-                        self.available_values(first_dimension, &[])
-                            .into_iter()
-                            .map(|(slug, display)| {
-                                CollectionItem::Collection(LayerCollectionListing {
-                                    r#type: Default::default(),
-                                    id: ProviderLayerCollectionId {
-                                        provider_id: self.id,
-                                        collection_id: LayerCollectionId(format!(
-                                            "{}/{slug}",
-                                            first_dimension.id(),
-                                        )),
-                                    },
-                                    name: display.clone(),
-                                    description: format!(
-                                        "Datasets with {} {}",
-                                        first_dimension.label(),
-                                        display,
-                                    ),
-                                    properties: vec![],
-                                })
-                            })
-                            .collect::<Vec<_>>()
-                    }
-                    [first_dimension_id, first_value] => {
-                        let first_dimension = GroupingDimension::from_id(first_dimension_id)
-                            .ok_or(error::Error::UnknownLayerCollectionId {
-                                id: collection.clone(),
-                            })?;
-
-                        GroupingDimension::all()
-                            .into_iter()
-                            .filter(|dimension| *dimension != first_dimension)
-                            .filter(|dimension| {
-                                !self
-                                    .available_values(*dimension, &[(first_dimension, first_value)])
-                                    .is_empty()
-                            })
-                            .map(|dimension| {
-                                CollectionItem::Collection(LayerCollectionListing {
-                                    r#type: Default::default(),
-                                    id: ProviderLayerCollectionId {
-                                        provider_id: self.id,
-                                        collection_id: LayerCollectionId(format!(
-                                            "{}/{first_value}/{}",
-                                            first_dimension.id(),
-                                            dimension.id()
-                                        )),
-                                    },
-                                    name: format!("By {}", dimension.label()),
-                                    description: format!(
-                                        "Filter datasets by {} with {} {}",
-                                        dimension.label(),
-                                        first_dimension.label(),
-                                        first_value,
-                                    ),
-                                    properties: vec![],
-                                })
-                            })
-                            .collect::<Vec<_>>()
-                    }
-                    [first_dimension_id, first_value, second_dimension_id] => {
-                        let first_dimension = GroupingDimension::from_id(first_dimension_id)
-                            .ok_or(error::Error::UnknownLayerCollectionId {
-                                id: collection.clone(),
-                            })?;
-                        let second_dimension = GroupingDimension::from_id(second_dimension_id)
-                            .ok_or(error::Error::UnknownLayerCollectionId {
-                                id: collection.clone(),
-                            })?;
-
-                        ensure!(
-                            first_dimension != second_dimension,
-                            error::UnknownLayerCollectionId {
-                                id: collection.clone(),
-                            }
-                        );
-
-                        self.available_values(second_dimension, &[(first_dimension, first_value)])
-                            .into_iter()
-                            .map(|(slug, display)| {
-                                CollectionItem::Collection(LayerCollectionListing {
-                                    r#type: Default::default(),
-                                    id: ProviderLayerCollectionId {
-                                        provider_id: self.id,
-                                        collection_id: LayerCollectionId(format!(
-                                            "{}/{first_value}/{}/{slug}",
-                                            first_dimension.id(),
-                                            second_dimension.id(),
-                                        )),
-                                    },
-                                    name: display.clone(),
-                                    description: format!(
-                                        "Datasets with {} {} and {} {}",
-                                        first_dimension.label(),
-                                        first_value,
-                                        second_dimension.label(),
-                                        display,
-                                    ),
-                                    properties: vec![],
-                                })
-                            })
-                            .collect::<Vec<_>>()
-                    }
-                    [
-                        first_dimension_id,
-                        first_value,
-                        second_dimension_id,
-                        second_value,
-                    ] => {
-                        let first_dimension = GroupingDimension::from_id(first_dimension_id)
-                            .ok_or(error::Error::UnknownLayerCollectionId {
-                                id: collection.clone(),
-                            })?;
-                        let second_dimension = GroupingDimension::from_id(second_dimension_id)
-                            .ok_or(error::Error::UnknownLayerCollectionId {
-                                id: collection.clone(),
-                            })?;
-
-                        ensure!(
-                            first_dimension != second_dimension,
-                            error::UnknownLayerCollectionId {
-                                id: collection.clone(),
-                            }
-                        );
-
-                        let mut items = self
-                            .datasets
-                            .iter()
-                            .filter(|dataset| {
-                                Self::dataset_matches(
-                                    dataset,
-                                    &[
-                                        (first_dimension, first_value),
-                                        (second_dimension, second_value),
-                                    ],
-                                )
-                            })
-                            .map(|dataset| {
-                                CollectionItem::Layer(LayerListing {
-                                    r#type: Default::default(),
-                                    id: ProviderLayerId {
-                                        provider_id: self.id,
-                                        layer_id: Self::dataset_layer_id(dataset),
-                                    },
-                                    name: dataset.name.clone(),
-                                    description: dataset.description.clone(),
-                                    properties: vec![],
-                                })
-                            })
-                            .collect::<Vec<_>>();
-
-                        items.sort_by_key(|item| item.name().to_owned());
-                        items
-                    }
-                    _ => {
-                        return Err(error::Error::UnknownLayerCollectionId {
-                            id: collection.clone(),
-                        });
-                    }
-                }
-            };
+        let items = self.collection_items_for_path(collection, collection_path)?;
 
         Ok(LayerCollection {
             id: ProviderLayerCollectionId {

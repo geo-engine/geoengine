@@ -256,7 +256,7 @@ impl EdrDataProvider {
         &self,
         collection_id: &LayerCollectionId,
         collection_meta: EdrCollectionMetaData,
-        options: &LayerCollectionListOptions,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let items = collection_meta
             .parameter_names
@@ -315,7 +315,7 @@ impl EdrDataProvider {
         &self,
         collection_id: &LayerCollectionId,
         collection_meta: EdrCollectionMetaData,
-        options: &LayerCollectionListOptions,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let items = collection_meta
             .extent
@@ -361,7 +361,7 @@ impl EdrDataProvider {
         collection_id: &LayerCollectionId,
         collection_meta: EdrCollectionMetaData,
         parameter: &str,
-        options: &LayerCollectionListOptions,
+        options: LayerCollectionListOptions,
     ) -> Result<LayerCollection> {
         let items = collection_meta
             .extent
@@ -950,13 +950,13 @@ impl LayerCollectionProvider for EdrDataProvider {
                 if collection_meta.is_raster_file()? {
                     // The collection is of type raster. A layer can only contain one parameter
                     // of a raster dataset at a time, so let the user choose one.
-                    self.get_raster_parameter_collection(collection_id, collection_meta, &options)
+                    self.get_raster_parameter_collection(collection_id, collection_meta, options)
                 } else if collection_meta.extent.vertical.is_some() {
                     // The collection is of type vector and data is provided for multiple heights.
                     // The user needs to be able to select the height he wants to see. It is not
                     // needed to select a parameter, because for vector datasets all parameters
                     // can be loaded simultaneously.
-                    self.get_vector_height_collection(collection_id, collection_meta, &options)
+                    self.get_vector_height_collection(collection_id, collection_meta, options)
                 } else {
                     // The collection is of type vector and there is only data for a single height.
                     // No height or parameter needs to be selected by the user. Therefore the name
@@ -985,7 +985,7 @@ impl LayerCollectionProvider for EdrDataProvider {
                     collection_id,
                     collection_meta,
                     &parameter,
-                    &options,
+                    options,
                 )
             }
             EdrCollectionId::ParameterAndHeight { .. } => Err(Error::InvalidLayerCollectionId),
