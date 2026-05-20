@@ -16,7 +16,7 @@
     "origin": 0,
     "step": {
       "granularity": "days",
-      "value": 1
+      "step": 1
     }
   },
   "datasets": [
@@ -24,7 +24,10 @@
       "name": "Sentinel-2 L2A EPSG:32632 U16 10m",
       "description": "",
       "dataType": "U16",
-      "resolution": 10,
+      "resolution": {
+        "x": 10,
+        "y": 10
+      },
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
@@ -80,7 +83,10 @@
       "name": "Sentinel-2 L2A EPSG:32632 U16 20m",
       "description": "",
       "dataType": "U16",
-      "resolution": 20,
+      "resolution": {
+        "x": 20,
+        "y": 20
+      },
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
@@ -160,7 +166,10 @@
       "name": "Sentinel-2 L2A EPSG:32632 U16 60m",
       "description": "",
       "dataType": "U16",
-      "resolution": 60,
+      "resolution": {
+        "x": 60,
+        "y": 60
+      },
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
@@ -244,7 +253,10 @@
       "name": "Sentinel-2 L2A EPSG:32632 U8 10m",
       "description": "",
       "dataType": "U8",
-      "resolution": 10,
+      "resolution": {
+        "x": 10,
+        "y": 10
+      },
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
@@ -288,7 +300,10 @@
       "name": "Sentinel-2 L2A EPSG:32632 U8 20m",
       "description": "",
       "dataType": "U8",
-      "resolution": 20,
+      "resolution": {
+        "x": 20,
+        "y": 20
+      },
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
@@ -343,7 +358,10 @@
       "name": "Sentinel-2 L2A EPSG:32632 U8 60m",
       "description": "",
       "dataType": "U8",
-      "resolution": 60,
+      "resolution": {
+        "x": 60,
+        "y": 60
+      },
       "projection": "EPSG:32632",
       "spatialGrid": {
         "descriptor": "source",
