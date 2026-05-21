@@ -198,7 +198,7 @@ pub struct StacImport {
 }
 
 /// Example call for Sentinel 2 from Element 84:
-/// ```
+/// ```bash
 /// cargo run --bin geoengine-cli stac-import \
 /// --verbose \
 /// --limit 267 \
@@ -206,10 +206,10 @@ pub struct StacImport {
 /// --time-start 2020-08-01T00:00:00Z \
 /// --time-end 2020-08-31T23:59:59Z \
 /// --stac-url https://earth-search.aws.element84.com/v1
-/// ````
+/// ```
 ///
 /// Example call for Sentinel 2 from CODE-DE:
-/// ```
+/// ```bash
 /// cargo run --bin geoengine-cli stac-import \
 /// --verbose \
 /// --limit 100 \
