@@ -1,4 +1,5 @@
 use super::{StacDataProvider, StacProviderDataset, StacProviderS3Config};
+use crate::error::Result;
 use crate::util::join_base_url_and_path;
 use async_trait::async_trait;
 use chrono::DateTime as ChronoDateTime;
@@ -23,6 +24,7 @@ use geoengine_operators::source::{
     OgrSourceDataset, TileFile,
 };
 use serde_json::Value;
+use stac::Item;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
@@ -153,7 +155,6 @@ impl
         MultiBandGdalLoadingInfoQueryRectangle,
     > for StacMultiBandMetaData
 {
-    #[allow(clippy::too_many_lines)]
     async fn loading_info(
         &self,
         query: MultiBandGdalLoadingInfoQueryRectangle,
@@ -166,51 +167,16 @@ impl
         )
         .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
 
-        let bbox = stac_query_bbox(
-            query.query_rectangle.spatial_bounds(),
-            self.dataset.projection,
-        )?;
         let time_interval =
             stac_query_time_interval(query.query_rectangle.time_interval(), self.time_dimension)?;
-        let time_start = time_interval.start();
-        let time_end = time_interval.end();
 
-        let query_params = vec![
-			(
-				"bbox".to_owned(),
-				format!(
-					"{},{},{},{}",
-					bbox.lower_left().x,
-					bbox.lower_left().y,
-					bbox.upper_right().x,
-					bbox.upper_right().y
-				),
-			),
-			(
-				"datetime".to_owned(),
-				format!(
-					"{}/{}",
-					time_start
-						.as_date_time()
-						.ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
-						.to_datetime_string_with_millis(),
-					time_end
-						.as_date_time()
-						.ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
-						.to_datetime_string_with_millis(),
-				),
-			),
-			("limit".to_owned(), "100".to_owned()),
-			(
-				"fields".to_owned(),
-				"stac_version,properties.datetime,properties.updated,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform".to_owned(),
-			),
-		];
+        let query_params = self.create_stac_query_params(&query, time_interval)?;
 
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(STAC_QUERY_TIMEOUT_SECS))
             .build()
             .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+
         let mut query_state = StacQueryState::FirstPage {
             query_url: items_url,
             query_params,
@@ -224,179 +190,10 @@ impl
                 query_stac_item_collection(&client, &query_state).await?;
 
             for item in item_collection.items {
-                if item.version != stac::Version::v1_1_0 {
-                    tracing::warn!(
-                        "Skipping STAC item with unsupported version: {:?}",
-                        item.version
-                    );
-                    continue;
-                }
-
-                let Some(item_datetime) = item.properties.datetime else {
-                    tracing::warn!("Skipping STAC item without datetime: {}", item.id);
-                    continue;
-                };
-
-                let z_index = item
-                    .properties
-                    .updated
-                    .as_deref()
-                    .and_then(|updated| ChronoDateTime::parse_from_rfc3339(updated).ok())
-                    .map_or_else(
-                        || item_datetime.timestamp_millis(),
-                        |updated| updated.timestamp_millis(),
-                    );
-
-                let item_time = TimeInstance::from_millis(item_datetime.timestamp_millis())
-                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-
-                let time = match self.time_dimension {
-                    TimeDimension::Regular(regular) => {
-                        let time_start = regular.snap_prev(item_time).map_err(|_e| {
-                            geoengine_operators::error::Error::InvalidDataProviderConfig
-                        })?;
-                        let time_end = (time_start + regular.step).map_err(|_e| {
-                            geoengine_operators::error::Error::InvalidDataProviderConfig
-                        })?;
-
-                        TimeInterval::new(time_start, time_end).map_err(|_e| {
-                            geoengine_operators::error::Error::InvalidDataProviderConfig
-                        })?
-                    }
-                    TimeDimension::Irregular => {
-                        unreachable!("irregular time dimension rejected at provider initialization")
-                    }
-                };
-
-                time_steps.push(time);
-
-                if !query.fetch_tiles {
-                    tracing::trace!(
-                        "STAC query does not require fetching tiles, skipping item with id: {}",
-                        item.id
-                    );
-                    continue;
-                }
-
-                for (_asset_key, asset) in item.assets {
-                    if data_type_from_asset_v1_1_0(&asset) != Some(self.dataset.data_type) {
-                        continue;
-                    }
-
-                    if !proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection)
-                    {
-                        continue;
-                    }
-
-                    let Some(geo_transform) = geo_transform_from_fields(&asset.additional_fields)
-                    else {
-                        tracing::warn!(
-                            "Skipping asset with href {} due to missing geo transform",
-                            asset.href
-                        );
-                        continue;
-                    };
-
-                    let Some((height, width)) = proj_shape_from_fields(&asset.additional_fields)
-                    else {
-                        tracing::warn!(
-                            "Skipping asset with href {} due to missing projection shape",
-                            asset.href
-                        );
-                        continue;
-                    };
-
-                    if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x).abs() > 1e-9
-                        || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y).abs()
-                            > 1e-9
-                    {
-                        continue;
-                    }
-
-                    let Some(asset_title) = asset.title.as_deref() else {
-                        tracing::warn!(
-                            "Skipping asset with href {} due to missing title",
-                            asset.href
-                        );
-                        continue;
-                    };
-
-                    let grid_bounds = GridBoundingBox2D::new(
-                        GridIdx2D::new([0, 0]),
-                        GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-                    )
-                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-                    let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
-
-                    let file_path = gdal_file_path(&asset.href)
-                        .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-
-                    let gdal_config_options = self.gdal_config_options_for_file_path(&file_path);
-
-                    for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
-                        if dataset_band.asset_title != asset_title {
-                            continue;
-                        }
-
-                        let rasterband_channel = if asset.bands.is_empty() {
-                            if dataset_band.band_name.is_some() {
-                                tracing::warn!(
-                                    "STAC asset with href {} does not include bands, but dataset configuration requires a band name. Skipping asset.",
-                                    asset.href
-                                );
-                                continue;
-                            }
-
-                            1
-                        } else {
-                            let Some(required_band_name) = dataset_band.band_name.as_deref() else {
-                                tracing::warn!(
-                                    "STAC asset with href {} includes bands, but dataset configuration does not specify a band name. Skipping asset.",
-                                    asset.href
-                                );
-                                continue;
-                            };
-
-                            let Some(asset_band_idx) = asset.bands.iter().position(|asset_band| {
-                                asset_band.name.as_deref() == Some(required_band_name)
-                            }) else {
-                                tracing::debug!(
-                                    "Skipping asset with href {} due to missing required band {}",
-                                    asset.href,
-                                    required_band_name
-                                );
-                                continue;
-                            };
-
-                            asset_band_idx + 1
-                        };
-
-                        files.push(TileFile {
-                            time,
-                            spatial_partition,
-                            band: dataset_band_idx as u32,
-                            z_index,
-                            params: GdalDatasetParameters {
-                                file_path: file_path.clone(),
-                                rasterband_channel,
-                                geo_transform: GdalDatasetGeoTransform {
-                                    origin_coordinate: geo_transform.origin_coordinate(),
-                                    x_pixel_size: geo_transform.x_pixel_size(),
-                                    y_pixel_size: geo_transform.y_pixel_size(),
-                                },
-                                width,
-                                height,
-                                file_not_found_handling: FileNotFoundHandling::Error,
-                                no_data_value: None,
-                                properties_mapping: None,
-                                gdal_open_options: None,
-                                gdal_config_options: gdal_config_options.clone(),
-                                allow_alphaband_as_mask: false,
-                                retry: Some(GdalRetryOptions { max_retries: 99 }),
-                            },
-                        });
-                    }
-                }
+                self.process_stac_item(&item, &mut time_steps, &mut files, query.fetch_tiles)
+                    .map_err(|e| geoengine_operators::error::Error::LoadingInfo {
+                        source: Box::new(e),
+                    })?;
             }
 
             query_state = next_state;
@@ -512,6 +309,232 @@ impl
 }
 
 impl StacMultiBandMetaData {
+    fn create_stac_query_params(
+        &self,
+        query: &MultiBandGdalLoadingInfoQueryRectangle,
+        time_interval: TimeInterval,
+    ) -> geoengine_operators::util::Result<Vec<(String, String)>> {
+        let bbox = stac_query_bbox(
+            query.query_rectangle.spatial_bounds(),
+            self.dataset.projection,
+        )?;
+
+        let time_start = time_interval.start();
+        let time_end = time_interval.end();
+
+        let query_params = vec![
+			(
+				"bbox".to_owned(),
+				format!(
+					"{},{},{},{}",
+					bbox.lower_left().x,
+					bbox.lower_left().y,
+					bbox.upper_right().x,
+					bbox.upper_right().y
+				),
+			),
+			(
+				"datetime".to_owned(),
+				format!(
+					"{}/{}",
+					time_start
+						.as_date_time()
+						.ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
+						.to_datetime_string_with_millis(),
+					time_end
+						.as_date_time()
+						.ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?
+						.to_datetime_string_with_millis(),
+				),
+			),
+			("limit".to_owned(), "100".to_owned()),
+			(
+				"fields".to_owned(),
+				"stac_version,properties.datetime,properties.updated,assets.*.title,assets.*.href,assets.*.data_type,assets.*.bands,assets.*.proj:code,assets.*.proj:shape,assets.*.proj:transform".to_owned(),
+			),
+		];
+
+        Ok(query_params)
+    }
+
+    fn process_stac_item(
+        &self,
+        item: &Item,
+        time_steps: &mut Vec<TimeInterval>,
+        files: &mut Vec<TileFile>,
+        fetch_tiles: bool,
+    ) -> Result<()> {
+        if item.version != stac::Version::v1_1_0 {
+            tracing::warn!(
+                "Skipping STAC item with unsupported version: {:?}",
+                item.version
+            );
+            return Ok(());
+        }
+
+        let Some(item_datetime) = item.properties.datetime else {
+            tracing::warn!("Skipping STAC item without datetime: {}", item.id);
+            return Ok(());
+        };
+
+        let z_index = item
+            .properties
+            .updated
+            .as_deref()
+            .and_then(|updated| ChronoDateTime::parse_from_rfc3339(updated).ok())
+            .map_or_else(
+                || item_datetime.timestamp_millis(),
+                |updated| updated.timestamp_millis(),
+            );
+
+        let item_time = TimeInstance::from_millis(item_datetime.timestamp_millis())
+            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+
+        let time = match self.time_dimension {
+            TimeDimension::Regular(regular) => {
+                let time_start = regular
+                    .snap_prev(item_time)
+                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+                let time_end = (time_start + regular.step)
+                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+
+                TimeInterval::new(time_start, time_end)
+                    .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?
+            }
+            TimeDimension::Irregular => {
+                unreachable!("irregular time dimension rejected at provider initialization")
+            }
+        };
+
+        time_steps.push(time);
+
+        if !fetch_tiles {
+            tracing::trace!(
+                "STAC query does not require fetching tiles, skipping item with id: {}",
+                item.id
+            );
+            return Ok(());
+        }
+
+        for (_asset_key, asset) in &item.assets {
+            if data_type_from_asset_v1_1_0(&asset) != Some(self.dataset.data_type) {
+                return Ok(());
+            }
+
+            if !proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
+                return Ok(());
+            }
+
+            let Some(geo_transform) = geo_transform_from_fields(&asset.additional_fields) else {
+                tracing::warn!(
+                    "Skipping asset with href {} due to missing geo transform",
+                    asset.href
+                );
+                return Ok(());
+            };
+
+            let Some((height, width)) = proj_shape_from_fields(&asset.additional_fields) else {
+                tracing::warn!(
+                    "Skipping asset with href {} due to missing projection shape",
+                    asset.href
+                );
+                return Ok(());
+            };
+
+            if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x).abs() > 1e-9
+                || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y).abs() > 1e-9
+            {
+                return Ok(());
+            }
+
+            let Some(asset_title) = asset.title.as_deref() else {
+                tracing::warn!(
+                    "Skipping asset with href {} due to missing title",
+                    asset.href
+                );
+                return Ok(());
+            };
+
+            let grid_bounds = GridBoundingBox2D::new(
+                GridIdx2D::new([0, 0]),
+                GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
+            )
+            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+            let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
+
+            let file_path = gdal_file_path(&asset.href)
+                .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+
+            let gdal_config_options = self.gdal_config_options_for_file_path(&file_path);
+
+            for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
+                if dataset_band.asset_title != asset_title {
+                    continue;
+                }
+
+                let rasterband_channel = if asset.bands.is_empty() {
+                    if dataset_band.band_name.is_some() {
+                        tracing::warn!(
+                            "STAC asset with href {} does not include bands, but dataset configuration requires a band name. Skipping asset.",
+                            asset.href
+                        );
+                        continue;
+                    }
+
+                    1
+                } else {
+                    let Some(required_band_name) = dataset_band.band_name.as_deref() else {
+                        tracing::warn!(
+                            "STAC asset with href {} includes bands, but dataset configuration does not specify a band name. Skipping asset.",
+                            asset.href
+                        );
+                        continue;
+                    };
+
+                    let Some(asset_band_idx) = asset.bands.iter().position(|asset_band| {
+                        asset_band.name.as_deref() == Some(required_band_name)
+                    }) else {
+                        tracing::debug!(
+                            "Skipping asset with href {} due to missing required band {}",
+                            asset.href,
+                            required_band_name
+                        );
+                        continue;
+                    };
+
+                    asset_band_idx + 1
+                };
+
+                files.push(TileFile {
+                    time,
+                    spatial_partition,
+                    band: dataset_band_idx as u32,
+                    z_index,
+                    params: GdalDatasetParameters {
+                        file_path: file_path.clone(),
+                        rasterband_channel,
+                        geo_transform: GdalDatasetGeoTransform {
+                            origin_coordinate: geo_transform.origin_coordinate(),
+                            x_pixel_size: geo_transform.x_pixel_size(),
+                            y_pixel_size: geo_transform.y_pixel_size(),
+                        },
+                        width,
+                        height,
+                        file_not_found_handling: FileNotFoundHandling::Error,
+                        no_data_value: None,
+                        properties_mapping: None,
+                        gdal_open_options: None,
+                        gdal_config_options: gdal_config_options.clone(),
+                        allow_alphaband_as_mask: false,
+                        retry: Some(GdalRetryOptions { max_retries: 99 }),
+                    },
+                });
+            }
+        }
+
+        Ok(())
+    }
+
     fn gdal_config_options_for_file_path(&self, file_path: &Path) -> Option<Vec<(String, String)>> {
         let file_path_str = file_path.to_string_lossy();
         let is_vsi_s3 = file_path_str.starts_with("/vsis3/");
