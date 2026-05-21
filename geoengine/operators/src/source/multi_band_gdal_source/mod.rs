@@ -50,6 +50,7 @@ use snafu::{ResultExt, ensure};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::Path;
+use std::time::Instant;
 use tracing::{debug, trace};
 
 mod error;
@@ -298,9 +299,17 @@ impl GdalRasterLoader {
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
+        let config_options = if let Some(config_options) = &dataset_params.gdal_config_options {
+            // ensure that GDAL only uses a single thread because otherweise the thread local configs may not be used by all gdal threads
+            let mut options = config_options.clone();
+            options.push(("GDAL_NUM_THREADS".to_string(), "1".to_string()));
+            Some(options)
+        } else {
+            None
+        };
+
         // reverts the thread local configs on drop
-        let _thread_local_configs = dataset_params
-            .gdal_config_options
+        let _thread_local_configs = config_options
             .as_ref()
             .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
 
@@ -455,6 +464,7 @@ where
             }
         };
 
+        let loading_info_start = Instant::now();
         let loading_info = self
             .meta_data
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
@@ -463,6 +473,8 @@ where
                 true,
             ))
             .await?;
+        let loading_info_ms = loading_info_start.elapsed().as_millis();
+        debug!(loading_info_ms, "loading_info timing");
 
         let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes().clone().as_vec();
@@ -882,12 +894,15 @@ where
 {
     let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
 
+    let start = std::time::Instant::now();
     let buffer = rasterband.read_as::<T>(
         read_window.gdal_window_start(), // pixelspace origin
         read_window.gdal_window_size(),  // pixelspace size
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
+    debug!("read raster band in {:?} s", start.elapsed().as_secs_f64());
+
     let (_, buffer_data) = buffer.into_shape_and_vec();
     let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
 
