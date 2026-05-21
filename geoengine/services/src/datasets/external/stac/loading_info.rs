@@ -418,11 +418,11 @@ impl StacMultiBandMetaData {
 
         for (_asset_key, asset) in &item.assets {
             if data_type_from_asset_v1_1_0(&asset) != Some(self.dataset.data_type) {
-                return Ok(());
+                continue;
             }
 
             if !proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
-                return Ok(());
+                continue;
             }
 
             let Some(geo_transform) = geo_transform_from_fields(&asset.additional_fields) else {
@@ -430,7 +430,7 @@ impl StacMultiBandMetaData {
                     "Skipping asset with href {} due to missing geo transform",
                     asset.href
                 );
-                return Ok(());
+                continue;
             };
 
             let Some((height, width)) = proj_shape_from_fields(&asset.additional_fields) else {
@@ -438,13 +438,13 @@ impl StacMultiBandMetaData {
                     "Skipping asset with href {} due to missing projection shape",
                     asset.href
                 );
-                return Ok(());
+                continue;
             };
 
             if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x).abs() > 1e-9
                 || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y).abs() > 1e-9
             {
-                return Ok(());
+                continue;
             }
 
             let Some(asset_title) = asset.title.as_deref() else {
@@ -452,7 +452,7 @@ impl StacMultiBandMetaData {
                     "Skipping asset with href {} due to missing title",
                     asset.href
                 );
-                return Ok(());
+                continue;
             };
 
             let grid_bounds = GridBoundingBox2D::new(
@@ -526,7 +526,7 @@ impl StacMultiBandMetaData {
                         gdal_open_options: None,
                         gdal_config_options: gdal_config_options.clone(),
                         allow_alphaband_as_mask: false,
-                        retry: Some(GdalRetryOptions { max_retries: 99 }),
+                        retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
                     },
                 });
             }
