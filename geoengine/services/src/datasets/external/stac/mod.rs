@@ -56,7 +56,7 @@ pub struct StacProviderDataset {
     pub resolution: SpatialResolution,
     pub projection: SpatialReference,
     pub spatial_grid: SpatialGridDescriptor, // TODO: this could be fetched from STAC, however it is dependent on the projection and the STAC collection API does not include this information for all projections but only the first one. so we would have to probe the items API...
-    pub bands: Vec<StacProviderDatasetBand>, // bands in order!
+    pub bands: Vec<StacProviderDatasetBand>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
