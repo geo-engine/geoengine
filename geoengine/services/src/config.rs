@@ -364,6 +364,16 @@ impl ConfigElement for Gdal {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct GdalProcessPool {
+    pub max_worker_processes: u64,
+    pub max_worker_per_dataset: u64,
+}
+
+impl ConfigElement for GdalProcessPool {
+    const KEY: &'static str = "gdal_process_pool";
+}
+
+#[derive(Debug, Deserialize)]
 pub struct Session {
     pub anonymous_access: bool,
 }

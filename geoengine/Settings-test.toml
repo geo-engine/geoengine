@@ -40,3 +40,7 @@ enabled = false
 size_in_mb = 1_000 # 1 GB
 # storage limit for collecting query results before insertion into the cache in 
 landing_zone_ratio = 0.1 # 10% of total cache size
+
+[gdal_process_pool]
+max_worker_processes = 4
+max_worker_per_dataset = 2

@@ -4,14 +4,14 @@ use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
 use geoengine_operators::source::{
     GdalDatasetCache, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
-    IpcProcessRasterResult, TileData, gdal_source::GdalRasterLoader, setup_client,
+    IpcProcessRasterResult,
+    gdal_source::{GdalRasterLoader, process::GdalIpcBytePayload},
+    setup_client,
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
 
 use tracing::Level;
-
-type Sender = IpcSender<IpcProcessRasterResult>;
 
 fn exit_with_error(msg: impl Display) -> ! {
     tracing::error!("Error: {msg}");
@@ -60,106 +60,99 @@ fn reroute_gdal_logging() {
 }
 
 fn main() {
-    let (token, debug_lvl) = setup();
+    let (token, _debug_lvl) = setup();
     reroute_gdal_logging();
 
-    //tracing_subscriber::fmt().with_max_level(debug_lvl).init();
+    // TODO: add a logger?
 
-    if let Err(err) = run(token) {
-        exit_with_error(err)
-    }
+    run(token);
 }
 
-fn run(token: Token) -> Result<(), IpcProcessError> {
-    let (sender, receiver) = match setup_client::<IpcChannelMessage, IpcProcessRasterResult>(token)
-    {
-        Ok(pair) => pair,
-        Err(err) => exit_with_error(err),
-    };
-    let mut dataset_cache = GdalDatasetCache::new();
-
-    while let Ok(message) = receiver.recv() {
-        let payload = message.0;
-        let result = match payload.data_type {
-            geoengine_datatypes::raster::RasterDataType::U8 => {
-                handle::<u8>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::U16 => {
-                handle::<u16>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::U32 => {
-                handle::<u32>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::U64 => {
-                handle::<u64>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::I8 => {
-                handle::<i8>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::I16 => {
-                handle::<i16>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::I32 => {
-                handle::<i32>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::I64 => {
-                handle::<i64>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::F32 => {
-                handle::<f32>(payload, &mut dataset_cache, &sender)
-            }
-            geoengine_datatypes::raster::RasterDataType::F64 => {
-                handle::<f64>(payload, &mut dataset_cache, &sender)
-            }
-        };
-
-        if let Err(err) = result {
-            // Attempt to notify the parent, but if the sender is also dead, just exit
-            if let Err(_) = sender.send(Err(IpcProcessError::IpcOther {
-                ipc_error: err.to_string(),
-            })) {
-                eprintln!("IPC Receiver error: {:?}. Exiting worker.", err);
-                break;
-            }
+fn raster_type_dispatch(
+    payload: IpcChannelMessagePayload,
+    dataset_cache: &mut GdalDatasetCache,
+    sender: &IpcSender<IpcProcessRasterResult>,
+) -> Result<(), IpcProcessError> {
+    match payload.data_type {
+        geoengine_datatypes::raster::RasterDataType::U8 => {
+            read_and_send::<u8>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::U16 => {
+            read_and_send::<u16>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::U32 => {
+            read_and_send::<u32>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::U64 => {
+            read_and_send::<u64>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::I8 => {
+            read_and_send::<i8>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::I16 => {
+            read_and_send::<i16>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::I32 => {
+            read_and_send::<i32>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::I64 => {
+            read_and_send::<i64>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::F32 => {
+            read_and_send::<f32>(payload, dataset_cache, sender)?;
+        }
+        geoengine_datatypes::raster::RasterDataType::F64 => {
+            read_and_send::<f64>(payload, dataset_cache, sender)?;
         }
     }
 
     Ok(())
 }
 
-fn handle<P: FromPrimitive + Pixel + GdalType>(
+fn run(token: Token) {
+    let (sender, receiver) = match setup_client::<IpcChannelMessage, IpcProcessRasterResult>(token)
+    {
+        Ok(pair) => pair,
+        Err(err) => exit_with_error(err),
+    };
+
+    let mut dataset_cache = GdalDatasetCache::new();
+
+    // Loop runs indefinitely, reusing the process and its GDAL dataset cache
+    while let Ok(message) = receiver.recv() {
+        let payload = message.0;
+
+        // If helper returns an error, it means the underlying IPC channel is completely broken
+        if let Err(err) = raster_type_dispatch(payload, &mut dataset_cache, &sender) {
+            eprintln!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
+            break;
+        }
+    }
+}
+
+fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
     IpcChannelMessagePayload {
         dataset_params,
         read_advise,
-        data_type: _,
+        data_type,
     }: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetCache,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
-    let gp = GdalRasterLoader::load_tile_data_with_dataset_retry::<P>(
+    let gp = GdalRasterLoader::load_tile_data_with_dataset_retry::<T>(
         dataset_cache,
         &dataset_params,
         read_advise,
+        data_type,
     )
-    .map_err(|e| IpcProcessError::GdalError {
-        gdal_error: e.to_string(),
-    });
+    .map_err(IpcProcessError::from);
 
-    let tile_data = gp.and_then(|g| TileData::serialize_grid_with_props(g));
-
-    if let Err(some_err) = send_serialized_tile_or_error(tile_data, sender) {
-        sender.send(Err(some_err)).map_err(IpcProcessError::from)?;
-    }
-    Ok(())
-}
-
-fn send_serialized_tile_or_error(
-    tile_res: Result<TileData, IpcProcessError>,
-    sender: &Sender,
-) -> std::result::Result<(), IpcProcessError> {
-    match tile_res {
+    let byte_payload = gp.and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into));
+    // Propagate channel send errors directly up out of the handler
+    match byte_payload {
         Ok(td) => sender.send(Ok(td)),
         Err(err) => sender.send(Err(err)),
     }?;
+
     Ok(())
 }

@@ -22,6 +22,7 @@ type Result<T, E = syn::Error> = std::result::Result<T, E>;
 /// - `oidc_db` - a tuple `(handle, f)` with
 ///     - `handle` being a handle of an OpenID-Connect endpoint, preventing it from dropping too early, and
 ///     - `f` begin function that returns a [`crate::users::OidcManager`] to use for the test
+/// - `gdal_process_pool_config`- the config for the gdl process pool
 ///
 #[proc_macro_attribute]
 pub fn test(

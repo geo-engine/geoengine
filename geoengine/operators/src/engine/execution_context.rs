@@ -11,6 +11,7 @@ use crate::machine_learning::MlModelLoadingInfo;
 use crate::meta::quota::{QuotaChecker, QuotaTracking};
 use crate::meta::wrapper::InitializedOperatorWrapper;
 use crate::mock::MockDatasetDataSourceLoadingInfo;
+use crate::source::gdal_source::{GdalProcessPool, GdalProcessPoolAccess};
 use crate::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,
@@ -41,7 +42,7 @@ pub trait ExecutionContext: Send
         MultiBandGdalLoadingInfo,
         RasterResultDescriptor,
         MultiBandGdalLoadingInfoQueryRectangle,
-    >
+    > + GdalProcessPoolAccess
 {
     fn thread_pool(&self) -> &Arc<ThreadPool>;
     fn tiling_specification(&self) -> TilingSpecification;
@@ -67,6 +68,10 @@ pub trait ExecutionContext: Send
     async fn resolve_named_data(&self, data: &NamedData) -> Result<DataId>;
 
     async fn ml_model_loading_info(&self, name: &MlModelName) -> Result<MlModelLoadingInfo>;
+
+    fn gdal_process_pool(&self) -> &Arc<GdalProcessPool> {
+        self.get_gdal_pool()
+    }
 }
 
 #[async_trait]
@@ -103,6 +108,7 @@ pub struct MockExecutionContext {
     pub named_data: HashMap<NamedData, DataId>,
     pub ml_models: HashMap<MlModelName, MlModelLoadingInfo>,
     pub tiling_specification: TilingSpecification,
+    pub gdal_process_pool: Arc<GdalProcessPool>,
 }
 
 impl TestDefault for MockExecutionContext {
@@ -113,6 +119,7 @@ impl TestDefault for MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification: TilingSpecification::test_default(),
+            gdal_process_pool: GdalProcessPool::new(4, 2),
         }
     }
 }
@@ -125,6 +132,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
+            gdal_process_pool: GdalProcessPool::new(4, 2), // TODO: GdalProcessPool defaults!
         }
     }
 
@@ -138,6 +146,7 @@ impl MockExecutionContext {
             named_data: HashMap::default(),
             ml_models: HashMap::default(),
             tiling_specification,
+            gdal_process_pool: GdalProcessPool::new(4, 2),
         }
     }
 
@@ -200,6 +209,12 @@ impl MockExecutionContext {
             self.tiling_specification,
             num_threads,
         )
+    }
+}
+
+impl GdalProcessPoolAccess for MockExecutionContext {
+    fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
+        &self.gdal_process_pool
     }
 }
 
@@ -452,6 +467,12 @@ impl ExecutionContext for StatisticsWrappingMockExecutionContext {
 
     async fn ml_model_loading_info(&self, name: &MlModelName) -> Result<MlModelLoadingInfo> {
         self.inner.ml_model_loading_info(name).await
+    }
+}
+
+impl GdalProcessPoolAccess for StatisticsWrappingMockExecutionContext {
+    fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
+        self.inner.get_gdal_pool()
     }
 }
 

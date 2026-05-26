@@ -27,6 +27,7 @@ use geoengine_operators::machine_learning::MlModelLoadingInfo;
 use geoengine_operators::meta::quota::{QuotaCheck, QuotaChecker, QuotaTracking};
 use geoengine_operators::meta::wrapper::InitializedOperatorWrapper;
 use geoengine_operators::mock::MockDatasetDataSourceLoadingInfo;
+use geoengine_operators::source::gdal_source::{GdalProcessPool, GdalProcessPoolAccess};
 use geoengine_operators::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,
@@ -125,6 +126,7 @@ pub struct QueryContextImpl {
     quota_checker: Option<QuotaChecker>,
     abort_registration: QueryAbortRegistration,
     abort_trigger: Option<QueryAbortTrigger>,
+    gdal_process_pool: Arc<GdalProcessPool>,
 }
 
 impl QueryContextImpl {
@@ -132,6 +134,7 @@ impl QueryContextImpl {
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         QueryContextImpl {
@@ -143,6 +146,7 @@ impl QueryContextImpl {
             quota_checker: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            gdal_process_pool,
         }
     }
 
@@ -150,6 +154,8 @@ impl QueryContextImpl {
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
+        gdal_process_pool: Arc<GdalProcessPool>,
+
         cache: Option<Arc<SharedCache>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
@@ -164,6 +170,7 @@ impl QueryContextImpl {
             quota_tracking,
             abort_registration,
             abort_trigger: Some(abort_trigger),
+            gdal_process_pool,
         }
     }
 }
@@ -205,6 +212,12 @@ impl QueryContext for QueryContextImpl {
     }
 }
 
+impl GdalProcessPoolAccess for QueryContextImpl {
+    fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
+        &self.gdal_process_pool
+    }
+}
+
 pub struct ExecutionContextImpl<D>
 where
     D: DatasetDb + LayerProviderDb,
@@ -212,6 +225,7 @@ where
     db: D,
     thread_pool: Arc<ThreadPool>,
     tiling_specification: TilingSpecification,
+    gdal_process_pool: Arc<GdalProcessPool>,
 }
 
 impl<D> ExecutionContextImpl<D>
@@ -222,11 +236,13 @@ where
         db: D,
         thread_pool: Arc<ThreadPool>,
         tiling_specification: TilingSpecification,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> Self {
         Self {
             db,
             thread_pool,
             tiling_specification,
+            gdal_process_pool,
         }
     }
 }
@@ -359,6 +375,15 @@ where
             storage_path,
             metadata: ml_model.metadata,
         })
+    }
+}
+
+impl<D> GdalProcessPoolAccess for ExecutionContextImpl<D>
+where
+    D: DatasetDb + LayerProviderDb,
+{
+    fn get_gdal_pool(&self) -> &Arc<GdalProcessPool> {
+        &self.gdal_process_pool
     }
 }
 

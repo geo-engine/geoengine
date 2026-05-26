@@ -1,24 +1,24 @@
+use std::borrow::Cow;
 use std::path::PathBuf;
 use std::process::Command;
 
+use bytemuck::{AnyBitPattern, NoUninit};
 use gdal::errors::GdalError;
 use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags};
 
-use geoengine_datatypes::raster::arrow_conversion::{
-    arrow_record_batch_to_grid_with_properties, bytes_to_record_batch,
-    grid_with_properties_to_arrow_record_batch, record_batch_to_bytes,
-};
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridOrEmpty, Pixel, RasterDataType, RasterProperties,
+    Grid, GridBoundingBox2D, GridOrEmpty, GridShape2D, MaskedGrid, NoDataValueGrid, Pixel,
+    RasterDataType, RasterProperties,
 };
-
 use ipc_channel::{
     IpcError,
     ipc::{self, IpcReceiver, IpcSender},
 };
+use serde::{Deserialize, Serialize};
 use snafu::Snafu;
 
-use super::{GdalDatasetParameters, GdalReadAdvise, GdalSourceError};
+use super::{GdalDatasetParameters, GdalReadAdvise};
+use crate::source::gdal_source::GdalRasterLoaderError;
 use crate::source::gdal_source::reader::GridAndProperties;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::util::gdal::gdal_open_ex_gdal_error;
@@ -31,70 +31,382 @@ pub struct IpcChannelMessagePayload {
     pub data_type: RasterDataType,
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone)]
-pub struct TileData {
-    tile: Vec<u8>,
+pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GdalIpcBytePayload {
+    pub dimensions: GridBoundingBox2D,
+    pub properties: RasterProperties,
+    pub data_variant: GdalDataByteVariant,
 }
 
-impl TileData {
-    pub fn serialize_grid_with_props<P: Pixel>(
-        gp: GridAndProperties<P, GridBoundingBox2D>,
-    ) -> Result<Self, IpcProcessError> {
-        let as_vec = grid_with_properties_to_arrow_record_batch(gp.grid, &gp.properties)
-            .and_then(|rb| record_batch_to_bytes(&rb))
-            .map_err(|e| IpcProcessError::RasterArrowConversion {
-                conversion: e.to_string(),
-            })?;
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum GdalDataByteVariant {
+    /// Represents an Empty Grid (zero allocation for pixels or masks)
+    Empty,
 
-        Ok(Self { tile: as_vec })
+    /// GDAL Native: Every single pixel in the buffer is valid.
+    /// ZERO mask data is written to or read from the IPC pipe.
+    AllValid {
+        #[serde(with = "serde_bytes")]
+        raw_bytes: Vec<u8>,
+    },
+
+    /// GDAL Native: Invalid pixels are defined by a specific scalar value.
+    /// The mask vector is completely omitted from the wire and calculated by the caller.
+    WithNoData {
+        #[serde(with = "serde_bytes")]
+        raw_bytes: Vec<u8>,
+        no_data_value: f64, // Stored as f64 to easily cover all primitive type limits
+    },
+
+    /// Fallback: Used only if an irregular mask band is present
+    WithExplicitMask {
+        #[serde(with = "serde_bytes")]
+        raw_bytes: Vec<u8>,
+        #[serde(with = "serde_bytes")]
+        validity_mask: Vec<u8>, // 1 byte per pixel: 1 = valid, 0 = invalid
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct GdalIpcPayload<T> {
+    pub dimensions: GridBoundingBox2D,
+    pub properties: RasterProperties,
+    pub data_variant: GdalDataVariant<T>,
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum GdalDataVariant<T> {
+    /// Represents an Empty Grid (zero allocation for pixels or masks)
+    Empty,
+    AllValid {
+        data: Vec<T>,
+    },
+
+    WithNoData {
+        data: Vec<T>,
+        no_data_value: f64, // Stored as f64 to easily cover all primitive type limits
+    },
+
+    WithExplicitMask {
+        data: Vec<T>,
+        validity_mask: Vec<u8>, // 1 byte per pixel: 1 = valid, 0 = invalid
+    },
+}
+
+impl<T> From<GdalIpcBytePayload> for GdalIpcPayload<T>
+where
+    T: bytemuck::AnyBitPattern,
+{
+    fn from(value: GdalIpcBytePayload) -> Self {
+        Self {
+            dimensions: value.dimensions,
+            properties: value.properties,
+            data_variant: value.data_variant.into(),
+        }
     }
+}
 
-    pub fn deserialize_grid_with_props<P: Pixel>(
-        &self,
-    ) -> Result<GridAndProperties<P, GridBoundingBox2D>, GdalSourceError> {
-        let rb = bytes_to_record_batch(&self.tile)
-            .map_err(|e| GdalSourceError::ArrowConversion { source: e })?;
+impl<T> TryFrom<GdalIpcPayload<T>> for GdalIpcBytePayload
+where
+    T: bytemuck::NoUninit,
+{
+    type Error = bytemuck::PodCastError;
 
-        let (grid, properties): (GridOrEmpty<GridBoundingBox2D, P>, RasterProperties) =
-            arrow_record_batch_to_grid_with_properties(&rb)
-                .map_err(|e| GdalSourceError::ArrowConversion { source: e })?;
+    fn try_from(value: GdalIpcPayload<T>) -> Result<Self, Self::Error> {
+        Ok(Self {
+            dimensions: value.dimensions,
+            properties: value.properties,
+            data_variant: value.data_variant.try_into()?,
+        })
+    }
+}
 
-        Ok(GridAndProperties { grid, properties })
+impl<T> TryFrom<GdalDataVariant<T>> for GdalDataByteVariant
+where
+    T: NoUninit,
+{
+    type Error = bytemuck::PodCastError;
+
+    fn try_from(value: GdalDataVariant<T>) -> Result<Self, Self::Error> {
+        match value {
+            GdalDataVariant::Empty => Ok(GdalDataByteVariant::Empty),
+            GdalDataVariant::AllValid { data } => {
+                bytemuck::try_cast_slice::<T, u8>(&data).map(|s| GdalDataByteVariant::AllValid {
+                    raw_bytes: s.to_vec(),
+                })
+            }
+            GdalDataVariant::WithNoData {
+                data,
+                no_data_value,
+            } => {
+                bytemuck::try_cast_slice::<T, u8>(&data).map(|s| GdalDataByteVariant::WithNoData {
+                    raw_bytes: s.to_vec(),
+                    no_data_value,
+                })
+            }
+            GdalDataVariant::WithExplicitMask {
+                data,
+                validity_mask,
+            } => bytemuck::try_cast_slice::<T, u8>(&data).map(|s| {
+                GdalDataByteVariant::WithExplicitMask {
+                    raw_bytes: s.to_vec(),
+                    validity_mask: validity_mask,
+                }
+            }),
+        }
+    }
+}
+
+impl<T> From<GdalDataByteVariant> for GdalDataVariant<T>
+where
+    T: AnyBitPattern,
+{
+    fn from(value: GdalDataByteVariant) -> Self {
+        match value {
+            GdalDataByteVariant::Empty => GdalDataVariant::Empty,
+            GdalDataByteVariant::AllValid { raw_bytes } => GdalDataVariant::AllValid {
+                data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
+            },
+            GdalDataByteVariant::WithNoData {
+                raw_bytes,
+                no_data_value,
+            } => GdalDataVariant::WithNoData {
+                data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
+                no_data_value,
+            },
+            GdalDataByteVariant::WithExplicitMask {
+                raw_bytes,
+                validity_mask,
+            } => GdalDataVariant::WithExplicitMask {
+                data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
+                validity_mask: validity_mask,
+            },
+        }
+    }
+}
+
+impl<T> From<GdalIpcPayload<T>> for GridAndProperties<T, GridBoundingBox2D>
+where
+    T: Pixel,
+{
+    fn from(value: GdalIpcPayload<T>) -> Self {
+        match value.data_variant {
+            GdalDataVariant::Empty => GridAndProperties {
+                grid: GridOrEmpty::new_empty_shape(value.dimensions),
+                properties: value.properties,
+            },
+            GdalDataVariant::AllValid { data } => GridAndProperties {
+                grid: GridOrEmpty::new_grid(MaskedGrid::new_with_data(
+                    Grid::new(value.dimensions, data).expect("shape and data match"),
+                )),
+                properties: value.properties,
+            },
+            GdalDataVariant::WithNoData {
+                data,
+                no_data_value,
+            } => {
+                let no_data_t = T::from_(no_data_value);
+                GridAndProperties {
+                    grid: GridOrEmpty::new_grid(
+                        NoDataValueGrid::new(
+                            Grid::new(value.dimensions, data).expect("shape and data match"),
+                            Some(no_data_t),
+                        )
+                        .into(),
+                    ),
+                    properties: value.properties,
+                }
+            }
+            GdalDataVariant::WithExplicitMask {
+                data,
+                validity_mask,
+            } => GridAndProperties {
+                grid: GridOrEmpty::new_grid(
+                    MaskedGrid::new(
+                        Grid::new(value.dimensions.clone(), data).expect("shape and data match"),
+                        Grid::new(
+                            value.dimensions,
+                            validity_mask.iter().map(|&m| m > 0).collect(),
+                        )
+                        .expect("shape and data match"),
+                    )
+                    .expect("dimensions must match"),
+                ),
+                properties: value.properties,
+            },
+        }
     }
 }
 
 // [`IpcError`] does not implement the serde traits, and thus cant be send
 // via the ipc_channels
-#[derive(Debug, Snafu, serde::Serialize, serde::Deserialize, Clone)]
-pub enum IpcProcessError {
-    SerializationError { serde: String },
-    Io { io: String },
-    Disconnected,
-    DataType { datatype: String },
-    GdalError { gdal_error: String },
-    RasterArrowConversion { conversion: String },
 
-    IpcOther { ipc_error: String },
+// --- 1. STRONGLY TYPED SUB-CATEGORIES (Must be Serialize + Deserialize + Clone) ---
+
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum GdalErrorKind {
+    FileNotFound,
+    AccessDenied,
+    InvalidDataset,
+    ConnectionTimeout,
+    Unknown,
 }
 
-pub type IpcProcessRasterResult = std::result::Result<TileData, IpcProcessError>;
+#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
+pub enum IoErrorKind {
+    NotFound,
+    PermissionDenied,
+    ConnectionRefused,
+    ConnectionAborted,
+    UnexpectedEof,
+    Other,
+}
 
-impl From<IpcError> for IpcProcessError {
-    fn from(value: IpcError) -> Self {
-        match value {
-            IpcError::SerializationError(e) => IpcProcessError::SerializationError {
-                serde: e.to_string(),
-            },
-            IpcError::Io(e) => IpcProcessError::Io { io: e.to_string() },
-            IpcError::Disconnected => IpcProcessError::Disconnected,
+// --- 2. THE IPC TRANSFERRABLE ERROR ENUM ---
+
+#[derive(Debug, Snafu, serde::Serialize, serde::Deserialize, Clone)]
+#[serde(tag = "type", content = "details")] // Flattens payload data over the ipc-channel
+#[snafu(visibility(pub))]
+pub enum IpcProcessError {
+    #[snafu(display("Serialization error: {msg}"))]
+    SerializationError {
+        // Cow allows zero-allocation compilation-string sharing on creation.
+        // On the receiving side of ipc-channel, serde automatically hydrates this into Cow::Owned.
+        msg: Cow<'static, str>,
+    },
+
+    #[snafu(display("IO error ({kind:?}): {context}"))]
+    Io { kind: IoErrorKind, context: String },
+
+    #[snafu(display("IPC channel disconnected"))]
+    Disconnected,
+
+    #[snafu(display("Unsupported or invalid data type: {datatype}"))]
+    DataType { datatype: Cow<'static, str> },
+
+    #[snafu(display("GDAL operational error ({kind:?}): {details}"))]
+    GdalError {
+        kind: GdalErrorKind,
+        details: String,
+    },
+
+    #[snafu(display("Raster Arrow conversion failure: {msg}"))]
+    RasterArrowConversion { msg: String },
+
+    #[snafu(display("Unhandled worker exception: {msg}"))]
+    IpcOther { msg: String },
+
+    #[snafu(display("Gdal buffer len {buffer_len} does not match grid shape {shape:?}"))]
+    ShapeBufferMissmatch {
+        shape: GridShape2D,
+        buffer_len: usize,
+    },
+
+    #[snafu(display("Error casting data to bytes for IPC transmission: {error}"))]
+    PocCastError { error: String },
+}
+
+impl IpcProcessError {
+    /// Convenience checker for your parent-side retry loop and fallback handlers
+    pub fn is_file_not_found(&self) -> bool {
+        match self {
+            Self::GdalError {
+                kind: GdalErrorKind::FileNotFound,
+                ..
+            } => true,
+            Self::Io {
+                kind: IoErrorKind::NotFound,
+                ..
+            } => true,
+            _ => false,
         }
     }
 }
 
 impl From<std::io::Error> for IpcProcessError {
-    fn from(value: std::io::Error) -> Self {
+    fn from(err: std::io::Error) -> Self {
+        let kind = match err.kind() {
+            std::io::ErrorKind::NotFound => IoErrorKind::NotFound,
+            std::io::ErrorKind::PermissionDenied => IoErrorKind::PermissionDenied,
+            std::io::ErrorKind::ConnectionRefused => IoErrorKind::ConnectionRefused,
+            std::io::ErrorKind::ConnectionAborted => IoErrorKind::ConnectionAborted,
+            std::io::ErrorKind::UnexpectedEof => IoErrorKind::UnexpectedEof,
+            _ => IoErrorKind::Other,
+        };
         IpcProcessError::Io {
-            io: value.to_string(),
+            kind,
+            context: err.to_string(),
+        }
+    }
+}
+
+impl From<gdal::errors::GdalError> for IpcProcessError {
+    /// Maps a raw GDAL library error into a strongly-typed structural variant
+    /// before serialization across the IPC channel.
+    fn from(err: gdal::errors::GdalError) -> Self {
+        let err_string = err.to_string();
+
+        // Parse the error structural context cleanly
+        let kind = match &err {
+            gdal::errors::GdalError::NullPointer { .. } => GdalErrorKind::InvalidDataset,
+            gdal::errors::GdalError::OgrError { .. } => GdalErrorKind::InvalidDataset,
+            _ if err_string.contains("No such file or directory") || err_string.contains("404") => {
+                GdalErrorKind::FileNotFound
+            }
+            _ if err_string.contains("Permission denied") || err_string.contains("403") => {
+                GdalErrorKind::AccessDenied
+            }
+            _ if err_string.contains("timeout") || err_string.contains("Connection timed out") => {
+                GdalErrorKind::ConnectionTimeout
+            }
+            _ => GdalErrorKind::Unknown,
+        };
+
+        IpcProcessError::GdalError {
+            kind,
+            details: err_string,
+        }
+    }
+}
+
+impl From<IpcError> for IpcProcessError {
+    fn from(err: IpcError) -> Self {
+        match err {
+            IpcError::SerializationError(serde_err) => IpcProcessError::SerializationError {
+                msg: std::borrow::Cow::Owned(serde_err.to_string()),
+            },
+            IpcError::Io(io_err) => {
+                // Automatically delegates to our optimized From<std::io::Error> implementation
+                IpcProcessError::from(io_err)
+            }
+            IpcError::Disconnected => IpcProcessError::Disconnected,
+        }
+    }
+}
+
+impl From<GdalRasterLoaderError> for IpcProcessError {
+    fn from(value: GdalRasterLoaderError) -> Self {
+        match value {
+            GdalRasterLoaderError::GdalError { source } => IpcProcessError::from(source),
+            GdalRasterLoaderError::GdalFileNotFound { source } => IpcProcessError::GdalError {
+                kind: GdalErrorKind::FileNotFound,
+                details: source.to_string(),
+            },
+            GdalRasterLoaderError::ShapeBufferMissmatch {
+                shape: _,
+                buffer_len: _,
+            } => todo!(),
+            GdalRasterLoaderError::AlphaBandAsMaskNotAllowed => todo!(),
+        }
+    }
+}
+
+impl From<bytemuck::PodCastError> for IpcProcessError {
+    fn from(error: bytemuck::PodCastError) -> Self {
+        IpcProcessError::PocCastError {
+            error: error.to_string(),
         }
     }
 }
@@ -176,6 +488,10 @@ pub struct GdalDatasetCache {
     thread_local: Option<TemporaryGdalThreadLocalConfigOptions>,
 }
 
+struct PrevDatasetOpt {
+    _prev_dataset: Option<GdalDataset>,
+}
+
 impl GdalDatasetCache {
     pub fn new() -> Self {
         Self {
@@ -221,16 +537,19 @@ impl GdalDatasetCache {
         }
     }
 
-    pub fn get_or_open(&mut self, params: &GdalDatasetParameters) -> Result<&mut GdalDataset, ()> {
+    pub fn get_or_open(
+        &mut self,
+        params: &GdalDatasetParameters,
+    ) -> Result<&mut GdalDataset, GdalError> {
         // FIXME: use error type here!
         let hit = Self::is_hit(self.params.as_ref(), params);
 
         if hit {
             Ok(self.dataset.as_mut().expect("Dataset must be set"))
         } else {
-            self.clear();
+            let _prev_dataset = self.clear(); // keep old dataset alive untill new one to keep Gdal internal cache alive
 
-            let (ds, tlo) = Self::open_ex(params).map_err(|_| ())?;
+            let (ds, tlo) = Self::open_ex(params)?;
 
             self.params = Some(params.clone());
             self.dataset = Some(ds);
@@ -241,13 +560,22 @@ impl GdalDatasetCache {
     }
 
     fn is_hit(params: Option<&GdalDatasetParameters>, other: &GdalDatasetParameters) -> bool {
-        matches!((params, other), (Some(cached_params), other_params) if cached_params.file_path == other_params.file_path)
+        if let Some(cached) = params {
+            cached.file_path == other.file_path
+                && cached.gdal_open_options == other.gdal_open_options
+                && cached.gdal_config_options == other.gdal_config_options
+        } else {
+            false
+        }
     }
 
-    pub fn clear(&mut self) {
+    fn clear(&mut self) -> PrevDatasetOpt {
+        let prev = PrevDatasetOpt {
+            _prev_dataset: self.dataset.take(),
+        };
         self.params = None;
-        self.dataset = None;
         self.thread_local = None;
+        prev
     }
 
     pub fn contains(&self, params: &GdalDatasetParameters) -> bool {

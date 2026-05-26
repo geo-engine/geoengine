@@ -19,6 +19,7 @@ path = "src/bin/gdalsource_process_main.rs"
 arrow = { workspace = true }
 async-trait = { workspace = true }
 bb8-postgres = { workspace = true }
+bytemuck = { workspace = true }
 bytes = { workspace = true }
 chrono = { workspace = true }
 csv = { workspace = true }
@@ -48,6 +49,7 @@ postgres-types = { workspace = true }
 rayon = { workspace = true }
 rustc-hash = { workspace = true }
 serde = { workspace = true }
+serde_bytes = { workspace = true }
 serde_json = { workspace = true }
 snafu = { workspace = true }
 stream-cancel = { workspace = true }

@@ -101,6 +101,7 @@ bb8-postgres = { version = "0.9", features = [
     "with-chrono-0_4",
     "with-serde_json-1",
 ] }
+bytemuck = "1.25.0"
 bytes = "1.11" # for postgres-types impls
 chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4.5", features = ["derive"] }
@@ -118,8 +119,8 @@ futures-util = "0.3"
 gdal = "0.19"
 gdal-sys = "0.12"
 # when changing geo version also adapt the Cargo.toml in the expression "deps-workspace"!
-geo = "0.32.0"
-geo-types = "0.7.18"                                      # important for compatibility when linking expressions
+geo = "0.33.1"
+geo-types = "0.7.19"                                      # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
 httptest = "0.16"
 ipc-channel = "0.22.0"
@@ -174,6 +175,7 @@ reqwest = { version = "0.12", features = [
 ] } # has to match with `oauth`
 rustc-hash = { version = "2.1", default-features = false }
 serde = { version = "1.0", features = ["derive", "rc"] }
+serde_bytes = "0.11"
 serde_json = "1.0"
 serde_urlencoded = "0.7"
 serde_with = "3.17"
