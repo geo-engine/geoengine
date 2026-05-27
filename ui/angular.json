@@ -38,7 +38,9 @@
                 "test": {
                     "builder": "@angular/build:unit-test",
                     "options": {
-                        "runnerConfig": "vitest.config.ts"
+                        "runnerConfig": "vitest.config.ts",
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
                     }
                 },
                 "lint": {
@@ -55,6 +57,134 @@
                     "configurations": {
                         "production": {
                             "devServerTarget": "core:serve:production"
+                        }
+                    }
+                }
+            }
+        },
+        "enhanced-data-viewer": {
+            "projectType": "application",
+            "schematics": {
+                "@schematics/angular:component": {
+                    "changeDetection": "OnPush",
+                    "inlineStyle": false,
+                    "inlineTemplate": false,
+                    "prefix": "geoengine",
+                    "style": "scss"
+                },
+                "@schematics/angular:directive": {
+                    "prefix": "geoengine"
+                }
+            },
+            "root": "projects/enhanced-data-viewer",
+            "sourceRoot": "projects/enhanced-data-viewer/src",
+            "prefix": "geoengine",
+            "architect": {
+                "build": {
+                    "builder": "@angular/build:application",
+                    "options": {
+                        "allowedCommonJsDependencies": [
+                            "dagre-d3",
+                            "json-stringify-pretty-compact",
+                            "fast-json-stable-stringify",
+                            "lerc",
+                            "moment",
+                            "xml-utils"
+                        ],
+                        "outputPath": {
+                            "base": "dist/enhanced-data-viewer"
+                        },
+                        "index": "projects/enhanced-data-viewer/src/index.html",
+                        "polyfills": [],
+                        "tsConfig": "projects/enhanced-data-viewer/tsconfig.app.json",
+                        "assets": [
+                            "projects/enhanced-data-viewer/src/favicon.ico",
+                            "projects/enhanced-data-viewer/src/assets",
+                            {
+                                "glob": "**/*",
+                                "input": "projects/common/assets",
+                                "output": "assets"
+                            }
+                        ],
+                        "styles": [
+                            "projects/enhanced-data-viewer/src/styles.scss",
+                            "projects/common/assets/fonts/poppins/poppins.css",
+                            "projects/common/assets/fonts/pacifico/pacifico.css",
+                            "projects/common/assets/fonts/material-design-icons/material-icons.css",
+                            "node_modules/ol/ol.css",
+                            "./node_modules/vis-timeline/dist/vis-timeline-graph2d.min.css"
+                        ],
+                        "scripts": ["node_modules/vis-timeline/peer/esm/vis-timeline-graph2d.min.js"],
+                        "extractLicenses": false,
+                        "sourceMap": true,
+                        "optimization": false,
+                        "namedChunks": true,
+                        "browser": "projects/enhanced-data-viewer/src/main.ts"
+                    },
+                    "configurations": {
+                        "production": {
+                            "optimization": true,
+                            "outputHashing": "all",
+                            "sourceMap": false,
+                            "namedChunks": false,
+                            "extractLicenses": true,
+                            "budgets": [
+                                {
+                                    "type": "initial",
+                                    "maximumWarning": "8mb",
+                                    "maximumError": "10mb"
+                                },
+                                {
+                                    "type": "anyComponentStyle",
+                                    "maximumWarning": "6kb",
+                                    "maximumError": "100kb"
+                                }
+                            ]
+                        },
+                        "development": {}
+                    },
+                    "defaultConfiguration": "production"
+                },
+                "serve": {
+                    "builder": "@angular/build:dev-server:dev-server",
+                    "options": {},
+                    "configurations": {
+                        "production": {
+                            "buildTarget": "enhanced-data-viewer:build:production"
+                        },
+                        "development": {
+                            "buildTarget": "enhanced-data-viewer:build:development"
+                        }
+                    },
+                    "defaultConfiguration": "development"
+                },
+                "extract-i18n": {
+                    "builder": "@angular/build:dev-server:extract-i18n",
+                    "options": {
+                        "buildTarget": "enhanced-data-viewer:build"
+                    }
+                },
+                "test": {
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
+                },
+                "lint": {
+                    "builder": "@angular-eslint/builder:lint",
+                    "options": {
+                        "lintFilePatterns": ["projects/enhanced-data-viewer/**/*.ts", "projects/enhanced-data-viewer/**/*.html"]
+                    }
+                },
+                "e2e": {
+                    "builder": "playwright-ng-schematics:playwright",
+                    "options": {
+                        "devServerTarget": "enhanced-data-viewer:serve"
+                    },
+                    "configurations": {
+                        "production": {
+                            "devServerTarget": "enhanced-data-viewer:serve:production"
                         }
                     }
                 }
@@ -163,7 +293,11 @@
                     }
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
@@ -286,7 +420,11 @@
                     }
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
@@ -409,7 +547,11 @@
                     }
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
@@ -532,7 +674,11 @@
                     }
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
@@ -658,7 +804,11 @@
                     }
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
@@ -767,7 +917,11 @@
                     }
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
@@ -810,7 +964,11 @@
                     "defaultConfiguration": "production"
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
@@ -925,7 +1083,11 @@
                     }
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",
@@ -1040,7 +1202,11 @@
                     }
                 },
                 "test": {
-                    "builder": "@angular/build:unit-test"
+                    "builder": "@angular/build:unit-test",
+                    "options": {
+                        "coverage": true,
+                        "coverageReporters": ["html", "lcovonly"]
+                    }
                 },
                 "lint": {
                     "builder": "@angular-eslint/builder:lint",

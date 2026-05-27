@@ -21,9 +21,10 @@ install no-lock="false" with-deps="false": common::_clear
 format write="false": common::_clear
     npm run prettier -- {{ if write != "true" { "--check" } else { "--write" } }} .
 
+[arg("project", long="project", help="Whether to only lint a specific project, e.g. `--project=gis`.")]
 [arg("only-errors", long="only-errors", value="true", help="Whether to only print errors and warnings, without the full linting output.")]
-lint only-errors="false": common::_clear format
-    npm run lint -- {{ if only-errors == "true" { "--quiet" } else { "" } }}
+lint only-errors="false" project="": common::_clear format
+    npm run lint -- {{ if only-errors == "true" { "--quiet" } else { "" } }} {{ project }}
 
 build project="gis": common::_clear
     npm run build-prod:{{ project }}

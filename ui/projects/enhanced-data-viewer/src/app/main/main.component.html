@@ -1,0 +1,196 @@
+<mat-toolbar #topToolbar class="top-bar">
+    <img [src]="config.BRANDING.LOGO_URL" class="logo" />
+
+    <h1>Enhanced Data Viewer</h1>
+
+    <div class="space"></div>
+
+    <button type="button" matIconButton aria-label="Help">
+        <mat-icon>help</mat-icon>
+    </button>
+
+    <button type="button" matIconButton aria-label="Login">
+        <mat-icon>person</mat-icon>
+    </button>
+
+    <button type="button" matIconButton aria-label="Settings">
+        <mat-icon>settings</mat-icon>
+    </button>
+
+    <!-- <geoengine-layer-list-menu></geoengine-layer-list-menu>
+
+    @if (config.BRANDING.HOMEPAGE; as homepage) {
+        <div class="divider"></div>
+
+        <a [href]="homepage.URL" mat-flat-button color="primary" class="homepage-button">
+            <mat-icon>keyboard_return</mat-icon>
+            <span></span>
+            <img [src]="homepage.BUTTON_IMAGE_URL" [alt]="homepage.BUTTON_ALT_TEXT" [matTooltip]="homepage.BUTTON_TOOLTIP_TEXT" />
+        </a>
+    }
+
+    <div class="divider"></div>
+
+    <!-- <geoengine-zoom-handles (zoomIn)="map.zoomIn()" (zoomOut)="map.zoomOut()"></geoengine-zoom-handles> -->
+
+    <!-- <div class="divider"></div>
+
+    
+
+    <div class="divider"></div>
+
+    <div class="space"></div>
+
+    <geoengine-navigation [buttons]="navigationButtons | async | valueDefault: []"></geoengine-navigation> -->
+</mat-toolbar>
+
+<mat-drawer-container [style.height.px]="middleContainerHeight()">
+    <mat-drawer position="start" mode="side" opened="true">
+        <div class="drawer-container">
+            <mat-nav-list>
+                <mat-list-item [activated]="true">
+                    <span matListItemTitle>
+                        <mat-icon>layers</mat-icon>
+                    </span>
+                    <span matListItemLine>Layers</span>
+                </mat-list-item>
+                <mat-list-item [activated]="false">
+                    <span matListItemTitle>
+                        <mat-icon svgIcon="cogs"></mat-icon>
+                    </span>
+                    <span matListItemLine>Compute</span>
+                </mat-list-item>
+                <mat-list-item [activated]="false">
+                    <span matListItemTitle>
+                        <mat-icon>search</mat-icon>
+                    </span>
+                    <span matListItemLine>Search</span>
+                </mat-list-item>
+                <div class="spacer"></div>
+                <mat-list-item [activated]="false">
+                    <span matListItemTitle>
+                        <img src="assets/geoengine.png" alt="Geo Engine" class="geoengine-logo" />
+                    </span>
+                    <span matListItemLine>About</span>
+                </mat-list-item>
+            </mat-nav-list>
+
+            <div class="drawer-main">
+                <div>
+                    <h4>Data Source</h4>
+                    <mat-radio-group class="data-sources" value="sentinel-2-l2a">
+                        <mat-radio-button disabled>Sentinel-1</mat-radio-button>
+                        <mat-radio-button value="sentinel-2-l2a">Sentinel-2 L2A</mat-radio-button>
+                        <mat-radio-button disabled>Sentinel-3 L2</mat-radio-button>
+                        <mat-radio-button disabled>Landsat 8</mat-radio-button>
+                    </mat-radio-group>
+                </div>
+                <mat-divider></mat-divider>
+
+                <div class="time-selection">
+                    <h4>Time Selection</h4>
+                    <div>
+                        <button
+                            mat-icon-button
+                            (click)="timeBackwards()"
+                            matTooltip="Backwards {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
+                        >
+                            <mat-icon>navigate_before</mat-icon>
+                        </button>
+                        <input matInput [matDatepicker]="picker" size="0" [value]="currentDate()" (dateChange)="setDate($event)" />
+                        <button matButton (click)="picker.open()" class="calendar-open">{{ formattedTime() }}</button>
+                        <mat-datepicker #picker></mat-datepicker>
+                        <button
+                            mat-icon-button
+                            (click)="timeForward()"
+                            matTooltip="Forward {{ timeStepDuration()?.durationAmount }} {{ timeStepDuration()?.durationUnit }}"
+                        >
+                            <mat-icon>navigate_next</mat-icon>
+                        </button>
+                    </div>
+                </div>
+                <mat-divider></mat-divider>
+
+                <div>
+                    <h4>Vizualization Presets</h4>
+                    <mat-nav-list class="visualization-presets">
+                        <mat-list-item [activated]="true">
+                            <img matListItemTitle src="assets/rgb.jpg" alt="RGB" class="preset-icon" />
+                            <span matListItemTitle>RGB</span>
+                        </mat-list-item>
+                        <mat-list-item [activated]="false">
+                            <img matListItemTitle src="assets/ndvi.jpg" alt="NDVI" class="preset-icon" />
+                            <span matListItemTitle>NDVI</span>
+                        </mat-list-item>
+                        <mat-list-item [activated]="false">
+                            <img matListItemTitle src="assets/false-color.jpg" alt="False Color" class="preset-icon" />
+                            <span matListItemTitle>False Color</span>
+                        </mat-list-item>
+                        <mat-list-item [activated]="false">
+                            <img matListItemTitle src="assets/swi.jpg" alt="SWI" class="preset-icon" />
+                            <span matListItemTitle>SWI</span>
+                        </mat-list-item>
+                    </mat-nav-list>
+                </div>
+                <mat-divider></mat-divider>
+            </div>
+        </div>
+    </mat-drawer>
+
+    <mat-drawer-content>
+        <geoengine-map-container #map [grid]="false">
+            @if (sessionToken()) {
+                @for (layer of layersReverse(); track idFromLayer($index, layer)) {
+                    @if (layer.layerType === 'vector') {
+                        <geoengine-ol-vector-layer
+                            [layerId]="layer.id"
+                            [workflow]="layer.workflowId"
+                            [symbology]="$any(layer.symbology)"
+                            [isVisible]="layer.isVisible"
+                            (mapRedraw)="map.layerForcesRedraw()"
+                        ></geoengine-ol-vector-layer>
+                    }
+                    @if (layer.layerType === 'raster') {
+                        <geoengine-ol-raster-layer
+                            [layerId]="layer.id"
+                            [workflow]="layer.workflowId"
+                            [symbology]="$any(layer.symbology)"
+                            [isVisible]="layer.isVisible"
+                            [sessionToken]="sessionToken()"
+                            (mapRedraw)="map.layerForcesRedraw()"
+                        ></geoengine-ol-raster-layer>
+                    }
+                }
+            }
+        </geoengine-map-container>
+
+        <div class="side-buttons">
+            <mat-button-toggle-group
+                #zoomButtons="matButtonToggleGroup"
+                class="zoom"
+                vertical="true"
+                hideSingleSelectionIndicator="true"
+                hideMultipleSelectionIndicator="true"
+            >
+                <mat-button-toggle (click)="map.zoomIn(); zoomButtons.value = null" aria-label="Zoom In">
+                    <mat-icon>add</mat-icon>
+                </mat-button-toggle>
+                <mat-button-toggle (click)="map.zoomOut(); zoomButtons.value = null" aria-label="Zoom Out">
+                    <mat-icon>remove</mat-icon>
+                </mat-button-toggle>
+            </mat-button-toggle-group>
+
+            <button type="button" matMiniFab aria-label="Measure" color="secondary">
+                <mat-icon>straighten</mat-icon>
+            </button>
+
+            <button type="button" matMiniFab aria-label="Plot" color="secondary">
+                <mat-icon>show_chart</mat-icon>
+            </button>
+
+            <button type="button" matMiniFab aria-label="Download" color="secondary">
+                <mat-icon>file_download</mat-icon>
+            </button>
+        </div>
+    </mat-drawer-content>
+</mat-drawer-container>

@@ -106,10 +106,7 @@ export class CommonConfig {
      * Initialize the config on app start.
      */
     public async load(defaults: CommonConfigStructure = DEFAULT_COMMON_CONFIG): Promise<void> {
-        const configFileResponse = await fetch(CommonConfig.CONFIG_FILE);
-
-        const appConfig = await configFileResponse.json().catch(() => ({}));
-        this.config = mergeDeepOverrideLists(defaults, {...appConfig});
+        this.config = mergeDeepOverrideLists(defaults, {...(await this.loadConfigFile())});
 
         // we alter the config in the openapi-client so that it uses the correct API_URL
         DefaultConfig.config = new Configuration({
@@ -124,6 +121,18 @@ export class CommonConfig {
             headers: DefaultConfig.headers,
             credentials: DefaultConfig.credentials,
         });
+    }
+
+    protected async loadConfigFile(): Promise<Partial<CommonConfigStructure>> {
+        const configFileResponse = await fetch(CommonConfig.CONFIG_FILE);
+
+        if (!configFileResponse.ok) return {};
+
+        try {
+            return await configFileResponse.json();
+        } catch (_error) {
+            return {};
+        }
     }
 }
 
