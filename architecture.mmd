@@ -1,0 +1,107 @@
+flowchart LR
+    %% Styling
+    classDef storage fill:#e1f5fe,stroke:#01579b,stroke-width:2px;
+    classDef compute fill:#fff3e0,stroke:#e65100,stroke-width:2px;
+    classDef external fill:#f5f5f5,stroke:#616161,stroke-dasharray: 5 5;
+    classDef users fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
+
+    subgraph External_Sources [External Data Sources]
+        direction TB
+
+        subgraph EO_Sources [EO Sources]
+            direction TB
+
+            S2[Sentinel-2]
+            L8[Landsat-8]
+            OTH_EO[...]
+        end
+        
+        subgraph CS_Sources [Survey Data & Citizen Science]
+            direction TB
+
+            GBIF[GBIF]
+            LUCAS[LUCAS]
+            OTH_CS[...]
+        end
+    end
+
+    subgraph CODEDE [CODE-DE Cloud Infrastructure]
+        direction LR
+
+        subgraph Integration_Layer [Integration Layer]
+            direction TB
+            GBIF_Harvester[GBIF<br>Harvester]:::compute
+            Manually:::compute@{ shape: procs, label: "Custom<br>Scripts"}
+        end
+        
+        subgraph Data_Lake [Data & Metadata Layer]
+            direction TB
+
+            subgraph Project_Data [Provided by us]
+                direction TB
+
+                PostGIS[(PostGIS: Harmonized CS Data)]:::storage
+                Registry[(Model Registry)]:::storage
+            end
+
+            subgraph CD_Data [Provided by Cloud]
+                direction TB
+
+                STAC[STAC API<br>Catalog]:::storage
+                S3_EO[(S3: EODATA)]:::storage
+            end
+        end
+
+        subgraph Apps_Layer [Application Containers]
+            direction TB
+
+            subgraph Partner_Apps [Partner Solutions]
+                direction TB
+                App1[App1]:::compute
+                App2[App2]:::compute
+                App_Other[... ]:::compute
+            end
+
+            subgraph Geo_Engine [Geo Engine]
+                direction LR
+                GE[Geo<br>Engine<br>Server]:::compute
+                Dashboard[Dashboard]:::compute
+                GIS[GIS<br>Application]:::compute
+            end
+
+            Jupyter[Jupyter<br>Lab]:::compute
+        end
+    end
+
+    %% Ingestion Flows
+    EO_Sources -->|already provided by| S3_EO
+    GBIF --> GBIF_Harvester
+    LUCAS & OTH_CS --> Manually
+    GBIF_Harvester & Manually --> PostGIS
+    STAC <--> S3_EO
+    
+    %% Internal Data Flows
+    %% Data_Lake --> GE & Jupyter & App1 & App2 & App_Other
+    Data_Lake ---> Geo_Engine & Jupyter & Partner_Apps
+    
+    %% Compute Flows
+    GE --> GIS & Dashboard & Jupyter
+
+    %% Stakeholders & Partners
+    %% Partners[Partner<br>Institutions]:::users -->|Contribute| Registry
+    Partners[Partner<br>Institutions]:::users
+    Internal((Consortium User)):::users
+    External_User((Stakeholders)):::users
+    
+    Partners -.- Internal((Consortium User))
+    Partners -->|Contribute| Registry
+    GIS & Jupyter --- Internal
+    Dashboard & App1 & App2 & App_Other --- External_User
+
+    %% Layout fine-tuning
+    External_Sources ~~~ Integration_Layer ~~~ Data_Lake ~~~ Apps_Layer
+    %% Project_Data ~~~ CD_Data
+    External_Sources ~~~ Project_Data & CD_Data
+
+    %% Applying Classes
+    class S2,L8,OTH_EO,GBIF,LUCAS,OTH_CS external;
