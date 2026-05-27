@@ -109,6 +109,7 @@ fn raster_type_dispatch(
     Ok(())
 }
 
+#[allow(clippy::print_stderr)]
 fn run(token: Token) {
     let (sender, receiver) = match setup_client::<IpcChannelMessage, IpcProcessRasterResult>(token)
     {
@@ -134,7 +135,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
     IpcChannelMessagePayload {
         dataset_params,
         read_advise,
-        data_type,
+        data_type: _,
     }: IpcChannelMessagePayload,
     dataset_cache: &mut GdalDatasetCache,
     sender: &IpcSender<IpcProcessRasterResult>,
@@ -143,7 +144,6 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         dataset_cache,
         &dataset_params,
         read_advise,
-        data_type,
     )
     .map_err(IpcProcessError::from);
 

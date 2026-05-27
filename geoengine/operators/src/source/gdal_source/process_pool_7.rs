@@ -17,12 +17,12 @@ const BROKER_QUEUE_CAPACITY: usize = 8192;
 
 /// A long-lived, reusable GDAL worker process.
 struct WorkerProcess {
-    _id: usize,
+    id: usize,
     // Wrapped in Option so they can be temporarily moved into `spawn_blocking`
     // without requiring Mutex locks on the worker array.
     sender: Option<IpcSender<IpcChannelMessage>>,
     receiver: Option<IpcReceiver<IpcProcessRasterResult>>,
-    _child_guard: ChildProcessGuard,
+    child_guard: ChildProcessGuard,
 
     // Affinity Tracking
     last_dataset_hash: Option<u64>,
@@ -38,7 +38,7 @@ struct QueuedRequest {
 }
 
 enum BrokerCommand {
-    Read(QueuedRequest),
+    Read(Box<QueuedRequest>), // Clippy really wants this boxed to avoid the large size of QueuedRequest on the stack of the broker loop
     ReturnWorker {
         worker_id: usize,
         is_dead: bool,
@@ -59,6 +59,12 @@ pub struct GdalProcessPool {
 }
 
 impl GdalProcessPool {
+    /// Initializes the GDAL process pool with the specified number of worker processes and maximum parallel requests per dataset.
+    ///
+    /// Spawns the worker processes sequentially to avoid issues with concurrent temp file creation, and then starts the centralized broker loop to manage request dispatching and worker lifecycle.
+    ///
+    /// # Panics
+    /// Panics if any of the worker processes fail to start, or if the broker loop fails to initialize.
     pub fn new(max_total: usize, max_parallel_per_dataset: usize) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
@@ -74,12 +80,14 @@ impl GdalProcessPool {
                 let mut w = Vec::with_capacity(max_total);
                 for id in 0..max_total {
                     let (guard, tx, rx) =
-                        spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>();
+                        spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
+                            .expect("Error while spawning GDAL worker process");
+
                     w.push(WorkerProcess {
-                        _id: id,
+                        id,
                         sender: Some(tx),
                         receiver: Some(rx),
-                        _child_guard: guard,
+                        child_guard: guard,
                         last_dataset_hash: None,
                         last_band: None,
                         last_spatial_window: None,
@@ -121,7 +129,7 @@ impl GdalProcessPool {
                         );
                         continue;
                     } // Discard abandoned requests
-                    pending_requests.push_back(req);
+                    pending_requests.push_back(*req);
                     Self::try_dispatch(
                         &mut idle_workers,
                         &mut workers,
@@ -160,7 +168,8 @@ impl GdalProcessPool {
                             let (guard, tx, rx) = spawn_ipc_server_process::<
                                 IpcChannelMessage,
                                 IpcProcessRasterResult,
-                            >();
+                            >()
+                            .expect("Error spawning replacement GDAL worker process after crash");
                             let _ = b_tx.blocking_send(BrokerCommand::WorkerReplaced {
                                 worker_id,
                                 child_guard: guard,
@@ -189,7 +198,7 @@ impl GdalProcessPool {
                     receiver,
                 } => {
                     let worker = &mut workers[worker_id];
-                    worker._child_guard = child_guard; // Drops old OS process guard, killing the zombie
+                    worker.child_guard = child_guard; // Drops old OS process guard, killing the zombie
                     worker.sender = Some(sender);
                     worker.receiver = Some(receiver);
                     worker.last_dataset_hash = None; // Reset affinity
@@ -208,6 +217,7 @@ impl GdalProcessPool {
         }
     }
 
+    #[allow(clippy::too_many_lines)]
     fn try_dispatch(
         idle_workers: &mut Vec<usize>,
         workers: &mut [WorkerProcess],
@@ -244,7 +254,9 @@ impl GdalProcessPool {
                 continue;
             }
 
-            let req = pending_requests.remove(i).unwrap();
+            let req = pending_requests
+                .remove(i)
+                .expect("index in pending_requests checked: i < pending_requests.len()");
             let window = req.request.0.read_advise.read_window_bounds;
             let band = req.request.0.dataset_params.rasterband_channel;
 
@@ -281,7 +293,7 @@ impl GdalProcessPool {
                 dataset_hash = req.dataset_hash,
                 best_score,
                 "Dispatching to worker {} with affinity score {}",
-                workers[idle_workers[best_idx]]._id,
+                workers[idle_workers[best_idx]].id,
                 best_score
             );
 
@@ -295,7 +307,10 @@ impl GdalProcessPool {
 
             *active_counts.entry(req.dataset_hash).or_insert(0) += 1;
 
-            let sender = worker.sender.take().unwrap();
+            let sender = worker
+                .sender
+                .take()
+                .expect("idle worker must have a sender");
             let receiver = worker.receiver.take().expect("worker exists");
 
             let b_tx = broker_tx.clone();
@@ -367,11 +382,11 @@ impl LazyGdalWorkerInstance {
 
         self.pool
             .broker_tx
-            .send(BrokerCommand::Read(QueuedRequest {
+            .send(BrokerCommand::Read(Box::new(QueuedRequest {
                 dataset_hash: hash,
                 request,
                 respond_to: tx,
-            }))
+            })))
             .await
             .map_err(|_| GdalSourceError::WorkerPanic)?;
 

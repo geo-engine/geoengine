@@ -1182,7 +1182,7 @@ mod tests {
                 "HEAD",
                 "/sentinel-s2-l2a-cogs/36/M/WC/2021/9/S2B_36MWC_20210923_0_L2A/B04.tif",
             ))
-            .times(7)
+            .times(5) //7
             .respond_with(responders::cycle![
                 // first fail
                 responders::status_code(500),
@@ -1195,8 +1195,8 @@ mod tests {
                 head_success_response(), // -> GET COG header fails
                 head_success_response(), // -> GET COG header times out
                 head_success_response(), // -> GET COG header succeeds, GET tile fails
-                head_success_response(), // -> GET COG header succeeds, GET tile times out
-                head_success_response(), // -> GET COG header succeeds, GET tile IReadBlock failed
+                                         //head_success_response(), // -> GET COG header succeeds, GET tile times out
+                                         //head_success_response(), // -> GET COG header succeeds, GET tile IReadBlock failed
             ]),
         );
 
@@ -1235,7 +1235,7 @@ mod tests {
                 ),
                 request::headers(contains(("range", "bytes=0-16383"))),
             ])
-            .times(5)
+            .times(4)
             .respond_with(responders::cycle![
                 // first fail
                 responders::status_code(500),

@@ -8,7 +8,7 @@ use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags};
 
 use geoengine_datatypes::raster::{
     Grid, GridBoundingBox2D, GridOrEmpty, GridShape2D, MaskedGrid, NoDataValueGrid, Pixel,
-    RasterDataType, RasterProperties,
+    RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesKey,
 };
 use ipc_channel::{
     IpcError,
@@ -27,7 +27,7 @@ use crate::util::gdal::gdal_open_ex_gdal_error;
 pub struct IpcChannelMessagePayload {
     pub dataset_params: GdalDatasetParameters,
     pub read_advise: GdalReadAdvise,
-    /// We use this to know what type we serialize using the `arrow_conversion` functions
+    /// We use this to know what type we serialize
     pub data_type: RasterDataType,
 }
 
@@ -36,8 +36,82 @@ pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct GdalIpcBytePayload {
     pub dimensions: GridBoundingBox2D,
-    pub properties: RasterProperties,
+    pub properties: GdalIpcRasterProperties,
     pub data_variant: GdalDataByteVariant,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub enum GdalIpcRasterPropertiesEntry {
+    Number(f64),
+    String(String),
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GdalIpcRasterProperties {
+    pub offset: Option<f64>,
+    pub scale: Option<f64>,
+    pub description: Option<String>,
+    pub properties_map: Vec<(RasterPropertiesKey, GdalIpcRasterPropertiesEntry)>,
+}
+
+impl From<RasterProperties> for GdalIpcRasterProperties {
+    fn from(
+        RasterProperties {
+            offset,
+            scale,
+            description,
+            properties_map,
+        }: RasterProperties,
+    ) -> Self {
+        Self {
+            offset,
+            scale,
+            description,
+            properties_map: properties_map
+                .into_iter()
+                .map(|(k, v)| {
+                    let v_converted = match v {
+                        RasterPropertiesEntry::Number(n) => GdalIpcRasterPropertiesEntry::Number(n),
+                        RasterPropertiesEntry::String(s) => GdalIpcRasterPropertiesEntry::String(s),
+                    };
+                    (k, v_converted)
+                })
+                .collect(),
+        }
+    }
+}
+
+impl From<GdalIpcRasterProperties> for RasterProperties {
+    fn from(
+        GdalIpcRasterProperties {
+            offset,
+            scale,
+            description,
+            properties_map,
+        }: GdalIpcRasterProperties,
+    ) -> Self {
+        Self {
+            offset,
+            scale,
+            description,
+            properties_map: properties_map
+                .into_iter()
+                .map(|(k, v)| {
+                    let v_converted = match v {
+                        GdalIpcRasterPropertiesEntry::Number(n) => RasterPropertiesEntry::Number(n),
+                        GdalIpcRasterPropertiesEntry::String(s) => RasterPropertiesEntry::String(s),
+                    };
+                    (k, v_converted)
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+pub struct GdalIpcRasterPropertiesKey {
+    pub domain: Option<String>,
+    pub key: String,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -102,7 +176,7 @@ where
     fn from(value: GdalIpcBytePayload) -> Self {
         Self {
             dimensions: value.dimensions,
-            properties: value.properties,
+            properties: value.properties.into(),
             data_variant: value.data_variant.into(),
         }
     }
@@ -117,7 +191,7 @@ where
     fn try_from(value: GdalIpcPayload<T>) -> Result<Self, Self::Error> {
         Ok(Self {
             dimensions: value.dimensions,
-            properties: value.properties,
+            properties: value.properties.into(),
             data_variant: value.data_variant.try_into()?,
         })
     }
@@ -152,7 +226,7 @@ where
             } => bytemuck::try_cast_slice::<T, u8>(&data).map(|s| {
                 GdalDataByteVariant::WithExplicitMask {
                     raw_bytes: s.to_vec(),
-                    validity_mask: validity_mask,
+                    validity_mask,
                 }
             }),
         }
@@ -181,7 +255,7 @@ where
                 validity_mask,
             } => GdalDataVariant::WithExplicitMask {
                 data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
-                validity_mask: validity_mask,
+                validity_mask,
             },
         }
     }
@@ -225,7 +299,7 @@ where
             } => GridAndProperties {
                 grid: GridOrEmpty::new_grid(
                     MaskedGrid::new(
-                        Grid::new(value.dimensions.clone(), data).expect("shape and data match"),
+                        Grid::new(value.dimensions, data).expect("shape and data match"),
                         Grid::new(
                             value.dimensions,
                             validity_mask.iter().map(|&m| m > 0).collect(),
@@ -311,17 +385,16 @@ pub enum IpcProcessError {
 impl IpcProcessError {
     /// Convenience checker for your parent-side retry loop and fallback handlers
     pub fn is_file_not_found(&self) -> bool {
-        match self {
+        matches!(
+            self,
             Self::GdalError {
                 kind: GdalErrorKind::FileNotFound,
                 ..
-            } => true,
-            Self::Io {
+            } | Self::Io {
                 kind: IoErrorKind::NotFound,
                 ..
-            } => true,
-            _ => false,
-        }
+            }
+        )
     }
 }
 
@@ -350,8 +423,8 @@ impl From<gdal::errors::GdalError> for IpcProcessError {
 
         // Parse the error structural context cleanly
         let kind = match &err {
-            gdal::errors::GdalError::NullPointer { .. } => GdalErrorKind::InvalidDataset,
-            gdal::errors::GdalError::OgrError { .. } => GdalErrorKind::InvalidDataset,
+            gdal::errors::GdalError::NullPointer { .. }
+            | gdal::errors::GdalError::OgrError { .. } => GdalErrorKind::InvalidDataset,
             _ if err_string.contains("No such file or directory") || err_string.contains("404") => {
                 GdalErrorKind::FileNotFound
             }
@@ -432,9 +505,22 @@ impl Drop for ChildProcessGuard {
     }
 }
 
-pub fn spawn_ipc_server_process<S, R>() -> (ChildProcessGuard, IpcSender<S>, IpcReceiver<R>) {
+/// Spawns the IPC server process and establishes the communication channels.
+///
+/// Returns a guard for the child process (which will automatically clean up on drop),
+/// as well as the sender and receiver for communication with the server.
+/// Assumes that the server executable is located at the path specified by the `GDAL_SOURCE_PROCESS_PATH` environment variable,
+/// or defaults to a sibling executable named `gdalsource-process` in the same directory as the current executable if the environment variable is not set.
+///
+/// # Errors
+/// Returns an `IpcProcessError` if the server process fails to start, or if the IPC channels fail to establish communication.
+///
+/// # Panics
+/// Panics if the current executable path cannot be determined, or if the executable has no parent directory, which should not happen under normal circumstances.
+pub fn spawn_ipc_server_process<S, R>()
+-> Result<(ChildProcessGuard, IpcSender<S>, IpcReceiver<R>), IpcProcessError> {
     let (server, token) = ipc::IpcOneShotServer::<(IpcSender<S>, IpcReceiver<R>)>::new()
-        .expect("Failed to create IPC Server");
+        .map_err(IpcProcessError::from)?;
 
     tracing::debug!("spawn_ipc_server token: {}", token);
 
@@ -454,10 +540,10 @@ pub fn spawn_ipc_server_process<S, R>() -> (ChildProcessGuard, IpcSender<S>, Ipc
         .arg("debug") // FIXME: paste log level here!
         .stderr(std::process::Stdio::inherit()) // This sends child logs to the parent's stderr
         .spawn()
-        .expect("failed to spawn ipc server process");
+        .map_err(IpcProcessError::from)?;
 
-    let (_rx, channels) = server.accept().expect("accept failed to receive message");
-    (ChildProcessGuard { child }, channels.0, channels.1)
+    let (_rx, channels) = server.accept().map_err(IpcProcessError::from)?;
+    Ok((ChildProcessGuard { child }, channels.0, channels.1))
 }
 
 /// Creates channels and connects to the IPC server with the given token,
@@ -537,11 +623,21 @@ impl GdalDatasetCache {
         }
     }
 
+    /// Retrieves the cached dataset if the parameters match, otherwise opens a new dataset with the given parameters, updates the cache, and returns it.
+    /// The previous dataset is kept alive until the new one is successfully opened to maintain GDAL's internal caching benefits.
+    /// This method ensures that only one dataset is open at a time, and that the cache is updated atomically to prevent stale data.
+    /// The caller is responsible for ensuring that the returned dataset is not used concurrently across threads, as GDAL datasets are generally not thread-safe.
+    /// # Errors
+    /// Returns a `GdalError` if opening the new dataset fails. In this case, the cache remains unchanged and the previous dataset (if any) is still valid.
+    ///
+    /// # Panics
+    /// Panics if the dataset is unexpectedly missing after a cache hit, which should never happen if the cache logic is correct.
+    /// Panics if the thread local configuration options fail to apply, which should also not happen under normal circumstances.
+    /// Panics if the caller attempts to use the returned dataset concurrently across threads, which is not allowed due to GDAL's thread safety constraints.
     pub fn get_or_open(
         &mut self,
         params: &GdalDatasetParameters,
     ) -> Result<&mut GdalDataset, GdalError> {
-        // FIXME: use error type here!
         let hit = Self::is_hit(self.params.as_ref(), params);
 
         if hit {
@@ -560,6 +656,7 @@ impl GdalDatasetCache {
     }
 
     fn is_hit(params: Option<&GdalDatasetParameters>, other: &GdalDatasetParameters) -> bool {
+        // TODO: we could optimize this by hashing the parameters and comparing the hash for a quick check before doing the full equality check, if it turns out to be a bottleneck.
         if let Some(cached) = params {
             cached.file_path == other.file_path
                 && cached.gdal_open_options == other.gdal_open_options

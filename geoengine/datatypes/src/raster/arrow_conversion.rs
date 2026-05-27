@@ -81,6 +81,16 @@ pub const RASTER_PROPERTIES: &str = "rasterProperties";
 pub const TILE_POSITION: &str = "tilePosition";
 pub const GRID_BOUNDS: &str = "gridBounds";
 
+/// Converts a grid with properties into an Arrow `RecordBatch`, including the grid data as an Arrow array and the properties as metadata.
+/// The grid bounds are also included in the metadata to allow reconstructing the grid from the array.
+///
+/// # Errors
+/// Returns an error if the grid bounds do not match the grid shape, or if the properties cannot be serialized to JSON for inclusion in the metadata.
+/// The conversion of the grid data to an Arrow array should not fail, as it is a straightforward mapping of the grid values and validity mask to an Arrow primitive array.
+///
+/// # Panics
+/// Panics if the grid bounds cannot be mapped to a serde-compatible format for inclusion in the metadata, or if the properties cannot be mapped to a serde-compatible format for inclusion in the metadata. This should not happen as long as the grid bounds and properties are properly defined and implement the necessary traits for serialization.
+///
 pub fn grid_with_properties_to_arrow_record_batch<P: Pixel>(
     grid: GridOrEmpty<GridBoundingBox2D, P>,
     properties: &raster_properties::RasterProperties,
