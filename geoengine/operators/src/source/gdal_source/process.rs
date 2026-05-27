@@ -1,5 +1,8 @@
 use std::borrow::Cow;
+use std::env;
+use std::path::{Path, PathBuf};
 use std::process::Command;
+use std::sync::OnceLock;
 
 use bytemuck::{AnyBitPattern, NoUninit};
 use gdal::errors::GdalError;
@@ -30,16 +33,16 @@ static GDALSOURCE_PROCESS_PATH: OnceLock<PathBuf> = OnceLock::new();
 fn get_gdalsource_path() -> &'static Path {
     GDALSOURCE_PROCESS_PATH.get_or_init(|| {
         // 1. Try the environment variable path first
-        if let Ok(env_path) = env::var("GDALSOURCE_PROCESS_PATH") {
-            if !env_path.is_empty() {
-                let path = PathBuf::from(env_path);
-                if path.is_file() {
-                    tracing::debug!(
-                        "Using gdalsource-process path from environment variable: {}",
-                        path.display()
-                    );
-                    return path;
-                }
+        if let Ok(env_path) = env::var("GDALSOURCE_PROCESS_PATH")
+            && !env_path.is_empty()
+        {
+            let path = PathBuf::from(env_path);
+            if path.is_file() {
+                tracing::debug!(
+                    "Using gdalsource-process path from environment variable: {}",
+                    path.display()
+                );
+                return path;
             }
         }
 
@@ -51,7 +54,7 @@ fn get_gdalsource_path() -> &'static Path {
             exe_path.pop();
         }
 
-        if exe_path.file_name().map_or(false, |name| name == "deps") {
+        if exe_path.file_name().is_some_and(|name| name == "deps") {
             exe_path.pop();
         }
 
