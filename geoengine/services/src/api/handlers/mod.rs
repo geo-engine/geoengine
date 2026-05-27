@@ -9,6 +9,7 @@ pub mod datasets;
 pub mod ebv;
 pub mod layers;
 pub mod machine_learning;
+pub mod ogc;
 pub mod permissions;
 pub mod plots;
 pub mod projects;

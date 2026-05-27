@@ -1,0 +1,30 @@
+# Login
+# @name session
+POST http://localhost:3030/api/anonymous
+
+@token = {{session.response.body.$.id}}
+
+###
+
+@processingGraphId = {{rasterWorkflow.response.body.$.id}}
+
+# @name rasterWorkflow
+POST http://localhost:3030/api/workflow
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "type": "Raster",
+    "operator": {
+        "type": "GdalSource",
+        "params": {"data": "ndvi"}
+    }
+}
+
+###
+
+# Landing Page
+GET http://localhost:3030/api/ogc/{{processingGraphId}}/
+Authorization: Bearer {{token}}
+
+###
