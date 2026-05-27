@@ -2,62 +2,35 @@
 
 All notable changes to this project will be documented in this file.
 
-## [0.9.1] - 2026-04-27
+## [0.9.2] - 2026-05-27
 
 ### 🚀 Features
 
-- *(www)* Add package registry links for Geo Engine UI and API clients in Python, Rust, and TypeScript ([#1171](https://github.com/geo-engine/geoengine/pull/1171))
-- Pixel based raster queries ([#784](https://github.com/geo-engine/geoengine/pull/784))
-- Use non-hash routes (and fix signin form) ([#870](https://github.com/geo-engine/geoengine/pull/870))
-- Optional build with base_href for all projects ([#878](https://github.com/geo-engine/geoengine/pull/878))
+- Add enhanced data viewer project ([#1190](https://github.com/geo-engine/geoengine/pull/1190))
 
 
 ### 🐛 Bug Fixes
 
-- Update OpenAPI linting command in CI workflow
-- Update version command in justfile to change directory before executing
-- Update API client version command to use python3
-- Update CI repo task to include www installation
-- Add test group to justfile for running tests on all submodules
-- Update actions/checkout and extractions/setup-just versions in CI workflows
-- Flip_y and metdata size for climate data ([#1163](https://github.com/geo-engine/geoengine/pull/1163))
-
-
-### 💼 Other
-
-- Update @geoengine/openapi-client dependency to 0.0.33 ([#887](https://github.com/geo-engine/geoengine/pull/887))
-- Bump version to 0.9.1 across all modules and update dependencies
-- Remove repetition of openapi version in every generated file
+- Still serve preline in production build ([#1183](https://github.com/geo-engine/geoengine/pull/1183))
 
 
 ### 🚜 Refactor
 
-- Update Angular and related dependencies to version 21.2.0 ([#875](https://github.com/geo-engine/geoengine/pull/875))
-- Move to ui subfolder
-- Add ui to monorepo
-- Add ui to monorepo ([#1166](https://github.com/geo-engine/geoengine/pull/1166))
-- Update User-Agent header in WFS tests to reflect new api-client structure
-- Version in openapi spec
+- *(ui)* Remove hash location ([#1169](https://github.com/geo-engine/geoengine/pull/1169))
+- Adjust development instructions for Angular, Jupyter, Python, SQL, and UI; update backend instructions and README ([#1180](https://github.com/geo-engine/geoengine/pull/1180))
 
 
 ### ⚙️ Miscellaneous Tasks
 
-- Add repository linting job and version consistency checks ([#1165](https://github.com/geo-engine/geoengine/pull/1165))
-- Add workflow_dispatch trigger to publish workflow ([#1167](https://github.com/geo-engine/geoengine/pull/1167))
-- Delete .github/workflows/docs.yml ([#1172](https://github.com/geo-engine/geoengine/pull/1172))
-- Update container publish workflow to use 'latest' tag and skip existing versions
-- Report merged coverage for geoengine, Python, and UI tests ([#1173](https://github.com/geo-engine/geoengine/pull/1173))
-- Update working directory paths for API clients in publish workflow
-- Fix update version command for api clients
-- Ensure newline at end of files for justfile and openapitools.json
-- Fix due to lints
+- Enhance Rust build caching strategy and update build configurations for Python ([#1184](https://github.com/geo-engine/geoengine/pull/1184))
 
-## [ge-backend-v0.8.0] - 2026-01-26
+## [0.9.1] - 2026-04-28
 
 ### 🚀 Features
 
 - *(core)* Basemap formats and picker ([#791](https://github.com/geo-engine/geoengine/pull/791))
 - *(manager)* Provider management ([#785](https://github.com/geo-engine/geoengine/pull/785))
+- *(www)* Add package registry links for Geo Engine UI and API clients in Python, Rust, and TypeScript ([#1171](https://github.com/geo-engine/geoengine/pull/1171))
 - Pixel based query rects for raster requests ([#854](https://github.com/geo-engine/geoengine/pull/854))
 - Operators in OpenAPI ([#1116](https://github.com/geo-engine/geoengine/pull/1116))
 - Add histogram and statistics plot operators to openapi.json ([#1130](https://github.com/geo-engine/geoengine/pull/1130))
@@ -72,6 +45,9 @@ All notable changes to this project will be documented in this file.
 - Datetime vector column type ([#790](https://github.com/geo-engine/geoengine/pull/790))
 - Wildlive Connector in Manager ([#840](https://github.com/geo-engine/geoengine/pull/840))
 - Embed manager in GIS ([#851](https://github.com/geo-engine/geoengine/pull/851))
+- Pixel based raster queries ([#784](https://github.com/geo-engine/geoengine/pull/784))
+- Use non-hash routes (and fix signin form) ([#870](https://github.com/geo-engine/geoengine/pull/870))
+- Optional build with base_href for all projects ([#878](https://github.com/geo-engine/geoengine/pull/878))
 
 
 ### 🐛 Bug Fixes
@@ -86,6 +62,13 @@ All notable changes to this project will be documented in this file.
 - Color table behaves strangely on changes ([#834](https://github.com/geo-engine/geoengine/pull/834))
 - Oidc redirect path for subfolders ([#846](https://github.com/geo-engine/geoengine/pull/846))
 - Dependency conflicts and Playwright. ([#867](https://github.com/geo-engine/geoengine/pull/867))
+- Update OpenAPI linting command in CI workflow
+- Update version command in justfile to change directory before executing
+- Update API client version command to use python3
+- Update CI repo task to include www installation
+- Add test group to justfile for running tests on all submodules
+- Update actions/checkout and extractions/setup-just versions in CI workflows
+- Flip_y and metdata size for climate data ([#1163](https://github.com/geo-engine/geoengine/pull/1163))
 
 
 ### 💼 Other
@@ -216,6 +199,7 @@ All notable changes to this project will be documented in this file.
 - Use openapi client 0.0.30 ([#855](https://github.com/geo-engine/geoengine/pull/855))
 - Update to angular 21 ([#854](https://github.com/geo-engine/geoengine/pull/854))
 - Use vitest instead of karma for testing ([#857](https://github.com/geo-engine/geoengine/pull/857))
+- Update @geoengine/openapi-client dependency to 0.0.33 ([#887](https://github.com/geo-engine/geoengine/pull/887))
 
 
 ### 🚜 Refactor
@@ -239,6 +223,11 @@ All notable changes to this project will be documented in this file.
 - Injectors instead of constructor parameters ([#800](https://github.com/geo-engine/geoengine/pull/800))
 - CodeMirror 5 -> CodeMirror 6 ([#802](https://github.com/geo-engine/geoengine/pull/802))
 - Inputs, outputs & queries to signals where possible ([#803](https://github.com/geo-engine/geoengine/pull/803))
+- Update Angular and related dependencies to version 21.2.0 ([#875](https://github.com/geo-engine/geoengine/pull/875))
+- Move to ui subfolder
+- Add ui to monorepo
+- Add ui to monorepo ([#1166](https://github.com/geo-engine/geoengine/pull/1166))
+- Update User-Agent header in WFS tests to reflect new api-client structure
 
 
 ### ⚙️ Miscellaneous Tasks
@@ -252,6 +241,13 @@ All notable changes to this project will be documented in this file.
 - Add notebook execution to coverage report ([#245](https://github.com/geo-engine/geoengine/pull/245))
 - Add repository linting job and version consistency checks
 - Lint pr title using conventional commit style ([#787](https://github.com/geo-engine/geoengine/pull/787))
+- Add repository linting job and version consistency checks ([#1165](https://github.com/geo-engine/geoengine/pull/1165))
+- Add workflow_dispatch trigger to publish workflow ([#1167](https://github.com/geo-engine/geoengine/pull/1167))
+- Delete .github/workflows/docs.yml ([#1172](https://github.com/geo-engine/geoengine/pull/1172))
+- Report merged coverage for geoengine, Python, and UI tests ([#1173](https://github.com/geo-engine/geoengine/pull/1173))
+- Remove setup-just action from CI workflow steps ([#1176](https://github.com/geo-engine/geoengine/pull/1176))
+- Update container publish workflow to use 'latest' tag and skip existing versions ([#1178](https://github.com/geo-engine/geoengine/pull/1178))
+- Update workflows to trigger publishes for packages  and containers ([#1182](https://github.com/geo-engine/geoengine/pull/1182))
 
 
 ### 🛡️ Security
