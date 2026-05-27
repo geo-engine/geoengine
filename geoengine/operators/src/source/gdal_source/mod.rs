@@ -373,7 +373,7 @@ impl GdalRasterLoader {
         time_interval: TimeInterval,
         read_advise: GdalReadAdvise,
         cache_hint: CacheHint,
-        process_data: LazyGdalWorkerInstance,
+        gdal_worker: LazyGdalWorkerInstance,
     ) -> Result<RasterTile2D<T>, GdalSourceError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
@@ -384,7 +384,7 @@ impl GdalRasterLoader {
             data_type: T::TYPE,
         });
 
-        let res = process_data.read_data(message).await;
+        let res = gdal_worker.read_data(message).await;
 
         let res = match res {
             Ok(t) => {
@@ -525,7 +525,7 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
         tile_time: TimeInterval,
         cache_hint: CacheHint,
-        process_data: LazyGdalWorkerInstance,
+        gdal_worker: LazyGdalWorkerInstance,
     ) -> Result<RasterTile2D<T>, GdalSourceError> {
         let tile_spatial_grid = tile_information.spatial_grid_definition();
 
@@ -561,7 +561,7 @@ impl GdalRasterLoader {
                     tile_time,
                     gdal_read_advise,
                     cache_hint,
-                    process_data,
+                    gdal_worker,
                 )
                 .await
             }
@@ -664,7 +664,7 @@ impl GdalRasterLoader {
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
         reader_mode: GdalReaderMode,
-        process_data: LazyGdalWorkerInstance,
+        gdal_worker: LazyGdalWorkerInstance,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
         stream::iter(tiling_strategy.tile_information_iterator_from_pixel_bounds(spatial_bounds))
             .map(move |tile| {
@@ -674,7 +674,7 @@ impl GdalRasterLoader {
                     tile,
                     info.time,
                     info.cache_ttl.into(),
-                    process_data.clone(),
+                    gdal_worker.clone(),
                 )
                 .map_err(Into::into)
             })
@@ -688,7 +688,7 @@ impl GdalRasterLoader {
         loading_info_stream: S,
         spatial_query: GridBoundingBox2D,
         tiling_strategy: TilingStrategy,
-        process_data: LazyGdalWorkerInstance,
+        gdal_worker: LazyGdalWorkerInstance,
         reader_mode: GdalReaderMode,
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> + use<S, T> {
         loading_info_stream
@@ -698,7 +698,7 @@ impl GdalRasterLoader {
                     info,
                     tiling_strategy,
                     reader_mode,
-                    process_data.clone(),
+                    gdal_worker.clone(),
                 )
                 .map(Result::Ok)
             })
@@ -1116,7 +1116,7 @@ fn load_source_stream<P, S>(
     query: &RasterQueryRectangle,
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
-    process_data: LazyGdalWorkerInstance,
+    gdal_worker: LazyGdalWorkerInstance,
 ) -> impl Stream<Item = Result<RasterTile2D<P>>> + use<P, S>
 where
     P: Pixel + GdalType + FromPrimitive,
@@ -1126,7 +1126,7 @@ where
         source_stream,
         query.spatial_bounds(),
         tiling_strategy,
-        process_data,
+        gdal_worker,
         reader_mode,
     )
 }
@@ -1861,7 +1861,7 @@ mod tests {
     async fn load_ndvi_jan_2014_by_process(
         gdal_read_advice: GdalReadAdvise,
         tile_information: TileInformation,
-        process_data: LazyGdalWorkerInstance,
+        gdal_worker: LazyGdalWorkerInstance,
     ) -> Result<RasterTile2D<u8>> {
         let dataset_params = GdalDatasetParameters {
             file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
@@ -1911,7 +1911,7 @@ mod tests {
             TimeInterval::default(),
             gdal_read_advice,
             CacheHint::default(),
-            process_data,
+            gdal_worker,
         )
         .await
         .map_err(Into::into)
