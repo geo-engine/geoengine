@@ -1,8 +1,6 @@
 use std::io;
 
-use geoengine_datatypes::raster::{
-    GridBoundingBox2D, RasterDataType, arrow_conversion::RasterArrowConversionError,
-};
+use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
 use ipc_channel::IpcError;
 use snafu::Snafu;
 
@@ -50,11 +48,6 @@ pub enum GdalSourceError {
     #[snafu(display("Error in the GdalSource reading process: {source}"))]
     IpcProcessError {
         source: IpcProcessError,
-    },
-
-    #[snafu(display("Error in Arrow Conversion: {source}"))]
-    ArrowConversion {
-        source: RasterArrowConversionError,
     },
 
     GdalRasterLoader {

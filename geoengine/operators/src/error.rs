@@ -540,10 +540,6 @@ pub enum Error {
     SimpleRasterStacker {
         source: SimpleRasterStackerError,
     },
-    #[snafu(display("Error wile convertig a raster tile to arrow for ipc. Source: {source}"))]
-    RasterArrowConversion {
-        source: geoengine_datatypes::raster::arrow_conversion::RasterArrowConversionError,
-    },
 }
 
 impl From<crate::mock::MockRasterSourceError> for Error {
@@ -604,12 +600,5 @@ impl From<crate::util::statistics::StatisticsError> for Error {
 impl From<ordered_float::FloatIsNan> for Error {
     fn from(source: FloatIsNan) -> Self {
         Error::InvalidNotNanFloatKey { source }
-    }
-}
-impl From<geoengine_datatypes::raster::arrow_conversion::RasterArrowConversionError> for Error {
-    fn from(
-        source: geoengine_datatypes::raster::arrow_conversion::RasterArrowConversionError,
-    ) -> Self {
-        Error::RasterArrowConversion { source }
     }
 }
