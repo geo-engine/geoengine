@@ -1,5 +1,4 @@
 use std::borrow::Cow;
-use std::path::PathBuf;
 use std::process::Command;
 
 use bytemuck::{AnyBitPattern, NoUninit};
@@ -22,6 +21,52 @@ use crate::source::gdal_source::GdalRasterLoaderError;
 use crate::source::gdal_source::reader::GridAndProperties;
 use crate::util::TemporaryGdalThreadLocalConfigOptions;
 use crate::util::gdal::gdal_open_ex_gdal_error;
+
+/// Global storage for the detected path, initialized on first access.
+static GDALSOURCE_PROCESS_PATH: OnceLock<PathBuf> = OnceLock::new();
+
+/// Returns a reference to the cached `gdalsource-process` path.
+/// The detection logic runs exactly once on the very first call.
+fn get_gdalsource_path() -> &'static Path {
+    GDALSOURCE_PROCESS_PATH.get_or_init(|| {
+        // 1. Try the environment variable path first
+        if let Ok(env_path) = env::var("GDALSOURCE_PROCESS_PATH") {
+            if !env_path.is_empty() {
+                let path = PathBuf::from(env_path);
+                if path.is_file() {
+                    tracing::debug!(
+                        "Using gdalsource-process path from environment variable: {}",
+                        path.display()
+                    );
+                    return path;
+                }
+            }
+        }
+
+        // 2. Fallback detection logic
+        let mut exe_path = env::current_exe()
+            .unwrap_or_else(|_| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+
+        if exe_path.is_file() {
+            exe_path.pop();
+        }
+
+        if exe_path.file_name().map_or(false, |name| name == "deps") {
+            exe_path.pop();
+        }
+
+        let binary_name = if cfg!(windows) {
+            "gdalsource-process.exe"
+        } else {
+            "gdalsource-process"
+        };
+        exe_path.push(binary_name);
+
+        tracing::debug!("Detected gdalsource-process path: {}", exe_path.display());
+
+        exe_path
+    })
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
 pub struct IpcChannelMessagePayload {
@@ -524,18 +569,9 @@ pub fn spawn_ipc_server_process<S, R>()
 
     tracing::debug!("spawn_ipc_server token: {}", token);
 
-    let path: PathBuf = std::env::var("GDAL_SOURCE_PROCESS_PATH").map_or_else(
-        |_| {
-            std::env::current_exe()
-                .expect("failed to get current executable path")
-                .parent()
-                .expect("executable has no parent directory")
-                .join("gdalsource-process")
-        },
-        PathBuf::from,
-    );
+    let exe_path = get_gdalsource_path();
 
-    let child = Command::new(path)
+    let child = Command::new(exe_path)
         .arg(token)
         .arg("debug") // FIXME: paste log level here!
         .stderr(std::process::Stdio::inherit()) // This sends child logs to the parent's stderr

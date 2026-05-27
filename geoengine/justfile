@@ -40,6 +40,12 @@ lint-sql: common::_clear
 build mode="":
     cargo build --locked {{ mode }} --verbose
 
+# Build gdalsource-process in dev or release mode.
+[arg('mode', pattern='|--release')]
+[group("build")]
+build-gdalsource-process mode="":
+    cargo build --bin gdalsource-process --locked {{ mode }} --verbose
+
 # Run tests and generate lcov exactly as in CI test action.
 [group("ci")]
 test-coverage output_path="lcov.info":
@@ -54,7 +60,7 @@ test-coverage output_path="lcov.info":
 # Run the application.
 [group("run")]
 run: common::_clear
-    cargo run
+    cargo build --bin gdalsource-process && cargo run
 
 # Run the tests. Optionally, a filter can be provided to run only a subset of the tests.
 [group("test")]
