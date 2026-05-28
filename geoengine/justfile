@@ -58,9 +58,10 @@ test-coverage output_path="lcov.info":
     	--output-path {{ output_path }}
 
 # Run the application.
+[arg('mode', pattern='|--release')]
 [group("run")]
-run: common::_clear
-    cargo build --bin gdalsource-process && cargo run
+run mode="": common::_clear
+    cargo build --bin gdalsource-process {{ mode }} && cargo run {{ mode }}
 
 # Run the tests. Optionally, a filter can be provided to run only a subset of the tests.
 [group("test")]
