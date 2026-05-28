@@ -1,6 +1,6 @@
 {
     "name": "geoengine",
-    "version": "0.9.1",
+    "version": "0.9.2",
     "license": "MIT",
     "scripts": {
         "ng": "ng",
@@ -25,6 +25,7 @@
         "serve:dashboards/gfbio:nightly": "ng serve --configuration development gfbio --proxy-config proxy-gfbio.conf.json",
         "serve:dashboards/nfdi-portal-demo:local": "npm run ng-serve-local nfdi-portal-demo",
         "serve:dashboards/nfdi-portal-demo:nightly": "ng serve --configuration development nfdi-portal-demo --proxy-config proxy-nfdi-portal-demo.conf.json",
+        "serve:edv:local": "npm run ng-serve-local enhanced-data-viewer",
         "serve:gis:local": "npm run ng-serve-local gis",
         "serve:gis:nightly": "ng serve --configuration development gis --proxy-config proxy-geoengine.conf.json",
         "serve:manager:local": "npm run ng-serve-local manager",
@@ -67,6 +68,7 @@
         "@codemirror/view": "~6.39.15",
         "@egjs/hammerjs": "^2.0.17",
         "@geoengine/api-client": "file:../api-clients/typescript",
+        "@vitest/coverage-v8": "^4.1.6",
         "d3": "~7.9.0",
         "dagre": "~0.8.5",
         "dagre-d3": "~0.6.4",

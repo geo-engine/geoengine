@@ -76,7 +76,7 @@ class Configuration {
 exports.Configuration = Configuration;
 exports.DefaultConfig = new Configuration({
     headers: {
-        'User-Agent': 'geoengine/api-client/typescript/0.9.1'
+        'User-Agent': 'geoengine/api-client/typescript/0.9.2'
     }
 });
 /**
