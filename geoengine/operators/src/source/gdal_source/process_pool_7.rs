@@ -17,7 +17,7 @@ const BROKER_QUEUE_CAPACITY: usize = 8192;
 
 /// A long-lived, reusable GDAL worker process.
 struct WorkerProcess {
-    id: usize,
+    _id: usize,
     // Wrapped in Option so they can be temporarily moved into `spawn_blocking`
     // without requiring Mutex locks on the worker array.
     sender: Option<IpcSender<IpcChannelMessage>>,
@@ -29,6 +29,34 @@ struct WorkerProcess {
     last_band: Option<usize>,
     last_spatial_window: Option<GridBoundingBox2D>,
     last_accessed: Instant,
+}
+
+impl WorkerProcess {
+    /// Evaluates how well this worker's internal GDAL caches match the incoming request.
+    fn calculate_affinity_score(
+        &self,
+        dataset_hash: u64,
+        band: usize,
+        window: &GridBoundingBox2D,
+    ) -> f64 {
+        let mut score = 0.0;
+
+        if self.last_dataset_hash == Some(dataset_hash) {
+            score += 10000.0; // Prevent GDAL from closing/reopening file handles
+            if self.last_band == Some(band) {
+                score += 1000.0; // Warm band cache match
+                if let Some(last_window) = self.last_spatial_window {
+                    let dist = calculate_grid_distance(&last_window, window);
+                    if dist == 0.0 {
+                        score += 100.0; // Exact spatial match
+                    } else {
+                        score += 50.0 / (1.0 + dist); // Proximity match
+                    }
+                }
+            }
+        }
+        score
+    }
 }
 
 struct QueuedRequest {
@@ -59,6 +87,9 @@ pub struct GdalProcessPool {
 }
 
 impl GdalProcessPool {
+    // PERFORMANCE TOGGLE: Switch to false to simulate your old cache thrashing behavior
+    const USE_GLOBAL_MATRIX: bool = true;
+
     /// Initializes the GDAL process pool with the specified number of worker processes and maximum parallel requests per dataset.
     ///
     /// Spawns the worker processes sequentially to avoid issues with concurrent temp file creation, and then starts the centralized broker loop to manage request dispatching and worker lifecycle.
@@ -84,7 +115,7 @@ impl GdalProcessPool {
                             .expect("Error while spawning GDAL worker process");
 
                     w.push(WorkerProcess {
-                        id,
+                        _id: id,
                         sender: Some(tx),
                         receiver: Some(rx),
                         child_guard: guard,
@@ -226,80 +257,45 @@ impl GdalProcessPool {
         max_parallel: usize,
         broker_tx: &mpsc::Sender<BrokerCommand>,
     ) {
-        let mut i = 0;
+        // Clean out dropped/cancelled channels immediately to keep the queue healthy
+        pending_requests.retain(|req| !req.respond_to.is_closed());
 
-        while i < pending_requests.len() && !idle_workers.is_empty() {
-            let req = &pending_requests[i];
-
-            if req.respond_to.is_closed() {
-                pending_requests.remove(i);
-                continue;
-            }
-
-            let active = *active_counts.get(&req.dataset_hash).unwrap_or(&0);
-            tracing::trace!(
-                dataset_hash = req.dataset_hash,
-                active_for_dataset = active,
-                "Evaluating request for dispatch (active: {active}, max_parallel: {max_parallel})"
-            );
-            if active >= max_parallel {
-                tracing::trace!(
-                    dataset_hash = req.dataset_hash,
-                    queue_pos = i,
-                    active,
+        while !idle_workers.is_empty() && !pending_requests.is_empty() {
+            // Plug-and-play strategy assignment
+            let (pair, best_score) = if GdalProcessPool::USE_GLOBAL_MATRIX {
+                Self::find_next_pair_global_matrix(
+                    idle_workers,
+                    workers,
+                    active_counts,
+                    pending_requests,
                     max_parallel,
-                    "Request blocked by max_parallel limit"
-                );
-                i += 1;
-                continue;
-            }
+                )
+            } else {
+                Self::find_next_pair_fifo_greedy(
+                    idle_workers,
+                    workers,
+                    active_counts,
+                    pending_requests,
+                    max_parallel,
+                )
+            };
 
+            // Break the dispatch loop if no valid matches can be scheduled (e.g. concurrency limits hit)
+            let Some((req_idx, w_matrix_idx)) = pair else {
+                break;
+            };
+
+            // Extract the selected request and worker from the available pools
             let req = pending_requests
-                .remove(i)
-                .expect("index in pending_requests checked: i < pending_requests.len()");
+                .remove(req_idx)
+                .expect("request must exist since we just indexed it");
+            let worker_id = idle_workers.remove(w_matrix_idx);
+            let worker = &mut workers[worker_id];
+
             let window = req.request.0.read_advise.read_window_bounds;
             let band = req.request.0.dataset_params.rasterband_channel;
 
-            // Calculate the best worker based on affinity heuristics
-            let mut best_idx = 0;
-            let mut best_score = -1.0;
-
-            for (idx, &w_id) in idle_workers.iter().enumerate() {
-                let w = &workers[w_id];
-                let mut score = 0.0;
-
-                if w.last_dataset_hash == Some(req.dataset_hash) {
-                    score += 10000.0; // Huge boost: Prevents GDAL from reopening the dataset file handle
-                    if w.last_band == Some(band) {
-                        score += 1000.0;
-                        if let Some(last_window) = w.last_spatial_window {
-                            let dist = calculate_grid_distance(&last_window, &window);
-                            if dist == 0.0 {
-                                score += 100.0;
-                            } else {
-                                score += 50.0 / (1.0 + dist);
-                            }
-                        }
-                    }
-                }
-
-                if score > best_score {
-                    best_score = score;
-                    best_idx = idx;
-                }
-            }
-
-            tracing::trace!(
-                dataset_hash = req.dataset_hash,
-                best_score,
-                "Dispatching to worker {} with affinity score {}",
-                workers[idle_workers[best_idx]].id,
-                best_score
-            );
-
-            let worker_id = idle_workers.remove(best_idx);
-            let worker = &mut workers[worker_id];
-
+            // Track worker cache states
             worker.last_dataset_hash = Some(req.dataset_hash);
             worker.last_band = Some(band);
             worker.last_spatial_window = Some(window);
@@ -349,6 +345,90 @@ impl GdalProcessPool {
                 "Worker dispatched"
             );
         }
+    }
+
+    /// OLD VERSION: Selects the first available request from the queue,
+    /// then matches it with the best available worker for that request.
+    fn find_next_pair_fifo_greedy(
+        idle_workers: &[usize],
+        workers: &[WorkerProcess],
+        active_counts: &HashMap<u64, usize>,
+        pending_requests: &VecDeque<QueuedRequest>,
+        max_parallel: usize,
+    ) -> (Option<(usize, usize)>, f64) {
+        for (r_idx, req) in pending_requests.iter().enumerate() {
+            let active = *active_counts.get(&req.dataset_hash).unwrap_or(&0);
+            if active >= max_parallel {
+                continue; // Blocked by concurrency limit
+            }
+
+            let window = req.request.0.read_advise.read_window_bounds;
+            let band = req.request.0.dataset_params.rasterband_channel;
+
+            let mut best_worker_matrix_idx = 0;
+            let mut best_score = -1.0;
+
+            for (w_matrix_idx, &w_id) in idle_workers.iter().enumerate() {
+                let w = &workers[w_id];
+                let score = w.calculate_affinity_score(req.dataset_hash, band, &window);
+
+                if score > best_score {
+                    best_score = score;
+                    best_worker_matrix_idx = w_matrix_idx;
+                }
+            }
+
+            // Return immediately on the first unblocked request found
+            if best_score >= 0.0 {
+                return (Some((r_idx, best_worker_matrix_idx)), best_score);
+            }
+        }
+        (None, -1.0)
+    }
+
+    /// NEW VERSION: Evaluates the entire matrix of workers and requests to find
+    /// the absolute best global affinity match, avoiding cache thrashing.
+    fn find_next_pair_global_matrix(
+        idle_workers: &[usize],
+        workers: &[WorkerProcess],
+        active_counts: &HashMap<u64, usize>,
+        pending_requests: &VecDeque<QueuedRequest>,
+        max_parallel: usize,
+    ) -> (Option<(usize, usize)>, f64) {
+        let mut best_score = -1.0;
+        let mut best_pair = None;
+
+        for (r_idx, req) in pending_requests.iter().enumerate() {
+            let active = *active_counts.get(&req.dataset_hash).unwrap_or(&0);
+            if active >= max_parallel {
+                continue; // Blocked by concurrency limit
+            }
+
+            let window = req.request.0.read_advise.read_window_bounds;
+            let band = req.request.0.dataset_params.rasterband_channel;
+
+            // Age boost gives older requests an advantage when affinity scores are identical
+            let age_boost = (pending_requests.len() - r_idx) as f64 * 0.01;
+
+            for (w_matrix_idx, &w_id) in idle_workers.iter().enumerate() {
+                let w = &workers[w_id];
+                let mut score = w.calculate_affinity_score(req.dataset_hash, band, &window);
+
+                // Prioritize pristine, completely unassigned workers over evicting an active cache
+                if w.last_dataset_hash.is_none() {
+                    score += 0.5;
+                }
+
+                score += age_boost;
+
+                if score > best_score {
+                    best_score = score;
+                    best_pair = Some((r_idx, w_matrix_idx));
+                }
+            }
+        }
+
+        (best_pair, best_score)
     }
 }
 
