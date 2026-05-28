@@ -3,6 +3,7 @@ pub mod error; // pub to export all Snafu-generated errors
 pub mod external;
 pub mod layer;
 pub mod listing;
+pub mod provider_registry;
 mod postgres_layer_db;
 pub mod storage;
 
