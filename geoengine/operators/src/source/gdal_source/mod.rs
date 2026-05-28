@@ -937,7 +937,7 @@ where
             query.attributes().as_slice() == [0],
             crate::error::GdalSourceDoesNotSupportQueryingOtherBandsThanTheFirstOneYet
         );
-        tracing::debug!(
+        tracing::trace!(
             "Querying GdalSourceProcessor<{:?}> with: {:?}.",
             P::TYPE,
             &query
@@ -978,18 +978,15 @@ where
             ),
         };
 
-        tracing::debug!(
-            "Creating reader mode: {:?}. Original grid: {:?} and target grid: {:?}",
-            reader_mode,
-            self.original_resolution_spatial_grid,
-            produced_tiling_grid
-        );
-
         let loading_info = self.meta_data.loading_info(query.clone()).await?;
 
-        debug!(
-            "GdalSource _query loading info: start_time_of_output_stream: {:?}, end_time_of_output_stream: {:?}",
-            loading_info.start_time_of_output_stream, loading_info.end_time_of_output_stream
+        tracing::trace!(
+            "Reader mode: {:?}. Original grid: {:?} and target grid: {:?}. Loadinginfo  start_time_of_output_stream: {:?}, end_time_of_output_stream: {:?}",
+            reader_mode,
+            self.original_resolution_spatial_grid,
+            produced_tiling_grid,
+            loading_info.start_time_of_output_stream,
+            loading_info.end_time_of_output_stream
         );
 
         debug_assert!(
@@ -1027,7 +1024,7 @@ where
 
         let stream = filled_loading_info_stream
                         .inspect_ok(move |r| {
-                            debug!("GdalSource _query now producing time slice: {:?}", r.time);
+                            tracing::trace!("GdalSource _query now producing time slice: {:?}", r.time);
                             if !r.time.intersects(&query_time) {
                                 warn!(
                                     "GdalSource _query producing time slice that does not intersect query time: {:?} vs {:?}",
@@ -1100,7 +1097,9 @@ where
         };
 
         Ok(res_stream
-            .inspect_ok(|ti| debug!("GdalSource time_query producing time interval: {:?}", ti))
+            .inspect_ok(|ti| {
+                tracing::trace!("GdalSource time_query producing time interval: {:?}", ti)
+            })
             .boxed())
     }
 }

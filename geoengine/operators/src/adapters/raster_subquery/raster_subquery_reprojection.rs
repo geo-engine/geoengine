@@ -29,7 +29,6 @@ use num;
 use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::{ParallelSlice, ParallelSliceMut};
-use tracing::debug;
 
 use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
 
@@ -194,26 +193,19 @@ fn projected_coordinate_grid_parallel(
 
     let start = std::time::Instant::now();
 
+    let parallelism = pool.current_num_threads();
+    let par_chunk_split =
+        num::integer::div_ceil(tile_info.tile_size_in_pixels.axis_size_y(), parallelism)
+            .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
+    let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
+
     let res = pool.install(|| {
-          let mut in_coord_grid: Grid2D<Option<Coordinate2D>> =
+        let mut in_coord_grid: Grid2D<Option<Coordinate2D>> =
             Grid2D::new_filled(tile_info.tile_size_in_pixels, None);
 
         let out_coords = tile_info
             .spatial_grid_definition()
             .generate_coord_grid_pixel_center();
-
-        let parallelism = pool.current_num_threads();
-        let par_chunk_split =
-            num::integer::div_ceil(tile_info.tile_size_in_pixels.axis_size_y(), parallelism)
-                .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
-        let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
-        debug!(
-            "projected_coordinate_grid_parallel {:?}, parallelism: threads={} par_chunk_split={} par_chunk_size={}",
-            &tile_info.global_tile_position,
-            pool.current_num_threads(),
-            par_chunk_split,
-            par_chunk_size
-        );
 
         in_coord_grid
             .data
@@ -263,8 +255,12 @@ fn projected_coordinate_grid_parallel(
             })?;
         Ok(in_coord_grid)
     });
-    debug!(
-        "projected_coordinate_grid_parallel took {} (ns)",
+    tracing::trace!(
+        "projected_coordinate_grid_parallel {:?}, parallelism: threads={} par_chunk_split={} par_chunk_size={} took {} (ns) ",
+        &tile_info.global_tile_position,
+        pool.current_num_threads(),
+        par_chunk_split,
+        par_chunk_size,
         start.elapsed().as_nanos()
     );
     res

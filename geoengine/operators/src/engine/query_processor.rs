@@ -137,13 +137,7 @@ pub trait RasterQueryProcessor:
     ) -> Result<BoxStream<'a, Result<TimeInterval>>> {
         let rdt = self.raster_result_descriptor().time;
         if let Some(regular_time) = rdt.dimension.unwrap_regular() {
-            debug!(
-                "Using time query shortcut for regular time dimension: {regular_time:?} and query: {query:?}"
-            );
-            let iter = regular_time
-                .intersecting_intervals(query)?
-                .inspect(|t| debug!("time_query regular shortcut yielded {t:?}"))
-                .map(Result::Ok);
+            let iter = regular_time.intersecting_intervals(query)?.map(Result::Ok);
             return Ok(futures::StreamExt::boxed(futures::stream::iter(iter)));
         }
 
