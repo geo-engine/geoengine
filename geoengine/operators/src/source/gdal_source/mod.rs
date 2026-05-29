@@ -544,9 +544,10 @@ impl GdalRasterLoader {
                     Self::read_advise_for_tile(reader_mode, &ds_spatial_grid, &tile_spatial_grid);
 
                 let Some(gdal_read_advise) = gdal_read_advise else {
-                    debug!(
+                    tracing::trace!(
                         "Tile {:?} not intersecting dataset grid or gdal grid {:?}",
-                        &tile_information, ds.file_path
+                        &tile_information,
+                        ds.file_path
                     );
                     return Ok(Self::create_no_data_tile(
                         tile_information,
@@ -1098,7 +1099,7 @@ where
 
         Ok(res_stream
             .inspect_ok(|ti| {
-                tracing::trace!("GdalSource time_query producing time interval: {:?}", ti)
+                tracing::trace!("GdalSource time_query producing time interval: {:?}", ti);
             })
             .boxed())
     }
@@ -1135,7 +1136,7 @@ fn overview_level_spatial_grid(
     overview_level: u32,
 ) -> Option<SpatialGridDefinition> {
     if overview_level > 0 {
-        debug!("Using overview level {overview_level}");
+        tracing::trace!("Using overview level {overview_level}");
         let geo_transform = GeoTransform::new(
             source_spatial_grid.geo_transform.origin_coordinate,
             source_spatial_grid.geo_transform.x_pixel_size() * f64::from(overview_level),
@@ -1163,7 +1164,7 @@ fn overview_level_spatial_grid(
 
         Some(SpatialGridDefinition::new(geo_transform, grid_bounds))
     } else {
-        debug!("Using original resolution (ov = 0)");
+        tracing::trace!("Using original resolution (ov = 0)");
         None
     }
 }
@@ -1179,8 +1180,11 @@ impl RasterOperator for GdalSource {
         let data_id = context.resolve_named_data(&self.params.data).await?;
         let meta_data: GdalMetaData = context.meta_data(&data_id).await?;
 
-        debug!("Initializing GdalSource for {:?}.", &self.params.data);
-        debug!("GdalSource path: {:?}", path);
+        tracing::trace!(
+            "Initializing GdalSource for {:?}. GdalSource path: {:?}",
+            &self.params.data,
+            path
+        );
 
         let meta_data_result_descriptor = meta_data.result_descriptor().await?;
 
@@ -2206,7 +2210,7 @@ mod tests {
         let tile_information =
             tile_information_with_partition_and_shape(output_bounds, output_shape);
 
-        let gpp = GdalProcessPool::new(4, 2);
+        let gpp = GdalProcessPool::new(8, 4, 2);
         let gw = gpp.get_gdal_worker();
 
         let RasterTile2D {
@@ -2499,7 +2503,7 @@ mod tests {
             ),
         });
 
-        let gpp = GdalProcessPool::new(4, 2);
+        let gpp = GdalProcessPool::new(8, 4, 2);
         let gw: LazyGdalWorkerInstance = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
@@ -3136,7 +3140,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
 
-        let gpp = GdalProcessPool::new(4, 2);
+        let gpp = GdalProcessPool::new(8, 4, 2);
         let gw: LazyGdalWorkerInstance = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(

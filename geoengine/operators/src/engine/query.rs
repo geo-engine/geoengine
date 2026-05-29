@@ -154,7 +154,7 @@ impl MockQueryContext {
             quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            gdal_process_pool: GdalProcessPool::new(4, 2),
+            gdal_process_pool: GdalProcessPool::new(8, 4, 2),
         }
     }
 
@@ -175,7 +175,7 @@ impl MockQueryContext {
             quota_tracking,
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            gdal_process_pool: GdalProcessPool::new(4, 2),
+            gdal_process_pool: GdalProcessPool::new(8, 4, 2),
         }
     }
 
@@ -194,7 +194,7 @@ impl MockQueryContext {
             quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            gdal_process_pool: GdalProcessPool::new(4, 2),
+            gdal_process_pool: GdalProcessPool::new(8, 4, 2),
         }
     }
 }

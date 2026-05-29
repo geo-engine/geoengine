@@ -365,8 +365,9 @@ impl ConfigElement for Gdal {
 
 #[derive(Debug, Deserialize)]
 pub struct GdalProcessPool {
-    pub max_worker_processes: u64,
-    pub max_worker_per_dataset: u64,
+    pub max_processes: u64,
+    pub global_active_worker: u64,
+    pub worker_per_dataset: u64,
 }
 
 impl ConfigElement for GdalProcessPool {

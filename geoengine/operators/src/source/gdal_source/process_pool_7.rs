@@ -71,6 +71,7 @@ enum BrokerCommand {
         worker_id: usize,
         is_dead: bool,
         dataset_hash: u64,
+        band: usize, // Tracked to decrement active band lane counters cleanly
         sender: IpcSender<IpcChannelMessage>,
         receiver: IpcReceiver<IpcProcessRasterResult>,
     },
@@ -82,13 +83,29 @@ enum BrokerCommand {
     },
 }
 
+/// Supported strategy patterns for balancing multi-lane queues against warm worker caches.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SchedulingStrategy {
+    /// Pure FIFO request consumption matching the first unblocked lane's available worker cache.
+    FifoGreedy,
+    /// Cross-matrix scheduling tracking all requests against all caches to maximize data affinity.
+    GlobalMatrix,
+    /// Advanced matrix scheduling supporting multi-lane band caps and automated idle bypass valves.
+    Balanced,
+}
+
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
 }
 
 impl GdalProcessPool {
-    // PERFORMANCE TOGGLE: Switch to false to simulate your old cache thrashing behavior
-    const USE_GLOBAL_MATRIX: bool = true;
+    // PERFORMANCE TOGGLE: Select the scheduling strategy for how the broker loop matches incoming requests to idle workers.
+    const SCHEDULING_STRATEGY: SchedulingStrategy = SchedulingStrategy::Balanced;
+
+    /// TOKIO EVENT LOOP PROTECTION: The maximum number of eligible (unblocked) requests
+    /// allowed to undergo full cross-matrix worker affinity evaluations per dispatch cycle.
+    /// Prevents CPU-pinning and event loop starvation when backlogs scale to thousands of items.
+    const MAX_ELIGIBLE_SCAN_DEPTH: usize = 32;
 
     /// Initializes the GDAL process pool with the specified number of worker processes and maximum parallel requests per dataset.
     ///
@@ -96,17 +113,22 @@ impl GdalProcessPool {
     ///
     /// # Panics
     /// Panics if any of the worker processes fail to start, or if the broker loop fails to initialize.
-    pub fn new(max_total: usize, max_parallel_per_dataset: usize) -> Arc<Self> {
+    pub fn new(
+        max_total: usize,
+        max_active_global: usize,
+        max_parallel_per_dataset: usize,
+    ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
 
         tokio::spawn(async move {
             tracing::info!(
-                "Initializing static GDAL worker pool of {} processes...",
-                max_total
+                "Initializing overprovisioned warm GDAL pool: Capacity={}, Execution Limit={}, Per-Dataset Parallelism={}",
+                max_total,
+                max_active_global,
+                max_parallel_per_dataset
             );
 
-            // Spawn worker processes sequentially to avoid problems with concurrent temp file creation in `spawn_ipc_server_process`
             let workers = tokio::task::spawn_blocking(move || {
                 let mut w = Vec::with_capacity(max_total);
                 for id in 0..max_total {
@@ -124,7 +146,6 @@ impl GdalProcessPool {
                         last_spatial_window: None,
                         last_accessed: Instant::now(),
                     });
-                    // Force an OS delay to ensure unique tempfile creation
                     std::thread::sleep(Duration::from_millis(15));
                 }
                 w
@@ -132,8 +153,14 @@ impl GdalProcessPool {
             .await
             .expect("Failed to initialize static GDAL worker processes");
 
-            // Start the centralized, lock-free broker loop
-            Self::broker_loop(broker_rx, workers, max_parallel_per_dataset, b_tx_clone).await;
+            Self::broker_loop(
+                broker_rx,
+                workers,
+                max_active_global,
+                max_parallel_per_dataset,
+                b_tx_clone,
+            )
+            .await;
         });
 
         Arc::new(Self { broker_tx })
@@ -142,31 +169,34 @@ impl GdalProcessPool {
     async fn broker_loop(
         mut rx: mpsc::Receiver<BrokerCommand>,
         mut workers: Vec<WorkerProcess>,
+        max_active_global: usize,
         max_parallel_per_dataset: usize,
         broker_tx: mpsc::Sender<BrokerCommand>,
     ) {
         let mut idle_workers: Vec<usize> = (0..workers.len()).collect();
         let mut active_counts: HashMap<u64, usize> = HashMap::new();
+        let mut active_bands: HashMap<(u64, usize), usize> = HashMap::new();
         let mut pending_requests: VecDeque<QueuedRequest> = VecDeque::new();
+
+        // Tracks the exact number of worker processes executing tasks inside spawn_blocking
+        let mut global_active_count: usize = 0;
 
         while let Some(cmd) = rx.recv().await {
             match cmd {
                 BrokerCommand::Read(req) => {
                     if req.respond_to.is_closed() {
-                        tracing::trace!(
-                            dataset_hash = req.dataset_hash,
-                            pending_len = pending_requests.len(),
-                            "Discarding abandoned request"
-                        );
                         continue;
-                    } // Discard abandoned requests
+                    }
                     pending_requests.push_back(*req);
                     Self::try_dispatch(
                         &mut idle_workers,
                         &mut workers,
                         &mut active_counts,
+                        &mut active_bands,
+                        &mut global_active_count,
                         &mut pending_requests,
                         max_parallel_per_dataset,
+                        max_active_global,
                         &broker_tx,
                     );
                 }
@@ -174,26 +204,21 @@ impl GdalProcessPool {
                     worker_id,
                     is_dead,
                     dataset_hash,
+                    band,
                     sender,
                     receiver,
                 } => {
                     if let Some(count) = active_counts.get_mut(&dataset_hash) {
                         *count = count.saturating_sub(1);
                     }
+                    if let Some(b_count) = active_bands.get_mut(&(dataset_hash, band)) {
+                        *b_count = b_count.saturating_sub(1);
+                    }
 
-                    tracing::trace!(
-                        worker_id,
-                        dataset_hash,
-                        remaining_active = active_counts.get(&dataset_hash).copied().unwrap_or(0),
-                        is_dead,
-                        "Worker returned"
-                    );
+                    global_active_count = global_active_count.saturating_sub(1);
 
                     if is_dead {
-                        tracing::warn!(
-                            worker_id,
-                            "GDAL Worker crashed. Spawning replacement sequentially..."
-                        );
+                        tracing::warn!(worker_id, "GDAL Worker crashed. Spawning replacement...");
                         let b_tx = broker_tx.clone();
                         tokio::task::spawn_blocking(move || {
                             let (guard, tx, rx) = spawn_ipc_server_process::<
@@ -216,8 +241,11 @@ impl GdalProcessPool {
                             &mut idle_workers,
                             &mut workers,
                             &mut active_counts,
+                            &mut active_bands,
+                            &mut global_active_count,
                             &mut pending_requests,
                             max_parallel_per_dataset,
+                            max_active_global,
                             &broker_tx,
                         );
                     }
@@ -229,18 +257,21 @@ impl GdalProcessPool {
                     receiver,
                 } => {
                     let worker = &mut workers[worker_id];
-                    worker.child_guard = child_guard; // Drops old OS process guard, killing the zombie
+                    worker.child_guard = child_guard;
                     worker.sender = Some(sender);
                     worker.receiver = Some(receiver);
-                    worker.last_dataset_hash = None; // Reset affinity
+                    worker.last_dataset_hash = None;
 
                     idle_workers.push(worker_id);
                     Self::try_dispatch(
                         &mut idle_workers,
                         &mut workers,
                         &mut active_counts,
+                        &mut active_bands,
+                        &mut global_active_count,
                         &mut pending_requests,
                         max_parallel_per_dataset,
+                        max_active_global,
                         &broker_tx,
                     );
                 }
@@ -248,60 +279,74 @@ impl GdalProcessPool {
         }
     }
 
-    #[allow(clippy::too_many_lines)]
+    #[allow(clippy::too_many_lines, clippy::too_many_arguments)]
     fn try_dispatch(
         idle_workers: &mut Vec<usize>,
         workers: &mut [WorkerProcess],
         active_counts: &mut HashMap<u64, usize>,
+        active_bands: &mut HashMap<(u64, usize), usize>,
+        global_active_count: &mut usize,
         pending_requests: &mut VecDeque<QueuedRequest>,
         max_parallel: usize,
+        max_active_global: usize,
         broker_tx: &mpsc::Sender<BrokerCommand>,
     ) {
-        // Clean out dropped/cancelled channels immediately to keep the queue healthy
         pending_requests.retain(|req| !req.respond_to.is_closed());
 
         while !idle_workers.is_empty() && !pending_requests.is_empty() {
-            // Plug-and-play strategy assignment
-            let (pair, best_score) = if GdalProcessPool::USE_GLOBAL_MATRIX {
-                Self::find_next_pair_global_matrix(
+            // NEW: Enforce global execution concurrency ceiling.
+            // If the global executing lanes are full, we stop dispatching.
+            // Remaining workers left in `idle_workers` act as "Parked" warm caches.
+            if *global_active_count >= max_active_global {
+                break;
+            }
+
+            let (pair, best_score) = match Self::SCHEDULING_STRATEGY {
+                SchedulingStrategy::Balanced => Self::find_next_pair_balanced(
+                    idle_workers,
+                    workers,
+                    active_counts,
+                    active_bands,
+                    pending_requests,
+                    max_parallel,
+                ),
+                SchedulingStrategy::GlobalMatrix => Self::find_next_pair_global_matrix(
                     idle_workers,
                     workers,
                     active_counts,
                     pending_requests,
                     max_parallel,
-                )
-            } else {
-                Self::find_next_pair_fifo_greedy(
+                ),
+                SchedulingStrategy::FifoGreedy => Self::find_next_pair_fifo_greedy(
                     idle_workers,
                     workers,
                     active_counts,
                     pending_requests,
                     max_parallel,
-                )
+                ),
             };
 
-            // Break the dispatch loop if no valid matches can be scheduled (e.g. concurrency limits hit)
             let Some((req_idx, w_matrix_idx)) = pair else {
                 break;
             };
 
-            // Extract the selected request and worker from the available pools
             let req = pending_requests
                 .remove(req_idx)
-                .expect("request must exist since we just indexed it");
+                .expect("The request should exist at the specified index");
             let worker_id = idle_workers.remove(w_matrix_idx);
             let worker = &mut workers[worker_id];
 
             let window = req.request.0.read_advise.read_window_bounds;
             let band = req.request.0.dataset_params.rasterband_channel;
 
-            // Track worker cache states
             worker.last_dataset_hash = Some(req.dataset_hash);
             worker.last_band = Some(band);
             worker.last_spatial_window = Some(window);
             worker.last_accessed = Instant::now();
 
+            *global_active_count += 1;
             *active_counts.entry(req.dataset_hash).or_insert(0) += 1;
+            *active_bands.entry((req.dataset_hash, band)).or_insert(0) += 1;
 
             let sender = worker
                 .sender
@@ -314,7 +359,6 @@ impl GdalProcessPool {
             let request_msg = req.request;
             let respond_to = req.respond_to;
 
-            // Execute cleanly in isolation
             tokio::task::spawn_blocking(move || {
                 let res = sender
                     .send(request_msg)
@@ -332,6 +376,7 @@ impl GdalProcessPool {
                     worker_id,
                     is_dead,
                     dataset_hash,
+                    band,
                     sender,
                     receiver,
                 });
@@ -339,6 +384,7 @@ impl GdalProcessPool {
             tracing::trace!(
                 worker_id,
                 dataset_hash = req.dataset_hash,
+                band,
                 best_score,
                 remaining_pending = pending_requests.len(),
                 remaining_idle = idle_workers.len(),
@@ -346,8 +392,7 @@ impl GdalProcessPool {
             );
         }
     }
-
-    /// OLD VERSION: Selects the first available request from the queue,
+    /// Selects the first available request from the queue up to the scan limit,
     /// then matches it with the best available worker for that request.
     fn find_next_pair_fifo_greedy(
         idle_workers: &[usize],
@@ -356,10 +401,17 @@ impl GdalProcessPool {
         pending_requests: &VecDeque<QueuedRequest>,
         max_parallel: usize,
     ) -> (Option<(usize, usize)>, f64) {
+        let mut eligible_scanned = 0;
+
         for (r_idx, req) in pending_requests.iter().enumerate() {
             let active = *active_counts.get(&req.dataset_hash).unwrap_or(&0);
             if active >= max_parallel {
                 continue; // Blocked by concurrency limit
+            }
+
+            eligible_scanned += 1;
+            if eligible_scanned > Self::MAX_ELIGIBLE_SCAN_DEPTH {
+                break; // Protect event loop from deep backlog traversal
             }
 
             let window = req.request.0.read_advise.read_window_bounds;
@@ -386,7 +438,7 @@ impl GdalProcessPool {
         (None, -1.0)
     }
 
-    /// NEW VERSION: Evaluates the entire matrix of workers and requests to find
+    /// Evaluates a bounded matrix of eligible workers and requests to find
     /// the absolute best global affinity match, avoiding cache thrashing.
     fn find_next_pair_global_matrix(
         idle_workers: &[usize],
@@ -397,11 +449,17 @@ impl GdalProcessPool {
     ) -> (Option<(usize, usize)>, f64) {
         let mut best_score = -1.0;
         let mut best_pair = None;
+        let mut eligible_scanned = 0;
 
         for (r_idx, req) in pending_requests.iter().enumerate() {
             let active = *active_counts.get(&req.dataset_hash).unwrap_or(&0);
             if active >= max_parallel {
                 continue; // Blocked by concurrency limit
+            }
+
+            eligible_scanned += 1;
+            if eligible_scanned > Self::MAX_ELIGIBLE_SCAN_DEPTH {
+                break; // Protect event loop from deep backlog traversal
             }
 
             let window = req.request.0.read_advise.read_window_bounds;
@@ -424,6 +482,97 @@ impl GdalProcessPool {
                 if score > best_score {
                     best_score = score;
                     best_pair = Some((r_idx, w_matrix_idx));
+                }
+            }
+        }
+
+        (best_pair, best_score)
+    }
+
+    /// Evaluates the complete cross-matrix of idle workers and pending requests up to the scan limit.
+    /// Incorporates a dynamic band holdback penalty to avoid interleaved channel thrashing,
+    /// while guaranteeing no worker sits idle if valid work is unfulfilled.
+    fn find_next_pair_balanced(
+        idle_workers: &[usize],
+        workers: &[WorkerProcess],
+        active_counts: &HashMap<u64, usize>,
+        active_bands: &HashMap<(u64, usize), usize>,
+        pending_requests: &VecDeque<QueuedRequest>,
+        max_parallel: usize,
+    ) -> (Option<(usize, usize)>, f64) {
+        const MAX_PARALLEL_LANES_PER_BAND: usize = 2;
+
+        let mut best_score = -1.0;
+        let mut best_pair = None;
+        let mut eligible_scanned = 0;
+
+        for (r_idx, req) in pending_requests.iter().enumerate() {
+            let active = *active_counts.get(&req.dataset_hash).unwrap_or(&0);
+            if active >= max_parallel {
+                continue;
+            }
+
+            eligible_scanned += 1;
+            if eligible_scanned > Self::MAX_ELIGIBLE_SCAN_DEPTH {
+                break; // Protect event loop from deep backlog traversal
+            }
+
+            let window = req.request.0.read_advise.read_window_bounds;
+            let band = req.request.0.dataset_params.rasterband_channel;
+
+            let active_on_this_band = *active_bands.get(&(req.dataset_hash, band)).unwrap_or(&0);
+
+            // Allow up to 2 parallel execution lanes per unique band channel before blocking
+
+            let band_lane_is_saturated = active_on_this_band >= MAX_PARALLEL_LANES_PER_BAND;
+
+            let age_boost = (pending_requests.len() - r_idx) as f64 * 0.01;
+
+            for (w_matrix_idx, &w_id) in idle_workers.iter().enumerate() {
+                let w = &workers[w_id];
+
+                let is_dataset_match = w.last_dataset_hash == Some(req.dataset_hash);
+                let is_band_match = w.last_band == Some(band);
+
+                let mut score = w.calculate_affinity_score(req.dataset_hash, band, &window);
+
+                if w.last_dataset_hash.is_none() {
+                    score += 0.5; // Favor completely unassigned workers over cache eviction
+                }
+
+                // BALANCED AFFINITY HOLDBACK: If the worker has the correct file handle open
+                // but a different band, and our preferred band lane is already saturated,
+                // penalize heavily to let this request wait for its true warm worker to return.
+                if is_dataset_match
+                    && !is_band_match
+                    && band_lane_is_saturated
+                    && idle_workers.len() > 1
+                {
+                    score -= 15000.0;
+                }
+
+                score += age_boost;
+
+                if score > best_score {
+                    best_score = score;
+                    best_pair = Some((r_idx, w_matrix_idx));
+                }
+            }
+        }
+
+        // FALLBACK EMERGENCY VALVE: If scheduling penalties caused zero valid pairs to match,
+        // but we have workers sitting idle and requests waiting under the concurrency ceilings,
+        // bypass affinity constraints completely to maximize compute saturation.
+        if best_pair.is_none() && !idle_workers.is_empty() {
+            let mut fallback_eligible_scanned = 0;
+            for (r_idx, req) in pending_requests.iter().enumerate() {
+                let active = *active_counts.get(&req.dataset_hash).unwrap_or(&0);
+                if active < max_parallel {
+                    fallback_eligible_scanned += 1;
+                    if fallback_eligible_scanned > Self::MAX_ELIGIBLE_SCAN_DEPTH {
+                        break;
+                    }
+                    return (Some((r_idx, 0)), 0.0);
                 }
             }
         }
