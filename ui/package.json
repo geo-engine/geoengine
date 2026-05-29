@@ -16,7 +16,7 @@
         "build-prod:dashboards/esg-indicator-service": "ng build --configuration production esg-indicator-service",
         "build-prod:dashboards/gfbio": "ng build --configuration production gfbio",
         "build-prod:dashboards/nfdi-portal-demo": "ng build --configuration production nfdi-portal-demo",
-        "build-prod:edv": "ng build --configuration production edv",
+        "build-prod:edv": "ng build --configuration production enhanced-data-viewer",
         "build-prod:gis": "ng build --configuration production gis",
         "build-prod:manager": "ng build --configuration production manager",
         "build-apps": "npm run build-prod:gis && npm run build-prod:dashboards/data-atlas && npm run build-prod:dashboards/ebv-analyzer && npm run build-prod:dashboards/gfbio && npm run build-prod:dashboards/nfdi-portal-demo",
