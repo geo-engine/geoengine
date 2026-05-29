@@ -17,20 +17,15 @@ const BROKER_QUEUE_CAPACITY: usize = 8192;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchedulingStrategy {
-    /// Baseline FIFO request consumption matching the first unblocked request's best available worker cache.
     FifoGreedy,
-    /// Cross-matrix scheduling evaluating the whole pool against the lookahead backlog to maximize global data affinity.
     GlobalMatrix,
 }
 
-/// A long-lived, reusable GDAL worker process.
 struct WorkerProcess {
     _id: usize,
     sender: Option<IpcSender<IpcChannelMessage>>,
     receiver: Option<IpcReceiver<IpcProcessRasterResult>>,
     child_guard: ChildProcessGuard,
-
-    // Affinity Tracking
     last_dataset_hash: Option<u64>,
     last_band: Option<usize>,
     last_spatial_window: Option<GridBoundingBox2D>,
@@ -38,7 +33,6 @@ struct WorkerProcess {
 }
 
 impl WorkerProcess {
-    /// Evaluates how well this worker's internal GDAL caches match the incoming request.
     #[inline]
     fn calculate_affinity_score(
         &self,
@@ -49,15 +43,15 @@ impl WorkerProcess {
         let mut score = 0.0;
 
         if self.last_dataset_hash == Some(dataset_hash) {
-            score += 10000.0; // Critical: Prevent closing/reopening file handles
+            score += 10000.0; 
             if self.last_band == Some(band) {
-                score += 1000.0; // Warm band cache match
+                score += 1000.0; 
                 if let Some(last_window) = self.last_spatial_window {
                     let dist = calculate_grid_distance(&last_window, window);
                     if dist == 0.0 {
-                        score += 100.0; // Exact spatial match
+                        score += 100.0; 
                     } else {
-                        score += 50.0 / (1.0 + dist); // Proximity match
+                        score += 50.0 / (1.0 + dist); 
                     }
                 }
             }
@@ -94,26 +88,9 @@ pub struct GdalProcessPool {
 }
 
 impl GdalProcessPool {
-    /// INTERCHANGEABLE STRATEGY TOGGLE:
     const STRATEGY: SchedulingStrategy = SchedulingStrategy::GlobalMatrix;
-
-    /// TOKIO EVENT LOOP PROTECTION: Limits lookahead depth under heavy queue backups.
     const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
 
-    /// Initializes the GDAL process pool and starts the broker loop.
-    /// Parameters control total pool size, global concurrency limits, and per-dataset parallelism to balance throughput and resource constraints.
-    /// The pool is designed to be shared across multiple query contexts, maximizing cache reuse and minimizing GDAL startup overhead.
-    ///
-    /// # Parameters
-    /// - `max_total`: Total number of GDAL worker processes to maintain in the pool
-    /// - `max_active_global`: Maximum number of concurrently active workers across all datasets (throttles overall GDAL concurrency)
-    /// - `max_parallel_per_dataset`: Maximum number of concurrently active workers for the same dataset
-    /// # Returns
-    /// An `Arc` to the initialized `GdalProcessPool` ready for use in query contexts
-    /// # Panics
-    /// Panics if worker processes fail to spawn during initialization or if the broker loop encounters critical errors (e.g., IPC channel failures)
-    /// # Notes
-    /// - The pool uses a broker pattern to manage worker assignment and request queuing, ensuring efficient scheduling and robust handling of worker crashes with automatic respawning.
     pub fn new(
         max_total: usize,
         max_active_global: usize,
@@ -124,45 +101,29 @@ impl GdalProcessPool {
 
         tokio::spawn(async move {
             tracing::info!(
-                "Initializing warm GDAL pool (Strategy={:?}): Capacity={}, Limit={}, Per-Dataset Parallelism={}",
-                Self::STRATEGY,
-                max_total,
-                max_active_global,
-                max_parallel_per_dataset
+                "Initializing optimized warm GDAL pool (Strategy={:?}): Capacity={}, Limit={}, Per-Dataset Parallelism={}",
+                Self::STRATEGY, max_total, max_active_global, max_parallel_per_dataset
             );
 
             let workers = tokio::task::spawn_blocking(move || {
                 let mut w = Vec::with_capacity(max_total);
                 for id in 0..max_total {
-                    let (guard, tx, rx) =
-                        spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
-                            .expect("Error while spawning GDAL worker process");
+                    let (guard, tx, rx) = spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
+                        .expect("Error while spawning GDAL worker process");
 
                     w.push(WorkerProcess {
                         _id: id,
-                        sender: Some(tx),
-                        receiver: Some(rx),
+                        sender: Some(tx), receiver: Some(rx),
                         child_guard: guard,
-                        last_dataset_hash: None,
-                        last_band: None,
-                        last_spatial_window: None,
+                        last_dataset_hash: None, last_band: None, last_spatial_window: None,
                         last_accessed: Instant::now(),
                     });
                     std::thread::sleep(Duration::from_millis(15));
                 }
                 w
-            })
-            .await
-            .expect("Failed to initialize static GDAL worker processes");
+            }).await.expect("Failed to initialize static GDAL worker processes");
 
-            Self::broker_loop(
-                broker_rx,
-                workers,
-                max_active_global,
-                max_parallel_per_dataset,
-                b_tx_clone,
-            )
-            .await;
+            Self::broker_loop(broker_rx, workers, max_active_global, max_parallel_per_dataset, b_tx_clone).await;
         });
 
         Arc::new(Self { broker_tx })
@@ -180,100 +141,67 @@ impl GdalProcessPool {
         let mut pending_requests: VecDeque<QueuedRequest> = VecDeque::new();
         let mut global_active_count: usize = 0;
 
-        while let Some(cmd) = rx.recv().await {
-            match cmd {
-                BrokerCommand::Read(req) => {
-                    if req.respond_to.is_closed() {
-                        continue;
-                    }
-                    pending_requests.push_back(*req);
-                    let start = Instant::now();
-                    Self::try_dispatch(
-                        &mut idle_workers,
-                        &mut workers,
-                        &mut active_counts,
-                        &mut global_active_count,
-                        &mut pending_requests,
-                        max_parallel_per_dataset,
-                        max_active_global,
-                        &broker_tx,
-                    );
-                    let duration = start.elapsed();
-                    if duration > Duration::from_micros(100) {
-                        tracing::warn!(
-                            ?duration,
-                            "Tokio Event Loop Starvation Risk: Dispatcher took too long ({duration:?}) to process incoming request. Consider tuning MAX_ELIGIBLE_SCAN_DEPTH or reviewing workload patterns."
-                        );
-                    }
-                }
-                BrokerCommand::ReturnWorker {
-                    worker_id,
-                    is_dead,
-                    dataset_hash,
-                    sender,
-                    receiver,
-                } => {
-                    if let Some(count) = active_counts.get_mut(&dataset_hash) {
-                        *count = count.saturating_sub(1);
-                    }
-                    global_active_count = global_active_count.saturating_sub(1);
+        // OPTIMIZATION 1: Tokio Event Loop Batching
+        loop {
+            // Await the first message to wake the loop
+            let Some(first_cmd) = rx.recv().await else { break; };
+            let mut batch = vec![first_cmd];
 
-                    if is_dead {
-                        tracing::warn!(worker_id, "GDAL Worker crashed. Spawning replacement...");
-                        let b_tx = broker_tx.clone();
-                        tokio::task::spawn_blocking(move || {
-                            let (guard, tx, rx) = spawn_ipc_server_process::<
-                                IpcChannelMessage,
-                                IpcProcessRasterResult,
-                            >()
-                            .expect("Error spawning replacement GDAL worker process after crash");
-                            let _ = b_tx.blocking_send(BrokerCommand::WorkerReplaced {
-                                worker_id,
-                                child_guard: guard,
-                                sender: tx,
-                                receiver: rx,
+            // Instantly drain any other messages that arrived during the same micro-burst
+            while let Ok(cmd) = rx.try_recv() {
+                batch.push(cmd);
+                if batch.len() >= 256 { break; } // Prevent channel-drain starvation
+            }
+
+            // Apply state updates for the entire burst
+            for cmd in batch {
+                match cmd {
+                    BrokerCommand::Read(req) => {
+                        pending_requests.push_back(*req);
+                    }
+                    BrokerCommand::ReturnWorker { worker_id, is_dead, dataset_hash, sender, receiver } => {
+                        if let Some(count) = active_counts.get_mut(&dataset_hash) {
+                            *count = count.saturating_sub(1);
+                        }
+                        global_active_count = global_active_count.saturating_sub(1);
+
+                        if is_dead {
+                            tracing::warn!(worker_id, "GDAL Worker crashed. Spawning replacement...");
+                            let b_tx = broker_tx.clone();
+                            tokio::task::spawn_blocking(move || {
+                                let (guard, tx, rx) = spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
+                                    .expect("Error spawning replacement GDAL worker process");
+                                let _ = b_tx.blocking_send(BrokerCommand::WorkerReplaced {
+                                    worker_id, child_guard: guard, sender: tx, receiver: rx,
+                                });
                             });
-                        });
-                    } else {
-                        workers[worker_id].sender = Some(sender);
-                        workers[worker_id].receiver = Some(receiver);
+                        } else {
+                            workers[worker_id].sender = Some(sender);
+                            workers[worker_id].receiver = Some(receiver);
+                            idle_workers.push(worker_id);
+                        }
+                    }
+                    BrokerCommand::WorkerReplaced { worker_id, child_guard, sender, receiver } => {
+                        let worker = &mut workers[worker_id];
+                        worker.child_guard = child_guard;
+                        worker.sender = Some(sender);
+                        worker.receiver = Some(receiver);
+                        worker.last_dataset_hash = None;
                         idle_workers.push(worker_id);
-                        Self::try_dispatch(
-                            &mut idle_workers,
-                            &mut workers,
-                            &mut active_counts,
-                            &mut global_active_count,
-                            &mut pending_requests,
-                            max_parallel_per_dataset,
-                            max_active_global,
-                            &broker_tx,
-                        );
                     }
                 }
-                BrokerCommand::WorkerReplaced {
-                    worker_id,
-                    child_guard,
-                    sender,
-                    receiver,
-                } => {
-                    let worker = &mut workers[worker_id];
-                    worker.child_guard = child_guard;
-                    worker.sender = Some(sender);
-                    worker.receiver = Some(receiver);
-                    worker.last_dataset_hash = None;
+            }
 
-                    idle_workers.push(worker_id);
-                    Self::try_dispatch(
-                        &mut idle_workers,
-                        &mut workers,
-                        &mut active_counts,
-                        &mut global_active_count,
-                        &mut pending_requests,
-                        max_parallel_per_dataset,
-                        max_active_global,
-                        &broker_tx,
-                    );
-                }
+            // RUN DISPATCH EXACTLY ONCE PER BURST
+            let start = Instant::now();
+            Self::try_dispatch(
+                &mut idle_workers, &mut workers, &mut active_counts, &mut global_active_count,
+                &mut pending_requests, max_parallel_per_dataset, max_active_global, &broker_tx,
+            );
+            
+            let duration = start.elapsed();
+            if duration > Duration::from_micros(250) {
+                tracing::warn!(?duration, "Tokio Event Loop: Heavy dispatch cycle");
             }
         }
     }
@@ -289,39 +217,28 @@ impl GdalProcessPool {
         max_active_global: usize,
         broker_tx: &mpsc::Sender<BrokerCommand>,
     ) {
+        // Because we batched, this only runs once per burst instead of 64 times
         pending_requests.retain(|req| !req.respond_to.is_closed());
 
         while !idle_workers.is_empty() && !pending_requests.is_empty() {
-            if *global_active_count >= max_active_global {
-                break;
-            }
+            if *global_active_count >= max_active_global { break; }
 
-            // Route execution to interchangeable strategy methods
             let (best_pair, best_score) = match Self::STRATEGY {
                 SchedulingStrategy::GlobalMatrix => Self::find_next_pair_global_matrix(
-                    idle_workers,
-                    workers,
-                    active_counts,
-                    pending_requests,
-                    max_parallel,
+                    idle_workers, workers, active_counts, pending_requests, max_parallel,
                 ),
                 SchedulingStrategy::FifoGreedy => Self::find_next_pair_fifo_greedy(
-                    idle_workers,
-                    workers,
-                    active_counts,
-                    pending_requests,
-                    max_parallel,
+                    idle_workers, workers, active_counts, pending_requests, max_parallel,
                 ),
             };
 
-            let Some((req_idx, w_matrix_idx)) = best_pair else {
-                break;
-            };
+            let Some((req_idx, w_matrix_idx)) = best_pair else { break; };
 
-            let req = pending_requests
-                .remove(req_idx)
-                .expect("the index was checked before");
-            let worker_id = idle_workers.remove(w_matrix_idx);
+            let req = pending_requests.remove(req_idx).expect("Checked bounds");
+            
+            // OPTIMIZATION 2: O(1) Memory Swap. 
+            // Removes shifting overhead entirely for idle_workers array
+            let worker_id = idle_workers.swap_remove(w_matrix_idx);
             let worker = &mut workers[worker_id];
 
             let window = req.request.0.read_advise.read_window_bounds;
@@ -344,58 +261,32 @@ impl GdalProcessPool {
             let respond_to = req.respond_to;
 
             tokio::task::spawn_blocking(move || {
-                let res = sender
-                    .send(request_msg)
+                let res = sender.send(request_msg)
                     .map_err(|e| GdalSourceError::IpcSendError { error: e })
-                    .and_then(|()| {
-                        receiver
-                            .recv()
-                            .map_err(|e| GdalSourceError::IpcReceiveError { error: e })
-                    });
+                    .and_then(|()| receiver.recv().map_err(|e| GdalSourceError::IpcReceiveError { error: e }));
 
                 let is_dead = res.is_err();
                 let _ = respond_to.send(res);
 
                 let _ = b_tx.blocking_send(BrokerCommand::ReturnWorker {
-                    worker_id,
-                    is_dead,
-                    dataset_hash,
-                    sender,
-                    receiver,
+                    worker_id, is_dead, dataset_hash, sender, receiver,
                 });
             });
-            tracing::trace!(
-                worker_id,
-                dataset_hash = req.dataset_hash,
-                band,
-                best_score,
-                remaining_pending = pending_requests.len(),
-                remaining_idle = idle_workers.len(),
-                "Worker dispatched"
-            );
+
+            tracing::trace!(worker_id, dataset_hash = req.dataset_hash, band, best_score, "Worker dispatched");
         }
     }
 
-    /// STRATEGY B: Baseline FIFO Greedy
-    /// Processes requests in strict head-of-line arrival sequence, polling the pool for the best immediate worker.
     fn find_next_pair_fifo_greedy(
-        idle_workers: &[usize],
-        workers: &[WorkerProcess],
-        active_counts: &HashMap<u64, usize>,
-        pending_requests: &VecDeque<QueuedRequest>,
-        max_parallel: usize,
+        idle_workers: &[usize], workers: &[WorkerProcess], active_counts: &HashMap<u64, usize>,
+        pending_requests: &VecDeque<QueuedRequest>, max_parallel: usize,
     ) -> (Option<(usize, usize)>, f64) {
         let mut eligible_scanned = 0;
-
         for (r_idx, req) in pending_requests.iter().enumerate() {
-            if *active_counts.get(&req.dataset_hash).unwrap_or(&0) >= max_parallel {
-                continue;
-            }
+            if *active_counts.get(&req.dataset_hash).unwrap_or(&0) >= max_parallel { continue; }
 
             eligible_scanned += 1;
-            if eligible_scanned > Self::MAX_ELIGIBLE_SCAN_DEPTH {
-                break;
-            }
+            if eligible_scanned > Self::MAX_ELIGIBLE_SCAN_DEPTH { break; }
 
             let window = req.request.0.read_advise.read_window_bounds;
             let band = req.request.0.dataset_params.rasterband_channel;
@@ -408,10 +299,14 @@ impl GdalProcessPool {
                 if score > best_score {
                     best_score = score;
                     best_worker_matrix_idx = w_matrix_idx;
+                    
+                    // OPTIMIZATION 3: Short-Circuit! 
+                    // Dataset + Band match is enough. Stop checking other idle workers.
+                    if score >= 11000.0 {
+                        return (Some((r_idx, best_worker_matrix_idx)), best_score);
+                    }
                 }
             }
-
-            // FIFO returns the very first unblocked request immediately once its match is weighed
             if best_score >= 0.0 {
                 return (Some((r_idx, best_worker_matrix_idx)), best_score);
             }
@@ -419,28 +314,19 @@ impl GdalProcessPool {
         (None, -1.0)
     }
 
-    /// STRATEGY A: Global Matrix Evaluation
-    /// Scans cross-combinations of lookahead items and idle workers to discover optimal cache alignment.
     fn find_next_pair_global_matrix(
-        idle_workers: &[usize],
-        workers: &[WorkerProcess],
-        active_counts: &HashMap<u64, usize>,
-        pending_requests: &VecDeque<QueuedRequest>,
-        max_parallel: usize,
+        idle_workers: &[usize], workers: &[WorkerProcess], active_counts: &HashMap<u64, usize>,
+        pending_requests: &VecDeque<QueuedRequest>, max_parallel: usize,
     ) -> (Option<(usize, usize)>, f64) {
         let mut best_score = -1.0;
         let mut best_pair = None;
         let mut eligible_scanned = 0;
 
         for (r_idx, req) in pending_requests.iter().enumerate() {
-            if *active_counts.get(&req.dataset_hash).unwrap_or(&0) >= max_parallel {
-                continue;
-            }
+            if *active_counts.get(&req.dataset_hash).unwrap_or(&0) >= max_parallel { continue; }
 
             eligible_scanned += 1;
-            if eligible_scanned > Self::MAX_ELIGIBLE_SCAN_DEPTH {
-                break;
-            }
+            if eligible_scanned > Self::MAX_ELIGIBLE_SCAN_DEPTH { break; }
 
             let window = req.request.0.read_advise.read_window_bounds;
             let band = req.request.0.dataset_params.rasterband_channel;
@@ -450,14 +336,17 @@ impl GdalProcessPool {
                 let w = &workers[w_id];
                 let mut score = w.calculate_affinity_score(req.dataset_hash, band, &window);
 
-                if w.last_dataset_hash.is_none() {
-                    score += 0.5; // Unused workers safely beat wiping unrelated hot file links
-                }
+                if w.last_dataset_hash.is_none() { score += 0.5; }
                 score += age_boost;
 
                 if score > best_score {
                     best_score = score;
                     best_pair = Some((r_idx, w_matrix_idx));
+                    
+                    // OPTIMIZATION 3: Short-Circuit!
+                    if score >= 11000.0 {
+                        return (best_pair, best_score);
+                    }
                 }
             }
         }
