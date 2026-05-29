@@ -4,7 +4,7 @@ on:
   # run on push of a new tag that matches the pattern `v*.*.*` (e.g., v1.2.3)
   push:
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
 
   # schedule manually
   workflow_dispatch:
@@ -128,9 +128,10 @@ jobs:
 
     strategy:
       matrix:
-        app: 
-          - {project: gis, name: gis}
-          - {project: gfbio, name: vat}
+        app:
+          - { project: gis, name: gis }
+          - { project: gfbio, name: vat }
+          - { project: enhanced-data-viewer, name: edv }
 
     runs-on: ubuntu-24.04
 
@@ -147,7 +148,7 @@ jobs:
         if: github.event.inputs.tag_name != ''
         run: |
           echo "TAG_NAME=${{ github.event.inputs.tag_name }}" >> $GITHUB_ENV
-      
+
       - name: Modify CONTAINER_REPOSITORY_BRANCH if on `container_repository_branch` is set on `workflow_dispatch`
         if: github.event.inputs.container_repository_branch != ''
         run: |
@@ -160,7 +161,7 @@ jobs:
       - name: Modify `BUILD_TAG` if dashboard
         if: env.BUILD_TAG != 'gis' && env.BUILD_TAG != 'manager'
         run: echo "BUILD_TAG=dashboards/${{env.BUILD_TAG}}" >> $GITHUB_ENV
-    
+
       - uses: extractions/setup-just@v4
 
       - name: Checkout code

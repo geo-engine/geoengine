@@ -15,6 +15,14 @@ mat-toolbar {
     border-bottom: 1px solid var(--geoengine-divider-color);
 }
 
+.loading-indicator {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    z-index: 10;
+}
+
 mat-drawer {
     width: 360px;
 
@@ -103,6 +111,12 @@ mat-drawer {
                     width: 46%;
                     text-align: center;
                     padding: 0;
+                    cursor: pointer;
+                    border: 2px solid transparent;
+                    border-radius: 6px;
+                    transition:
+                        border-color 120ms ease,
+                        box-shadow 120ms ease;
 
                     img {
                         width: 100%;
@@ -115,6 +129,21 @@ mat-drawer {
                         color: white;
                         text-shadow: 0 0 5px rgba(0, 0, 0, 0.7);
                         transform: translateY(-1rem);
+                    }
+
+                    &.preset-disabled {
+                        cursor: default;
+                        opacity: 0.55;
+                        pointer-events: none;
+
+                        img {
+                            filter: grayscale(1);
+                        }
+                    }
+
+                    &.preset-active {
+                        border-color: var(--geoengine-primary-color, #2f6dff);
+                        box-shadow: 0 0 0 2px rgb(47 109 255 / 25%);
                     }
                 }
             }
