@@ -99,9 +99,9 @@ layer_defs_path = "./test_data/layer_defs"
 layer_collection_defs_path = "./test_data/layer_collection_defs"
 
 [gdal_process_pool]
-max_worker_active_global = 32
-max_worker_processes = 16
-max_worker_per_dataset = 8
+max_processes = 32
+global_active_worker = 16
+worker_per_dataset = 8
 
 [gdal]
 # TODO: find good default
