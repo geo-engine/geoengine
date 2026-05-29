@@ -5,7 +5,7 @@ use crate::{
 };
 use actix_web::web;
 use ogcapi_types::common::{
-    LandingPage, Link,
+    Conformance, LandingPage, Link,
     link_rel::{CONFORMANCE, DATA, SELF, TILING_SCHEMES},
     media_type::JSON,
 };
@@ -75,6 +75,49 @@ pub async fn landing_page<C: ApplicationContext>(
         ],
         ..LandingPage::default()
     }))
+}
+
+/// OGC API Conformance Classes
+///
+/// Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+#[utoipa::path(
+    tag = "OGC API",
+    get,
+    path = "/ogc/{workflow}/conformance",
+    responses(
+        (status = 200, description = "OK", body = Conformance,
+            example = json!({
+                "conformsTo": [
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
+                    "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                ]
+            })
+        )
+    ),
+    params(
+        ("processingGraphId" = WorkflowId, description = "Processing Graph ID"),
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn conformance<C: ApplicationContext>(
+    _session: C::Session,
+    _app_ctx: web::Data<C>,
+    _processing_graph_id: web::Path<WorkflowId>,
+) -> web::Json<Conformance> {
+    web::Json(Conformance::new(&[
+        "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+        "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
+        // "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
+        // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+        // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+        // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+    ]))
 }
 
 fn link_creator(
@@ -173,6 +216,35 @@ mod tests {
                   "rel": "http://www.opengis.net/def/rel/ogc/1.0/tiling-schemes",
                   "type": "application/json"
                 }
+              ]
+            })
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_returns_ogc_conformance_classes(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, processing_graph_id) = session_and_processing_graph_id(&app_ctx).await;
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/ogc/{processing_graph_id}/conformance"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let body = read_body_json(res).await;
+
+        assert_eq!(status, 200, "{body}");
+
+        assert_eq!(
+            body,
+            serde_json::json!({
+              "conformsTo": [
+                "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+                "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
+                // "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
+                // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+                // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+                // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
               ]
             })
         );

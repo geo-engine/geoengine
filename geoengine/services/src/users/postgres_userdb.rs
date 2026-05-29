@@ -131,7 +131,11 @@ where
         tx.execute(&stmt, &[&user_id, &Role::anonymous_role_id()])
             .await?;
 
-        let session_id = SessionId::new();
+        // Short-circuit if a fixed session ID is configured, e.g. for testing purposes
+        // Normal mode, a new session ID is generated for each anonymous session
+        let session_id = crate::config::get_config_element::<crate::config::Session>()?
+            .fixed_session_id
+            .unwrap_or_else(SessionId::new);
 
         // TODO: load from config
         let session_duration = chrono::Duration::days(30);

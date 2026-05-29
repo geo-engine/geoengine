@@ -28,3 +28,7 @@ GET http://localhost:3030/api/ogc/{{processingGraphId}}/
 Authorization: Bearer {{token}}
 
 ###
+
+# Conformance Classes
+GET http://localhost:3030/api/ogc/{{processingGraphId}}/conformance
+Authorization: Bearer {{token}}

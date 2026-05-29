@@ -17,7 +17,8 @@ where
 {
     cfg.service(
         web::scope("/ogc/{processingGraphId}")
-            .service(web::resource(["", "/"]).route(web::get().to(common::landing_page::<C>))),
+            .service(web::resource(["", "/"]).route(web::get().to(common::landing_page::<C>)))
+            .service(web::resource("/conformance").route(web::get().to(common::conformance::<C>))),
     );
 }
 

@@ -23,6 +23,14 @@ pub mod wms;
 pub mod workflows;
 
 pub fn get_token(req: &HttpRequest) -> Result<SessionId> {
+    // Short-circuit if a fixed session ID is configured, e.g. for testing purposes
+    if let Some(session_id) =
+        crate::config::get_config_element::<crate::config::Session>()?.fixed_session_id
+    {
+        return Ok(session_id);
+    }
+
+    // Otherwise, extract the session ID from the Authorization header
     let header = req
         .headers()
         .get(header::AUTHORIZATION)
