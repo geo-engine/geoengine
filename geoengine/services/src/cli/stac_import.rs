@@ -31,7 +31,7 @@ use crate::{
         model::{
             datatypes::{
                 GdalConfigOption, GridBoundingBox2D, GridIdx2D, LayerId, Measurement,
-                RasterDataType, SpatialGridDefinition, StringPair, TimeGranularity, TimeStep,
+                RasterDataType, SpatialGridDefinition, TimeGranularity, TimeStep,
                 UnitlessMeasurement,
             },
             operators::{
@@ -1657,11 +1657,11 @@ impl AssetBandProcessor<'_> {
             }
 
             Some(vec![
-                StringPair(("AWS_S3_ENDPOINT".to_string(), s3_endpoint.clone())),
-                StringPair(("AWS_ACCESS_KEY_ID".to_string(), s3_access_key.clone())),
-                StringPair(("AWS_SECRET_ACCESS_KEY".to_string(), s3_secret_key.clone())),
+                (("AWS_S3_ENDPOINT".to_string(), s3_endpoint.clone())).into(),
+                (("AWS_ACCESS_KEY_ID".to_string(), s3_access_key.clone())).into(),
+                (("AWS_SECRET_ACCESS_KEY".to_string(), s3_secret_key.clone())).into(),
                 // StringPair(("AWS_HTTPS".to_string(), "YES".to_string())), // TODO: make configurable?
-                StringPair(("AWS_VIRTUAL_HOSTING".to_string(), "FALSE".to_string())), // TODO: make configurable?
+                (("AWS_VIRTUAL_HOSTING".to_string(), "FALSE".to_string())).into(), // TODO: make configurable?
             ])
         } else {
             None
@@ -2938,20 +2938,17 @@ mod tests {
             .as_ref()
             .expect("s3 tiles should include gdal config options");
 
-        assert!(
-            gdal_options
-                .iter()
-                .any(|opt| opt.0.0 == "AWS_S3_ENDPOINT" && opt.0.1 == "localhost:9000")
-        );
-        assert!(
-            gdal_options
-                .iter()
-                .any(|opt| opt.0.0 == "AWS_ACCESS_KEY_ID" && opt.0.1 == "mock-access-key")
-        );
-        assert!(
-            gdal_options
-                .iter()
-                .any(|opt| { opt.0.0 == "AWS_SECRET_ACCESS_KEY" && opt.0.1 == "mock-secret-key" })
-        );
+        assert!(gdal_options.iter().any(|opt| {
+            let (key, value): (String, String) = opt.clone().into();
+            key == "AWS_S3_ENDPOINT" && value == "localhost:9000"
+        }));
+        assert!(gdal_options.iter().any(|opt| {
+            let (key, value): (String, String) = opt.clone().into();
+            key == "AWS_ACCESS_KEY_ID" && value == "mock-access-key"
+        }));
+        assert!(gdal_options.iter().any(|opt| {
+            let (key, value): (String, String) = opt.clone().into();
+            key == "AWS_SECRET_ACCESS_KEY" && value == "mock-secret-key"
+        }));
     }
 }
