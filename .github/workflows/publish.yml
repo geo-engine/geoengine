@@ -334,7 +334,7 @@ jobs:
         app: 
           - {project: gis, name: gis}
           - {project: gfbio, name: vat}
-          - {project: edv, name: edv}
+          - {project: enhanced-data-viewer, name: edv}
 
     runs-on: ubuntu-24.04
 
