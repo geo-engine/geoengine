@@ -362,7 +362,7 @@ jobs:
           echo "BUILD_TAG=${{matrix.app.project}}" >> $GITHUB_ENV
 
       - name: Modify `BUILD_TAG` if dashboard
-        if: contains(fromJSON('["gis", "manager", "edv"]'), env.BUILD_TAG) == false
+        if: contains(fromJSON('["gis", "manager", "enhanced-data-viewer"]'), env.BUILD_TAG) == false
         run: echo "BUILD_TAG=dashboards/${{env.BUILD_TAG}}" >> $GITHUB_ENV
     
       - uses: extractions/setup-just@v4
