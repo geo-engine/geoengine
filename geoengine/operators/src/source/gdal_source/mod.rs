@@ -369,12 +369,9 @@ impl GdalRasterLoader {
     /// Panics if the response from the process is not in the expected format, or if the grid blitting fails (which should not happen if the bounds are correct).
     pub async fn load_tile_data_process<T: Pixel + GdalType + FromPrimitive>(
         dataset_params: GdalDatasetParameters,
-        tile_info: TileInformation,
-        time_interval: TimeInterval,
         read_advise: GdalReadAdvise,
-        cache_hint: CacheHint,
         gdal_worker: LazyGdalWorkerInstance,
-    ) -> Result<RasterTile2D<T>, GdalSourceError> {
+    ) -> Result<GridAndProperties<T, GridBoundingBox2D>, GdalSourceError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
 
@@ -436,16 +433,7 @@ impl GdalRasterLoader {
             Err(other_err) => Err(other_err),
         }?;
 
-        let tile = RasterTile2D::new_with_tile_info_and_properties(
-            time_interval,
-            tile_info,
-            0,
-            res.grid.unbounded(),
-            res.properties,
-            cache_hint,
-        );
-
-        Ok(tile)
+        Ok(res)
     }
 
     ///
@@ -518,6 +506,39 @@ impl GdalRasterLoader {
         reader_mode.tiling_to_dataset_read_advise(ds_spatial_grid, tile_spatial_grid)
     }
 
+    pub async fn load_tile_grid_props<T: Pixel + GdalType + FromPrimitive>(
+        dataset_params: GdalDatasetParameters,
+        reader_mode: GdalReaderMode,
+        tile_information: TileInformation,
+        gdal_worker: LazyGdalWorkerInstance,
+    ) -> Result<Option<GridAndProperties<T, GridBoundingBox2D>>, GdalSourceError> {
+        tracing::trace!(
+            "Loading tile {:?}, from {}, band: {}",
+            &tile_information,
+            dataset_params.file_path.display(),
+            dataset_params.rasterband_channel
+        );
+
+        let ds_spatial_grid = dataset_params.spatial_grid_definition();
+        let tile_spatial_grid = tile_information.spatial_grid_definition();
+        let gdal_read_advise =
+            Self::read_advise_for_tile(reader_mode, &ds_spatial_grid, &tile_spatial_grid);
+
+        let Some(gdal_read_advise) = gdal_read_advise else {
+            tracing::trace!(
+                "Tile {:?} not intersecting dataset grid or gdal grid {:?}",
+                &tile_information,
+                dataset_params.file_path
+            );
+            return Ok(None);
+        };
+
+        let res =
+            Self::load_tile_data_process(dataset_params, gdal_read_advise, gdal_worker).await?;
+
+        Ok(Some(res))
+    }
+
     /// Load a single tile using the process manager.
     async fn load_tile_async<T: Pixel + GdalType + FromPrimitive>(
         dataset_params: Option<GdalDatasetParameters>,
@@ -527,44 +548,30 @@ impl GdalRasterLoader {
         cache_hint: CacheHint,
         gdal_worker: LazyGdalWorkerInstance,
     ) -> Result<RasterTile2D<T>, GdalSourceError> {
-        let tile_spatial_grid = tile_information.spatial_grid_definition();
-
         match dataset_params {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
             Some(ds) => {
-                tracing::trace!(
-                    "Loading tile {:?}, from {}, band: {}",
-                    &tile_information,
-                    ds.file_path.display(),
-                    ds.rasterband_channel
-                );
-
-                let ds_spatial_grid = ds.spatial_grid_definition();
-                let gdal_read_advise =
-                    Self::read_advise_for_tile(reader_mode, &ds_spatial_grid, &tile_spatial_grid);
-
-                let Some(gdal_read_advise) = gdal_read_advise else {
-                    tracing::trace!(
-                        "Tile {:?} not intersecting dataset grid or gdal grid {:?}",
-                        &tile_information,
-                        ds.file_path
-                    );
-                    return Ok(Self::create_no_data_tile(
-                        tile_information,
+                let grid_and_props =
+                    Self::load_tile_grid_props(ds, reader_mode, tile_information, gdal_worker)
+                        .await?;
+                let tile = match grid_and_props {
+                    Some(gp) => RasterTile2D::new_with_tile_info_and_properties(
                         tile_time,
+                        tile_information,
+                        0,
+                        gp.grid.unbounded(),
+                        gp.properties,
                         cache_hint,
-                    ));
+                    ),
+                    None => {
+                        debug!(
+                            "Tile {:?} not intersecting dataset grid or gdal grid",
+                            &tile_information.global_tile_position
+                        );
+                        Self::create_no_data_tile(tile_information, tile_time, cache_hint)
+                    }
                 };
-
-                Self::load_tile_data_process(
-                    ds,
-                    tile_information,
-                    tile_time,
-                    gdal_read_advise,
-                    cache_hint,
-                    gdal_worker,
-                )
-                .await
+                Ok(tile)
             }
             _ => {
                 debug!(
@@ -1910,13 +1917,19 @@ mod tests {
 
         GdalRasterLoader::load_tile_data_process::<u8>(
             dataset_params,
-            tile_information,
-            TimeInterval::default(),
             gdal_read_advice,
-            CacheHint::default(),
             gdal_worker,
         )
         .await
+        .map(|r| {
+            RasterTile2D::new_with_tile_info(
+                TimeInterval::default(),
+                tile_information,
+                0,
+                r.grid.unbounded(),
+                CacheHint::default(),
+            )
+        })
         .map_err(Into::into)
     }
 
