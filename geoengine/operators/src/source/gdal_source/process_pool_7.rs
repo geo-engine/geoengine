@@ -185,6 +185,7 @@ enum BrokerCommand {
     },
     WorkerDied {
         worker_id: usize,
+        dataset_hash: u64,
     },
     WorkerReplaced {
         worker_id: usize,
@@ -293,7 +294,10 @@ impl GdalProcessPool {
             let _ = job.respond_to.send(res);
 
             if is_dead {
-                let _ = broker_tx.blocking_send(BrokerCommand::WorkerDied { worker_id });
+                let _ = broker_tx.blocking_send(BrokerCommand::WorkerDied {
+                    worker_id,
+                    dataset_hash,
+                });
                 break;
             }
             let _ = broker_tx.blocking_send(BrokerCommand::ReturnWorker {
@@ -343,7 +347,15 @@ impl GdalProcessPool {
                     } => {
                         state.release_worker(worker_id, dataset_hash, band, window);
                     }
-                    BrokerCommand::WorkerDied { worker_id } => {
+                    BrokerCommand::WorkerDied {
+                        worker_id,
+                        dataset_hash,
+                    } => {
+                        if let Some(slot) = state.dataset_registry.get_mut(&dataset_hash) {
+                            slot.active_count = slot.active_count.saturating_sub(1);
+                        }
+                        state.global_active_count = state.global_active_count.saturating_sub(1);
+
                         let b_tx = broker_tx.clone();
                         tokio::task::spawn_blocking(move || {
                             if let Ok((guard, tx, rx)) = spawn_ipc_server_process::<

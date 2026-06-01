@@ -81,7 +81,7 @@ pub struct IpcChannelMessagePayload {
 
 pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct GdalIpcBytePayload {
     pub dimensions: GridBoundingBox2D,
     pub properties: GdalIpcRasterProperties,
@@ -162,7 +162,7 @@ pub struct GdalIpcRasterPropertiesKey {
     pub key: String,
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub enum GdalDataByteVariant {
     /// Represents an Empty Grid (zero allocation for pixels or masks)
     Empty,
@@ -388,15 +388,14 @@ pub enum IoErrorKind {
 
 // --- 2. THE IPC TRANSFERRABLE ERROR ENUM ---
 
-#[derive(Debug, Snafu, serde::Serialize, serde::Deserialize, Clone)]
-#[serde(tag = "type", content = "details")] // Flattens payload data over the ipc-channel
+#[derive(Debug, Snafu, Serialize, Deserialize, Clone, PartialEq)]
 #[snafu(visibility(pub))]
 pub enum IpcProcessError {
     #[snafu(display("Serialization error: {msg}"))]
     SerializationError {
         // Cow allows zero-allocation compilation-string sharing on creation.
         // On the receiving side of ipc-channel, serde automatically hydrates this into Cow::Owned.
-        msg: Cow<'static, str>,
+        msg: String,
     },
 
     #[snafu(display("IO error ({kind:?}): {context}"))]
@@ -496,7 +495,7 @@ impl From<IpcError> for IpcProcessError {
     fn from(err: IpcError) -> Self {
         match err {
             IpcError::SerializationError(serde_err) => IpcProcessError::SerializationError {
-                msg: std::borrow::Cow::Owned(serde_err.to_string()),
+                msg: serde_err.to_string(),
             },
             IpcError::Io(io_err) => {
                 // Automatically delegates to our optimized From<std::io::Error> implementation
@@ -532,7 +531,7 @@ impl From<bytemuck::PodCastError> for IpcProcessError {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
+#[derive(Debug, Serialize, Deserialize, Clone, PartialEq)]
 pub struct IpcChannelMessage(pub IpcChannelMessagePayload);
 
 impl IpcChannelMessage {
@@ -716,5 +715,24 @@ impl GdalDatasetCache {
 
     pub fn contains(&self, params: &GdalDatasetParameters) -> bool {
         Self::is_hit(self.params.as_ref(), params)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn ipc_process_error_ipc_channel_roundtrip() {
+        let error = IpcProcessError::GdalError {
+            kind: GdalErrorKind::FileNotFound,
+            details: "not found".into(),
+        };
+
+        let (sender, receiver) = ipc::channel::<IpcProcessRasterResult>().unwrap();
+        sender.send(Err(error.clone())).unwrap();
+        let decoded = receiver.recv().unwrap();
+
+        assert_eq!(decoded, Err(error));
     }
 }
