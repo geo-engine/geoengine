@@ -384,7 +384,7 @@ impl GdalRasterLoader {
             data_type: T::TYPE,
         });
 
-        let res = gdal_worker.read_data(message).await;
+        let res: Result<_, _> = gdal_worker.read_data(message).await;
 
         let res = match res {
             Ok(t) => {
