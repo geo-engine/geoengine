@@ -895,28 +895,8 @@ impl From<crate::datasets::external::sentinel_s2_l2a_cogs::SentinelS2L2ACogsProv
 #[serde(rename_all = "camelCase")]
 pub struct StacProviderS3Config {
     pub endpoint: String,
-    pub access_key: Option<String>,
-    pub secret_key: Option<String>,
-}
-
-impl From<StacProviderS3Config> for crate::datasets::external::stac::StacProviderS3Config {
-    fn from(value: StacProviderS3Config) -> Self {
-        Self {
-            endpoint: value.endpoint,
-            access_key: value.access_key,
-            secret_key: value.secret_key,
-        }
-    }
-}
-
-impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProviderS3Config {
-    fn from(value: crate::datasets::external::stac::StacProviderS3Config) -> Self {
-        Self {
-            endpoint: value.endpoint,
-            access_key: value.access_key.map(|_| SECRET_REPLACEMENT.to_string()),
-            secret_key: value.secret_key.map(|_| SECRET_REPLACEMENT.to_string()),
-        }
-    }
+    pub access_key: Option<Secret<String>>,
+    pub secret_key: Option<Secret<String>>,
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
@@ -1436,7 +1416,7 @@ mod tests {
         let api: StacProviderS3Config = internal.into();
 
         assert_eq!(api.endpoint, "https://example-s3.local");
-        assert_eq!(api.access_key.as_deref(), Some(SECRET_REPLACEMENT));
-        assert_eq!(api.secret_key.as_deref(), Some(SECRET_REPLACEMENT));
+        assert_eq!(api.access_key.0.as_deref(), Some(SECRET_REPLACEMENT));
+        assert_eq!(api.secret_key.0.as_deref(), Some(SECRET_REPLACEMENT));
     }
 }
