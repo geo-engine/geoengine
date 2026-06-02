@@ -43,8 +43,8 @@ _build-python-postprocess:
 [working-directory("python")]
 build-python-dist: common::_clear
     python -m pip install --upgrade pip build
-    pip install -r requirements.txt
-    pip install -r test-requirements.txt
+    python -m pip install -r requirements.txt
+    python -m pip install -r test-requirements.txt
     python3 -m build
 
 # Build the API clients for TypeScript by generating code with the OpenAPI Generator and applying post-processing steps. Also install npm dependencies and set up .gitignore.
