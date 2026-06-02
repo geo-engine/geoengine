@@ -229,6 +229,71 @@ impl GdalProcessPool {
     /// The worker processes themselves are spawned in a blocking thread to avoid stalling the async runtime during fork and initialization.
     /// The number of worker processes is determined by `max_total`, while `max_active_global` and `max_parallel_per_dataset` control the scheduling constraints for concurrent active requests.
     /// Returns an `Arc` to the initialized `GdalProcessPool`, which can be cloned and shared across the application for submitting read requests.
+    /// # Parameters
+    /// - `max_total`: The total number of GDAL worker processes to spawn and maintain in the pool.
+    /// - `max_active_global`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
+    /// - `max_parallel_per_dataset`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// # Panics
+    /// This function will panic if any of the worker processes fail to spawn successfully.
+    pub fn new_with_tokio_handle(
+        handle: &tokio::runtime::Handle,
+        max_total: usize,
+        max_active_global: usize,
+        max_parallel_per_dataset: usize,
+    ) -> Arc<Self> {
+        let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
+        let b_tx_clone = broker_tx.clone();
+
+        handle.spawn(async move {
+            let b_tx_clone_2 = b_tx_clone.clone();
+            let workers = tokio::task::spawn_blocking(move || {
+                let mut w = Vec::with_capacity(max_total);
+                for id in 0..max_total {
+                    let (guard, tx, rx) =
+                        spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
+                            .expect("Error while spawning GDAL worker process");
+
+                    let (job_tx, mut job_rx) = mpsc::unbounded_channel();
+                    let b_tx_worker = b_tx_clone_2.clone();
+
+                    std::thread::Builder::new()
+                        .name(format!("gdal-worker-companion-{id}"))
+                        .spawn(move || {
+                            Self::worker_companion_loop(id, &tx, &rx, &mut job_rx, &b_tx_worker);
+                        })
+                        .expect("Failed to spawn persistent GDAL companion thread");
+
+                    w.push(WorkerProcess {
+                        _id: id,
+                        job_tx,
+                        child_guard: guard,
+                        affinity: None,
+                    });
+                    std::thread::sleep(Duration::from_millis(INITIAL_SPAWN_DELAY_MS));
+                }
+                w
+            })
+            .await
+            .expect("Failed to initialize static GDAL worker processes");
+
+            Self::broker_loop(
+                broker_rx,
+                workers,
+                max_active_global,
+                max_parallel_per_dataset,
+                b_tx_clone,
+            )
+            .await;
+        });
+
+        Arc::new(Self { broker_tx })
+    }
+
+    /// Initializes the GDAL process pool and spawns the broker loop in a dedicated Tokio task.
+    /// The broker is responsible for all scheduling decisions and routing of requests to worker processes.
+    /// The worker processes themselves are spawned in a blocking thread to avoid stalling the async runtime during fork and initialization.
+    /// The number of worker processes is determined by `max_total`, while `max_active_global` and `max_parallel_per_dataset` control the scheduling constraints for concurrent active requests.
+    /// Returns an `Arc` to the initialized `GdalProcessPool`, which can be cloned and shared across the application for submitting read requests.
     ///
     /// # Parameters
     /// - `max_total`: The total number of GDAL worker processes to spawn and maintain in the pool.

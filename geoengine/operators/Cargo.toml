@@ -72,9 +72,6 @@ rand = { workspace = true }
 name = "ci_operators"
 harness = false
 
-[[bench]]
-name = "gdal_source_operator_bench"
-harness = false
 
 [lints]
 workspace = true

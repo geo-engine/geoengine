@@ -143,6 +143,7 @@ impl MockQueryContext {
     pub(super) fn new(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
@@ -154,13 +155,14 @@ impl MockQueryContext {
             quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            gdal_process_pool: GdalProcessPool::new(8, 4, 2),
+            gdal_process_pool,
         }
     }
 
     pub(super) fn new_with_query_extensions(
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
+        gdal_process_pool: Arc<GdalProcessPool>,
         cache: Option<Arc<SharedCache>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
@@ -175,7 +177,7 @@ impl MockQueryContext {
             quota_tracking,
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            gdal_process_pool: GdalProcessPool::new(8, 4, 2),
+            gdal_process_pool,
         }
     }
 
@@ -183,18 +185,19 @@ impl MockQueryContext {
         chunk_byte_size: ChunkByteSize,
         tiling_specification: TilingSpecification,
         num_threads: usize,
+        gdal_process_pool: Arc<GdalProcessPool>,
     ) -> Self {
         let (abort_registration, abort_trigger) = QueryAbortRegistration::new();
         Self {
             chunk_byte_size,
             tiling_specification,
             thread_pool: create_rayon_thread_pool(num_threads),
+            gdal_process_pool,
             cache: None,
             quota_checker: None,
             quota_tracking: None,
             abort_registration,
             abort_trigger: Some(abort_trigger),
-            gdal_process_pool: GdalProcessPool::new(8, 4, 2),
         }
     }
 }

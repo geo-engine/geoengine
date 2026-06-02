@@ -125,6 +125,20 @@ impl TestDefault for MockExecutionContext {
 }
 
 impl MockExecutionContext {
+    pub fn new_with_tiling_spec_and_tokio_handle(
+        tiling_specification: TilingSpecification,
+        handle: &tokio::runtime::Handle,
+    ) -> Self {
+        Self {
+            thread_pool: create_rayon_thread_pool(0),
+            meta_data: HashMap::default(),
+            named_data: HashMap::default(),
+            ml_models: HashMap::default(),
+            tiling_specification,
+            gdal_process_pool: GdalProcessPool::new_with_tokio_handle(handle, 8, 4, 2),
+        }
+    }
+
     pub fn new_with_tiling_spec(tiling_specification: TilingSpecification) -> Self {
         Self {
             thread_pool: create_rayon_thread_pool(0),
@@ -176,11 +190,19 @@ impl MockExecutionContext {
     }
 
     pub fn mock_query_context_test_default(&self) -> MockQueryContext {
-        MockQueryContext::new(ChunkByteSize::test_default(), self.tiling_specification)
+        MockQueryContext::new(
+            ChunkByteSize::test_default(),
+            self.tiling_specification,
+            self.gdal_process_pool.clone(),
+        )
     }
 
     pub fn mock_query_context(&self, chunk_byte_size: ChunkByteSize) -> MockQueryContext {
-        MockQueryContext::new(chunk_byte_size, self.tiling_specification)
+        MockQueryContext::new(
+            chunk_byte_size,
+            self.tiling_specification,
+            self.gdal_process_pool.clone(),
+        )
     }
 
     pub fn mock_query_context_with_query_extensions(
@@ -193,6 +215,7 @@ impl MockExecutionContext {
         MockQueryContext::new_with_query_extensions(
             chunk_byte_size,
             self.tiling_specification,
+            self.gdal_process_pool.clone(),
             cache,
             quota_tracking,
             quota_checker,
@@ -208,6 +231,7 @@ impl MockExecutionContext {
             chunk_byte_size,
             self.tiling_specification,
             num_threads,
+            self.gdal_process_pool.clone(),
         )
     }
 }
