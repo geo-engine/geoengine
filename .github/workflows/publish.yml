@@ -16,6 +16,19 @@ on:
   
   # schedule manually
   workflow_dispatch:
+    inputs:
+      # On workflow dispatch, `branch` is selected by default
+      # You can access it in `github.ref_name`
+
+      container_tag_name:
+        description: "Tag name for the container"
+        required: true
+        default: "latest"
+
+      container_repository_branch:
+        description: "Branch of the container repository"
+        required: true
+        default: "main"
 
 env:
   python-version: "3.10" # use lowest supported Python version
@@ -212,3 +225,212 @@ jobs:
             });
         env:
           VERSION_TAG: ${{ steps.tag.outputs.version_tag }}
+
+  backend-container:
+    if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
+
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    env:
+      TAG_NAME: latest
+      CONTAINER_REPOSITORY_BRANCH: main
+      CONTAINER_NAME: geoengine
+
+    services:
+      postgres:
+        image: postgis/postgis
+        env:
+          POSTGRES_USER: geoengine
+          POSTGRES_PASSWORD: geoengine
+          POSTGRES_DB: geoengine
+        ports:
+          - 5432:5432
+        options: --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - name: Modify TAG_NAME if on `tag_name` is set on `workflow_dispatch`
+        if: github.event.inputs.container_tag_name != ''
+        run: |
+          echo "TAG_NAME=${{ github.event.inputs.container_tag_name }}" >> $GITHUB_ENV
+
+      - name: Modify CONTAINER_REPOSITORY_BRANCH if on `container_repository_branch` is set on `workflow_dispatch`
+        if: github.event.inputs.container_repository_branch != ''
+        run: |
+          echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
+
+      - name: Free Disk Space (Ubuntu)
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
+      - uses: extractions/setup-just@v4
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          path: geoengine
+
+      - name: Checkout container files
+        uses: actions/checkout@v6
+        with:
+          repository: geo-engine/geoengine-container
+          ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
+          ssh-key: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
+          path: "container"
+
+      - name: Login to quay.io
+        run: podman login -u="geoengine+bot" -p="${{secrets.QUAY_IO_TOKEN}}" quay.io
+
+      - name: Build with podman
+        run: |
+          podman build \
+            --tag ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} \
+            --build-arg GEO_ENGINE_CARGO_BUILD_PARAMS="--release" \
+            --build-arg GEOENGINE_CODE_PATH="/geoengine/geoengine" \
+            --build-arg GEOENGINE_GIT_PATH="/geoengine/.git" \
+            -f container/${{env.CONTAINER_NAME}}/Dockerfile \
+            .
+
+      - name: Test the container
+        working-directory: geoengine/geoengine
+        run: |
+          CONTAINER_ID=${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
+          POD_ID=$(podman run --rm -d --network=host $CONTAINER_ID)
+          (podman run --rm -i $CONTAINER_ID ./geoengine-cli check-successful-startup --output-stdin) < <(podman logs --follow $POD_ID |& tee)
+          podman run --rm --network=host $CONTAINER_ID ./geoengine-cli heartbeat --server-url http://localhost:8080/api
+          podman stop $POD_ID
+
+      - name: Push image to quay.io
+        if: env.TAG_NAME != 'latest'
+        run: podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
+
+      - name: Push latest with version number to quay.io
+        if: env.TAG_NAME == 'latest'
+        working-directory: geoengine
+        run: |
+          if `just repo is-container-already-published geoengine $(just repo::print-version-number)`; then
+            echo "Version is already published, skipping publish step."
+            exit 0
+          fi
+
+          podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:${{env.TAG_NAME}}
+          podman push ${{env.CONTAINER_NAME}}:${{env.TAG_NAME}} quay.io/geoengine/${{env.CONTAINER_NAME}}:`just repo print-version-tag`
+
+  ui-containers:
+    if: github.event_name != 'schedule' || github.repository_owner == 'geo-engine'
+
+    strategy:
+      matrix:
+        app: 
+          - {project: gis, name: gis}
+          - {project: gfbio, name: vat}
+          - {project: enhanced-data-viewer, name: edv}
+
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    env:
+      TAG_NAME: latest
+      CONTAINER_REPOSITORY_BRANCH: main
+      BUILD_TAG: gis
+
+    steps:
+      - name: Modify TAG_NAME if on `tag_name` is set on `workflow_dispatch`
+        if: github.event.inputs.container_tag_name != ''
+        run: |
+          echo "TAG_NAME=${{ github.event.inputs.container_tag_name }}" >> $GITHUB_ENV
+      
+      - name: Modify CONTAINER_REPOSITORY_BRANCH if on `container_repository_branch` is set on `workflow_dispatch`
+        if: github.event.inputs.container_repository_branch != ''
+        run: |
+          echo "CONTAINER_REPOSITORY_BRANCH=${{ github.event.inputs.container_repository_branch }}" >> $GITHUB_ENV
+
+      - name: Set `BUILD_TAG` wrt. apps
+        run: |
+          echo "BUILD_TAG=${{matrix.app.project}}" >> $GITHUB_ENV
+
+      - name: Modify `BUILD_TAG` if dashboard
+        if: contains(fromJSON('["gis", "manager", "enhanced-data-viewer"]'), env.BUILD_TAG) == false
+        run: echo "BUILD_TAG=dashboards/${{env.BUILD_TAG}}" >> $GITHUB_ENV
+    
+      - uses: extractions/setup-just@v4
+
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref_name }}
+          path: geoengine
+
+      - name: Checkout container files
+        uses: actions/checkout@v6
+        with:
+          repository: geo-engine/geoengine-container
+          ref: ${{ env.CONTAINER_REPOSITORY_BRANCH }}
+          ssh-key: ${{ secrets.CONTAINER_GITHUB_TOKEN }}
+          path: "container"
+
+      - name: Login to quay.io
+        run: podman login -u="geoengine+bot" -p="${{secrets.QUAY_IO_TOKEN}}" quay.io
+
+      - name: Build with podman
+        run: |
+          podman build \
+            --tag "${{matrix.app.name}}:${{env.TAG_NAME}}" \
+            --build-arg GEOENGINE_UI_PROJECT="${{env.BUILD_TAG}}" \
+            -f container/geoengine-ui/Dockerfile \
+            .
+
+      - name: Push image to quay.io
+        if: env.TAG_NAME != 'latest'
+        run: podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:${{env.TAG_NAME}}
+
+      - name: Push latest with version number to quay.io
+        if: env.TAG_NAME == 'latest'
+        working-directory: geoengine
+        run: |
+          if `just repo is-container-already-published ${{matrix.app.name}} $(just repo::print-version-number)`; then
+            echo "Version is already published, skipping publish step."
+            exit 0
+          fi
+
+          podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:${{env.TAG_NAME}}
+          podman push ${{matrix.app.name}}:${{env.TAG_NAME}} quay.io/geoengine/${{matrix.app.name}}:`just repo print-version-tag`
+
+  notify-slack-on-failure:
+    name: Post to a Slack channel in case of failure
+    needs:
+      - api-client-python
+      - api-client-typescript
+      - api-client-rust
+      - tag
+      - backend-container
+      - ui-containers
+    if: always()
+
+    runs-on: ubuntu-24.04
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Post to a Slack channel
+        if: contains(needs.*.result, 'failure')
+        id: slack
+        uses: slackapi/slack-github-action@v1.23.0
+        with:
+          channel-id: "geoengine-dev-core"
+          slack-message: "⚠️ The workflow ${{ github.workflow }} in the repository ${{ github.event.repository.name }} FAILED!"
+        env:
+          SLACK_BOT_TOKEN: ${{ secrets.SLACK_BOT_TOKEN }}
