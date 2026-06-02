@@ -1,3 +1,4 @@
+use snafu::Snafu;
 use std::collections::VecDeque;
 use std::hash::{BuildHasherDefault, DefaultHasher, Hasher};
 use std::sync::Arc;
@@ -11,8 +12,8 @@ use rustc_hash::FxHasher;
 
 use crate::source::gdal_source::GdalProcessPoolAccess;
 use crate::source::gdal_source::process::{GdalIpcPayload, spawn_ipc_server_process};
-use crate::source::{GdalSourceError, IpcProcessRasterResult};
 use crate::source::{IpcChannelMessage, gdal_source::process::ChildProcessGuard};
+use crate::source::{IpcProcessError, IpcProcessRasterResult};
 
 // --- Core Structural Parameters & Tuning Constants ---
 
@@ -63,6 +64,28 @@ const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
 
 type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
+#[derive(Debug, Snafu)]
+#[snafu(visibility(pub))]
+pub enum GdalProcessPoolError {
+    IpcProcessError { source: IpcProcessError },
+
+    IpcError { source: ipc_channel::IpcError },
+
+    WorkerPanic,
+}
+
+impl From<IpcProcessError> for GdalProcessPoolError {
+    fn from(source: IpcProcessError) -> Self {
+        GdalProcessPoolError::IpcProcessError { source }
+    }
+}
+
+impl From<ipc_channel::IpcError> for GdalProcessPoolError {
+    fn from(source: ipc_channel::IpcError) -> Self {
+        GdalProcessPoolError::IpcError { source }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SchedulingStrategy {
     FifoGreedy,
@@ -71,7 +94,7 @@ pub enum SchedulingStrategy {
 
 struct WorkerJob {
     request: IpcChannelMessage,
-    respond_to: oneshot::Sender<Result<IpcProcessRasterResult, GdalSourceError>>,
+    respond_to: oneshot::Sender<Result<IpcProcessRasterResult, GdalProcessPoolError>>,
     dataset_hash: u64,
 }
 
@@ -172,7 +195,7 @@ impl DatasetSlot {
 struct QueuedRequest {
     dataset_hash: u64,
     request: IpcChannelMessage,
-    respond_to: oneshot::Sender<Result<IpcProcessRasterResult, GdalSourceError>>,
+    respond_to: oneshot::Sender<Result<IpcProcessRasterResult, GdalProcessPoolError>>,
 }
 
 enum BrokerCommand {
@@ -283,11 +306,11 @@ impl GdalProcessPool {
 
             let res = sender
                 .send(job.request)
-                .map_err(|e| GdalSourceError::IpcSendError { error: e })
+                .map_err(|e| GdalProcessPoolError::IpcError { source: e })
                 .and_then(|()| {
                     receiver
                         .recv()
-                        .map_err(|e| GdalSourceError::IpcReceiveError { error: e })
+                        .map_err(|e| GdalProcessPoolError::IpcError { source: e })
                 });
 
             let is_dead = res.is_err();
@@ -649,7 +672,7 @@ impl LazyGdalWorkerInstance {
     pub async fn read_data<P: Pixel>(
         &self,
         request: IpcChannelMessage,
-    ) -> Result<GdalIpcPayload<P>, GdalSourceError> {
+    ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
         let mut s = DefaultHasher::new();
         request.0.dataset_params.partial_hash(&mut s);
         let hash = s.finish();
@@ -664,12 +687,12 @@ impl LazyGdalWorkerInstance {
                 respond_to: tx,
             })))
             .await
-            .map_err(|_| GdalSourceError::WorkerPanic)?;
+            .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
 
         let res = rx
             .await
-            .map_err(|_| GdalSourceError::WorkerPanic)??
-            .map_err(|e| GdalSourceError::IpcProcessError { source: e })
+            .map_err(|_| GdalProcessPoolError::WorkerPanic)??
+            .map_err(|e| GdalProcessPoolError::IpcProcessError { source: e })
             .inspect_err(|e| tracing::error!("Ipc response error: {e}"))?;
 
         let payload: GdalIpcPayload<P> = res.into();

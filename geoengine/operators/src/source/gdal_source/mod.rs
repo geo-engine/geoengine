@@ -6,6 +6,7 @@ use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNot
 use crate::source::gdal_source::process::{
     GdalDataVariant, GdalErrorKind, GdalIpcPayload, IpcChannelMessage, IpcChannelMessagePayload,
 };
+use crate::source::gdal_source::process_pool_7::GdalProcessPoolError;
 use crate::source::{GdalDatasetCache, IpcProcessError};
 
 pub use crate::source::gdal_source::process_pool_7::{GdalProcessPool, LazyGdalWorkerInstance};
@@ -420,7 +421,7 @@ impl GdalRasterLoader {
                 };
                 Ok(GridAndProperties { grid, properties })
             }
-            Err(GdalSourceError::IpcProcessError {
+            Err(GdalProcessPoolError::IpcProcessError {
                 source:
                     IpcProcessError::GdalError {
                         kind: GdalErrorKind::FileNotFound,
@@ -847,7 +848,6 @@ impl GdalRasterLoader {
         tile_time: TimeInterval,
         cache_hint: CacheHint,
     ) -> RasterTile2D<T> {
-        // TODO: add cache_hint
         RasterTile2D::new_with_tile_info_and_properties(
             tile_time,
             tile_info,
@@ -1922,11 +1922,12 @@ mod tests {
         )
         .await
         .map(|r| {
-            RasterTile2D::new_with_tile_info(
+            RasterTile2D::new_with_tile_info_and_properties(
                 TimeInterval::default(),
                 tile_information,
                 0,
                 r.grid.unbounded(),
+                r.properties,
                 CacheHint::default(),
             )
         })
@@ -2258,19 +2259,20 @@ mod tests {
 
         assert!((properties.scale_option()).is_none());
         assert!(properties.offset_option().is_none());
-        assert_eq!(
-            properties.get_property(&RasterPropertiesKey {
-                domain: None,
-                key: "AREA_OR_POINT".to_string(),
-            }),
-            Some(&RasterPropertiesEntry::String("Area".to_string()))
-        );
+        dbg!("properties: {:?}", &properties);
         assert_eq!(
             properties.get_property(&RasterPropertiesKey {
                 domain: Some("IMAGE_STRUCTURE_INFO".to_string()),
                 key: "COMPRESSION".to_string(),
             }),
             Some(&RasterPropertiesEntry::String("LZW".to_string()))
+        );
+        assert_eq!(
+            properties.get_property(&RasterPropertiesKey {
+                domain: None,
+                key: "AREA_OR_POINT".to_string(),
+            }),
+            Some(&RasterPropertiesEntry::String("Area".to_string()))
         );
     }
 
