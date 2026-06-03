@@ -61,7 +61,8 @@ test-coverage output_path="lcov.info":
 [arg('mode', pattern='|--release')]
 [group("run")]
 run mode="": common::_clear
-    cargo build --bin gdalsource-process {{ mode }} && cargo run {{ mode }}
+    cargo build --bin gdalsource-process {{ mode }}
+    cargo run {{ mode }}
 
 # Run the tests. Optionally, a filter can be provided to run only a subset of the tests.
 [group("test")]
