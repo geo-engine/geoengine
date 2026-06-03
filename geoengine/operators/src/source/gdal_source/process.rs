@@ -576,6 +576,8 @@ pub fn spawn_ipc_server_process<S, R>()
     let child = Command::new(exe_path)
         .arg(token)
         .arg("debug") // FIXME: paste log level here!
+        .env_remove("LLVM_PROFILE_FILE")
+        .env_remove("LLVM_PROFILE_FILE_NAME")
         .stderr(std::process::Stdio::inherit()) // This sends child logs to the parent's stderr
         .spawn()
         .map_err(IpcProcessError::from)?;
