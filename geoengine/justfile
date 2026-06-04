@@ -75,3 +75,8 @@ test-macros filter="": common::_clear
 [group("test")]
 test-doc:
     cargo test --doc --all-features --profile ci --locked
+
+# Show module after macro expansion. Example: just expand-macro geoengine-services api::handlers::ogc::error
+[group("debug")]
+expand-macro crate macro_path:
+    cargo expand --locked -p {{ crate }} --lib {{ macro_path }}

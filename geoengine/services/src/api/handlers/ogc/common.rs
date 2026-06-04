@@ -1,14 +1,45 @@
 use crate::{
-    api::handlers::ogc::{OgcApiResult, internal_server_error, ogc_base_url},
-    contexts::ApplicationContext,
-    workflows::workflow::WorkflowId,
+    api::handlers::{
+        ogc::{
+            OgcApiResult,
+            error::{self, OgcApiError},
+            util::{LinkCreator, link_creator, parse_bbox_option, parse_datetime_option},
+        },
+        workflows::{ProvenanceEntry, workflow_metadata, workflow_provenance},
+    },
+    contexts::{ApplicationContext, SessionContext},
+    workflows::{
+        registry::WorkflowRegistry,
+        workflow::{Workflow, WorkflowId},
+    },
 };
 use actix_web::web;
+use chrono::{DateTime, Utc};
+use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt, stream::BoxStream};
+use geoengine_datatypes::{
+    error::BoxedResultExt,
+    primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance, TimeInterval},
+};
+use geoengine_operators::{
+    call_on_generic_raster_processor,
+    engine::{
+        RasterQueryProcessor, RasterResultDescriptor, TypedOperator, TypedRasterQueryProcessor,
+        TypedResultDescriptor, WorkflowOperatorPath,
+    },
+};
+use itertools::Itertools;
 use ogcapi_types::common::{
-    Conformance, LandingPage, Link,
+    Bbox as OgcBbox, Collection, Collections, Conformance, Crs, Datetime as OgcDatetime, Extent,
+    LandingPage, SpatialExtent, TemporalExtent,
     link_rel::{CONFORMANCE, DATA, SELF, TILING_SCHEMES},
     media_type::JSON,
 };
+use std::collections::HashSet;
+use utoipa::{IntoParams, ToSchema};
+use uuid::Uuid;
+
+// TODO: add to [`ogcapi_types::common::link_rel`] and use from there
+const TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets";
 
 /// OGC API Landing Page
 ///
@@ -16,7 +47,7 @@ use ogcapi_types::common::{
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{workflow}/",
+    path = "/ogc/{processingGraphId}/",
     responses(
         (status = 200, description = "OK", body = LandingPage,
             example = json!({
@@ -48,7 +79,7 @@ use ogcapi_types::common::{
         )
     ),
     params(
-        ("processingGraphId" = WorkflowId, description = "Processing Graph ID"),
+        ("processingGraphId" = WorkflowId, description = "ID of the processing graph, which is used as collection ID")
     ),
     security(
         ("session_token" = [])
@@ -83,7 +114,7 @@ pub async fn landing_page<C: ApplicationContext>(
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{workflow}/conformance",
+    path = "/ogc/{processingGraphId}/conformance",
     responses(
         (status = 200, description = "OK", body = Conformance,
             example = json!({
@@ -99,7 +130,7 @@ pub async fn landing_page<C: ApplicationContext>(
         )
     ),
     params(
-        ("processingGraphId" = WorkflowId, description = "Processing Graph ID"),
+        ("processingGraphId" = WorkflowId, description = "ID of the processing graph, which is used as collection ID")
     ),
     security(
         ("session_token" = [])
@@ -112,44 +143,368 @@ pub async fn conformance<C: ApplicationContext>(
 ) -> web::Json<Conformance> {
     web::Json(Conformance::new(&[
         "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+        "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/landing-page",
+        "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/oas30",
         "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
-        // "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
+        "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
         // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
         // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
         // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+        // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
     ]))
 }
 
-fn link_creator(
-    processing_graph_id: WorkflowId,
-) -> impl Fn(&str, &'static str, &'static str) -> OgcApiResult<Link> {
-    move |path: &str, rel: &'static str, mediatype: &'static str| -> OgcApiResult<Link> {
-        let base_url = match ogc_base_url(processing_graph_id) {
-            Ok(base_url) => base_url,
-            Err(error) => {
-                tracing::error!(
-                    "failed to generate OGC base url for workflow {processing_graph_id}: {error}"
-                );
-                return Err(internal_server_error());
-            }
-        };
+#[derive(Debug, serde::Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionsQueryParams {
+    /// Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
+    #[param(
+        value_type = String,
+        example = "2018-02-12T23:20:50Z"
+    )]
+    #[serde(default)]
+    #[serde(deserialize_with = "parse_datetime_option")]
+    #[allow(unused, reason = "TODO: incorporate if it makes sense")]
+    pub datetime: Option<OgcDatetime>,
 
-        let href = match base_url.join(path) {
-            Ok(href) => href,
-            Err(error) => {
-                tracing::error!(
-                    "failed to build OGC landing page link '{path}' for workflow {processing_graph_id}: {error}"
-                );
-                return Err(internal_server_error());
-            }
-        };
+    /// Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).
+    #[param(
+        value_type = String,
+        example = "-180,-90,180,90"
+    )]
+    #[serde(default)]
+    #[serde(deserialize_with = "parse_bbox_option")]
+    #[allow(unused, reason = "TODO: incorporate if it makes sense")]
+    pub bbox: Option<OgcBbox>,
 
-        Ok(Link::new(href.to_string(), rel).mediatype(mediatype))
+    /// Optional limit for the number of first-level collections returned (minimum: 1, maximum: 10000, default: 10).
+    #[param(example = 10)]
+    #[allow(unused, reason = "TODO: incorporate if it makes sense")]
+    pub limit: Option<u32>,
+
+    /// Response format. If omitted, the `Accept` header is used.
+    #[param(example = "json")]
+    #[allow(unused, reason = "TODO: incorporate if it makes sense")]
+    pub f: Option<CollectionsResponseFormat>,
+}
+
+#[derive(Debug, Clone, Copy, serde::Deserialize, serde::Serialize, ToSchema)]
+#[serde(rename_all = "lowercase")]
+pub enum CollectionsResponseFormat {
+    Json,
+    // Html, // TODO: support HTML response format
+}
+
+/// OGC API Collections List
+///
+/// Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
+#[utoipa::path(
+    tag = "OGC API",
+    get,
+    path = "/ogc/{processingGraphId}/collections",
+    responses(
+        (status = 200, description = "OK", body = Collections)
+    ),
+    params(
+        ("processingGraphId" = WorkflowId, description = "ID of the processing graph, which is used as collection ID"),
+        CollectionsQueryParams,
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn collections<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    processing_graph_id: web::Path<WorkflowId>,
+    _query: web::Query<CollectionsQueryParams>,
+) -> OgcApiResult<web::Json<Collections>> {
+    let processing_graph_id = processing_graph_id.into_inner();
+
+    let ctx = app_ctx.session_context(session);
+    let processing_graph = ctx.db().load_workflow(&processing_graph_id).await?;
+
+    let create_link = link_creator(processing_graph_id);
+
+    let collections = vec![
+        build_collection(
+            processing_graph_id,
+            &create_link,
+            raster_workflow_metadata::<C::SessionContext>(
+                processing_graph.clone(),
+                ctx.execution_context()?,
+            ),
+            workflow_provenance(&processing_graph, &ctx).map_err(Into::into),
+            no_timestamps(),
+        )
+        .await?,
+    ];
+
+    let collections = Collections {
+        links: vec![create_link("collections", SELF, JSON)?],
+        time_stamp: None,
+        number_matched: None,
+        number_returned: Some(collections.len() as u64),
+        crs: {
+            let mut seen_crs = HashSet::<&Crs>::new();
+            collections
+                .iter()
+                .flat_map(|c| c.crs.as_slice())
+                .filter(|crs| seen_crs.insert(crs))
+                .cloned()
+                .collect()
+        },
+        collections,
+    };
+
+    Ok(web::Json(collections))
+}
+
+async fn raster_workflow_metadata<C: SessionContext>(
+    processing_graph: Workflow,
+    execution_context: C::ExecutionContext,
+) -> OgcApiResult<RasterResultDescriptor> {
+    let result_descriptor = workflow_metadata::<C>(processing_graph, execution_context).await?;
+    match result_descriptor.into() {
+        TypedResultDescriptor::Raster(descriptor) => Ok(descriptor),
+        TypedResultDescriptor::Vector(_) => Err(OgcApiError::ExpectedRaster {
+            found: "vector".to_string(),
+        })?,
+        TypedResultDescriptor::Plot(_) => Err(OgcApiError::ExpectedRaster {
+            found: "plot".to_string(),
+        })?,
     }
+}
+
+#[derive(Debug, serde::Deserialize, IntoParams)]
+#[serde(rename_all = "camelCase")]
+pub struct CollectionQueryParams {
+    /// Response format. If omitted, the `Accept` header is used.
+    #[param(example = "json")]
+    #[allow(unused, reason = "TODO: incorporate if it makes sense")]
+    pub f: Option<CollectionsResponseFormat>,
+}
+
+/// OGC API Collection Metadata
+///
+/// Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
+#[utoipa::path(
+    tag = "OGC API",
+    get,
+    path = "/ogc/{processingGraphId}/collections/{processingGraphId}",
+    responses(
+        (status = 200, description = "OK", body = Collection)
+    ),
+    params(
+        ("processingGraphId" = WorkflowId, description = "ID of the processing graph, which is used as collection ID")
+    ),
+    security(
+        ("session_token" = [])
+    )
+)]
+pub async fn collection<C: ApplicationContext>(
+    session: C::Session,
+    app_ctx: web::Data<C>,
+    path: web::Path<(WorkflowId, WorkflowId)>,
+    _query: web::Query<CollectionQueryParams>,
+) -> OgcApiResult<web::Json<Collection>> {
+    let (processing_graph_id, collection_id) = path.into_inner();
+
+    if processing_graph_id != collection_id {
+        return Err(OgcApiError::CollectionNotFound { collection_id })?;
+    }
+
+    let ctx = app_ctx.session_context(session);
+    let processing_graph = ctx.db().load_workflow(&processing_graph_id).await?;
+    let query_context = ctx.query_context(processing_graph_id.0, Uuid::new_v4())?;
+
+    let create_link = link_creator(processing_graph_id);
+
+    let descriptor = raster_workflow_metadata::<C::SessionContext>(
+        processing_graph.clone(),
+        ctx.execution_context()?,
+    )
+    .await?;
+
+    let raster_query_processor = raster_query_processor::<C::SessionContext>(
+        processing_graph.clone(),
+        ctx.execution_context()?,
+    )
+    .await?;
+
+    let collection = build_collection(
+        processing_graph_id,
+        &create_link,
+        futures::future::ready(Ok(descriptor.clone())),
+        workflow_provenance(&processing_graph, &ctx).map_err(Into::into),
+        Some(
+            time_stream::<C::SessionContext>(
+                &query_context,
+                &raster_query_processor,
+                descriptor.time.bounds.unwrap_or_default(),
+            )
+            .await?,
+        ),
+    )
+    .await?;
+
+    Ok(web::Json(collection))
+}
+
+async fn raster_query_processor<C: SessionContext>(
+    processing_graph: Workflow,
+    execution_context: C::ExecutionContext,
+) -> OgcApiResult<TypedRasterQueryProcessor> {
+    let operator = match processing_graph.operator()? {
+        TypedOperator::Raster(operator) => operator,
+        TypedOperator::Vector(_) => {
+            return Err(OgcApiError::ExpectedRaster {
+                found: "vector".to_string(),
+            })?;
+        }
+        TypedOperator::Plot(_) => {
+            return Err(OgcApiError::ExpectedRaster {
+                found: "plot".to_string(),
+            })?;
+        }
+    };
+    let initialized_operator = operator
+        .initialize(WorkflowOperatorPath::initialize_root(), &execution_context)
+        .await
+        .boxed_context(error::InitializingProcessingGraph)?;
+
+    initialized_operator
+        .query_processor()
+        .boxed_context(error::InitializingProcessingGraph)
+}
+
+async fn time_stream<'a, C: SessionContext>(
+    query_context: &'a C::QueryContext,
+    processor: &'a TypedRasterQueryProcessor,
+    query_interval: TimeInterval,
+) -> OgcApiResult<BoxStream<'a, OgcApiResult<TimeInterval>>> {
+    let time_stream = call_on_generic_raster_processor!(
+        processor, p => p.time_query(query_interval, query_context).await
+    )
+    .map_err(|source| OgcApiError::Internal {
+        source: source.into(),
+    })?
+    .map_err(|source| OgcApiError::Internal {
+        source: source.into(),
+    });
+
+    Ok(time_stream.boxed())
+}
+
+async fn time_intervals_from_stream(
+    mut stream: impl Stream<Item = OgcApiResult<TimeInterval>> + Unpin,
+) -> OgcApiResult<Option<Vec<[Option<DateTime<Utc>>; 2]>>> {
+    let mut intervals = Vec::new();
+
+    while let Some(interval) = stream.next().await {
+        intervals.push(ogc_interval(interval?));
+    }
+
+    Ok(Some(intervals))
+}
+
+fn no_timestamps() -> Option<impl Stream<Item = OgcApiResult<TimeInterval>>> {
+    None::<futures::stream::Empty<OgcApiResult<TimeInterval>>>
+}
+
+async fn build_collection(
+    collection_id: WorkflowId,
+    create_link: &LinkCreator,
+    descriptor: impl Future<Output = OgcApiResult<RasterResultDescriptor>>,
+    provenance: impl Future<Output = OgcApiResult<Vec<ProvenanceEntry>>>,
+    timestamps: Option<impl Stream<Item = OgcApiResult<TimeInterval>> + Unpin>,
+) -> OgcApiResult<Collection> {
+    let (descriptor, provenance, timestamps) = if let Some(stream) = timestamps {
+        futures::try_join!(descriptor, provenance, time_intervals_from_stream(stream))?
+    } else {
+        futures::try_join!(descriptor, provenance, futures::future::ok(None))?
+    };
+
+    let crs = descriptor
+        .spatial_reference
+        .as_option()
+        .map(|spatial_reference| Crs::from_srid(spatial_reference.code() as i32));
+
+    Ok(Collection {
+        id: collection_id.to_string(),
+        title: Some(format!("Raster Layer [{collection_id}]")),
+        description: Some(format!(
+            "Raster collection generated from processing graph `{collection_id}`"
+        )),
+        item_type: "tile".to_string(), // TODO: investigate appropriate item type
+        links: vec![
+            create_link(&format!("collections/{collection_id}"), SELF, JSON)?,
+            create_link(
+                &format!("collections/{collection_id}/tiles"),
+                TILESETS_REL,
+                JSON,
+            )?,
+        ],
+        extent: Some(Extent {
+            spatial: Some(spatial_extent(descriptor.spatial_bounds(), crs.clone())),
+            temporal: timestamps.map(|timestamps| TemporalExtent {
+                interval: timestamps,
+                ..TemporalExtent::default()
+            }),
+        }),
+        crs: crs.into_iter().collect(),
+        attribution: attribution_from_provenance(&provenance),
+        ..Collection::default()
+    })
+}
+
+fn attribution_from_provenance(provenance: &[ProvenanceEntry]) -> Option<String> {
+    if provenance.is_empty() {
+        return None;
+    }
+
+    provenance
+        .iter()
+        .filter_map(ProvenanceEntry::attribution)
+        .join(", ")
+        .into()
+}
+
+fn spatial_extent(spatial_bounds: SpatialPartition2D, crs: Option<Crs>) -> SpatialExtent {
+    let lower_left = spatial_bounds.lower_left();
+    let upper_right = spatial_bounds.upper_right();
+
+    SpatialExtent {
+        bbox: vec![OgcBbox::Bbox2D([
+            lower_left.x,
+            lower_left.y,
+            upper_right.x,
+            upper_right.y,
+        ])],
+        crs,
+    }
+}
+
+fn ogc_interval(interval: TimeInterval) -> [Option<DateTime<Utc>>; 2] {
+    [
+        time_instance_to_ogc_datetime(interval.start()),
+        time_instance_to_ogc_datetime(interval.end()),
+    ]
+}
+
+fn time_instance_to_ogc_datetime(time_instance: TimeInstance) -> Option<DateTime<Utc>> {
+    if time_instance.is_min() || time_instance.is_max() {
+        return None;
+    }
+
+    time_instance
+        .as_date_time()
+        .map(chrono::DateTime::<chrono::Utc>::from)
 }
 
 #[cfg(test)]
 mod tests {
+    use super::TILESETS_REL;
     use crate::contexts::{
         ApplicationContext, PostgresContext, Session, SessionContext, SessionId,
     };
@@ -240,12 +595,129 @@ mod tests {
             serde_json::json!({
               "conformsTo": [
                 "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
+                "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/landing-page",
+                "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/oas30",
                 "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
-                // "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
+                "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
                 // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
                 // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
                 // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
               ]
+            })
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_returns_ogc_collections(app_ctx: PostgresContext<NoTls>) {
+        let server_url = "http://127.0.0.1:3030";
+        let (session_id, processing_graph_id) = session_and_processing_graph_id(&app_ctx).await;
+        let collection_id = processing_graph_id.to_string();
+
+        let req = test::TestRequest::get()
+            .uri(&format!("/ogc/{processing_graph_id}/collections"))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let body = read_body_json(res).await;
+
+        assert_eq!(status, 200, "{body}");
+
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "links": [{
+                    "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections"),
+                    "rel": "self",
+                    "type": "application/json"
+                }],
+                "numberReturned": 1,
+                "collections": [{
+                    "id": collection_id,
+                    "title": format!("Raster Layer [{processing_graph_id}]"),
+                    "description": format!("Raster collection generated from processing graph `{processing_graph_id}`"),
+                    "attribution": "Sample Citation",
+                    "extent": {
+                        "spatial": {
+                            "bbox": [[-180.0, -90.0, 180.0, 90.0]],
+                            "crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+                        }
+                    },
+                    "itemType": "tile",
+                    "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"],
+                    "links": [
+                        {
+                            "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}"),
+                            "rel": "self",
+                            "type": "application/json"
+                        },
+                        {
+                            "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles"),
+                            "rel": TILESETS_REL,
+                            "type": "application/json"
+                        }
+                    ]
+                }],
+                "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"]
+            })
+        );
+    }
+
+    #[ge_context::test]
+    async fn it_returns_ogc_collection_metadata(app_ctx: PostgresContext<NoTls>) {
+        let server_url = "http://127.0.0.1:3030";
+        let (session_id, processing_graph_id) = session_and_processing_graph_id(&app_ctx).await;
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/ogc/{processing_graph_id}/collections/{processing_graph_id}"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let body = read_body_json(res).await;
+
+        assert_eq!(status, 200, "{body}");
+
+        assert_eq!(
+            body,
+            serde_json::json!({
+                "id": processing_graph_id,
+                "title": format!("Raster Layer [{processing_graph_id}]"),
+                "description": format!("Raster collection generated from processing graph `{processing_graph_id}`"),
+                "attribution": "Sample Citation",
+                "itemType": "tile",
+                "extent": {
+                    "spatial": {
+                        "bbox": [[-180.0, -90.0, 180.0, 90.0]],
+                        "crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+                    },
+                    "temporal": {
+                        "interval": [
+                            ["2014-01-01T00:00:00Z", "2014-02-01T00:00:00Z"],
+                            ["2014-02-01T00:00:00Z", "2014-03-01T00:00:00Z"],
+                            ["2014-03-01T00:00:00Z", "2014-04-01T00:00:00Z"],
+                            ["2014-04-01T00:00:00Z", "2014-05-01T00:00:00Z"],
+                            ["2014-05-01T00:00:00Z", "2014-06-01T00:00:00Z"],
+                            ["2014-06-01T00:00:00Z", "2014-07-01T00:00:00Z"]
+                        ],
+                        "trs": "http://www.opengis.net/def/uom/ISO-8601/0/Gregorian"
+                    }
+                },
+                "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"],
+                "links": [
+                    {
+                        "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}"),
+                        "rel": "self",
+                        "type": "application/json"
+                    },
+                    {
+                        "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles"),
+                        "rel": TILESETS_REL,
+                        "type": "application/json"
+                    }
+                ]
             })
         );
     }
