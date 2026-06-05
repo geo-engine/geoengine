@@ -570,7 +570,10 @@ async fn raster_stream_websocket<C: ApplicationContext>(
 
     let (response, mut session, mut msg_stream) = match actix_ws::handle(&request, stream) {
         Ok((response, session, msg_stream)) => (response, session, msg_stream),
-        Err(e) => return Ok(e.error_response()),
+        Err(e) => {
+            tracing::error!("Raster websocket failed: {e}");
+            return Ok(e.error_response());
+        }
     };
 
     actix_web::rt::spawn(async move {
@@ -680,7 +683,10 @@ async fn vector_stream_websocket<C: ApplicationContext>(
 
     let (response, mut session, mut msg_stream) = match actix_ws::handle(&request, stream) {
         Ok((response, session, msg_stream)) => (response, session, msg_stream),
-        Err(e) => return Ok(e.error_response()),
+        Err(e) => {
+            tracing::error!("Vector websocket failed: {e}");
+            return Ok(e.error_response());
+        }
     };
 
     actix_web::rt::spawn(async move {
