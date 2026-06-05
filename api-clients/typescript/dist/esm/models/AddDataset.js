@@ -16,9 +16,9 @@ import { SymbologyFromJSON, SymbologyToJSON, } from './Symbology';
  * Check if a given object implements the AddDataset interface.
  */
 export function instanceOfAddDataset(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('displayName' in value) || value['displayName'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     if (!('sourceOperator' in value) || value['sourceOperator'] === undefined)
         return false;
@@ -32,12 +32,12 @@ export function AddDatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
-        'displayName': json['displayName'],
         'name': json['name'] == null ? undefined : json['name'],
-        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(ProvenanceFromJSON)),
+        'displayName': json['displayName'],
+        'description': json['description'],
         'sourceOperator': json['sourceOperator'],
         'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(ProvenanceFromJSON)),
         'tags': json['tags'] == null ? undefined : json['tags'],
     };
 }
@@ -49,12 +49,12 @@ export function AddDatasetToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'displayName': value['displayName'],
         'name': value['name'],
-        'provenance': value['provenance'] == null ? undefined : (value['provenance'].map(ProvenanceToJSON)),
+        'displayName': value['displayName'],
+        'description': value['description'],
         'sourceOperator': value['sourceOperator'],
         'symbology': SymbologyToJSON(value['symbology']),
+        'provenance': value['provenance'] == null ? undefined : (value['provenance'].map(ProvenanceToJSON)),
         'tags': value['tags'],
     };
 }

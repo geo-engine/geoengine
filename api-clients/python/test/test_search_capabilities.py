@@ -35,20 +35,20 @@ class TestSearchCapabilities(unittest.TestCase):
         model = SearchCapabilities()
         if include_optional:
             return SearchCapabilities(
-                autocomplete = True,
-                filters = [
-                    ''
-                    ],
-                search_types = geoengine_api_client.models.search_types.SearchTypes(
-                    fulltext = True, 
-                    prefix = True, )
-            )
-        else:
-            return SearchCapabilities(
-                autocomplete = True,
                 search_types = geoengine_api_client.models.search_types.SearchTypes(
                     fulltext = True, 
                     prefix = True, ),
+                autocomplete = True,
+                filters = [
+                    ''
+                    ]
+            )
+        else:
+            return SearchCapabilities(
+                search_types = geoengine_api_client.models.search_types.SearchTypes(
+                    fulltext = True, 
+                    prefix = True, ),
+                autocomplete = True,
         )
         """
 

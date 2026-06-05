@@ -35,21 +35,21 @@ class TestProjectLayer(unittest.TestCase):
         model = ProjectLayer()
         if include_optional:
             return ProjectLayer(
+                workflow = '',
                 name = '',
-                symbology = None,
                 visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                     data = True, 
                     legend = True, ),
-                workflow = ''
+                symbology = None
             )
         else:
             return ProjectLayer(
+                workflow = '',
                 name = '',
-                symbology = None,
                 visibility = geoengine_api_client.models.layer_visibility.LayerVisibility(
                     data = True, 
                     legend = True, ),
-                workflow = '',
+                symbology = None,
         )
         """
 

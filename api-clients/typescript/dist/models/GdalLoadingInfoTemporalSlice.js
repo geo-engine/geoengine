@@ -35,9 +35,9 @@ function GdalLoadingInfoTemporalSliceFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'params': json['params'] == null ? undefined : (0, GdalDatasetParameters_1.GdalDatasetParametersFromJSON)(json['params']),
         'time': (0, TimeInterval_1.TimeIntervalFromJSON)(json['time']),
+        'params': json['params'] == null ? undefined : (0, GdalDatasetParameters_1.GdalDatasetParametersFromJSON)(json['params']),
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 function GdalLoadingInfoTemporalSliceToJSON(json) {
@@ -48,8 +48,8 @@ function GdalLoadingInfoTemporalSliceToJSONTyped(value, ignoreDiscriminator = fa
         return value;
     }
     return {
-        'cacheTtl': value['cacheTtl'],
-        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersToJSON)(value['params']),
         'time': (0, TimeInterval_1.TimeIntervalToJSON)(value['time']),
+        'params': (0, GdalDatasetParameters_1.GdalDatasetParametersToJSON)(value['params']),
+        'cacheTtl': value['cacheTtl'],
     };
 }

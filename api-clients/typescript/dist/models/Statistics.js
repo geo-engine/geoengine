@@ -30,11 +30,11 @@ exports.StatisticsTypeEnum = {
  * Check if a given object implements the Statistics interface.
  */
 function instanceOfStatistics(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -46,9 +46,9 @@ function StatisticsFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': (0, StatisticsParameters_1.StatisticsParametersFromJSON)(json['params']),
         'sources': (0, MultipleRasterOrSingleVectorSource_1.MultipleRasterOrSingleVectorSourceFromJSON)(json['sources']),
-        'type': json['type'],
     };
 }
 function StatisticsToJSON(json) {
@@ -59,8 +59,8 @@ function StatisticsToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'params': (0, StatisticsParameters_1.StatisticsParametersToJSON)(value['params']),
         'sources': (0, MultipleRasterOrSingleVectorSource_1.MultipleRasterOrSingleVectorSourceToJSON)(value['sources']),
-        'type': value['type'],
     };
 }

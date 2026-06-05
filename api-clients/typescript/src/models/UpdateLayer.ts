@@ -38,25 +38,19 @@ export interface UpdateLayer {
      * @type {string}
      * @memberof UpdateLayer
      */
-    description: string;
-    /**
-     * metadata used for loading the data
-     * @type {{ [key: string]: string; }}
-     * @memberof UpdateLayer
-     */
-    metadata?: { [key: string]: string; };
+    name: string;
     /**
      * 
      * @type {string}
      * @memberof UpdateLayer
      */
-    name: string;
+    description: string;
     /**
-     * properties, for instance, to be rendered in the UI
-     * @type {Array<Array<string>>}
+     * 
+     * @type {Workflow}
      * @memberof UpdateLayer
      */
-    properties?: Array<Array<string>>;
+    workflow: Workflow;
     /**
      * 
      * @type {Symbology}
@@ -64,19 +58,25 @@ export interface UpdateLayer {
      */
     symbology?: Symbology | null;
     /**
-     * 
-     * @type {Workflow}
+     * properties, for instance, to be rendered in the UI
+     * @type {Array<Array<string>>}
      * @memberof UpdateLayer
      */
-    workflow: Workflow;
+    properties?: Array<Array<string>>;
+    /**
+     * metadata used for loading the data
+     * @type {{ [key: string]: string; }}
+     * @memberof UpdateLayer
+     */
+    metadata?: { [key: string]: string; };
 }
 
 /**
  * Check if a given object implements the UpdateLayer interface.
  */
 export function instanceOfUpdateLayer(value: object): value is UpdateLayer {
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('workflow' in value) || value['workflow'] === undefined) return false;
     return true;
 }
@@ -91,12 +91,12 @@ export function UpdateLayerFromJSONTyped(json: any, ignoreDiscriminator: boolean
     }
     return {
         
-        'description': json['description'],
-        'metadata': json['metadata'] == null ? undefined : json['metadata'],
         'name': json['name'],
-        'properties': json['properties'] == null ? undefined : json['properties'],
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'description': json['description'],
         'workflow': WorkflowFromJSON(json['workflow']),
+        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'properties': json['properties'] == null ? undefined : json['properties'],
+        'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };
 }
 
@@ -111,12 +111,12 @@ export function UpdateLayerToJSONTyped(value?: UpdateLayer | null, ignoreDiscrim
 
     return {
         
-        'description': value['description'],
-        'metadata': value['metadata'],
         'name': value['name'],
-        'properties': value['properties'],
-        'symbology': SymbologyToJSON(value['symbology']),
+        'description': value['description'],
         'workflow': WorkflowToJSON(value['workflow']),
+        'symbology': SymbologyToJSON(value['symbology']),
+        'properties': value['properties'],
+        'metadata': value['metadata'],
     };
 }
 

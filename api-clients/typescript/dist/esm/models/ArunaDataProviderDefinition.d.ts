@@ -16,34 +16,10 @@
 export interface ArunaDataProviderDefinition {
     /**
      *
-     * @type {string}
+     * @type {ArunaDataProviderDefinitionTypeEnum}
      * @memberof ArunaDataProviderDefinition
      */
-    apiToken: string;
-    /**
-     *
-     * @type {string}
-     * @memberof ArunaDataProviderDefinition
-     */
-    apiUrl: string;
-    /**
-     *
-     * @type {number}
-     * @memberof ArunaDataProviderDefinition
-     */
-    cacheTtl?: number;
-    /**
-     *
-     * @type {string}
-     * @memberof ArunaDataProviderDefinition
-     */
-    description: string;
-    /**
-     *
-     * @type {string}
-     * @memberof ArunaDataProviderDefinition
-     */
-    filterLabel: string;
+    type: ArunaDataProviderDefinitionTypeEnum;
     /**
      *
      * @type {string}
@@ -58,6 +34,12 @@ export interface ArunaDataProviderDefinition {
     name: string;
     /**
      *
+     * @type {string}
+     * @memberof ArunaDataProviderDefinition
+     */
+    description: string;
+    /**
+     *
      * @type {number}
      * @memberof ArunaDataProviderDefinition
      */
@@ -67,13 +49,31 @@ export interface ArunaDataProviderDefinition {
      * @type {string}
      * @memberof ArunaDataProviderDefinition
      */
+    apiUrl: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ArunaDataProviderDefinition
+     */
     projectId: string;
     /**
      *
-     * @type {ArunaDataProviderDefinitionTypeEnum}
+     * @type {string}
      * @memberof ArunaDataProviderDefinition
      */
-    type: ArunaDataProviderDefinitionTypeEnum;
+    apiToken: string;
+    /**
+     *
+     * @type {string}
+     * @memberof ArunaDataProviderDefinition
+     */
+    filterLabel: string;
+    /**
+     *
+     * @type {number}
+     * @memberof ArunaDataProviderDefinition
+     */
+    cacheTtl?: number;
 }
 /**
  * @export

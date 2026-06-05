@@ -35,19 +35,19 @@ class TestColorParam(unittest.TestCase):
         model = ColorParam()
         if include_optional:
             return ColorParam(
+                type = 'static',
                 color = [
                     56
                     ],
-                type = 'static',
                 attribute = '',
                 colorizer = None
             )
         else:
             return ColorParam(
+                type = 'static',
                 color = [
                     56
                     ],
-                type = 'static',
                 attribute = '',
                 colorizer = None,
         )

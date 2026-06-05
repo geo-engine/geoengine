@@ -35,15 +35,15 @@ class TestWrappedPlotOutput(unittest.TestCase):
         model = WrappedPlotOutput()
         if include_optional:
             return WrappedPlotOutput(
-                data = None,
                 output_format = 'JsonPlain',
-                plot_type = ''
+                plot_type = '',
+                data = None
             )
         else:
             return WrappedPlotOutput(
-                data = None,
                 output_format = 'JsonPlain',
                 plot_type = '',
+                data = None,
         )
         """
 

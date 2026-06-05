@@ -22,11 +22,11 @@ export const ExpressionTypeEnum = {
  * Check if a given object implements the Expression interface.
  */
 export function instanceOfExpression(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -38,9 +38,9 @@ export function ExpressionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': ExpressionParametersFromJSON(json['params']),
         'sources': SingleRasterSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 export function ExpressionToJSON(json) {
@@ -51,8 +51,8 @@ export function ExpressionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'params': ExpressionParametersToJSON(value['params']),
         'sources': SingleRasterSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }

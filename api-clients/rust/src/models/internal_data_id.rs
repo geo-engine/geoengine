@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct InternalDataId {
-    #[serde(rename = "datasetId")]
-    pub dataset_id: uuid::Uuid,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "datasetId")]
+    pub dataset_id: uuid::Uuid,
 }
 
 impl InternalDataId {
-    pub fn new(dataset_id: uuid::Uuid, r#type: Type) -> InternalDataId {
+    pub fn new(r#type: Type, dataset_id: uuid::Uuid) -> InternalDataId {
         InternalDataId {
-            dataset_id,
             r#type,
+            dataset_id,
         }
     }
 }

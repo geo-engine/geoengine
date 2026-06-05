@@ -20,12 +20,6 @@ import { mapValues } from '../runtime';
 export interface Resolution {
     /**
      * 
-     * @type {ResolutionTypeEnum}
-     * @memberof Resolution
-     */
-    type: ResolutionTypeEnum;
-    /**
-     * 
      * @type {number}
      * @memberof Resolution
      */
@@ -36,6 +30,12 @@ export interface Resolution {
      * @memberof Resolution
      */
     y: number;
+    /**
+     * 
+     * @type {ResolutionTypeEnum}
+     * @memberof Resolution
+     */
+    type: ResolutionTypeEnum;
 }
 
 
@@ -52,9 +52,9 @@ export type ResolutionTypeEnum = typeof ResolutionTypeEnum[keyof typeof Resoluti
  * Check if a given object implements the Resolution interface.
  */
 export function instanceOfResolution(value: object): value is Resolution {
-    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('x' in value) || value['x'] === undefined) return false;
     if (!('y' in value) || value['y'] === undefined) return false;
+    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -68,9 +68,9 @@ export function ResolutionFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
-        'type': json['type'],
         'x': json['x'],
         'y': json['y'],
+        'type': json['type'],
     };
 }
 
@@ -85,9 +85,9 @@ export function ResolutionToJSONTyped(value?: Resolution | null, ignoreDiscrimin
 
     return {
         
-        'type': value['type'],
         'x': value['x'],
         'y': value['y'],
+        'type': value['type'],
     };
 }
 

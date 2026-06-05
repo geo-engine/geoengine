@@ -98,6 +98,15 @@ All URIs are relative to *https://geoengine.io/api*
 *MLApi* | [**addMlModel**](docs/MLApi.md#addmlmodel) | **POST** /ml/models | Create a new ml model.
 *MLApi* | [**getMlModel**](docs/MLApi.md#getmlmodel) | **GET** /ml/models/{model_name} | Get ml model by name.
 *MLApi* | [**listMlModels**](docs/MLApi.md#listmlmodels) | **GET** /ml/models | List ml models.
+*OGCAPIApi* | [**collection**](docs/OGCAPIApi.md#collection) | **GET** /ogc/ogc/{processingGraphId}/collections/{processingGraphId} | OGC API Collection Metadata
+*OGCAPIApi* | [**collectionTileset**](docs/OGCAPIApi.md#collectiontileset) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata
+*OGCAPIApi* | [**collectionTilesets**](docs/OGCAPIApi.md#collectiontilesets) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles | OGC API Collection Tilesets List
+*OGCAPIApi* | [**collections**](docs/OGCAPIApi.md#collections) | **GET** /ogc/ogc/{processingGraphId}/collections | OGC API Collections List
+*OGCAPIApi* | [**conformance**](docs/OGCAPIApi.md#conformance) | **GET** /ogc/ogc/{processingGraphId}/conformance | OGC API Conformance Classes
+*OGCAPIApi* | [**landingPage**](docs/OGCAPIApi.md#landingpage) | **GET** /ogc/ogc/{processingGraphId}/ | OGC API Landing Page
+*OGCAPIApi* | [**tile**](docs/OGCAPIApi.md#tile) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
+*OGCAPIApi* | [**tileMatrixSet**](docs/OGCAPIApi.md#tilematrixset) | **GET** /ogc/ogc/{processingGraphId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
+*OGCAPIApi* | [**tileMatrixSets**](docs/OGCAPIApi.md#tilematrixsets) | **GET** /ogc/ogc/{processingGraphId}/tileMatrixSets | OGC API Tile Matrix Set List
 *OGCWCSApi* | [**wcsHandler**](docs/OGCWCSApi.md#wcshandler) | **GET** /wcs/{workflow} | OGC WCS endpoint
 *OGCWFSApi* | [**wfsHandler**](docs/OGCWFSApi.md#wfshandler) | **GET** /wfs/{workflow} | OGC WFS endpoint
 *OGCWMSApi* | [**wmsHandler**](docs/OGCWMSApi.md#wmshandler) | **GET** /wms/{workflow} | OGC WMS endpoint
@@ -168,15 +177,20 @@ All URIs are relative to *https://geoengine.io/api*
 - [BoundingBox2D](docs/BoundingBox2D.md)
 - [Breakpoint](docs/Breakpoint.md)
 - [ClassificationMeasurement](docs/ClassificationMeasurement.md)
+- [Collection](docs/Collection.md)
 - [CollectionItem](docs/CollectionItem.md)
 - [CollectionType](docs/CollectionType.md)
+- [Collections](docs/Collections.md)
+- [CollectionsResponseFormat](docs/CollectionsResponseFormat.md)
 - [ColorParam](docs/ColorParam.md)
 - [Colorizer](docs/Colorizer.md)
 - [ColumnNames](docs/ColumnNames.md)
 - [ComputationQuota](docs/ComputationQuota.md)
+- [Conformance](docs/Conformance.md)
 - [ContinuousMeasurement](docs/ContinuousMeasurement.md)
 - [Coordinate2D](docs/Coordinate2D.md)
 - [CopernicusDataspaceDataProviderDefinition](docs/CopernicusDataspaceDataProviderDefinition.md)
+- [CornerOfOrigin](docs/CornerOfOrigin.md)
 - [CountAggregation](docs/CountAggregation.md)
 - [CreateDataset](docs/CreateDataset.md)
 - [CreateProject](docs/CreateProject.md)
@@ -207,6 +221,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [ErrorResponse](docs/ErrorResponse.md)
 - [Expression](docs/Expression.md)
 - [ExpressionParameters](docs/ExpressionParameters.md)
+- [Extent](docs/Extent.md)
 - [ExternalDataId](docs/ExternalDataId.md)
 - [FeatureAggregationMethod](docs/FeatureAggregationMethod.md)
 - [FeatureDataType](docs/FeatureDataType.md)
@@ -249,6 +264,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [InterpolationParameters](docs/InterpolationParameters.md)
 - [InterpolationResolution](docs/InterpolationResolution.md)
 - [Irregular](docs/Irregular.md)
+- [LandingPage](docs/LandingPage.md)
 - [LastAggregation](docs/LastAggregation.md)
 - [Layer](docs/Layer.md)
 - [LayerCollection](docs/LayerCollection.md)
@@ -262,6 +278,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [LegacyTypedOperatorOperator](docs/LegacyTypedOperatorOperator.md)
 - [LineSymbology](docs/LineSymbology.md)
 - [LinearGradient](docs/LinearGradient.md)
+- [Link](docs/Link.md)
 - [LogarithmicGradient](docs/LogarithmicGradient.md)
 - [MaxAggregation](docs/MaxAggregation.md)
 - [MeanAggregation](docs/MeanAggregation.md)
@@ -382,6 +399,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [SpatialBoundsDeriveBounds](docs/SpatialBoundsDeriveBounds.md)
 - [SpatialBoundsDeriveDerive](docs/SpatialBoundsDeriveDerive.md)
 - [SpatialBoundsDeriveNone](docs/SpatialBoundsDeriveNone.md)
+- [SpatialExtent](docs/SpatialExtent.md)
 - [SpatialGridDefinition](docs/SpatialGridDefinition.md)
 - [SpatialGridDescriptor](docs/SpatialGridDescriptor.md)
 - [SpatialGridDescriptorState](docs/SpatialGridDescriptorState.md)
@@ -406,10 +424,25 @@ All URIs are relative to *https://geoengine.io/api*
 - [TaskStatusFailed](docs/TaskStatusFailed.md)
 - [TaskStatusRunning](docs/TaskStatusRunning.md)
 - [TaskStatusWithId](docs/TaskStatusWithId.md)
+- [TemplatedTileLink](docs/TemplatedTileLink.md)
 - [TemporalAggregationMethod](docs/TemporalAggregationMethod.md)
+- [TemporalExtent](docs/TemporalExtent.md)
 - [TemporalRasterAggregation](docs/TemporalRasterAggregation.md)
 - [TemporalRasterAggregationParameters](docs/TemporalRasterAggregationParameters.md)
 - [TextSymbology](docs/TextSymbology.md)
+- [TileMatrix](docs/TileMatrix.md)
+- [TileMatrixSet](docs/TileMatrixSet.md)
+- [TileMatrixSetId](docs/TileMatrixSetId.md)
+- [TileMatrixSetIdOneOf](docs/TileMatrixSetIdOneOf.md)
+- [TileMatrixSetItem](docs/TileMatrixSetItem.md)
+- [TileMatrixSets](docs/TileMatrixSets.md)
+- [TileSetListItemResponse](docs/TileSetListItemResponse.md)
+- [TileSetMetadataResponse](docs/TileSetMetadataResponse.md)
+- [TileSetsResponse](docs/TileSetsResponse.md)
+- [TilesCrs](docs/TilesCrs.md)
+- [TilesCrsOneOf](docs/TilesCrsOneOf.md)
+- [TilesCrsOneOf1](docs/TilesCrsOneOf1.md)
+- [TilesCrsOneOf2](docs/TilesCrsOneOf2.md)
 - [TimeDescriptor](docs/TimeDescriptor.md)
 - [TimeDimension](docs/TimeDimension.md)
 - [TimeGranularity](docs/TimeGranularity.md)
@@ -444,6 +477,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [UserInfo](docs/UserInfo.md)
 - [UserRegistration](docs/UserRegistration.md)
 - [UserSession](docs/UserSession.md)
+- [VariableMatrixWidth](docs/VariableMatrixWidth.md)
 - [VecUpdate](docs/VecUpdate.md)
 - [VectorColumnInfo](docs/VectorColumnInfo.md)
 - [VectorDataType](docs/VectorDataType.md)

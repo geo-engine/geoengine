@@ -7,8 +7,8 @@ Parameters for the [`OgrSource`] operator.
 
 Name | Type
 ------------ | -------------
-`attributeProjection` | Array&lt;string&gt;
 `data` | string
+`attributeProjection` | Array&lt;string&gt;
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { OgrSourceParameters } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "attributeProjection": null,
   "data": null,
+  "attributeProjection": null,
 } satisfies OgrSourceParameters
 
 console.log(example)

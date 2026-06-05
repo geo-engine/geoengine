@@ -16,16 +16,16 @@
 export interface OgrSourceTimeFormatCustom {
     /**
      *
-     * @type {string}
-     * @memberof OgrSourceTimeFormatCustom
-     */
-    customFormat: string;
-    /**
-     *
      * @type {OgrSourceTimeFormatCustomFormatEnum}
      * @memberof OgrSourceTimeFormatCustom
      */
     format: OgrSourceTimeFormatCustomFormatEnum;
+    /**
+     *
+     * @type {string}
+     * @memberof OgrSourceTimeFormatCustom
+     */
+    customFormat: string;
 }
 /**
  * @export

@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`database` | string
 `host` | string
-`password` | string
 `port` | number
+`database` | string
 `schema` | string
 `user` | string
+`password` | string
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { DatabaseConnectionConfig } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "database": null,
   "host": null,
-  "password": null,
   "port": null,
+  "database": null,
   "schema": null,
   "user": null,
+  "password": null,
 } satisfies DatabaseConnectionConfig
 
 console.log(example)

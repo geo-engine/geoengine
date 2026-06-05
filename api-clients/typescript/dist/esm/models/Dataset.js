@@ -18,13 +18,13 @@ import { TypedResultDescriptorFromJSON, TypedResultDescriptorToJSON, } from './T
  * Check if a given object implements the Dataset interface.
  */
 export function instanceOfDataset(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
-    if (!('displayName' in value) || value['displayName'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('displayName' in value) || value['displayName'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
@@ -40,16 +40,16 @@ export function DatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'dataPath': json['dataPath'] == null ? undefined : DataPathFromJSON(json['dataPath']),
-        'description': json['description'],
-        'displayName': json['displayName'],
         'id': json['id'],
         'name': json['name'],
-        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(ProvenanceFromJSON)),
+        'displayName': json['displayName'],
+        'description': json['description'],
         'resultDescriptor': TypedResultDescriptorFromJSON(json['resultDescriptor']),
         'sourceOperator': json['sourceOperator'],
         'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(ProvenanceFromJSON)),
         'tags': json['tags'] == null ? undefined : json['tags'],
+        'dataPath': json['dataPath'] == null ? undefined : DataPathFromJSON(json['dataPath']),
     };
 }
 export function DatasetToJSON(json) {
@@ -60,15 +60,15 @@ export function DatasetToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'dataPath': DataPathToJSON(value['dataPath']),
-        'description': value['description'],
-        'displayName': value['displayName'],
         'id': value['id'],
         'name': value['name'],
-        'provenance': value['provenance'] == null ? undefined : (value['provenance'].map(ProvenanceToJSON)),
+        'displayName': value['displayName'],
+        'description': value['description'],
         'resultDescriptor': TypedResultDescriptorToJSON(value['resultDescriptor']),
         'sourceOperator': value['sourceOperator'],
         'symbology': SymbologyToJSON(value['symbology']),
+        'provenance': value['provenance'] == null ? undefined : (value['provenance'].map(ProvenanceToJSON)),
         'tags': value['tags'],
+        'dataPath': DataPathToJSON(value['dataPath']),
     };
 }

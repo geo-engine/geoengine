@@ -7,9 +7,9 @@ It is either a set of `RasterOperator` or a single `VectorOperator`
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [ReprojectionParameters](ReprojectionParameters.md)
 `sources` | [SingleRasterOrVectorSource](SingleRasterOrVectorSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { SingleRasterOrVectorOperator } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies SingleRasterOrVectorOperator
 
 console.log(example)

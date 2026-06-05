@@ -29,10 +29,10 @@ class GdalLoadingInfoTemporalSlice(BaseModel):
     """
     one temporal slice of the dataset that requires reading from exactly one Gdal dataset
     """ # noqa: E501
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    params: Optional[GdalDatasetParameters] = None
     time: TimeInterval
-    __properties: ClassVar[List[str]] = ["cacheTtl", "params", "time"]
+    params: Optional[GdalDatasetParameters] = None
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["time", "params", "cacheTtl"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -73,12 +73,12 @@ class GdalLoadingInfoTemporalSlice(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of params
-        if self.params:
-            _dict['params'] = self.params.to_dict()
         # override the default output from pydantic by calling `to_dict()` of time
         if self.time:
             _dict['time'] = self.time.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of params
+        if self.params:
+            _dict['params'] = self.params.to_dict()
         # set to None if params (nullable) is None
         # and model_fields_set contains the field
         if self.params is None and "params" in self.model_fields_set:
@@ -96,9 +96,9 @@ class GdalLoadingInfoTemporalSlice(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "cacheTtl": obj.get("cacheTtl"),
+            "time": TimeInterval.from_dict(obj["time"]) if obj.get("time") is not None else None,
             "params": GdalDatasetParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
-            "time": TimeInterval.from_dict(obj["time"]) if obj.get("time") is not None else None
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

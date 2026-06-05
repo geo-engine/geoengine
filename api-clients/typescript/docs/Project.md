@@ -6,14 +6,14 @@
 
 Name | Type
 ------------ | -------------
-`bounds` | [STRectangle](STRectangle.md)
-`description` | string
 `id` | string
-`layers` | [Array&lt;ProjectLayer&gt;](ProjectLayer.md)
-`name` | string
-`plots` | [Array&lt;Plot&gt;](Plot.md)
-`timeStep` | [TimeStep](TimeStep.md)
 `version` | [ProjectVersion](ProjectVersion.md)
+`name` | string
+`description` | string
+`layers` | [Array&lt;ProjectLayer&gt;](ProjectLayer.md)
+`plots` | [Array&lt;Plot&gt;](Plot.md)
+`bounds` | [STRectangle](STRectangle.md)
+`timeStep` | [TimeStep](TimeStep.md)
 
 ## Example
 
@@ -22,14 +22,14 @@ import type { Project } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bounds": null,
-  "description": null,
   "id": null,
-  "layers": null,
-  "name": null,
-  "plots": null,
-  "timeStep": null,
   "version": null,
+  "name": null,
+  "description": null,
+  "layers": null,
+  "plots": null,
+  "bounds": null,
+  "timeStep": null,
 } satisfies Project
 
 console.log(example)

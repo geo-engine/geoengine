@@ -36,17 +36,17 @@ class TestExpressionParameters(unittest.TestCase):
         if include_optional:
             return ExpressionParameters(
                 expression = '',
-                map_no_data = True,
+                output_type = 'U8',
                 output_band = geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
-                    measurement = null, 
-                    name = '', ),
-                output_type = 'U8'
+                    name = '', 
+                    measurement = null, ),
+                map_no_data = True
             )
         else:
             return ExpressionParameters(
                 expression = '',
-                map_no_data = True,
                 output_type = 'U8',
+                map_no_data = True,
         )
         """
 

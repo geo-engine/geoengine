@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GdalMetaDataList {
-    #[serde(rename = "params")]
-    pub params: Vec<models::GdalLoadingInfoTemporalSlice>,
-    #[serde(rename = "resultDescriptor")]
-    pub result_descriptor: Box<models::RasterResultDescriptor>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "resultDescriptor")]
+    pub result_descriptor: Box<models::RasterResultDescriptor>,
+    #[serde(rename = "params")]
+    pub params: Vec<models::GdalLoadingInfoTemporalSlice>,
 }
 
 impl GdalMetaDataList {
-    pub fn new(params: Vec<models::GdalLoadingInfoTemporalSlice>, result_descriptor: models::RasterResultDescriptor, r#type: Type) -> GdalMetaDataList {
+    pub fn new(r#type: Type, result_descriptor: models::RasterResultDescriptor, params: Vec<models::GdalLoadingInfoTemporalSlice>) -> GdalMetaDataList {
         GdalMetaDataList {
-            params,
-            result_descriptor: Box::new(result_descriptor),
             r#type,
+            result_descriptor: Box::new(result_descriptor),
+            params,
         }
     }
 }

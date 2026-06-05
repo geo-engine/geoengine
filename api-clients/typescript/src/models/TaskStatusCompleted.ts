@@ -20,18 +20,6 @@ import { mapValues } from '../runtime';
 export interface TaskStatusCompleted {
     /**
      * 
-     * @type {string}
-     * @memberof TaskStatusCompleted
-     */
-    description?: string;
-    /**
-     * 
-     * @type {any}
-     * @memberof TaskStatusCompleted
-     */
-    info?: any | null;
-    /**
-     * 
      * @type {TaskStatusCompletedStatusEnum}
      * @memberof TaskStatusCompleted
      */
@@ -47,13 +35,25 @@ export interface TaskStatusCompleted {
      * @type {string}
      * @memberof TaskStatusCompleted
      */
-    timeStarted: string;
+    description?: string;
+    /**
+     * 
+     * @type {any}
+     * @memberof TaskStatusCompleted
+     */
+    info?: any | null;
     /**
      * 
      * @type {string}
      * @memberof TaskStatusCompleted
      */
     timeTotal: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof TaskStatusCompleted
+     */
+    timeStarted: string;
 }
 
 
@@ -72,8 +72,8 @@ export type TaskStatusCompletedStatusEnum = typeof TaskStatusCompletedStatusEnum
 export function instanceOfTaskStatusCompleted(value: object): value is TaskStatusCompleted {
     if (!('status' in value) || value['status'] === undefined) return false;
     if (!('taskType' in value) || value['taskType'] === undefined) return false;
-    if (!('timeStarted' in value) || value['timeStarted'] === undefined) return false;
     if (!('timeTotal' in value) || value['timeTotal'] === undefined) return false;
+    if (!('timeStarted' in value) || value['timeStarted'] === undefined) return false;
     return true;
 }
 
@@ -87,12 +87,12 @@ export function TaskStatusCompletedFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'description': json['description'] == null ? undefined : json['description'],
-        'info': json['info'] == null ? undefined : json['info'],
         'status': json['status'],
         'taskType': json['taskType'],
-        'timeStarted': json['timeStarted'],
+        'description': json['description'] == null ? undefined : json['description'],
+        'info': json['info'] == null ? undefined : json['info'],
         'timeTotal': json['timeTotal'],
+        'timeStarted': json['timeStarted'],
     };
 }
 
@@ -107,12 +107,12 @@ export function TaskStatusCompletedToJSONTyped(value?: TaskStatusCompleted | nul
 
     return {
         
-        'description': value['description'],
-        'info': value['info'],
         'status': value['status'],
         'taskType': value['taskType'],
-        'timeStarted': value['timeStarted'],
+        'description': value['description'],
+        'info': value['info'],
         'timeTotal': value['timeTotal'],
+        'timeStarted': value['timeStarted'],
     };
 }
 

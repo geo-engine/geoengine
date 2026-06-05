@@ -20,6 +20,30 @@ import { mapValues } from '../runtime';
 export interface PangaeaDataProviderDefinition {
     /**
      * 
+     * @type {PangaeaDataProviderDefinitionTypeEnum}
+     * @memberof PangaeaDataProviderDefinition
+     */
+    type: PangaeaDataProviderDefinitionTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof PangaeaDataProviderDefinition
+     */
+    name: string;
+    /**
+     * 
+     * @type {string}
+     * @memberof PangaeaDataProviderDefinition
+     */
+    description: string;
+    /**
+     * 
+     * @type {number}
+     * @memberof PangaeaDataProviderDefinition
+     */
+    priority?: number | null;
+    /**
+     * 
      * @type {string}
      * @memberof PangaeaDataProviderDefinition
      */
@@ -30,30 +54,6 @@ export interface PangaeaDataProviderDefinition {
      * @memberof PangaeaDataProviderDefinition
      */
     cacheTtl: number;
-    /**
-     * 
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
-     */
-    description: string;
-    /**
-     * 
-     * @type {string}
-     * @memberof PangaeaDataProviderDefinition
-     */
-    name: string;
-    /**
-     * 
-     * @type {number}
-     * @memberof PangaeaDataProviderDefinition
-     */
-    priority?: number | null;
-    /**
-     * 
-     * @type {PangaeaDataProviderDefinitionTypeEnum}
-     * @memberof PangaeaDataProviderDefinition
-     */
-    type: PangaeaDataProviderDefinitionTypeEnum;
 }
 
 
@@ -70,11 +70,11 @@ export type PangaeaDataProviderDefinitionTypeEnum = typeof PangaeaDataProviderDe
  * Check if a given object implements the PangaeaDataProviderDefinition interface.
  */
 export function instanceOfPangaeaDataProviderDefinition(value: object): value is PangaeaDataProviderDefinition {
+    if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('baseUrl' in value) || value['baseUrl'] === undefined) return false;
     if (!('cacheTtl' in value) || value['cacheTtl'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('name' in value) || value['name'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -88,12 +88,12 @@ export function PangaeaDataProviderDefinitionFromJSONTyped(json: any, ignoreDisc
     }
     return {
         
+        'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
         'baseUrl': json['baseUrl'],
         'cacheTtl': json['cacheTtl'],
-        'description': json['description'],
-        'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
-        'type': json['type'],
     };
 }
 
@@ -108,12 +108,12 @@ export function PangaeaDataProviderDefinitionToJSONTyped(value?: PangaeaDataProv
 
     return {
         
+        'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
         'baseUrl': value['baseUrl'],
         'cacheTtl': value['cacheTtl'],
-        'description': value['description'],
-        'name': value['name'],
-        'priority': value['priority'],
-        'type': value['type'],
     };
 }
 

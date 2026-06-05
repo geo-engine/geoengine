@@ -30,15 +30,15 @@ exports.SentinelS2L2ACogsProviderDefinitionTypeEnum = {
  * Check if a given object implements the SentinelS2L2ACogsProviderDefinition interface.
  */
 function instanceOfSentinelS2L2ACogsProviderDefinition(value) {
-    if (!('apiUrl' in value) || value['apiUrl'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
-    if (!('id' in value) || value['id'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('id' in value) || value['id'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('apiUrl' in value) || value['apiUrl'] === undefined)
         return false;
     return true;
 }
@@ -50,16 +50,16 @@ function SentinelS2L2ACogsProviderDefinitionFromJSONTyped(json, ignoreDiscrimina
         return json;
     }
     return {
-        'apiUrl': json['apiUrl'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'description': json['description'],
-        'gdalRetries': json['gdalRetries'] == null ? undefined : json['gdalRetries'],
-        'id': json['id'],
-        'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
-        'queryBuffer': json['queryBuffer'] == null ? undefined : (0, StacQueryBuffer_1.StacQueryBufferFromJSON)(json['queryBuffer']),
-        'stacApiRetries': json['stacApiRetries'] == null ? undefined : (0, StacApiRetries_1.StacApiRetriesFromJSON)(json['stacApiRetries']),
         'type': json['type'],
+        'name': json['name'],
+        'id': json['id'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'apiUrl': json['apiUrl'],
+        'stacApiRetries': json['stacApiRetries'] == null ? undefined : (0, StacApiRetries_1.StacApiRetriesFromJSON)(json['stacApiRetries']),
+        'gdalRetries': json['gdalRetries'] == null ? undefined : json['gdalRetries'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'queryBuffer': json['queryBuffer'] == null ? undefined : (0, StacQueryBuffer_1.StacQueryBufferFromJSON)(json['queryBuffer']),
     };
 }
 function SentinelS2L2ACogsProviderDefinitionToJSON(json) {
@@ -70,15 +70,15 @@ function SentinelS2L2ACogsProviderDefinitionToJSONTyped(value, ignoreDiscriminat
         return value;
     }
     return {
-        'apiUrl': value['apiUrl'],
-        'cacheTtl': value['cacheTtl'],
-        'description': value['description'],
-        'gdalRetries': value['gdalRetries'],
-        'id': value['id'],
-        'name': value['name'],
-        'priority': value['priority'],
-        'queryBuffer': (0, StacQueryBuffer_1.StacQueryBufferToJSON)(value['queryBuffer']),
-        'stacApiRetries': (0, StacApiRetries_1.StacApiRetriesToJSON)(value['stacApiRetries']),
         'type': value['type'],
+        'name': value['name'],
+        'id': value['id'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'apiUrl': value['apiUrl'],
+        'stacApiRetries': (0, StacApiRetries_1.StacApiRetriesToJSON)(value['stacApiRetries']),
+        'gdalRetries': value['gdalRetries'],
+        'cacheTtl': value['cacheTtl'],
+        'queryBuffer': (0, StacQueryBuffer_1.StacQueryBufferToJSON)(value['queryBuffer']),
     };
 }

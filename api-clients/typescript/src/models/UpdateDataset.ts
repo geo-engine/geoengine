@@ -23,7 +23,7 @@ export interface UpdateDataset {
      * @type {string}
      * @memberof UpdateDataset
      */
-    description: string;
+    name: string;
     /**
      * 
      * @type {string}
@@ -35,7 +35,7 @@ export interface UpdateDataset {
      * @type {string}
      * @memberof UpdateDataset
      */
-    name: string;
+    description: string;
     /**
      * 
      * @type {Array<string>}
@@ -48,9 +48,9 @@ export interface UpdateDataset {
  * Check if a given object implements the UpdateDataset interface.
  */
 export function instanceOfUpdateDataset(value: object): value is UpdateDataset {
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('displayName' in value) || value['displayName'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('displayName' in value) || value['displayName'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('tags' in value) || value['tags'] === undefined) return false;
     return true;
 }
@@ -65,9 +65,9 @@ export function UpdateDatasetFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
-        'description': json['description'],
-        'displayName': json['display_name'],
         'name': json['name'],
+        'displayName': json['display_name'],
+        'description': json['description'],
         'tags': json['tags'],
     };
 }
@@ -83,9 +83,9 @@ export function UpdateDatasetToJSONTyped(value?: UpdateDataset | null, ignoreDis
 
     return {
         
-        'description': value['description'],
-        'display_name': value['displayName'],
         'name': value['name'],
+        'display_name': value['displayName'],
+        'description': value['description'],
         'tags': value['tags'],
     };
 }

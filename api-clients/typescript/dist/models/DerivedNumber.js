@@ -28,13 +28,13 @@ exports.DerivedNumberTypeEnum = {
  * Check if a given object implements the DerivedNumber interface.
  */
 function instanceOfDerivedNumber(value) {
-    if (!('attribute' in value) || value['attribute'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
-    if (!('defaultValue' in value) || value['defaultValue'] === undefined)
+    if (!('attribute' in value) || value['attribute'] === undefined)
         return false;
     if (!('factor' in value) || value['factor'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('defaultValue' in value) || value['defaultValue'] === undefined)
         return false;
     return true;
 }
@@ -46,10 +46,10 @@ function DerivedNumberFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'attribute': json['attribute'],
-        'defaultValue': json['defaultValue'],
-        'factor': json['factor'],
         'type': json['type'],
+        'attribute': json['attribute'],
+        'factor': json['factor'],
+        'defaultValue': json['defaultValue'],
     };
 }
 function DerivedNumberToJSON(json) {
@@ -60,9 +60,9 @@ function DerivedNumberToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'attribute': value['attribute'],
-        'defaultValue': value['defaultValue'],
-        'factor': value['factor'],
         'type': value['type'],
+        'attribute': value['attribute'],
+        'factor': value['factor'],
+        'defaultValue': value['defaultValue'],
     };
 }

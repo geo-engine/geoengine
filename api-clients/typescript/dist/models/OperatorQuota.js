@@ -21,11 +21,11 @@ exports.OperatorQuotaToJSONTyped = OperatorQuotaToJSONTyped;
  * Check if a given object implements the OperatorQuota interface.
  */
 function instanceOfOperatorQuota(value) {
-    if (!('count' in value) || value['count'] === undefined)
-        return false;
     if (!('operatorName' in value) || value['operatorName'] === undefined)
         return false;
     if (!('operatorPath' in value) || value['operatorPath'] === undefined)
+        return false;
+    if (!('count' in value) || value['count'] === undefined)
         return false;
     return true;
 }
@@ -37,9 +37,9 @@ function OperatorQuotaFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'count': json['count'],
         'operatorName': json['operatorName'],
         'operatorPath': json['operatorPath'],
+        'count': json['count'],
     };
 }
 function OperatorQuotaToJSON(json) {
@@ -50,8 +50,8 @@ function OperatorQuotaToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'count': value['count'],
         'operatorName': value['operatorName'],
         'operatorPath': value['operatorPath'],
+        'count': value['count'],
     };
 }

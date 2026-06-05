@@ -35,37 +35,37 @@ class TestGfbioCollectionsDataProviderDefinition(unittest.TestCase):
         model = GfbioCollectionsDataProviderDefinition()
         if include_optional:
             return GfbioCollectionsDataProviderDefinition(
-                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                cache_ttl = 0,
-                collection_api_auth_token = '',
-                collection_api_url = '',
-                description = '',
+                type = 'GfbioCollections',
                 name = '',
-                pangaea_url = '',
+                description = '',
                 priority = 56,
-                type = 'GfbioCollections'
+                collection_api_url = '',
+                collection_api_auth_token = '',
+                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
+                pangaea_url = '',
+                cache_ttl = 0
             )
         else:
             return GfbioCollectionsDataProviderDefinition(
-                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                collection_api_auth_token = '',
-                collection_api_url = '',
-                description = '',
-                name = '',
-                pangaea_url = '',
                 type = 'GfbioCollections',
+                name = '',
+                description = '',
+                collection_api_url = '',
+                collection_api_auth_token = '',
+                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
+                pangaea_url = '',
         )
         """
 

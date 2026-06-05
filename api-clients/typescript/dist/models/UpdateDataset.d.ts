@@ -19,7 +19,7 @@ export interface UpdateDataset {
      * @type {string}
      * @memberof UpdateDataset
      */
-    description: string;
+    name: string;
     /**
      *
      * @type {string}
@@ -31,7 +31,7 @@ export interface UpdateDataset {
      * @type {string}
      * @memberof UpdateDataset
      */
-    name: string;
+    description: string;
     /**
      *
      * @type {Array<string>}

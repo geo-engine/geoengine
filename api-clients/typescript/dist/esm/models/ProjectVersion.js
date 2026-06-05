@@ -14,9 +14,9 @@
  * Check if a given object implements the ProjectVersion interface.
  */
 export function instanceOfProjectVersion(value) {
-    if (!('changed' in value) || value['changed'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
+        return false;
+    if (!('changed' in value) || value['changed'] === undefined)
         return false;
     return true;
 }
@@ -28,8 +28,8 @@ export function ProjectVersionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'changed': (new Date(json['changed'])),
         'id': json['id'],
+        'changed': (new Date(json['changed'])),
     };
 }
 export function ProjectVersionToJSON(json) {
@@ -40,7 +40,7 @@ export function ProjectVersionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'changed': value['changed'].toISOString(),
         'id': value['id'],
+        'changed': value['changed'].toISOString(),
     };
 }

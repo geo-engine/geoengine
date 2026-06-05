@@ -17,16 +17,16 @@ import type { Role } from './Role';
 export interface RoleDescription {
     /**
      *
-     * @type {boolean}
-     * @memberof RoleDescription
-     */
-    individual: boolean;
-    /**
-     *
      * @type {Role}
      * @memberof RoleDescription
      */
     role: Role;
+    /**
+     *
+     * @type {boolean}
+     * @memberof RoleDescription
+     */
+    individual: boolean;
 }
 /**
  * Check if a given object implements the RoleDescription interface.

@@ -30,12 +30,12 @@ class GdalMetaDataStatic(BaseModel):
     """
     GdalMetaDataStatic
     """ # noqa: E501
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    type: StrictStr
+    time: Optional[TimeInterval] = None
     params: GdalDatasetParameters
     result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
-    time: Optional[TimeInterval] = None
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["cacheTtl", "params", "resultDescriptor", "time", "type"]
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "time", "params", "resultDescriptor", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -83,15 +83,15 @@ class GdalMetaDataStatic(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of time
+        if self.time:
+            _dict['time'] = self.time.to_dict()
         # override the default output from pydantic by calling `to_dict()` of params
         if self.params:
             _dict['params'] = self.params.to_dict()
         # override the default output from pydantic by calling `to_dict()` of result_descriptor
         if self.result_descriptor:
             _dict['resultDescriptor'] = self.result_descriptor.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of time
-        if self.time:
-            _dict['time'] = self.time.to_dict()
         # set to None if time (nullable) is None
         # and model_fields_set contains the field
         if self.time is None and "time" in self.model_fields_set:
@@ -109,11 +109,11 @@ class GdalMetaDataStatic(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "cacheTtl": obj.get("cacheTtl"),
+            "type": obj.get("type"),
+            "time": TimeInterval.from_dict(obj["time"]) if obj.get("time") is not None else None,
             "params": GdalDatasetParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
             "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
-            "time": TimeInterval.from_dict(obj["time"]) if obj.get("time") is not None else None,
-            "type": obj.get("type")
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

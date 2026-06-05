@@ -27,16 +27,16 @@ class OgrSourceColumnSpec(BaseModel):
     """
     OgrSourceColumnSpec
     """ # noqa: E501
-    bool: Optional[List[StrictStr]] = None
-    datetime: Optional[List[StrictStr]] = None
-    var_float: Optional[List[StrictStr]] = Field(default=None, alias="float")
     format_specifics: Optional[FormatSpecifics] = Field(default=None, alias="formatSpecifics")
-    int: Optional[List[StrictStr]] = None
-    rename: Optional[Dict[str, StrictStr]] = None
-    text: Optional[List[StrictStr]] = None
     x: StrictStr
     y: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["bool", "datetime", "float", "formatSpecifics", "int", "rename", "text", "x", "y"]
+    int: Optional[List[StrictStr]] = None
+    var_float: Optional[List[StrictStr]] = Field(default=None, alias="float")
+    text: Optional[List[StrictStr]] = None
+    bool: Optional[List[StrictStr]] = None
+    datetime: Optional[List[StrictStr]] = None
+    rename: Optional[Dict[str, StrictStr]] = None
+    __properties: ClassVar[List[str]] = ["formatSpecifics", "x", "y", "int", "float", "text", "bool", "datetime", "rename"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -102,15 +102,15 @@ class OgrSourceColumnSpec(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "formatSpecifics": FormatSpecifics.from_dict(obj["formatSpecifics"]) if obj.get("formatSpecifics") is not None else None,
+            "x": obj.get("x"),
+            "y": obj.get("y"),
+            "int": obj.get("int"),
+            "float": obj.get("float"),
+            "text": obj.get("text"),
             "bool": obj.get("bool"),
             "datetime": obj.get("datetime"),
-            "float": obj.get("float"),
-            "formatSpecifics": FormatSpecifics.from_dict(obj["formatSpecifics"]) if obj.get("formatSpecifics") is not None else None,
-            "int": obj.get("int"),
-            "rename": obj.get("rename"),
-            "text": obj.get("text"),
-            "x": obj.get("x"),
-            "y": obj.get("y")
+            "rename": obj.get("rename")
         })
         return _obj
 

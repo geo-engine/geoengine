@@ -36,8 +36,8 @@ class TestSuggestMetaData(unittest.TestCase):
         if include_optional:
             return SuggestMetaData(
                 data_path = None,
-                layer_name = '',
-                main_file = ''
+                main_file = '',
+                layer_name = ''
             )
         else:
             return SuggestMetaData(

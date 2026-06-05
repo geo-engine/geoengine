@@ -7,8 +7,8 @@ Stores time intervals in ms in close-open semantic [start, end)
 
 Name | Type
 ------------ | -------------
-`end` | number
 `start` | number
+`end` | number
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { TimeInterval } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "end": null,
   "start": null,
+  "end": null,
 } satisfies TimeInterval
 
 console.log(example)

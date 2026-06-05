@@ -20,16 +20,16 @@ import { mapValues } from '../runtime';
 export interface DataProviderResource {
     /**
      * 
-     * @type {string}
-     * @memberof DataProviderResource
-     */
-    id: string;
-    /**
-     * 
      * @type {DataProviderResourceTypeEnum}
      * @memberof DataProviderResource
      */
     type: DataProviderResourceTypeEnum;
+    /**
+     * 
+     * @type {string}
+     * @memberof DataProviderResource
+     */
+    id: string;
 }
 
 
@@ -46,8 +46,8 @@ export type DataProviderResourceTypeEnum = typeof DataProviderResourceTypeEnum[k
  * Check if a given object implements the DataProviderResource interface.
  */
 export function instanceOfDataProviderResource(value: object): value is DataProviderResource {
-    if (!('id' in value) || value['id'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('id' in value) || value['id'] === undefined) return false;
     return true;
 }
 
@@ -61,8 +61,8 @@ export function DataProviderResourceFromJSONTyped(json: any, ignoreDiscriminator
     }
     return {
         
-        'id': json['id'],
         'type': json['type'],
+        'id': json['id'],
     };
 }
 
@@ -77,8 +77,8 @@ export function DataProviderResourceToJSONTyped(value?: DataProviderResource | n
 
     return {
         
-        'id': value['id'],
         'type': value['type'],
+        'id': value['id'],
     };
 }
 

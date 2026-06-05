@@ -25,13 +25,13 @@ const TypedResultDescriptor_1 = require("./TypedResultDescriptor");
  * Check if a given object implements the Dataset interface.
  */
 function instanceOfDataset(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
-    if (!('displayName' in value) || value['displayName'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('displayName' in value) || value['displayName'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
         return false;
@@ -47,16 +47,16 @@ function DatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'dataPath': json['dataPath'] == null ? undefined : (0, DataPath_1.DataPathFromJSON)(json['dataPath']),
-        'description': json['description'],
-        'displayName': json['displayName'],
         'id': json['id'],
         'name': json['name'],
-        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(Provenance_1.ProvenanceFromJSON)),
+        'displayName': json['displayName'],
+        'description': json['description'],
         'resultDescriptor': (0, TypedResultDescriptor_1.TypedResultDescriptorFromJSON)(json['resultDescriptor']),
         'sourceOperator': json['sourceOperator'],
         'symbology': json['symbology'] == null ? undefined : (0, Symbology_1.SymbologyFromJSON)(json['symbology']),
+        'provenance': json['provenance'] == null ? undefined : (json['provenance'].map(Provenance_1.ProvenanceFromJSON)),
         'tags': json['tags'] == null ? undefined : json['tags'],
+        'dataPath': json['dataPath'] == null ? undefined : (0, DataPath_1.DataPathFromJSON)(json['dataPath']),
     };
 }
 function DatasetToJSON(json) {
@@ -67,15 +67,15 @@ function DatasetToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'dataPath': (0, DataPath_1.DataPathToJSON)(value['dataPath']),
-        'description': value['description'],
-        'displayName': value['displayName'],
         'id': value['id'],
         'name': value['name'],
-        'provenance': value['provenance'] == null ? undefined : (value['provenance'].map(Provenance_1.ProvenanceToJSON)),
+        'displayName': value['displayName'],
+        'description': value['description'],
         'resultDescriptor': (0, TypedResultDescriptor_1.TypedResultDescriptorToJSON)(value['resultDescriptor']),
         'sourceOperator': value['sourceOperator'],
         'symbology': (0, Symbology_1.SymbologyToJSON)(value['symbology']),
+        'provenance': value['provenance'] == null ? undefined : (value['provenance'].map(Provenance_1.ProvenanceToJSON)),
         'tags': value['tags'],
+        'dataPath': (0, DataPath_1.DataPathToJSON)(value['dataPath']),
     };
 }

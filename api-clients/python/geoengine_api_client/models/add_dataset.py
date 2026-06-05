@@ -28,14 +28,14 @@ class AddDataset(BaseModel):
     """
     AddDataset
     """ # noqa: E501
-    description: StrictStr
-    display_name: StrictStr = Field(alias="displayName")
     name: Optional[StrictStr] = None
-    provenance: Optional[List[Provenance]] = None
+    display_name: StrictStr = Field(alias="displayName")
+    description: StrictStr
     source_operator: StrictStr = Field(alias="sourceOperator")
     symbology: Optional[Symbology] = None
+    provenance: Optional[List[Provenance]] = None
     tags: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["description", "displayName", "name", "provenance", "sourceOperator", "symbology", "tags"]
+    __properties: ClassVar[List[str]] = ["name", "displayName", "description", "sourceOperator", "symbology", "provenance", "tags"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -76,6 +76,9 @@ class AddDataset(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of symbology
+        if self.symbology:
+            _dict['symbology'] = self.symbology.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in provenance (list)
         _items = []
         if self.provenance:
@@ -83,23 +86,20 @@ class AddDataset(BaseModel):
                 if _item_provenance:
                     _items.append(_item_provenance.to_dict())
             _dict['provenance'] = _items
-        # override the default output from pydantic by calling `to_dict()` of symbology
-        if self.symbology:
-            _dict['symbology'] = self.symbology.to_dict()
         # set to None if name (nullable) is None
         # and model_fields_set contains the field
         if self.name is None and "name" in self.model_fields_set:
             _dict['name'] = None
 
-        # set to None if provenance (nullable) is None
-        # and model_fields_set contains the field
-        if self.provenance is None and "provenance" in self.model_fields_set:
-            _dict['provenance'] = None
-
         # set to None if symbology (nullable) is None
         # and model_fields_set contains the field
         if self.symbology is None and "symbology" in self.model_fields_set:
             _dict['symbology'] = None
+
+        # set to None if provenance (nullable) is None
+        # and model_fields_set contains the field
+        if self.provenance is None and "provenance" in self.model_fields_set:
+            _dict['provenance'] = None
 
         # set to None if tags (nullable) is None
         # and model_fields_set contains the field
@@ -118,12 +118,12 @@ class AddDataset(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "displayName": obj.get("displayName"),
             "name": obj.get("name"),
-            "provenance": [Provenance.from_dict(_item) for _item in obj["provenance"]] if obj.get("provenance") is not None else None,
+            "displayName": obj.get("displayName"),
+            "description": obj.get("description"),
             "sourceOperator": obj.get("sourceOperator"),
             "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None,
+            "provenance": [Provenance.from_dict(_item) for _item in obj["provenance"]] if obj.get("provenance") is not None else None,
             "tags": obj.get("tags")
         })
         return _obj

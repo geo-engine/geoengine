@@ -38,16 +38,16 @@ class TestNumberParam(unittest.TestCase):
                 type = 'static',
                 value = 0,
                 attribute = '',
-                default_value = 1.337,
-                factor = 1.337
+                factor = 1.337,
+                default_value = 1.337
             )
         else:
             return NumberParam(
                 type = 'static',
                 value = 0,
                 attribute = '',
-                default_value = 1.337,
                 factor = 1.337,
+                default_value = 1.337,
         )
         """
 

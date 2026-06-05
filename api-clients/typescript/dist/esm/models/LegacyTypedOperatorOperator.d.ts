@@ -16,6 +16,12 @@
 export interface LegacyTypedOperatorOperator {
     /**
      *
+     * @type {string}
+     * @memberof LegacyTypedOperatorOperator
+     */
+    type: string;
+    /**
+     *
      * @type {object}
      * @memberof LegacyTypedOperatorOperator
      */
@@ -26,12 +32,6 @@ export interface LegacyTypedOperatorOperator {
      * @memberof LegacyTypedOperatorOperator
      */
     sources?: object;
-    /**
-     *
-     * @type {string}
-     * @memberof LegacyTypedOperatorOperator
-     */
-    type: string;
 }
 /**
  * Check if a given object implements the LegacyTypedOperatorOperator interface.

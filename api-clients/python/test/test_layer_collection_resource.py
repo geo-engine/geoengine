@@ -35,13 +35,13 @@ class TestLayerCollectionResource(unittest.TestCase):
         model = LayerCollectionResource()
         if include_optional:
             return LayerCollectionResource(
-                id = '',
-                type = 'layerCollection'
+                type = 'layerCollection',
+                id = ''
             )
         else:
             return LayerCollectionResource(
-                id = '',
                 type = 'layerCollection',
+                id = '',
         )
         """
 

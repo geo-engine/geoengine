@@ -12,35 +12,35 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DatasetListing {
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "displayName")]
-    pub display_name: String,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
     #[serde(rename = "name")]
     pub name: String,
-    #[serde(rename = "resultDescriptor")]
-    pub result_descriptor: Box<models::TypedResultDescriptor>,
-    #[serde(rename = "sourceOperator")]
-    pub source_operator: String,
-    #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub symbology: Option<Option<Box<models::Symbology>>>,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "tags")]
     pub tags: Vec<String>,
+    #[serde(rename = "sourceOperator")]
+    pub source_operator: String,
+    #[serde(rename = "resultDescriptor")]
+    pub result_descriptor: Box<models::TypedResultDescriptor>,
+    #[serde(rename = "symbology", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub symbology: Option<Option<Box<models::Symbology>>>,
 }
 
 impl DatasetListing {
-    pub fn new(description: String, display_name: String, id: uuid::Uuid, name: String, result_descriptor: models::TypedResultDescriptor, source_operator: String, tags: Vec<String>) -> DatasetListing {
+    pub fn new(id: uuid::Uuid, name: String, display_name: String, description: String, tags: Vec<String>, source_operator: String, result_descriptor: models::TypedResultDescriptor) -> DatasetListing {
         DatasetListing {
-            description,
-            display_name,
             id,
             name,
-            result_descriptor: Box::new(result_descriptor),
-            source_operator,
-            symbology: None,
+            display_name,
+            description,
             tags,
+            source_operator,
+            result_descriptor: Box::new(result_descriptor),
+            symbology: None,
         }
     }
 }

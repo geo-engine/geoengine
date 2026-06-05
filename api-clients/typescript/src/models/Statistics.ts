@@ -98,6 +98,12 @@ import {
 export interface Statistics {
     /**
      * 
+     * @type {StatisticsTypeEnum}
+     * @memberof Statistics
+     */
+    type: StatisticsTypeEnum;
+    /**
+     * 
      * @type {StatisticsParameters}
      * @memberof Statistics
      */
@@ -108,12 +114,6 @@ export interface Statistics {
      * @memberof Statistics
      */
     sources: MultipleRasterOrSingleVectorSource;
-    /**
-     * 
-     * @type {StatisticsTypeEnum}
-     * @memberof Statistics
-     */
-    type: StatisticsTypeEnum;
 }
 
 
@@ -130,9 +130,9 @@ export type StatisticsTypeEnum = typeof StatisticsTypeEnum[keyof typeof Statisti
  * Check if a given object implements the Statistics interface.
  */
 export function instanceOfStatistics(value: object): value is Statistics {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -146,9 +146,9 @@ export function StatisticsFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
+        'type': json['type'],
         'params': StatisticsParametersFromJSON(json['params']),
         'sources': MultipleRasterOrSingleVectorSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -163,9 +163,9 @@ export function StatisticsToJSONTyped(value?: Statistics | null, ignoreDiscrimin
 
     return {
         
+        'type': value['type'],
         'params': StatisticsParametersToJSON(value['params']),
         'sources': MultipleRasterOrSingleVectorSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

@@ -35,23 +35,14 @@ class TestGdalMetaDataList(unittest.TestCase):
         model = GdalMetaDataList()
         if include_optional:
             return GdalMetaDataList(
-                params = [
-                    geoengine_api_client.models.gdal_loading_info_temporal_slice.GdalLoadingInfoTemporalSlice(
-                        cache_ttl = 0, 
-                        params = null, 
-                        time = geoengine_api_client.models.time_interval.TimeInterval(
-                            end = 56, 
-                            start = 56, ), )
-                    ],
+                type = 'GdalMetaDataList',
                 result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
-                    bands = [
-                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
-                            measurement = null, 
-                            name = '', )
-                        ], 
                     data_type = 'U8', 
+                    spatial_reference = '', 
+                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
+                        bounds = null, 
+                        dimension = null, ), 
                     spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                        descriptor = 'source', 
                         spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                             geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                                 origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -60,37 +51,37 @@ class TestGdalMetaDataList(unittest.TestCase):
                                 x_pixel_size = 1.337, 
                                 y_pixel_size = 1.337, ), 
                             grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), 
                                 top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), ), ), ), 
-                    spatial_reference = '', 
-                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
-                        bounds = null, 
-                        dimension = null, ), ),
-                type = 'GdalMetaDataList'
+                                    y_idx = 56, 
+                                    x_idx = 56, ), 
+                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                    y_idx = 56, 
+                                    x_idx = 56, ), ), ), 
+                        descriptor = 'source', ), 
+                    bands = [
+                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
+                            name = '', 
+                            measurement = null, )
+                        ], ),
+                params = [
+                    geoengine_api_client.models.gdal_loading_info_temporal_slice.GdalLoadingInfoTemporalSlice(
+                        time = geoengine_api_client.models.time_interval.TimeInterval(
+                            start = 56, 
+                            end = 56, ), 
+                        params = null, 
+                        cache_ttl = 0, )
+                    ]
             )
         else:
             return GdalMetaDataList(
-                params = [
-                    geoengine_api_client.models.gdal_loading_info_temporal_slice.GdalLoadingInfoTemporalSlice(
-                        cache_ttl = 0, 
-                        params = null, 
-                        time = geoengine_api_client.models.time_interval.TimeInterval(
-                            end = 56, 
-                            start = 56, ), )
-                    ],
+                type = 'GdalMetaDataList',
                 result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
-                    bands = [
-                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
-                            measurement = null, 
-                            name = '', )
-                        ], 
                     data_type = 'U8', 
+                    spatial_reference = '', 
+                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
+                        bounds = null, 
+                        dimension = null, ), 
                     spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                        descriptor = 'source', 
                         spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
                             geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                                 origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -99,17 +90,26 @@ class TestGdalMetaDataList(unittest.TestCase):
                                 x_pixel_size = 1.337, 
                                 y_pixel_size = 1.337, ), 
                             grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), 
                                 top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), ), ), ), 
-                    spatial_reference = '', 
-                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
-                        bounds = null, 
-                        dimension = null, ), ),
-                type = 'GdalMetaDataList',
+                                    y_idx = 56, 
+                                    x_idx = 56, ), 
+                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                    y_idx = 56, 
+                                    x_idx = 56, ), ), ), 
+                        descriptor = 'source', ), 
+                    bands = [
+                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
+                            name = '', 
+                            measurement = null, )
+                        ], ),
+                params = [
+                    geoengine_api_client.models.gdal_loading_info_temporal_slice.GdalLoadingInfoTemporalSlice(
+                        time = geoengine_api_client.models.time_interval.TimeInterval(
+                            start = 56, 
+                            end = 56, ), 
+                        params = null, 
+                        cache_ttl = 0, )
+                    ],
         )
         """
 

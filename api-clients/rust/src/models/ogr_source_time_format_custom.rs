@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OgrSourceTimeFormatCustom {
-    #[serde(rename = "customFormat")]
-    pub custom_format: String,
     #[serde(rename = "format")]
     pub format: Format,
+    #[serde(rename = "customFormat")]
+    pub custom_format: String,
 }
 
 impl OgrSourceTimeFormatCustom {
-    pub fn new(custom_format: String, format: Format) -> OgrSourceTimeFormatCustom {
+    pub fn new(format: Format, custom_format: String) -> OgrSourceTimeFormatCustom {
         OgrSourceTimeFormatCustom {
-            custom_format,
             format,
+            custom_format,
         }
     }
 }

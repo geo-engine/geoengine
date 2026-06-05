@@ -16,13 +16,13 @@ import { ProviderLayerCollectionIdFromJSON, ProviderLayerCollectionIdToJSON, } f
  * Check if a given object implements the LayerCollection interface.
  */
 export function instanceOfLayerCollection(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
-    if (!('items' in value) || value['items'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('items' in value) || value['items'] === undefined)
         return false;
     if (!('properties' in value) || value['properties'] === undefined)
         return false;
@@ -36,11 +36,11 @@ export function LayerCollectionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
-        'entryLabel': json['entryLabel'] == null ? undefined : json['entryLabel'],
         'id': ProviderLayerCollectionIdFromJSON(json['id']),
-        'items': (json['items'].map(CollectionItemFromJSON)),
         'name': json['name'],
+        'description': json['description'],
+        'items': (json['items'].map(CollectionItemFromJSON)),
+        'entryLabel': json['entryLabel'] == null ? undefined : json['entryLabel'],
         'properties': json['properties'],
     };
 }
@@ -52,11 +52,11 @@ export function LayerCollectionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'entryLabel': value['entryLabel'],
         'id': ProviderLayerCollectionIdToJSON(value['id']),
-        'items': (value['items'].map(CollectionItemToJSON)),
         'name': value['name'],
+        'description': value['description'],
+        'items': (value['items'].map(CollectionItemToJSON)),
+        'entryLabel': value['entryLabel'],
         'properties': value['properties'],
     };
 }

@@ -21,13 +21,13 @@ export const LayerListingTypeEnum = {
  * Check if a given object implements the LayerListing interface.
  */
 export function instanceOfLayerListing(value) {
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     return true;
 }
@@ -39,11 +39,11 @@ export function LayerListingFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
+        'type': json['type'],
         'id': ProviderLayerIdFromJSON(json['id']),
         'name': json['name'],
+        'description': json['description'],
         'properties': json['properties'] == null ? undefined : json['properties'],
-        'type': json['type'],
     };
 }
 export function LayerListingToJSON(json) {
@@ -54,10 +54,10 @@ export function LayerListingToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
+        'type': value['type'],
         'id': ProviderLayerIdToJSON(value['id']),
         'name': value['name'],
+        'description': value['description'],
         'properties': value['properties'],
-        'type': value['type'],
     };
 }

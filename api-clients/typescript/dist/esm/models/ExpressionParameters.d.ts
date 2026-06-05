@@ -27,11 +27,11 @@ export interface ExpressionParameters {
      */
     expression: string;
     /**
-     * Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
-     * @type {boolean}
+     * A raster data type for the output
+     * @type {RasterDataType}
      * @memberof ExpressionParameters
      */
-    mapNoData: boolean;
+    outputType: RasterDataType;
     /**
      * Description about the output
      * @type {RasterBandDescriptor}
@@ -39,11 +39,11 @@ export interface ExpressionParameters {
      */
     outputBand?: RasterBandDescriptor;
     /**
-     * A raster data type for the output
-     * @type {RasterDataType}
+     * Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.
+     * @type {boolean}
      * @memberof ExpressionParameters
      */
-    outputType: RasterDataType;
+    mapNoData: boolean;
 }
 /**
  * Check if a given object implements the ExpressionParameters interface.

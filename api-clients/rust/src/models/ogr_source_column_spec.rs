@@ -12,38 +12,38 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct OgrSourceColumnSpec {
-    #[serde(rename = "bool", skip_serializing_if = "Option::is_none")]
-    pub bool: Option<Vec<String>>,
-    #[serde(rename = "datetime", skip_serializing_if = "Option::is_none")]
-    pub datetime: Option<Vec<String>>,
-    #[serde(rename = "float", skip_serializing_if = "Option::is_none")]
-    pub float: Option<Vec<String>>,
     #[serde(rename = "formatSpecifics", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub format_specifics: Option<Option<Box<models::FormatSpecifics>>>,
-    #[serde(rename = "int", skip_serializing_if = "Option::is_none")]
-    pub int: Option<Vec<String>>,
-    #[serde(rename = "rename", skip_serializing_if = "Option::is_none")]
-    pub rename: Option<std::collections::HashMap<String, String>>,
-    #[serde(rename = "text", skip_serializing_if = "Option::is_none")]
-    pub text: Option<Vec<String>>,
     #[serde(rename = "x")]
     pub x: String,
     #[serde(rename = "y", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub y: Option<Option<String>>,
+    #[serde(rename = "int", skip_serializing_if = "Option::is_none")]
+    pub int: Option<Vec<String>>,
+    #[serde(rename = "float", skip_serializing_if = "Option::is_none")]
+    pub float: Option<Vec<String>>,
+    #[serde(rename = "text", skip_serializing_if = "Option::is_none")]
+    pub text: Option<Vec<String>>,
+    #[serde(rename = "bool", skip_serializing_if = "Option::is_none")]
+    pub bool: Option<Vec<String>>,
+    #[serde(rename = "datetime", skip_serializing_if = "Option::is_none")]
+    pub datetime: Option<Vec<String>>,
+    #[serde(rename = "rename", skip_serializing_if = "Option::is_none")]
+    pub rename: Option<std::collections::HashMap<String, String>>,
 }
 
 impl OgrSourceColumnSpec {
     pub fn new(x: String) -> OgrSourceColumnSpec {
         OgrSourceColumnSpec {
-            bool: None,
-            datetime: None,
-            float: None,
             format_specifics: None,
-            int: None,
-            rename: None,
-            text: None,
             x,
             y: None,
+            int: None,
+            float: None,
+            text: None,
+            bool: None,
+            datetime: None,
+            rename: None,
         }
     }
 }

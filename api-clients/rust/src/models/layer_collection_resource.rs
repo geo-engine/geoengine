@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LayerCollectionResource {
-    #[serde(rename = "id")]
-    pub id: String,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "id")]
+    pub id: String,
 }
 
 impl LayerCollectionResource {
-    pub fn new(id: String, r#type: Type) -> LayerCollectionResource {
+    pub fn new(r#type: Type, id: String) -> LayerCollectionResource {
         LayerCollectionResource {
-            id,
             r#type,
+            id,
         }
     }
 }

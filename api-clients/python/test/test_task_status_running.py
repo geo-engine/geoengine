@@ -35,20 +35,20 @@ class TestTaskStatusRunning(unittest.TestCase):
         model = TaskStatusRunning()
         if include_optional:
             return TaskStatusRunning(
-                description = '',
-                estimated_time_remaining = '',
-                info = None,
-                pct_complete = '',
                 status = 'running',
                 task_type = '',
+                description = '',
+                info = None,
+                pct_complete = '',
+                estimated_time_remaining = '',
                 time_started = ''
             )
         else:
             return TaskStatusRunning(
-                estimated_time_remaining = '',
-                pct_complete = '',
                 status = 'running',
                 task_type = '',
+                pct_complete = '',
+                estimated_time_remaining = '',
                 time_started = '',
         )
         """

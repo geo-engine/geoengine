@@ -29,12 +29,12 @@ export function UpdateProjectFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bounds': json['bounds'] == null ? undefined : STRectangleFromJSON(json['bounds']),
-        'description': json['description'] == null ? undefined : json['description'],
         'id': json['id'],
-        'layers': json['layers'] == null ? undefined : (json['layers'].map(VecUpdateFromJSON)),
         'name': json['name'] == null ? undefined : json['name'],
+        'description': json['description'] == null ? undefined : json['description'],
+        'layers': json['layers'] == null ? undefined : (json['layers'].map(VecUpdateFromJSON)),
         'plots': json['plots'] == null ? undefined : (json['plots'].map(VecUpdateFromJSON)),
+        'bounds': json['bounds'] == null ? undefined : STRectangleFromJSON(json['bounds']),
         'timeStep': json['timeStep'] == null ? undefined : TimeStepFromJSON(json['timeStep']),
     };
 }
@@ -46,12 +46,12 @@ export function UpdateProjectToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bounds': STRectangleToJSON(value['bounds']),
-        'description': value['description'],
         'id': value['id'],
-        'layers': value['layers'] == null ? undefined : (value['layers'].map(VecUpdateToJSON)),
         'name': value['name'],
+        'description': value['description'],
+        'layers': value['layers'] == null ? undefined : (value['layers'].map(VecUpdateToJSON)),
         'plots': value['plots'] == null ? undefined : (value['plots'].map(VecUpdateToJSON)),
+        'bounds': STRectangleToJSON(value['bounds']),
         'timeStep': TimeStepToJSON(value['timeStep']),
     };
 }

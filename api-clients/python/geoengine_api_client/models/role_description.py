@@ -27,9 +27,9 @@ class RoleDescription(BaseModel):
     """
     RoleDescription
     """ # noqa: E501
-    individual: StrictBool
     role: Role
-    __properties: ClassVar[List[str]] = ["individual", "role"]
+    individual: StrictBool
+    __properties: ClassVar[List[str]] = ["role", "individual"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -85,8 +85,8 @@ class RoleDescription(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "individual": obj.get("individual"),
-            "role": Role.from_dict(obj["role"]) if obj.get("role") is not None else None
+            "role": Role.from_dict(obj["role"]) if obj.get("role") is not None else None,
+            "individual": obj.get("individual")
         })
         return _obj
 

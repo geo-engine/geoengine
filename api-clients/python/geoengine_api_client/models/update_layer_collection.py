@@ -27,10 +27,10 @@ class UpdateLayerCollection(BaseModel):
     """
     UpdateLayerCollection
     """ # noqa: E501
-    description: StrictStr
     name: StrictStr
+    description: StrictStr
     properties: Optional[List[Annotated[List[StrictStr], Field(min_length=2, max_length=2)]]] = None
-    __properties: ClassVar[List[str]] = ["description", "name", "properties"]
+    __properties: ClassVar[List[str]] = ["name", "description", "properties"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,8 +83,8 @@ class UpdateLayerCollection(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
             "properties": obj.get("properties")
         })
         return _obj

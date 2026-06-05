@@ -13,18 +13,18 @@ use serde::{Deserialize, Serialize};
 /// TimeInterval : Stores time intervals in ms in close-open semantic [start, end)
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TimeInterval {
-    #[serde(rename = "end")]
-    pub end: i64,
     #[serde(rename = "start")]
     pub start: i64,
+    #[serde(rename = "end")]
+    pub end: i64,
 }
 
 impl TimeInterval {
     /// Stores time intervals in ms in close-open semantic [start, end)
-    pub fn new(end: i64, start: i64) -> TimeInterval {
+    pub fn new(start: i64, end: i64) -> TimeInterval {
         TimeInterval {
-            end,
             start,
+            end,
         }
     }
 }

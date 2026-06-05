@@ -28,16 +28,16 @@ import {
 export interface LegacyTypedOperator {
     /**
      * 
-     * @type {LegacyTypedOperatorOperator}
-     * @memberof LegacyTypedOperator
-     */
-    operator: LegacyTypedOperatorOperator;
-    /**
-     * 
      * @type {LegacyTypedOperatorTypeEnum}
      * @memberof LegacyTypedOperator
      */
     type: LegacyTypedOperatorTypeEnum;
+    /**
+     * 
+     * @type {LegacyTypedOperatorOperator}
+     * @memberof LegacyTypedOperator
+     */
+    operator: LegacyTypedOperatorOperator;
 }
 
 
@@ -56,8 +56,8 @@ export type LegacyTypedOperatorTypeEnum = typeof LegacyTypedOperatorTypeEnum[key
  * Check if a given object implements the LegacyTypedOperator interface.
  */
 export function instanceOfLegacyTypedOperator(value: object): value is LegacyTypedOperator {
-    if (!('operator' in value) || value['operator'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('operator' in value) || value['operator'] === undefined) return false;
     return true;
 }
 
@@ -71,8 +71,8 @@ export function LegacyTypedOperatorFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
-        'operator': LegacyTypedOperatorOperatorFromJSON(json['operator']),
         'type': json['type'],
+        'operator': LegacyTypedOperatorOperatorFromJSON(json['operator']),
     };
 }
 
@@ -87,8 +87,8 @@ export function LegacyTypedOperatorToJSONTyped(value?: LegacyTypedOperator | nul
 
     return {
         
-        'operator': LegacyTypedOperatorOperatorToJSON(value['operator']),
         'type': value['type'],
+        'operator': LegacyTypedOperatorOperatorToJSON(value['operator']),
     };
 }
 

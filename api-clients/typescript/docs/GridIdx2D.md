@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`xIdx` | number
 `yIdx` | number
+`xIdx` | number
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { GridIdx2D } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "xIdx": null,
   "yIdx": null,
+  "xIdx": null,
 } satisfies GridIdx2D
 
 console.log(example)

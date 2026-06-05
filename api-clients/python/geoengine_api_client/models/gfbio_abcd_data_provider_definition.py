@@ -28,13 +28,13 @@ class GfbioAbcdDataProviderDefinition(BaseModel):
     """
     GfbioAbcdDataProviderDefinition
     """ # noqa: E501
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    db_config: DatabaseConnectionConfig = Field(alias="dbConfig")
-    description: StrictStr
-    name: StrictStr
-    priority: Optional[StrictInt] = None
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["cacheTtl", "dbConfig", "description", "name", "priority", "type"]
+    name: StrictStr
+    description: StrictStr
+    priority: Optional[StrictInt] = None
+    db_config: DatabaseConnectionConfig = Field(alias="dbConfig")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "name", "description", "priority", "dbConfig", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -102,12 +102,12 @@ class GfbioAbcdDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "cacheTtl": obj.get("cacheTtl"),
-            "dbConfig": DatabaseConnectionConfig.from_dict(obj["dbConfig"]) if obj.get("dbConfig") is not None else None,
-            "description": obj.get("description"),
+            "type": obj.get("type"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
-            "type": obj.get("type")
+            "dbConfig": DatabaseConnectionConfig.from_dict(obj["dbConfig"]) if obj.get("dbConfig") is not None else None,
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

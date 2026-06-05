@@ -35,17 +35,17 @@ class TestSuffix(unittest.TestCase):
         model = Suffix()
         if include_optional:
             return Suffix(
-                type = 'suffix',
-                values = [
-                    ''
-                    ]
-            )
-        else:
-            return Suffix(
-                type = 'suffix',
                 values = [
                     ''
                     ],
+                type = 'suffix'
+            )
+        else:
+            return Suffix(
+                values = [
+                    ''
+                    ],
+                type = 'suffix',
         )
         """
 

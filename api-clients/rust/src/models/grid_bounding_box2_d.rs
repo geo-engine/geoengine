@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GridBoundingBox2D {
-    #[serde(rename = "bottomRightIdx")]
-    pub bottom_right_idx: Box<models::GridIdx2D>,
     #[serde(rename = "topLeftIdx")]
     pub top_left_idx: Box<models::GridIdx2D>,
+    #[serde(rename = "bottomRightIdx")]
+    pub bottom_right_idx: Box<models::GridIdx2D>,
 }
 
 impl GridBoundingBox2D {
-    pub fn new(bottom_right_idx: models::GridIdx2D, top_left_idx: models::GridIdx2D) -> GridBoundingBox2D {
+    pub fn new(top_left_idx: models::GridIdx2D, bottom_right_idx: models::GridIdx2D) -> GridBoundingBox2D {
         GridBoundingBox2D {
-            bottom_right_idx: Box::new(bottom_right_idx),
             top_left_idx: Box::new(top_left_idx),
+            bottom_right_idx: Box::new(bottom_right_idx),
         }
     }
 }

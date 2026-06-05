@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProviderLayerCollectionId {
-    #[serde(rename = "collectionId")]
-    pub collection_id: String,
     #[serde(rename = "providerId")]
     pub provider_id: uuid::Uuid,
+    #[serde(rename = "collectionId")]
+    pub collection_id: String,
 }
 
 impl ProviderLayerCollectionId {
-    pub fn new(collection_id: String, provider_id: uuid::Uuid) -> ProviderLayerCollectionId {
+    pub fn new(provider_id: uuid::Uuid, collection_id: String) -> ProviderLayerCollectionId {
         ProviderLayerCollectionId {
-            collection_id,
             provider_id,
+            collection_id,
         }
     }
 }

@@ -19,10 +19,10 @@ import type { ColorParam } from './ColorParam';
 export interface PolygonSymbology {
     /**
      *
-     * @type {boolean}
+     * @type {PolygonSymbologyTypeEnum}
      * @memberof PolygonSymbology
      */
-    autoSimplified: boolean;
+    type: PolygonSymbologyTypeEnum;
     /**
      *
      * @type {ColorParam}
@@ -43,10 +43,10 @@ export interface PolygonSymbology {
     text?: TextSymbology | null;
     /**
      *
-     * @type {PolygonSymbologyTypeEnum}
+     * @type {boolean}
      * @memberof PolygonSymbology
      */
-    type: PolygonSymbologyTypeEnum;
+    autoSimplified: boolean;
 }
 /**
  * @export

@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`bounds` | [STRectangle](STRectangle.md)
-`description` | string
 `name` | string
+`description` | string
+`bounds` | [STRectangle](STRectangle.md)
 `timeStep` | [TimeStep](TimeStep.md)
 
 ## Example
@@ -18,9 +18,9 @@ import type { CreateProject } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bounds": null,
-  "description": null,
   "name": null,
+  "description": null,
+  "bounds": null,
   "timeStep": null,
 } satisfies CreateProject
 

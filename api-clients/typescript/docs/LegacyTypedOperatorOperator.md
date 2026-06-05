@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | object
 `sources` | object
-`type` | string
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { LegacyTypedOperatorOperator } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies LegacyTypedOperatorOperator
 
 console.log(example)

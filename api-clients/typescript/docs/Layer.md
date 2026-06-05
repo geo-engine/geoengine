@@ -6,13 +6,13 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
 `id` | [ProviderLayerId](ProviderLayerId.md)
-`metadata` | { [key: string]: string; }
 `name` | string
-`properties` | Array&lt;Array&lt;string&gt;&gt;
-`symbology` | [Symbology](Symbology.md)
+`description` | string
 `workflow` | [Workflow](Workflow.md)
+`symbology` | [Symbology](Symbology.md)
+`properties` | Array&lt;Array&lt;string&gt;&gt;
+`metadata` | { [key: string]: string; }
 
 ## Example
 
@@ -21,13 +21,13 @@ import type { Layer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
   "id": null,
-  "metadata": null,
   "name": null,
-  "properties": null,
-  "symbology": null,
+  "description": null,
   "workflow": null,
+  "symbology": null,
+  "properties": null,
+  "metadata": null,
 } satisfies Layer
 
 console.log(example)

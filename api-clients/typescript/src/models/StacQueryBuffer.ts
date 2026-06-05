@@ -23,21 +23,21 @@ export interface StacQueryBuffer {
      * @type {number}
      * @memberof StacQueryBuffer
      */
-    endSeconds: number;
+    startSeconds: number;
     /**
      * 
      * @type {number}
      * @memberof StacQueryBuffer
      */
-    startSeconds: number;
+    endSeconds: number;
 }
 
 /**
  * Check if a given object implements the StacQueryBuffer interface.
  */
 export function instanceOfStacQueryBuffer(value: object): value is StacQueryBuffer {
-    if (!('endSeconds' in value) || value['endSeconds'] === undefined) return false;
     if (!('startSeconds' in value) || value['startSeconds'] === undefined) return false;
+    if (!('endSeconds' in value) || value['endSeconds'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function StacQueryBufferFromJSONTyped(json: any, ignoreDiscriminator: boo
     }
     return {
         
-        'endSeconds': json['endSeconds'],
         'startSeconds': json['startSeconds'],
+        'endSeconds': json['endSeconds'],
     };
 }
 
@@ -67,8 +67,8 @@ export function StacQueryBufferToJSONTyped(value?: StacQueryBuffer | null, ignor
 
     return {
         
-        'endSeconds': value['endSeconds'],
         'startSeconds': value['startSeconds'],
+        'endSeconds': value['endSeconds'],
     };
 }
 

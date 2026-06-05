@@ -16,13 +16,13 @@ import { AxisOrderFromJSON, AxisOrderToJSON, } from './AxisOrder';
  * Check if a given object implements the SpatialReferenceSpecification interface.
  */
 export function instanceOfSpatialReferenceSpecification(value) {
-    if (!('extent' in value) || value['extent'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('spatialReference' in value) || value['spatialReference'] === undefined)
         return false;
     if (!('projString' in value) || value['projString'] === undefined)
         return false;
-    if (!('spatialReference' in value) || value['spatialReference'] === undefined)
+    if (!('extent' in value) || value['extent'] === undefined)
         return false;
     return true;
 }
@@ -34,12 +34,12 @@ export function SpatialReferenceSpecificationFromJSONTyped(json, ignoreDiscrimin
         return json;
     }
     return {
+        'name': json['name'],
+        'spatialReference': json['spatialReference'],
+        'projString': json['projString'],
+        'extent': BoundingBox2DFromJSON(json['extent']),
         'axisLabels': json['axisLabels'] == null ? undefined : json['axisLabels'],
         'axisOrder': json['axisOrder'] == null ? undefined : AxisOrderFromJSON(json['axisOrder']),
-        'extent': BoundingBox2DFromJSON(json['extent']),
-        'name': json['name'],
-        'projString': json['projString'],
-        'spatialReference': json['spatialReference'],
     };
 }
 export function SpatialReferenceSpecificationToJSON(json) {
@@ -50,11 +50,11 @@ export function SpatialReferenceSpecificationToJSONTyped(value, ignoreDiscrimina
         return value;
     }
     return {
+        'name': value['name'],
+        'spatialReference': value['spatialReference'],
+        'projString': value['projString'],
+        'extent': BoundingBox2DToJSON(value['extent']),
         'axisLabels': value['axisLabels'],
         'axisOrder': AxisOrderToJSON(value['axisOrder']),
-        'extent': BoundingBox2DToJSON(value['extent']),
-        'name': value['name'],
-        'projString': value['projString'],
-        'spatialReference': value['spatialReference'],
     };
 }

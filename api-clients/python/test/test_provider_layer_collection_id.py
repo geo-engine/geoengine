@@ -35,13 +35,13 @@ class TestProviderLayerCollectionId(unittest.TestCase):
         model = ProviderLayerCollectionId()
         if include_optional:
             return ProviderLayerCollectionId(
-                collection_id = '',
-                provider_id = ''
+                provider_id = '',
+                collection_id = ''
             )
         else:
             return ProviderLayerCollectionId(
-                collection_id = '',
                 provider_id = '',
+                collection_id = '',
         )
         """
 

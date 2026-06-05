@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MlModel {
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "displayName")]
-    pub display_name: String,
-    #[serde(rename = "fileName")]
-    pub file_name: String,
-    #[serde(rename = "metadata")]
-    pub metadata: Box<models::MlModelMetadata>,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "displayName")]
+    pub display_name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "upload")]
     pub upload: uuid::Uuid,
+    #[serde(rename = "metadata")]
+    pub metadata: Box<models::MlModelMetadata>,
+    #[serde(rename = "fileName")]
+    pub file_name: String,
 }
 
 impl MlModel {
-    pub fn new(description: String, display_name: String, file_name: String, metadata: models::MlModelMetadata, name: String, upload: uuid::Uuid) -> MlModel {
+    pub fn new(name: String, display_name: String, description: String, upload: uuid::Uuid, metadata: models::MlModelMetadata, file_name: String) -> MlModel {
         MlModel {
-            description,
-            display_name,
-            file_name,
-            metadata: Box::new(metadata),
             name,
+            display_name,
+            description,
             upload,
+            metadata: Box::new(metadata),
+            file_name,
         }
     }
 }

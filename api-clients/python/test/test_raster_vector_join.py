@@ -35,33 +35,33 @@ class TestRasterVectorJoin(unittest.TestCase):
         model = RasterVectorJoin()
         if include_optional:
             return RasterVectorJoin(
+                type = 'RasterVectorJoin',
                 params = geoengine_api_client.models.raster_vector_join_parameters.RasterVectorJoinParameters(
+                    names = null, 
                     feature_aggregation = null, 
                     feature_aggregation_ignore_no_data = True, 
-                    names = null, 
                     temporal_aggregation = null, 
                     temporal_aggregation_ignore_no_data = True, ),
                 sources = geoengine_api_client.models.single_vector_multiple_raster_sources.SingleVectorMultipleRasterSources(
+                    vector = null, 
                     rasters = [
                         null
-                        ], 
-                    vector = null, ),
-                type = 'RasterVectorJoin'
+                        ], )
             )
         else:
             return RasterVectorJoin(
+                type = 'RasterVectorJoin',
                 params = geoengine_api_client.models.raster_vector_join_parameters.RasterVectorJoinParameters(
+                    names = null, 
                     feature_aggregation = null, 
                     feature_aggregation_ignore_no_data = True, 
-                    names = null, 
                     temporal_aggregation = null, 
                     temporal_aggregation_ignore_no_data = True, ),
                 sources = geoengine_api_client.models.single_vector_multiple_raster_sources.SingleVectorMultipleRasterSources(
+                    vector = null, 
                     rasters = [
                         null
-                        ], 
-                    vector = null, ),
-                type = 'RasterVectorJoin',
+                        ], ),
         )
         """
 

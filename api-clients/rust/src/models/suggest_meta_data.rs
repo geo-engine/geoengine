@@ -14,18 +14,18 @@ use serde::{Deserialize, Serialize};
 pub struct SuggestMetaData {
     #[serde(rename = "dataPath")]
     pub data_path: Box<models::DataPath>,
-    #[serde(rename = "layerName", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub layer_name: Option<Option<String>>,
     #[serde(rename = "mainFile", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub main_file: Option<Option<String>>,
+    #[serde(rename = "layerName", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub layer_name: Option<Option<String>>,
 }
 
 impl SuggestMetaData {
     pub fn new(data_path: models::DataPath) -> SuggestMetaData {
         SuggestMetaData {
             data_path: Box::new(data_path),
-            layer_name: None,
             main_file: None,
+            layer_name: None,
         }
     }
 }

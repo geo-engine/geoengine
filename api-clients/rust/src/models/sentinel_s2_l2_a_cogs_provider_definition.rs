@@ -12,41 +12,41 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct SentinelS2L2ACogsProviderDefinition {
-    #[serde(rename = "apiUrl")]
-    pub api_url: String,
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "gdalRetries", skip_serializing_if = "Option::is_none")]
-    pub gdal_retries: Option<i32>,
-    #[serde(rename = "id")]
-    pub id: uuid::Uuid,
-    #[serde(rename = "name")]
-    pub name: String,
-    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub priority: Option<Option<i32>>,
-    #[serde(rename = "queryBuffer", skip_serializing_if = "Option::is_none")]
-    pub query_buffer: Option<Box<models::StacQueryBuffer>>,
-    #[serde(rename = "stacApiRetries", skip_serializing_if = "Option::is_none")]
-    pub stac_api_retries: Option<Box<models::StacApiRetries>>,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "name")]
+    pub name: String,
+    #[serde(rename = "id")]
+    pub id: uuid::Uuid,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "priority", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub priority: Option<Option<i32>>,
+    #[serde(rename = "apiUrl")]
+    pub api_url: String,
+    #[serde(rename = "stacApiRetries", skip_serializing_if = "Option::is_none")]
+    pub stac_api_retries: Option<Box<models::StacApiRetries>>,
+    #[serde(rename = "gdalRetries", skip_serializing_if = "Option::is_none")]
+    pub gdal_retries: Option<i32>,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
+    #[serde(rename = "queryBuffer", skip_serializing_if = "Option::is_none")]
+    pub query_buffer: Option<Box<models::StacQueryBuffer>>,
 }
 
 impl SentinelS2L2ACogsProviderDefinition {
-    pub fn new(api_url: String, description: String, id: uuid::Uuid, name: String, r#type: Type) -> SentinelS2L2ACogsProviderDefinition {
+    pub fn new(r#type: Type, name: String, id: uuid::Uuid, description: String, api_url: String) -> SentinelS2L2ACogsProviderDefinition {
         SentinelS2L2ACogsProviderDefinition {
-            api_url,
-            cache_ttl: None,
-            description,
-            gdal_retries: None,
-            id,
-            name,
-            priority: None,
-            query_buffer: None,
-            stac_api_retries: None,
             r#type,
+            name,
+            id,
+            description,
+            priority: None,
+            api_url,
+            stac_api_retries: None,
+            gdal_retries: None,
+            cache_ttl: None,
+            query_buffer: None,
         }
     }
 }

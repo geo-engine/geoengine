@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`customFormat` | string
 `format` | string
+`customFormat` | string
 `timestampType` | [UnixTimeStampType](UnixTimeStampType.md)
 
 ## Example
@@ -17,8 +17,8 @@ import type { OgrSourceTimeFormat } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "customFormat": null,
   "format": null,
+  "customFormat": null,
   "timestampType": null,
 } satisfies OgrSourceTimeFormat
 

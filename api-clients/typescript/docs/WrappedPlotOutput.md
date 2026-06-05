@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`data` | object
 `outputFormat` | [PlotOutputFormat](PlotOutputFormat.md)
 `plotType` | string
+`data` | object
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { WrappedPlotOutput } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "data": null,
   "outputFormat": null,
   "plotType": null,
+  "data": null,
 } satisfies WrappedPlotOutput
 
 console.log(example)

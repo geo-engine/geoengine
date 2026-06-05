@@ -7,9 +7,9 @@ The `RasterVectorJoin` operator allows combining a single vector input and multi
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [RasterVectorJoinParameters](RasterVectorJoinParameters.md)
 `sources` | [SingleVectorMultipleRasterSources](SingleVectorMultipleRasterSources.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { RasterVectorJoin } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies RasterVectorJoin
 
 console.log(example)

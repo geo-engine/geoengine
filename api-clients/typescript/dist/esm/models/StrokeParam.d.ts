@@ -18,16 +18,16 @@ import type { ColorParam } from './ColorParam';
 export interface StrokeParam {
     /**
      *
-     * @type {ColorParam}
-     * @memberof StrokeParam
-     */
-    color: ColorParam;
-    /**
-     *
      * @type {NumberParam}
      * @memberof StrokeParam
      */
     width: NumberParam;
+    /**
+     *
+     * @type {ColorParam}
+     * @memberof StrokeParam
+     */
+    color: ColorParam;
 }
 /**
  * Check if a given object implements the StrokeParam interface.

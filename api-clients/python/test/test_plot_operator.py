@@ -35,6 +35,7 @@ class TestPlotOperator(unittest.TestCase):
         model = PlotOperator()
         if include_optional:
             return PlotOperator(
+                type = 'Histogram',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
                     column_names = [
                         ''
@@ -43,11 +44,11 @@ class TestPlotOperator(unittest.TestCase):
                         1.337
                         ], ),
                 sources = geoengine_api_client.models.multiple_raster_or_single_vector_source.MultipleRasterOrSingleVectorSource(
-                    source = null, ),
-                type = 'Histogram'
+                    source = null, )
             )
         else:
             return PlotOperator(
+                type = 'Histogram',
                 params = geoengine_api_client.models.statistics_parameters.StatisticsParameters(
                     column_names = [
                         ''
@@ -57,7 +58,6 @@ class TestPlotOperator(unittest.TestCase):
                         ], ),
                 sources = geoengine_api_client.models.multiple_raster_or_single_vector_source.MultipleRasterOrSingleVectorSource(
                     source = null, ),
-                type = 'Histogram',
         )
         """
 

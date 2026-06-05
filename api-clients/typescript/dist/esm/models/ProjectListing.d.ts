@@ -16,28 +16,10 @@
 export interface ProjectListing {
     /**
      *
-     * @type {Date}
-     * @memberof ProjectListing
-     */
-    changed: Date;
-    /**
-     *
-     * @type {string}
-     * @memberof ProjectListing
-     */
-    description: string;
-    /**
-     *
      * @type {string}
      * @memberof ProjectListing
      */
     id: string;
-    /**
-     *
-     * @type {Array<string>}
-     * @memberof ProjectListing
-     */
-    layerNames: Array<string>;
     /**
      *
      * @type {string}
@@ -46,10 +28,28 @@ export interface ProjectListing {
     name: string;
     /**
      *
+     * @type {string}
+     * @memberof ProjectListing
+     */
+    description: string;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof ProjectListing
+     */
+    layerNames: Array<string>;
+    /**
+     *
      * @type {Array<string>}
      * @memberof ProjectListing
      */
     plotNames: Array<string>;
+    /**
+     *
+     * @type {Date}
+     * @memberof ProjectListing
+     */
+    changed: Date;
 }
 /**
  * Check if a given object implements the ProjectListing interface.

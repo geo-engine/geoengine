@@ -23,13 +23,13 @@ export interface AuthCodeResponse {
      * @type {string}
      * @memberof AuthCodeResponse
      */
-    code: string;
+    sessionState: string;
     /**
      * 
      * @type {string}
      * @memberof AuthCodeResponse
      */
-    sessionState: string;
+    code: string;
     /**
      * 
      * @type {string}
@@ -42,8 +42,8 @@ export interface AuthCodeResponse {
  * Check if a given object implements the AuthCodeResponse interface.
  */
 export function instanceOfAuthCodeResponse(value: object): value is AuthCodeResponse {
-    if (!('code' in value) || value['code'] === undefined) return false;
     if (!('sessionState' in value) || value['sessionState'] === undefined) return false;
+    if (!('code' in value) || value['code'] === undefined) return false;
     if (!('state' in value) || value['state'] === undefined) return false;
     return true;
 }
@@ -58,8 +58,8 @@ export function AuthCodeResponseFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'code': json['code'],
         'sessionState': json['sessionState'],
+        'code': json['code'],
         'state': json['state'],
     };
 }
@@ -75,8 +75,8 @@ export function AuthCodeResponseToJSONTyped(value?: AuthCodeResponse | null, ign
 
     return {
         
-        'code': value['code'],
         'sessionState': value['sessionState'],
+        'code': value['code'],
         'state': value['state'],
     };
 }

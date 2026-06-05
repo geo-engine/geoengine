@@ -15,9 +15,9 @@ import { CollectionTypeFromJSON, CollectionTypeToJSON, } from './CollectionType'
  * Check if a given object implements the GeoJson interface.
  */
 export function instanceOfGeoJson(value) {
-    if (!('features' in value) || value['features'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('features' in value) || value['features'] === undefined)
         return false;
     return true;
 }
@@ -29,8 +29,8 @@ export function GeoJsonFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'features': json['features'],
         'type': CollectionTypeFromJSON(json['type']),
+        'features': json['features'],
     };
 }
 export function GeoJsonToJSON(json) {
@@ -41,7 +41,7 @@ export function GeoJsonToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'features': value['features'],
         'type': CollectionTypeToJSON(value['type']),
+        'features': value['features'],
     };
 }

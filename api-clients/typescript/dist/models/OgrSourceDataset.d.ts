@@ -24,19 +24,13 @@ export interface OgrSourceDataset {
      * @type {string}
      * @memberof OgrSourceDataset
      */
-    attributeQuery?: string | null;
+    fileName: string;
     /**
      *
-     * @type {number}
+     * @type {string}
      * @memberof OgrSourceDataset
      */
-    cacheTtl?: number;
-    /**
-     *
-     * @type {OgrSourceColumnSpec}
-     * @memberof OgrSourceDataset
-     */
-    columns?: OgrSourceColumnSpec | null;
+    layerName: string;
     /**
      *
      * @type {VectorDataType}
@@ -45,22 +39,22 @@ export interface OgrSourceDataset {
     dataType?: VectorDataType | null;
     /**
      *
+     * @type {OgrSourceDatasetTimeType}
+     * @memberof OgrSourceDataset
+     */
+    time?: OgrSourceDatasetTimeType;
+    /**
+     *
      * @type {TypedGeometry}
      * @memberof OgrSourceDataset
      */
     defaultGeometry?: TypedGeometry | null;
     /**
      *
-     * @type {string}
+     * @type {OgrSourceColumnSpec}
      * @memberof OgrSourceDataset
      */
-    fileName: string;
-    /**
-     *
-     * @type {boolean}
-     * @memberof OgrSourceDataset
-     */
-    forceOgrSpatialFilter?: boolean;
+    columns?: OgrSourceColumnSpec | null;
     /**
      *
      * @type {boolean}
@@ -69,10 +63,10 @@ export interface OgrSourceDataset {
     forceOgrTimeFilter?: boolean;
     /**
      *
-     * @type {string}
+     * @type {boolean}
      * @memberof OgrSourceDataset
      */
-    layerName: string;
+    forceOgrSpatialFilter?: boolean;
     /**
      *
      * @type {OgrSourceErrorSpec}
@@ -87,10 +81,16 @@ export interface OgrSourceDataset {
     sqlQuery?: string | null;
     /**
      *
-     * @type {OgrSourceDatasetTimeType}
+     * @type {string}
      * @memberof OgrSourceDataset
      */
-    time?: OgrSourceDatasetTimeType;
+    attributeQuery?: string | null;
+    /**
+     *
+     * @type {number}
+     * @memberof OgrSourceDataset
+     */
+    cacheTtl?: number;
 }
 /**
  * Check if a given object implements the OgrSourceDataset interface.

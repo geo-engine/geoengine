@@ -6,41 +6,41 @@
 
 Name | Type
 ------------ | -------------
-`apiToken` | string
-`apiUrl` | string
-`cacheTtl` | number
-`description` | string
-`filterLabel` | string
+`type` | string
 `id` | string
 `name` | string
+`description` | string
 `priority` | number
+`apiUrl` | string
 `projectId` | string
-`type` | string
-`gdalConfig` | Array&lt;Array&lt;string&gt;&gt;
+`apiToken` | string
+`filterLabel` | string
+`cacheTtl` | number
+`stacUrl` | string
+`s3Url` | string
 `s3AccessKey` | string
 `s3SecretKey` | string
-`s3Url` | string
-`stacUrl` | string
+`gdalConfig` | Array&lt;Array&lt;string&gt;&gt;
 `collections` | [Array&lt;DatasetLayerListingCollection&gt;](DatasetLayerListingCollection.md)
 `baseUrl` | string
 `data` | string
 `overviews` | string
+`vectorSpec` | [EdrVectorSpec](EdrVectorSpec.md)
 `discreteVrs` | Array&lt;string&gt;
 `provenance` | [Array&lt;Provenance&gt;](Provenance.md)
-`vectorSpec` | [EdrVectorSpec](EdrVectorSpec.md)
+`dbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
 `autocompleteTimeout` | number
 `columns` | Array&lt;string&gt;
-`dbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
-`abcdDbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
-`collectionApiAuthToken` | string
 `collectionApiUrl` | string
+`collectionApiAuthToken` | string
+`abcdDbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
 `pangaeaUrl` | string
+`stacApiRetries` | [StacApiRetries](StacApiRetries.md)
 `gdalRetries` | number
 `queryBuffer` | [StacQueryBuffer](StacQueryBuffer.md)
-`stacApiRetries` | [StacApiRetries](StacApiRetries.md)
-`expiryDate` | Date
-`refreshToken` | string
 `user` | string
+`refreshToken` | string
+`expiryDate` | Date
 
 ## Example
 
@@ -49,41 +49,41 @@ import type { TypedDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "apiToken": null,
-  "apiUrl": null,
-  "cacheTtl": null,
-  "description": null,
-  "filterLabel": null,
+  "type": null,
   "id": null,
   "name": null,
+  "description": null,
   "priority": null,
+  "apiUrl": null,
   "projectId": null,
-  "type": null,
-  "gdalConfig": null,
+  "apiToken": null,
+  "filterLabel": null,
+  "cacheTtl": null,
+  "stacUrl": null,
+  "s3Url": null,
   "s3AccessKey": null,
   "s3SecretKey": null,
-  "s3Url": null,
-  "stacUrl": null,
+  "gdalConfig": null,
   "collections": null,
   "baseUrl": null,
   "data": null,
   "overviews": null,
+  "vectorSpec": null,
   "discreteVrs": null,
   "provenance": null,
-  "vectorSpec": null,
+  "dbConfig": null,
   "autocompleteTimeout": null,
   "columns": null,
-  "dbConfig": null,
-  "abcdDbConfig": null,
-  "collectionApiAuthToken": null,
   "collectionApiUrl": null,
+  "collectionApiAuthToken": null,
+  "abcdDbConfig": null,
   "pangaeaUrl": null,
+  "stacApiRetries": null,
   "gdalRetries": null,
   "queryBuffer": null,
-  "stacApiRetries": null,
-  "expiryDate": null,
-  "refreshToken": null,
   "user": null,
+  "refreshToken": null,
+  "expiryDate": null,
 } satisfies TypedDataProviderDefinition
 
 console.log(example)

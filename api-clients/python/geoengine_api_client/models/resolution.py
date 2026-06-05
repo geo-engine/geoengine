@@ -26,10 +26,10 @@ class Resolution(BaseModel):
     """
     Explicit output resolution (`x`, `y`) in target coordinates.
     """ # noqa: E501
-    type: StrictStr
     x: Union[StrictFloat, StrictInt]
     y: Union[StrictFloat, StrictInt]
-    __properties: ClassVar[List[str]] = ["type", "x", "y"]
+    type: StrictStr
+    __properties: ClassVar[List[str]] = ["x", "y", "type"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -89,9 +89,9 @@ class Resolution(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "type": obj.get("type"),
             "x": obj.get("x"),
-            "y": obj.get("y")
+            "y": obj.get("y"),
+            "type": obj.get("type")
         })
         return _obj
 

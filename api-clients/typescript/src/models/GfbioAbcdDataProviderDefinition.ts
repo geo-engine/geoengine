@@ -28,22 +28,10 @@ import {
 export interface GfbioAbcdDataProviderDefinition {
     /**
      * 
-     * @type {number}
+     * @type {GfbioAbcdDataProviderDefinitionTypeEnum}
      * @memberof GfbioAbcdDataProviderDefinition
      */
-    cacheTtl?: number;
-    /**
-     * 
-     * @type {DatabaseConnectionConfig}
-     * @memberof GfbioAbcdDataProviderDefinition
-     */
-    dbConfig: DatabaseConnectionConfig;
-    /**
-     * 
-     * @type {string}
-     * @memberof GfbioAbcdDataProviderDefinition
-     */
-    description: string;
+    type: GfbioAbcdDataProviderDefinitionTypeEnum;
     /**
      * 
      * @type {string}
@@ -52,16 +40,28 @@ export interface GfbioAbcdDataProviderDefinition {
     name: string;
     /**
      * 
+     * @type {string}
+     * @memberof GfbioAbcdDataProviderDefinition
+     */
+    description: string;
+    /**
+     * 
      * @type {number}
      * @memberof GfbioAbcdDataProviderDefinition
      */
     priority?: number | null;
     /**
      * 
-     * @type {GfbioAbcdDataProviderDefinitionTypeEnum}
+     * @type {DatabaseConnectionConfig}
      * @memberof GfbioAbcdDataProviderDefinition
      */
-    type: GfbioAbcdDataProviderDefinitionTypeEnum;
+    dbConfig: DatabaseConnectionConfig;
+    /**
+     * 
+     * @type {number}
+     * @memberof GfbioAbcdDataProviderDefinition
+     */
+    cacheTtl?: number;
 }
 
 
@@ -78,10 +78,10 @@ export type GfbioAbcdDataProviderDefinitionTypeEnum = typeof GfbioAbcdDataProvid
  * Check if a given object implements the GfbioAbcdDataProviderDefinition interface.
  */
 export function instanceOfGfbioAbcdDataProviderDefinition(value: object): value is GfbioAbcdDataProviderDefinition {
-    if (!('dbConfig' in value) || value['dbConfig'] === undefined) return false;
-    if (!('description' in value) || value['description'] === undefined) return false;
-    if (!('name' in value) || value['name'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
+    if (!('dbConfig' in value) || value['dbConfig'] === undefined) return false;
     return true;
 }
 
@@ -95,12 +95,12 @@ export function GfbioAbcdDataProviderDefinitionFromJSONTyped(json: any, ignoreDi
     }
     return {
         
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
-        'description': json['description'],
-        'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 
@@ -115,12 +115,12 @@ export function GfbioAbcdDataProviderDefinitionToJSONTyped(value?: GfbioAbcdData
 
     return {
         
-        'cacheTtl': value['cacheTtl'],
-        'dbConfig': DatabaseConnectionConfigToJSON(value['dbConfig']),
-        'description': value['description'],
-        'name': value['name'],
-        'priority': value['priority'],
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'dbConfig': DatabaseConnectionConfigToJSON(value['dbConfig']),
+        'cacheTtl': value['cacheTtl'],
     };
 }
 

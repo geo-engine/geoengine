@@ -32,9 +32,9 @@ function instanceOfTaskStatusCompleted(value) {
         return false;
     if (!('taskType' in value) || value['taskType'] === undefined)
         return false;
-    if (!('timeStarted' in value) || value['timeStarted'] === undefined)
-        return false;
     if (!('timeTotal' in value) || value['timeTotal'] === undefined)
+        return false;
+    if (!('timeStarted' in value) || value['timeStarted'] === undefined)
         return false;
     return true;
 }
@@ -46,12 +46,12 @@ function TaskStatusCompletedFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'] == null ? undefined : json['description'],
-        'info': json['info'] == null ? undefined : json['info'],
         'status': json['status'],
         'taskType': json['taskType'],
-        'timeStarted': json['timeStarted'],
+        'description': json['description'] == null ? undefined : json['description'],
+        'info': json['info'] == null ? undefined : json['info'],
         'timeTotal': json['timeTotal'],
+        'timeStarted': json['timeStarted'],
     };
 }
 function TaskStatusCompletedToJSON(json) {
@@ -62,11 +62,11 @@ function TaskStatusCompletedToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'info': value['info'],
         'status': value['status'],
         'taskType': value['taskType'],
-        'timeStarted': value['timeStarted'],
+        'description': value['description'],
+        'info': value['info'],
         'timeTotal': value['timeTotal'],
+        'timeStarted': value['timeStarted'],
     };
 }

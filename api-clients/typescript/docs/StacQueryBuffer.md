@@ -7,8 +7,8 @@ A struct that represents buffers to apply to stac requests
 
 Name | Type
 ------------ | -------------
-`endSeconds` | number
 `startSeconds` | number
+`endSeconds` | number
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { StacQueryBuffer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "endSeconds": null,
   "startSeconds": null,
+  "endSeconds": null,
 } satisfies StacQueryBuffer
 
 console.log(example)

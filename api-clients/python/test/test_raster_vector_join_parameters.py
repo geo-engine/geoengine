@@ -35,16 +35,16 @@ class TestRasterVectorJoinParameters(unittest.TestCase):
         model = RasterVectorJoinParameters()
         if include_optional:
             return RasterVectorJoinParameters(
+                names = None,
                 feature_aggregation = 'first',
                 feature_aggregation_ignore_no_data = True,
-                names = None,
                 temporal_aggregation = 'none',
                 temporal_aggregation_ignore_no_data = True
             )
         else:
             return RasterVectorJoinParameters(
-                feature_aggregation = 'first',
                 names = None,
+                feature_aggregation = 'first',
                 temporal_aggregation = 'none',
         )
         """

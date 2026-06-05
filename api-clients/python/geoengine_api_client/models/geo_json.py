@@ -27,9 +27,9 @@ class GeoJson(BaseModel):
     """
     GeoJson
     """ # noqa: E501
-    features: List[Any]
     type: CollectionType
-    __properties: ClassVar[List[str]] = ["features", "type"]
+    features: List[Any]
+    __properties: ClassVar[List[str]] = ["type", "features"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,8 +82,8 @@ class GeoJson(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "features": obj.get("features"),
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "features": obj.get("features")
         })
         return _obj
 

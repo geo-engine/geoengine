@@ -20,10 +20,10 @@ import { mapValues } from '../runtime';
 export interface ClassificationMeasurement {
     /**
      * 
-     * @type {{ [key: string]: string; }}
+     * @type {ClassificationMeasurementTypeEnum}
      * @memberof ClassificationMeasurement
      */
-    classes: { [key: string]: string; };
+    type: ClassificationMeasurementTypeEnum;
     /**
      * 
      * @type {string}
@@ -32,10 +32,10 @@ export interface ClassificationMeasurement {
     measurement: string;
     /**
      * 
-     * @type {ClassificationMeasurementTypeEnum}
+     * @type {{ [key: string]: string; }}
      * @memberof ClassificationMeasurement
      */
-    type: ClassificationMeasurementTypeEnum;
+    classes: { [key: string]: string; };
 }
 
 
@@ -52,9 +52,9 @@ export type ClassificationMeasurementTypeEnum = typeof ClassificationMeasurement
  * Check if a given object implements the ClassificationMeasurement interface.
  */
 export function instanceOfClassificationMeasurement(value: object): value is ClassificationMeasurement {
-    if (!('classes' in value) || value['classes'] === undefined) return false;
-    if (!('measurement' in value) || value['measurement'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('measurement' in value) || value['measurement'] === undefined) return false;
+    if (!('classes' in value) || value['classes'] === undefined) return false;
     return true;
 }
 
@@ -68,9 +68,9 @@ export function ClassificationMeasurementFromJSONTyped(json: any, ignoreDiscrimi
     }
     return {
         
-        'classes': json['classes'],
-        'measurement': json['measurement'],
         'type': json['type'],
+        'measurement': json['measurement'],
+        'classes': json['classes'],
     };
 }
 
@@ -85,9 +85,9 @@ export function ClassificationMeasurementToJSONTyped(value?: ClassificationMeasu
 
     return {
         
-        'classes': value['classes'],
-        'measurement': value['measurement'],
         'type': value['type'],
+        'measurement': value['measurement'],
+        'classes': value['classes'],
     };
 }
 

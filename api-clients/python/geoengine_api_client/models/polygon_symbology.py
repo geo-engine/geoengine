@@ -29,12 +29,12 @@ class PolygonSymbology(BaseModel):
     """
     PolygonSymbology
     """ # noqa: E501
-    auto_simplified: StrictBool = Field(alias="autoSimplified")
+    type: StrictStr
     fill_color: ColorParam = Field(alias="fillColor")
     stroke: StrokeParam
     text: Optional[TextSymbology] = None
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["autoSimplified", "fillColor", "stroke", "text", "type"]
+    auto_simplified: StrictBool = Field(alias="autoSimplified")
+    __properties: ClassVar[List[str]] = ["type", "fillColor", "stroke", "text", "autoSimplified"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -108,11 +108,11 @@ class PolygonSymbology(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "autoSimplified": obj.get("autoSimplified"),
+            "type": obj.get("type"),
             "fillColor": ColorParam.from_dict(obj["fillColor"]) if obj.get("fillColor") is not None else None,
             "stroke": StrokeParam.from_dict(obj["stroke"]) if obj.get("stroke") is not None else None,
             "text": TextSymbology.from_dict(obj["text"]) if obj.get("text") is not None else None,
-            "type": obj.get("type")
+            "autoSimplified": obj.get("autoSimplified")
         })
         return _obj
 

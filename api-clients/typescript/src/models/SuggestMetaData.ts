@@ -37,13 +37,13 @@ export interface SuggestMetaData {
      * @type {string}
      * @memberof SuggestMetaData
      */
-    layerName?: string | null;
+    mainFile?: string | null;
     /**
      * 
      * @type {string}
      * @memberof SuggestMetaData
      */
-    mainFile?: string | null;
+    layerName?: string | null;
 }
 
 /**
@@ -65,8 +65,8 @@ export function SuggestMetaDataFromJSONTyped(json: any, ignoreDiscriminator: boo
     return {
         
         'dataPath': DataPathFromJSON(json['dataPath']),
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
         'mainFile': json['mainFile'] == null ? undefined : json['mainFile'],
+        'layerName': json['layerName'] == null ? undefined : json['layerName'],
     };
 }
 
@@ -82,8 +82,8 @@ export function SuggestMetaDataToJSONTyped(value?: SuggestMetaData | null, ignor
     return {
         
         'dataPath': DataPathToJSON(value['dataPath']),
-        'layerName': value['layerName'],
         'mainFile': value['mainFile'],
+        'layerName': value['layerName'],
     };
 }
 

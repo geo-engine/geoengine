@@ -41,18 +41,6 @@ import {
  */
 export interface RasterVectorJoinParameters {
     /**
-     * The aggregation function to use for features covering multiple pixels.
-     * @type {FeatureAggregationMethod}
-     * @memberof RasterVectorJoinParameters
-     */
-    featureAggregation: FeatureAggregationMethod;
-    /**
-     * Whether to ignore no data values in the aggregation. Defaults to `false`.
-     * @type {boolean}
-     * @memberof RasterVectorJoinParameters
-     */
-    featureAggregationIgnoreNoData?: boolean;
-    /**
      * Specify how the new column names are derived from the raster band names.
      * 
      * The `ColumnNames` type is used to specify how the new column names are derived from the raster band names.
@@ -65,6 +53,18 @@ export interface RasterVectorJoinParameters {
      * @memberof RasterVectorJoinParameters
      */
     names: ColumnNames;
+    /**
+     * The aggregation function to use for features covering multiple pixels.
+     * @type {FeatureAggregationMethod}
+     * @memberof RasterVectorJoinParameters
+     */
+    featureAggregation: FeatureAggregationMethod;
+    /**
+     * Whether to ignore no data values in the aggregation. Defaults to `false`.
+     * @type {boolean}
+     * @memberof RasterVectorJoinParameters
+     */
+    featureAggregationIgnoreNoData?: boolean;
     /**
      * The aggregation function to use for features covering multiple (raster) time steps.
      * @type {TemporalAggregationMethod}
@@ -85,8 +85,8 @@ export interface RasterVectorJoinParameters {
  * Check if a given object implements the RasterVectorJoinParameters interface.
  */
 export function instanceOfRasterVectorJoinParameters(value: object): value is RasterVectorJoinParameters {
-    if (!('featureAggregation' in value) || value['featureAggregation'] === undefined) return false;
     if (!('names' in value) || value['names'] === undefined) return false;
+    if (!('featureAggregation' in value) || value['featureAggregation'] === undefined) return false;
     if (!('temporalAggregation' in value) || value['temporalAggregation'] === undefined) return false;
     return true;
 }
@@ -101,9 +101,9 @@ export function RasterVectorJoinParametersFromJSONTyped(json: any, ignoreDiscrim
     }
     return {
         
+        'names': ColumnNamesFromJSON(json['names']),
         'featureAggregation': FeatureAggregationMethodFromJSON(json['featureAggregation']),
         'featureAggregationIgnoreNoData': json['featureAggregationIgnoreNoData'] == null ? undefined : json['featureAggregationIgnoreNoData'],
-        'names': ColumnNamesFromJSON(json['names']),
         'temporalAggregation': TemporalAggregationMethodFromJSON(json['temporalAggregation']),
         'temporalAggregationIgnoreNoData': json['temporalAggregationIgnoreNoData'] == null ? undefined : json['temporalAggregationIgnoreNoData'],
     };
@@ -120,9 +120,9 @@ export function RasterVectorJoinParametersToJSONTyped(value?: RasterVectorJoinPa
 
     return {
         
+        'names': ColumnNamesToJSON(value['names']),
         'featureAggregation': FeatureAggregationMethodToJSON(value['featureAggregation']),
         'featureAggregationIgnoreNoData': value['featureAggregationIgnoreNoData'],
-        'names': ColumnNamesToJSON(value['names']),
         'temporalAggregation': TemporalAggregationMethodToJSON(value['temporalAggregation']),
         'temporalAggregationIgnoreNoData': value['temporalAggregationIgnoreNoData'],
     };

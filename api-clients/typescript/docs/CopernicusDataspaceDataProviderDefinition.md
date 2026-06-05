@@ -6,16 +6,16 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`gdalConfig` | Array&lt;Array&lt;string&gt;&gt;
-`id` | string
+`type` | string
 `name` | string
-`priority` | number
+`description` | string
+`id` | string
+`stacUrl` | string
+`s3Url` | string
 `s3AccessKey` | string
 `s3SecretKey` | string
-`s3Url` | string
-`stacUrl` | string
-`type` | string
+`gdalConfig` | Array&lt;Array&lt;string&gt;&gt;
+`priority` | number
 
 ## Example
 
@@ -24,16 +24,16 @@ import type { CopernicusDataspaceDataProviderDefinition } from '@geoengine/api-c
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
-  "gdalConfig": null,
-  "id": null,
+  "type": null,
   "name": null,
-  "priority": null,
+  "description": null,
+  "id": null,
+  "stacUrl": null,
+  "s3Url": null,
   "s3AccessKey": null,
   "s3SecretKey": null,
-  "s3Url": null,
-  "stacUrl": null,
-  "type": null,
+  "gdalConfig": null,
+  "priority": null,
 } satisfies CopernicusDataspaceDataProviderDefinition
 
 console.log(example)

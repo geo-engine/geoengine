@@ -35,13 +35,13 @@ class TestRasterBandDescriptor(unittest.TestCase):
         model = RasterBandDescriptor()
         if include_optional:
             return RasterBandDescriptor(
-                measurement = None,
-                name = ''
+                name = '',
+                measurement = None
             )
         else:
             return RasterBandDescriptor(
-                measurement = None,
                 name = '',
+                measurement = None,
         )
         """
 

@@ -26,11 +26,11 @@ class UpdateDataset(BaseModel):
     """
     UpdateDataset
     """ # noqa: E501
-    description: StrictStr
-    display_name: StrictStr
     name: StrictStr
+    display_name: StrictStr
+    description: StrictStr
     tags: List[StrictStr]
-    __properties: ClassVar[List[str]] = ["description", "display_name", "name", "tags"]
+    __properties: ClassVar[List[str]] = ["name", "display_name", "description", "tags"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,9 +83,9 @@ class UpdateDataset(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "display_name": obj.get("display_name"),
             "name": obj.get("name"),
+            "display_name": obj.get("display_name"),
+            "description": obj.get("description"),
             "tags": obj.get("tags")
         })
         return _obj

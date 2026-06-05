@@ -23,11 +23,11 @@ export const GdalMetaDataStaticTypeEnum = {
  * Check if a given object implements the GdalMetaDataStatic interface.
  */
 export function instanceOfGdalMetaDataStatic(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -39,11 +39,11 @@ export function GdalMetaDataStaticFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'type': json['type'],
+        'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
         'params': GdalDatasetParametersFromJSON(json['params']),
         'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
-        'time': json['time'] == null ? undefined : TimeIntervalFromJSON(json['time']),
-        'type': json['type'],
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
     };
 }
 export function GdalMetaDataStaticToJSON(json) {
@@ -54,10 +54,10 @@ export function GdalMetaDataStaticToJSONTyped(value, ignoreDiscriminator = false
         return value;
     }
     return {
-        'cacheTtl': value['cacheTtl'],
+        'type': value['type'],
+        'time': TimeIntervalToJSON(value['time']),
         'params': GdalDatasetParametersToJSON(value['params']),
         'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
-        'time': TimeIntervalToJSON(value['time']),
-        'type': value['type'],
+        'cacheTtl': value['cacheTtl'],
     };
 }

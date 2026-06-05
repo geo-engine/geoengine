@@ -16,13 +16,13 @@ import { SymbologyFromJSON, SymbologyToJSON, } from './Symbology';
  * Check if a given object implements the ProjectLayer interface.
  */
 export function instanceOfProjectLayer(value) {
-    if (!('name' in value) || value['name'] === undefined)
+    if (!('workflow' in value) || value['workflow'] === undefined)
         return false;
-    if (!('symbology' in value) || value['symbology'] === undefined)
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('visibility' in value) || value['visibility'] === undefined)
         return false;
-    if (!('workflow' in value) || value['workflow'] === undefined)
+    if (!('symbology' in value) || value['symbology'] === undefined)
         return false;
     return true;
 }
@@ -34,10 +34,10 @@ export function ProjectLayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'name': json['name'],
-        'symbology': SymbologyFromJSON(json['symbology']),
-        'visibility': LayerVisibilityFromJSON(json['visibility']),
         'workflow': json['workflow'],
+        'name': json['name'],
+        'visibility': LayerVisibilityFromJSON(json['visibility']),
+        'symbology': SymbologyFromJSON(json['symbology']),
     };
 }
 export function ProjectLayerToJSON(json) {
@@ -48,9 +48,9 @@ export function ProjectLayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'name': value['name'],
-        'symbology': SymbologyToJSON(value['symbology']),
-        'visibility': LayerVisibilityToJSON(value['visibility']),
         'workflow': value['workflow'],
+        'name': value['name'],
+        'visibility': LayerVisibilityToJSON(value['visibility']),
+        'symbology': SymbologyToJSON(value['symbology']),
     };
 }

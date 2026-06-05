@@ -32,8 +32,8 @@ export function InterpolationParametersFromJSONTyped(json, ignoreDiscriminator) 
     }
     return {
         'interpolation': InterpolationMethodFromJSON(json['interpolation']),
-        'outputOriginReference': json['outputOriginReference'] == null ? undefined : Coordinate2DFromJSON(json['outputOriginReference']),
         'outputResolution': InterpolationResolutionFromJSON(json['outputResolution']),
+        'outputOriginReference': json['outputOriginReference'] == null ? undefined : Coordinate2DFromJSON(json['outputOriginReference']),
     };
 }
 export function InterpolationParametersToJSON(json) {
@@ -45,7 +45,7 @@ export function InterpolationParametersToJSONTyped(value, ignoreDiscriminator = 
     }
     return {
         'interpolation': InterpolationMethodToJSON(value['interpolation']),
-        'outputOriginReference': Coordinate2DToJSON(value['outputOriginReference']),
         'outputResolution': InterpolationResolutionToJSON(value['outputResolution']),
+        'outputOriginReference': Coordinate2DToJSON(value['outputOriginReference']),
     };
 }

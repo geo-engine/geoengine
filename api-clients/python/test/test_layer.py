@@ -35,29 +35,29 @@ class TestLayer(unittest.TestCase):
         model = Layer()
         if include_optional:
             return Layer(
-                description = '',
                 id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
-                    layer_id = '', 
-                    provider_id = '', ),
-                metadata = {
-                    'key' : ''
-                    },
+                    provider_id = '', 
+                    layer_id = '', ),
                 name = '',
+                description = '',
+                workflow = None,
+                symbology = None,
                 properties = [
                     [
                         ''
                         ]
                     ],
-                symbology = None,
-                workflow = None
+                metadata = {
+                    'key' : ''
+                    }
             )
         else:
             return Layer(
-                description = '',
                 id = geoengine_api_client.models.provider_layer_id.ProviderLayerId(
-                    layer_id = '', 
-                    provider_id = '', ),
+                    provider_id = '', 
+                    layer_id = '', ),
                 name = '',
+                description = '',
                 workflow = None,
         )
         """

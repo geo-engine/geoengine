@@ -28,9 +28,9 @@ exports.TaskStatusAbortedStatusEnum = {
  * Check if a given object implements the TaskStatusAborted interface.
  */
 function instanceOfTaskStatusAborted(value) {
-    if (!('cleanUp' in value) || value['cleanUp'] === undefined)
-        return false;
     if (!('status' in value) || value['status'] === undefined)
+        return false;
+    if (!('cleanUp' in value) || value['cleanUp'] === undefined)
         return false;
     return true;
 }
@@ -42,8 +42,8 @@ function TaskStatusAbortedFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'cleanUp': json['cleanUp'],
         'status': json['status'],
+        'cleanUp': json['cleanUp'],
     };
 }
 function TaskStatusAbortedToJSON(json) {
@@ -54,7 +54,7 @@ function TaskStatusAbortedToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'cleanUp': value['cleanUp'],
         'status': value['status'],
+        'cleanUp': value['cleanUp'],
     };
 }

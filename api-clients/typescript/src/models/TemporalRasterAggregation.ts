@@ -48,6 +48,12 @@ import {
 export interface TemporalRasterAggregation {
     /**
      * 
+     * @type {TemporalRasterAggregationTypeEnum}
+     * @memberof TemporalRasterAggregation
+     */
+    type: TemporalRasterAggregationTypeEnum;
+    /**
+     * 
      * @type {TemporalRasterAggregationParameters}
      * @memberof TemporalRasterAggregation
      */
@@ -58,12 +64,6 @@ export interface TemporalRasterAggregation {
      * @memberof TemporalRasterAggregation
      */
     sources: SingleRasterSource;
-    /**
-     * 
-     * @type {TemporalRasterAggregationTypeEnum}
-     * @memberof TemporalRasterAggregation
-     */
-    type: TemporalRasterAggregationTypeEnum;
 }
 
 
@@ -80,9 +80,9 @@ export type TemporalRasterAggregationTypeEnum = typeof TemporalRasterAggregation
  * Check if a given object implements the TemporalRasterAggregation interface.
  */
 export function instanceOfTemporalRasterAggregation(value: object): value is TemporalRasterAggregation {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -96,9 +96,9 @@ export function TemporalRasterAggregationFromJSONTyped(json: any, ignoreDiscrimi
     }
     return {
         
+        'type': json['type'],
         'params': TemporalRasterAggregationParametersFromJSON(json['params']),
         'sources': SingleRasterSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -113,9 +113,9 @@ export function TemporalRasterAggregationToJSONTyped(value?: TemporalRasterAggre
 
     return {
         
+        'type': value['type'],
         'params': TemporalRasterAggregationParametersToJSON(value['params']),
         'sources': SingleRasterSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

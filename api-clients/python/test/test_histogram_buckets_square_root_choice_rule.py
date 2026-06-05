@@ -35,8 +35,8 @@ class TestHistogramBucketsSquareRootChoiceRule(unittest.TestCase):
         model = HistogramBucketsSquareRootChoiceRule()
         if include_optional:
             return HistogramBucketsSquareRootChoiceRule(
-                max_number_of_buckets = 0,
-                type = 'squareRootChoiceRule'
+                type = 'squareRootChoiceRule',
+                max_number_of_buckets = 0
             )
         else:
             return HistogramBucketsSquareRootChoiceRule(

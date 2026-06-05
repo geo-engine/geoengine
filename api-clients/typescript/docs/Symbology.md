@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `opacity` | number
 `rasterColorizer` | [RasterColorizer](RasterColorizer.md)
-`type` | string
-`fillColor` | [ColorParam](ColorParam.md)
 `radius` | [NumberParam](NumberParam.md)
+`fillColor` | [ColorParam](ColorParam.md)
 `stroke` | [StrokeParam](StrokeParam.md)
 `text` | [TextSymbology](TextSymbology.md)
 `autoSimplified` | boolean
@@ -22,11 +22,11 @@ import type { Symbology } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "opacity": null,
   "rasterColorizer": null,
-  "type": null,
-  "fillColor": null,
   "radius": null,
+  "fillColor": null,
   "stroke": null,
   "text": null,
   "autoSimplified": null,

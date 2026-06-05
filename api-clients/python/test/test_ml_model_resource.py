@@ -35,13 +35,13 @@ class TestMlModelResource(unittest.TestCase):
         model = MlModelResource()
         if include_optional:
             return MlModelResource(
-                id = '',
-                type = 'mlModel'
+                type = 'mlModel',
+                id = ''
             )
         else:
             return MlModelResource(
-                id = '',
                 type = 'mlModel',
+                id = '',
         )
         """
 

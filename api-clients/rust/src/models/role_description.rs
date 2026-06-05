@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RoleDescription {
-    #[serde(rename = "individual")]
-    pub individual: bool,
     #[serde(rename = "role")]
     pub role: Box<models::Role>,
+    #[serde(rename = "individual")]
+    pub individual: bool,
 }
 
 impl RoleDescription {
-    pub fn new(individual: bool, role: models::Role) -> RoleDescription {
+    pub fn new(role: models::Role, individual: bool) -> RoleDescription {
         RoleDescription {
-            individual,
             role: Box::new(role),
+            individual,
         }
     }
 }

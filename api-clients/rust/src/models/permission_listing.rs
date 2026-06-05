@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PermissionListing {
-    #[serde(rename = "permission")]
-    pub permission: models::Permission,
     #[serde(rename = "resource")]
     pub resource: Box<models::Resource>,
     #[serde(rename = "role")]
     pub role: Box<models::Role>,
+    #[serde(rename = "permission")]
+    pub permission: models::Permission,
 }
 
 impl PermissionListing {
-    pub fn new(permission: models::Permission, resource: models::Resource, role: models::Role) -> PermissionListing {
+    pub fn new(resource: models::Resource, role: models::Role, permission: models::Permission) -> PermissionListing {
         PermissionListing {
-            permission,
             resource: Box::new(resource),
             role: Box::new(role),
+            permission,
         }
     }
 }

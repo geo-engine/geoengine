@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`bounds` | [STRectangle](STRectangle.md)
-`description` | string
 `id` | string
-`layers` | [Array&lt;VecUpdate&gt;](VecUpdate.md)
 `name` | string
+`description` | string
+`layers` | [Array&lt;VecUpdate&gt;](VecUpdate.md)
 `plots` | [Array&lt;VecUpdate&gt;](VecUpdate.md)
+`bounds` | [STRectangle](STRectangle.md)
 `timeStep` | [TimeStep](TimeStep.md)
 
 ## Example
@@ -21,12 +21,12 @@ import type { UpdateProject } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bounds": null,
-  "description": null,
   "id": null,
-  "layers": null,
   "name": null,
+  "description": null,
+  "layers": null,
   "plots": null,
+  "bounds": null,
   "timeStep": null,
 } satisfies UpdateProject
 

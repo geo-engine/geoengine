@@ -26,11 +26,11 @@ const BoundingBox2D_1 = require("./BoundingBox2D");
  * Check if a given object implements the VectorResultDescriptor interface.
  */
 function instanceOfVectorResultDescriptor(value) {
-    if (!('columns' in value) || value['columns'] === undefined)
-        return false;
     if (!('dataType' in value) || value['dataType'] === undefined)
         return false;
     if (!('spatialReference' in value) || value['spatialReference'] === undefined)
+        return false;
+    if (!('columns' in value) || value['columns'] === undefined)
         return false;
     return true;
 }
@@ -42,11 +42,11 @@ function VectorResultDescriptorFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bbox': json['bbox'] == null ? undefined : (0, BoundingBox2D_1.BoundingBox2DFromJSON)(json['bbox']),
-        'columns': ((0, runtime_1.mapValues)(json['columns'], VectorColumnInfo_1.VectorColumnInfoFromJSON)),
         'dataType': (0, VectorDataType_1.VectorDataTypeFromJSON)(json['dataType']),
         'spatialReference': json['spatialReference'],
+        'columns': ((0, runtime_1.mapValues)(json['columns'], VectorColumnInfo_1.VectorColumnInfoFromJSON)),
         'time': json['time'] == null ? undefined : (0, TimeInterval_1.TimeIntervalFromJSON)(json['time']),
+        'bbox': json['bbox'] == null ? undefined : (0, BoundingBox2D_1.BoundingBox2DFromJSON)(json['bbox']),
     };
 }
 function VectorResultDescriptorToJSON(json) {
@@ -57,10 +57,10 @@ function VectorResultDescriptorToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bbox': (0, BoundingBox2D_1.BoundingBox2DToJSON)(value['bbox']),
-        'columns': ((0, runtime_1.mapValues)(value['columns'], VectorColumnInfo_1.VectorColumnInfoToJSON)),
         'dataType': (0, VectorDataType_1.VectorDataTypeToJSON)(value['dataType']),
         'spatialReference': value['spatialReference'],
+        'columns': ((0, runtime_1.mapValues)(value['columns'], VectorColumnInfo_1.VectorColumnInfoToJSON)),
         'time': (0, TimeInterval_1.TimeIntervalToJSON)(value['time']),
+        'bbox': (0, BoundingBox2D_1.BoundingBox2DToJSON)(value['bbox']),
     };
 }

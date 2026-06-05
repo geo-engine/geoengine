@@ -27,10 +27,10 @@ class UserInfo(BaseModel):
     """
     UserInfo
     """ # noqa: E501
-    email: Optional[StrictStr] = None
     id: UUID
+    email: Optional[StrictStr] = None
     real_name: Optional[StrictStr] = Field(default=None, alias="realName")
-    __properties: ClassVar[List[str]] = ["email", "id", "realName"]
+    __properties: ClassVar[List[str]] = ["id", "email", "realName"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -93,8 +93,8 @@ class UserInfo(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "email": obj.get("email"),
             "id": obj.get("id"),
+            "email": obj.get("email"),
             "realName": obj.get("realName")
         })
         return _obj

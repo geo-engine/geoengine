@@ -23,13 +23,13 @@ export interface AddLayerCollection {
      * @type {string}
      * @memberof AddLayerCollection
      */
-    description: string;
+    name: string;
     /**
      * 
      * @type {string}
      * @memberof AddLayerCollection
      */
-    name: string;
+    description: string;
     /**
      * 
      * @type {Array<Array<string>>}
@@ -42,8 +42,8 @@ export interface AddLayerCollection {
  * Check if a given object implements the AddLayerCollection interface.
  */
 export function instanceOfAddLayerCollection(value: object): value is AddLayerCollection {
-    if (!('description' in value) || value['description'] === undefined) return false;
     if (!('name' in value) || value['name'] === undefined) return false;
+    if (!('description' in value) || value['description'] === undefined) return false;
     return true;
 }
 
@@ -57,8 +57,8 @@ export function AddLayerCollectionFromJSONTyped(json: any, ignoreDiscriminator: 
     }
     return {
         
-        'description': json['description'],
         'name': json['name'],
+        'description': json['description'],
         'properties': json['properties'] == null ? undefined : json['properties'],
     };
 }
@@ -74,8 +74,8 @@ export function AddLayerCollectionToJSONTyped(value?: AddLayerCollection | null,
 
     return {
         
-        'description': value['description'],
         'name': value['name'],
+        'description': value['description'],
         'properties': value['properties'],
     };
 }

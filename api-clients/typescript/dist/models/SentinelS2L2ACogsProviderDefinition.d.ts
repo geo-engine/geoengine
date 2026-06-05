@@ -18,28 +18,16 @@ import type { StacQueryBuffer } from './StacQueryBuffer';
 export interface SentinelS2L2ACogsProviderDefinition {
     /**
      *
-     * @type {string}
+     * @type {SentinelS2L2ACogsProviderDefinitionTypeEnum}
      * @memberof SentinelS2L2ACogsProviderDefinition
      */
-    apiUrl: string;
-    /**
-     *
-     * @type {number}
-     * @memberof SentinelS2L2ACogsProviderDefinition
-     */
-    cacheTtl?: number;
+    type: SentinelS2L2ACogsProviderDefinitionTypeEnum;
     /**
      *
      * @type {string}
      * @memberof SentinelS2L2ACogsProviderDefinition
      */
-    description: string;
-    /**
-     *
-     * @type {number}
-     * @memberof SentinelS2L2ACogsProviderDefinition
-     */
-    gdalRetries?: number;
+    name: string;
     /**
      *
      * @type {string}
@@ -51,7 +39,7 @@ export interface SentinelS2L2ACogsProviderDefinition {
      * @type {string}
      * @memberof SentinelS2L2ACogsProviderDefinition
      */
-    name: string;
+    description: string;
     /**
      *
      * @type {number}
@@ -60,10 +48,10 @@ export interface SentinelS2L2ACogsProviderDefinition {
     priority?: number | null;
     /**
      *
-     * @type {StacQueryBuffer}
+     * @type {string}
      * @memberof SentinelS2L2ACogsProviderDefinition
      */
-    queryBuffer?: StacQueryBuffer;
+    apiUrl: string;
     /**
      *
      * @type {StacApiRetries}
@@ -72,10 +60,22 @@ export interface SentinelS2L2ACogsProviderDefinition {
     stacApiRetries?: StacApiRetries;
     /**
      *
-     * @type {SentinelS2L2ACogsProviderDefinitionTypeEnum}
+     * @type {number}
      * @memberof SentinelS2L2ACogsProviderDefinition
      */
-    type: SentinelS2L2ACogsProviderDefinitionTypeEnum;
+    gdalRetries?: number;
+    /**
+     *
+     * @type {number}
+     * @memberof SentinelS2L2ACogsProviderDefinition
+     */
+    cacheTtl?: number;
+    /**
+     *
+     * @type {StacQueryBuffer}
+     * @memberof SentinelS2L2ACogsProviderDefinition
+     */
+    queryBuffer?: StacQueryBuffer;
 }
 /**
  * @export

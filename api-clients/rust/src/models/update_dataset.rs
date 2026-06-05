@@ -12,22 +12,22 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct UpdateDataset {
-    #[serde(rename = "description")]
-    pub description: String,
-    #[serde(rename = "display_name")]
-    pub display_name: String,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "display_name")]
+    pub display_name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "tags")]
     pub tags: Vec<String>,
 }
 
 impl UpdateDataset {
-    pub fn new(description: String, display_name: String, name: String, tags: Vec<String>) -> UpdateDataset {
+    pub fn new(name: String, display_name: String, description: String, tags: Vec<String>) -> UpdateDataset {
         UpdateDataset {
-            description,
-            display_name,
             name,
+            display_name,
+            description,
             tags,
         }
     }

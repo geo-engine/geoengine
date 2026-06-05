@@ -7,9 +7,9 @@ An operator that produces raster data.
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [TemporalRasterAggregationParameters](TemporalRasterAggregationParameters.md)
 `sources` | [SingleRasterSource](SingleRasterSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { RasterOperator } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies RasterOperator
 
 console.log(example)

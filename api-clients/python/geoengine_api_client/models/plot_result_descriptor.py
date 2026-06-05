@@ -28,10 +28,10 @@ class PlotResultDescriptor(BaseModel):
     """
     A `ResultDescriptor` for plot queries
     """ # noqa: E501
-    bbox: Optional[BoundingBox2D] = None
     spatial_reference: StrictStr = Field(alias="spatialReference")
     time: Optional[TimeInterval] = None
-    __properties: ClassVar[List[str]] = ["bbox", "spatialReference", "time"]
+    bbox: Optional[BoundingBox2D] = None
+    __properties: ClassVar[List[str]] = ["spatialReference", "time", "bbox"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -72,21 +72,21 @@ class PlotResultDescriptor(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of bbox
-        if self.bbox:
-            _dict['bbox'] = self.bbox.to_dict()
         # override the default output from pydantic by calling `to_dict()` of time
         if self.time:
             _dict['time'] = self.time.to_dict()
-        # set to None if bbox (nullable) is None
-        # and model_fields_set contains the field
-        if self.bbox is None and "bbox" in self.model_fields_set:
-            _dict['bbox'] = None
-
+        # override the default output from pydantic by calling `to_dict()` of bbox
+        if self.bbox:
+            _dict['bbox'] = self.bbox.to_dict()
         # set to None if time (nullable) is None
         # and model_fields_set contains the field
         if self.time is None and "time" in self.model_fields_set:
             _dict['time'] = None
+
+        # set to None if bbox (nullable) is None
+        # and model_fields_set contains the field
+        if self.bbox is None and "bbox" in self.model_fields_set:
+            _dict['bbox'] = None
 
         return _dict
 

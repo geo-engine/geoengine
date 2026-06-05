@@ -14,11 +14,11 @@
  * Check if a given object implements the StacApiRetries interface.
  */
 export function instanceOfStacApiRetries(value) {
-    if (!('exponentialBackoffFactor' in value) || value['exponentialBackoffFactor'] === undefined)
+    if (!('numberOfRetries' in value) || value['numberOfRetries'] === undefined)
         return false;
     if (!('initialDelayMs' in value) || value['initialDelayMs'] === undefined)
         return false;
-    if (!('numberOfRetries' in value) || value['numberOfRetries'] === undefined)
+    if (!('exponentialBackoffFactor' in value) || value['exponentialBackoffFactor'] === undefined)
         return false;
     return true;
 }
@@ -30,9 +30,9 @@ export function StacApiRetriesFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'exponentialBackoffFactor': json['exponentialBackoffFactor'],
-        'initialDelayMs': json['initialDelayMs'],
         'numberOfRetries': json['numberOfRetries'],
+        'initialDelayMs': json['initialDelayMs'],
+        'exponentialBackoffFactor': json['exponentialBackoffFactor'],
     };
 }
 export function StacApiRetriesToJSON(json) {
@@ -43,8 +43,8 @@ export function StacApiRetriesToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'exponentialBackoffFactor': value['exponentialBackoffFactor'],
-        'initialDelayMs': value['initialDelayMs'],
         'numberOfRetries': value['numberOfRetries'],
+        'initialDelayMs': value['initialDelayMs'],
+        'exponentialBackoffFactor': value['exponentialBackoffFactor'],
     };
 }

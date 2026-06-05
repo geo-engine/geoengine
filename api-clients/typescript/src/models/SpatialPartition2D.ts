@@ -31,21 +31,21 @@ export interface SpatialPartition2D {
      * @type {Coordinate2D}
      * @memberof SpatialPartition2D
      */
-    lowerRightCoordinate: Coordinate2D;
+    upperLeftCoordinate: Coordinate2D;
     /**
      * 
      * @type {Coordinate2D}
      * @memberof SpatialPartition2D
      */
-    upperLeftCoordinate: Coordinate2D;
+    lowerRightCoordinate: Coordinate2D;
 }
 
 /**
  * Check if a given object implements the SpatialPartition2D interface.
  */
 export function instanceOfSpatialPartition2D(value: object): value is SpatialPartition2D {
-    if (!('lowerRightCoordinate' in value) || value['lowerRightCoordinate'] === undefined) return false;
     if (!('upperLeftCoordinate' in value) || value['upperLeftCoordinate'] === undefined) return false;
+    if (!('lowerRightCoordinate' in value) || value['lowerRightCoordinate'] === undefined) return false;
     return true;
 }
 
@@ -59,8 +59,8 @@ export function SpatialPartition2DFromJSONTyped(json: any, ignoreDiscriminator: 
     }
     return {
         
-        'lowerRightCoordinate': Coordinate2DFromJSON(json['lowerRightCoordinate']),
         'upperLeftCoordinate': Coordinate2DFromJSON(json['upperLeftCoordinate']),
+        'lowerRightCoordinate': Coordinate2DFromJSON(json['lowerRightCoordinate']),
     };
 }
 
@@ -75,8 +75,8 @@ export function SpatialPartition2DToJSONTyped(value?: SpatialPartition2D | null,
 
     return {
         
-        'lowerRightCoordinate': Coordinate2DToJSON(value['lowerRightCoordinate']),
         'upperLeftCoordinate': Coordinate2DToJSON(value['upperLeftCoordinate']),
+        'lowerRightCoordinate': Coordinate2DToJSON(value['lowerRightCoordinate']),
     };
 }
 

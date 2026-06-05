@@ -35,17 +35,18 @@ class TestMockPointSource(unittest.TestCase):
         model = MockPointSource()
         if include_optional:
             return MockPointSource(
+                type = 'MockPointSource',
                 params = geoengine_api_client.models.mock_point_source_parameters.MockPointSourceParameters(
                     points = [
                         geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, )
                         ], 
-                    spatial_bounds = null, ),
-                type = 'MockPointSource'
+                    spatial_bounds = null, )
             )
         else:
             return MockPointSource(
+                type = 'MockPointSource',
                 params = geoengine_api_client.models.mock_point_source_parameters.MockPointSourceParameters(
                     points = [
                         geoengine_api_client.models.coordinate2_d.Coordinate2D(
@@ -53,7 +54,6 @@ class TestMockPointSource(unittest.TestCase):
                             y = 1.337, )
                         ], 
                     spatial_bounds = null, ),
-                type = 'MockPointSource',
         )
         """
 

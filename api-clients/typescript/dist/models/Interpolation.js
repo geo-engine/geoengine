@@ -30,11 +30,11 @@ exports.InterpolationTypeEnum = {
  * Check if a given object implements the Interpolation interface.
  */
 function instanceOfInterpolation(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -46,9 +46,9 @@ function InterpolationFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': (0, InterpolationParameters_1.InterpolationParametersFromJSON)(json['params']),
         'sources': (0, SingleRasterSource_1.SingleRasterSourceFromJSON)(json['sources']),
-        'type': json['type'],
     };
 }
 function InterpolationToJSON(json) {
@@ -59,8 +59,8 @@ function InterpolationToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'params': (0, InterpolationParameters_1.InterpolationParametersToJSON)(value['params']),
         'sources': (0, SingleRasterSource_1.SingleRasterSourceToJSON)(value['sources']),
-        'type': value['type'],
     };
 }

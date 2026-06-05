@@ -23,11 +23,11 @@ const Resource_1 = require("./Resource");
  * Check if a given object implements the PermissionRequest interface.
  */
 function instanceOfPermissionRequest(value) {
-    if (!('permission' in value) || value['permission'] === undefined)
-        return false;
     if (!('resource' in value) || value['resource'] === undefined)
         return false;
     if (!('roleId' in value) || value['roleId'] === undefined)
+        return false;
+    if (!('permission' in value) || value['permission'] === undefined)
         return false;
     return true;
 }
@@ -39,9 +39,9 @@ function PermissionRequestFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'permission': (0, Permission_1.PermissionFromJSON)(json['permission']),
         'resource': (0, Resource_1.ResourceFromJSON)(json['resource']),
         'roleId': json['roleId'],
+        'permission': (0, Permission_1.PermissionFromJSON)(json['permission']),
     };
 }
 function PermissionRequestToJSON(json) {
@@ -52,8 +52,8 @@ function PermissionRequestToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'permission': (0, Permission_1.PermissionToJSON)(value['permission']),
         'resource': (0, Resource_1.ResourceToJSON)(value['resource']),
         'roleId': value['roleId'],
+        'permission': (0, Permission_1.PermissionToJSON)(value['permission']),
     };
 }

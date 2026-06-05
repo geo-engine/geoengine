@@ -35,13 +35,13 @@ class TestOgrSourceTimeFormatCustom(unittest.TestCase):
         model = OgrSourceTimeFormatCustom()
         if include_optional:
             return OgrSourceTimeFormatCustom(
-                custom_format = '',
-                format = 'custom'
+                format = 'custom',
+                custom_format = ''
             )
         else:
             return OgrSourceTimeFormatCustom(
-                custom_format = '',
                 format = 'custom',
+                custom_format = '',
         )
         """
 

@@ -16,9 +16,9 @@ import { WorkflowFromJSON, WorkflowToJSON, } from './Workflow';
  * Check if a given object implements the AddLayer interface.
  */
 export function instanceOfAddLayer(value) {
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('name' in value) || value['name'] === undefined)
+        return false;
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     if (!('workflow' in value) || value['workflow'] === undefined)
         return false;
@@ -32,12 +32,12 @@ export function AddLayerFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
-        'metadata': json['metadata'] == null ? undefined : json['metadata'],
         'name': json['name'],
-        'properties': json['properties'] == null ? undefined : json['properties'],
-        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'description': json['description'],
         'workflow': WorkflowFromJSON(json['workflow']),
+        'symbology': json['symbology'] == null ? undefined : SymbologyFromJSON(json['symbology']),
+        'properties': json['properties'] == null ? undefined : json['properties'],
+        'metadata': json['metadata'] == null ? undefined : json['metadata'],
     };
 }
 export function AddLayerToJSON(json) {
@@ -48,11 +48,11 @@ export function AddLayerToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'metadata': value['metadata'],
         'name': value['name'],
-        'properties': value['properties'],
-        'symbology': SymbologyToJSON(value['symbology']),
+        'description': value['description'],
         'workflow': WorkflowToJSON(value['workflow']),
+        'symbology': SymbologyToJSON(value['symbology']),
+        'properties': value['properties'],
+        'metadata': value['metadata'],
     };
 }

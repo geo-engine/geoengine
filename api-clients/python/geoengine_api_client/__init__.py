@@ -22,6 +22,7 @@ __all__ = [
     "GeneralApi",
     "LayersApi",
     "MLApi",
+    "OGCAPIApi",
     "OGCWCSApi",
     "OGCWFSApi",
     "OGCWMSApi",
@@ -59,15 +60,20 @@ __all__ = [
     "BoundingBox2D",
     "Breakpoint",
     "ClassificationMeasurement",
+    "Collection",
     "CollectionItem",
     "CollectionType",
+    "Collections",
+    "CollectionsResponseFormat",
     "ColorParam",
     "Colorizer",
     "ColumnNames",
     "ComputationQuota",
+    "Conformance",
     "ContinuousMeasurement",
     "Coordinate2D",
     "CopernicusDataspaceDataProviderDefinition",
+    "CornerOfOrigin",
     "CountAggregation",
     "CreateDataset",
     "CreateProject",
@@ -98,6 +104,7 @@ __all__ = [
     "ErrorResponse",
     "Expression",
     "ExpressionParameters",
+    "Extent",
     "ExternalDataId",
     "FeatureAggregationMethod",
     "FeatureDataType",
@@ -140,6 +147,7 @@ __all__ = [
     "InterpolationParameters",
     "InterpolationResolution",
     "Irregular",
+    "LandingPage",
     "LastAggregation",
     "Layer",
     "LayerCollection",
@@ -153,6 +161,7 @@ __all__ = [
     "LegacyTypedOperatorOperator",
     "LineSymbology",
     "LinearGradient",
+    "Link",
     "LogarithmicGradient",
     "MaxAggregation",
     "MeanAggregation",
@@ -273,6 +282,7 @@ __all__ = [
     "SpatialBoundsDeriveBounds",
     "SpatialBoundsDeriveDerive",
     "SpatialBoundsDeriveNone",
+    "SpatialExtent",
     "SpatialGridDefinition",
     "SpatialGridDescriptor",
     "SpatialGridDescriptorState",
@@ -297,10 +307,25 @@ __all__ = [
     "TaskStatusFailed",
     "TaskStatusRunning",
     "TaskStatusWithId",
+    "TemplatedTileLink",
     "TemporalAggregationMethod",
+    "TemporalExtent",
     "TemporalRasterAggregation",
     "TemporalRasterAggregationParameters",
     "TextSymbology",
+    "TileMatrix",
+    "TileMatrixSet",
+    "TileMatrixSetId",
+    "TileMatrixSetIdOneOf",
+    "TileMatrixSetItem",
+    "TileMatrixSets",
+    "TileSetListItemResponse",
+    "TileSetMetadataResponse",
+    "TileSetsResponse",
+    "TilesCrs",
+    "TilesCrsOneOf",
+    "TilesCrsOneOf1",
+    "TilesCrsOneOf2",
     "TimeDescriptor",
     "TimeDimension",
     "TimeGranularity",
@@ -335,6 +360,7 @@ __all__ = [
     "UserInfo",
     "UserRegistration",
     "UserSession",
+    "VariableMatrixWidth",
     "VecUpdate",
     "VectorColumnInfo",
     "VectorDataType",
@@ -362,6 +388,7 @@ from geoengine_api_client.api.datasets_api import DatasetsApi as DatasetsApi
 from geoengine_api_client.api.general_api import GeneralApi as GeneralApi
 from geoengine_api_client.api.layers_api import LayersApi as LayersApi
 from geoengine_api_client.api.ml_api import MLApi as MLApi
+from geoengine_api_client.api.ogcapi_api import OGCAPIApi as OGCAPIApi
 from geoengine_api_client.api.ogcwcs_api import OGCWCSApi as OGCWCSApi
 from geoengine_api_client.api.ogcwfs_api import OGCWFSApi as OGCWFSApi
 from geoengine_api_client.api.ogcwms_api import OGCWMSApi as OGCWMSApi
@@ -403,15 +430,20 @@ from geoengine_api_client.models.bands_by_name_or_index import BandsByNameOrInde
 from geoengine_api_client.models.bounding_box2_d import BoundingBox2D as BoundingBox2D
 from geoengine_api_client.models.breakpoint import Breakpoint as Breakpoint
 from geoengine_api_client.models.classification_measurement import ClassificationMeasurement as ClassificationMeasurement
+from geoengine_api_client.models.collection import Collection as Collection
 from geoengine_api_client.models.collection_item import CollectionItem as CollectionItem
 from geoengine_api_client.models.collection_type import CollectionType as CollectionType
+from geoengine_api_client.models.collections import Collections as Collections
+from geoengine_api_client.models.collections_response_format import CollectionsResponseFormat as CollectionsResponseFormat
 from geoengine_api_client.models.color_param import ColorParam as ColorParam
 from geoengine_api_client.models.colorizer import Colorizer as Colorizer
 from geoengine_api_client.models.column_names import ColumnNames as ColumnNames
 from geoengine_api_client.models.computation_quota import ComputationQuota as ComputationQuota
+from geoengine_api_client.models.conformance import Conformance as Conformance
 from geoengine_api_client.models.continuous_measurement import ContinuousMeasurement as ContinuousMeasurement
 from geoengine_api_client.models.coordinate2_d import Coordinate2D as Coordinate2D
 from geoengine_api_client.models.copernicus_dataspace_data_provider_definition import CopernicusDataspaceDataProviderDefinition as CopernicusDataspaceDataProviderDefinition
+from geoengine_api_client.models.corner_of_origin import CornerOfOrigin as CornerOfOrigin
 from geoengine_api_client.models.count_aggregation import CountAggregation as CountAggregation
 from geoengine_api_client.models.create_dataset import CreateDataset as CreateDataset
 from geoengine_api_client.models.create_project import CreateProject as CreateProject
@@ -442,6 +474,7 @@ from geoengine_api_client.models.edr_vector_spec import EdrVectorSpec as EdrVect
 from geoengine_api_client.models.error_response import ErrorResponse as ErrorResponse
 from geoengine_api_client.models.expression import Expression as Expression
 from geoengine_api_client.models.expression_parameters import ExpressionParameters as ExpressionParameters
+from geoengine_api_client.models.extent import Extent as Extent
 from geoengine_api_client.models.external_data_id import ExternalDataId as ExternalDataId
 from geoengine_api_client.models.feature_aggregation_method import FeatureAggregationMethod as FeatureAggregationMethod
 from geoengine_api_client.models.feature_data_type import FeatureDataType as FeatureDataType
@@ -484,6 +517,7 @@ from geoengine_api_client.models.interpolation_method import InterpolationMethod
 from geoengine_api_client.models.interpolation_parameters import InterpolationParameters as InterpolationParameters
 from geoengine_api_client.models.interpolation_resolution import InterpolationResolution as InterpolationResolution
 from geoengine_api_client.models.irregular import Irregular as Irregular
+from geoengine_api_client.models.landing_page import LandingPage as LandingPage
 from geoengine_api_client.models.last_aggregation import LastAggregation as LastAggregation
 from geoengine_api_client.models.layer import Layer as Layer
 from geoengine_api_client.models.layer_collection import LayerCollection as LayerCollection
@@ -497,6 +531,7 @@ from geoengine_api_client.models.legacy_typed_operator import LegacyTypedOperato
 from geoengine_api_client.models.legacy_typed_operator_operator import LegacyTypedOperatorOperator as LegacyTypedOperatorOperator
 from geoengine_api_client.models.line_symbology import LineSymbology as LineSymbology
 from geoengine_api_client.models.linear_gradient import LinearGradient as LinearGradient
+from geoengine_api_client.models.link import Link as Link
 from geoengine_api_client.models.logarithmic_gradient import LogarithmicGradient as LogarithmicGradient
 from geoengine_api_client.models.max_aggregation import MaxAggregation as MaxAggregation
 from geoengine_api_client.models.mean_aggregation import MeanAggregation as MeanAggregation
@@ -617,6 +652,7 @@ from geoengine_api_client.models.spatial_bounds_derive import SpatialBoundsDeriv
 from geoengine_api_client.models.spatial_bounds_derive_bounds import SpatialBoundsDeriveBounds as SpatialBoundsDeriveBounds
 from geoengine_api_client.models.spatial_bounds_derive_derive import SpatialBoundsDeriveDerive as SpatialBoundsDeriveDerive
 from geoengine_api_client.models.spatial_bounds_derive_none import SpatialBoundsDeriveNone as SpatialBoundsDeriveNone
+from geoengine_api_client.models.spatial_extent import SpatialExtent as SpatialExtent
 from geoengine_api_client.models.spatial_grid_definition import SpatialGridDefinition as SpatialGridDefinition
 from geoengine_api_client.models.spatial_grid_descriptor import SpatialGridDescriptor as SpatialGridDescriptor
 from geoengine_api_client.models.spatial_grid_descriptor_state import SpatialGridDescriptorState as SpatialGridDescriptorState
@@ -641,10 +677,25 @@ from geoengine_api_client.models.task_status_completed import TaskStatusComplete
 from geoengine_api_client.models.task_status_failed import TaskStatusFailed as TaskStatusFailed
 from geoengine_api_client.models.task_status_running import TaskStatusRunning as TaskStatusRunning
 from geoengine_api_client.models.task_status_with_id import TaskStatusWithId as TaskStatusWithId
+from geoengine_api_client.models.templated_tile_link import TemplatedTileLink as TemplatedTileLink
 from geoengine_api_client.models.temporal_aggregation_method import TemporalAggregationMethod as TemporalAggregationMethod
+from geoengine_api_client.models.temporal_extent import TemporalExtent as TemporalExtent
 from geoengine_api_client.models.temporal_raster_aggregation import TemporalRasterAggregation as TemporalRasterAggregation
 from geoengine_api_client.models.temporal_raster_aggregation_parameters import TemporalRasterAggregationParameters as TemporalRasterAggregationParameters
 from geoengine_api_client.models.text_symbology import TextSymbology as TextSymbology
+from geoengine_api_client.models.tile_matrix import TileMatrix as TileMatrix
+from geoengine_api_client.models.tile_matrix_set import TileMatrixSet as TileMatrixSet
+from geoengine_api_client.models.tile_matrix_set_id import TileMatrixSetId as TileMatrixSetId
+from geoengine_api_client.models.tile_matrix_set_id_one_of import TileMatrixSetIdOneOf as TileMatrixSetIdOneOf
+from geoengine_api_client.models.tile_matrix_set_item import TileMatrixSetItem as TileMatrixSetItem
+from geoengine_api_client.models.tile_matrix_sets import TileMatrixSets as TileMatrixSets
+from geoengine_api_client.models.tile_set_list_item_response import TileSetListItemResponse as TileSetListItemResponse
+from geoengine_api_client.models.tile_set_metadata_response import TileSetMetadataResponse as TileSetMetadataResponse
+from geoengine_api_client.models.tile_sets_response import TileSetsResponse as TileSetsResponse
+from geoengine_api_client.models.tiles_crs import TilesCrs as TilesCrs
+from geoengine_api_client.models.tiles_crs_one_of import TilesCrsOneOf as TilesCrsOneOf
+from geoengine_api_client.models.tiles_crs_one_of1 import TilesCrsOneOf1 as TilesCrsOneOf1
+from geoengine_api_client.models.tiles_crs_one_of2 import TilesCrsOneOf2 as TilesCrsOneOf2
 from geoengine_api_client.models.time_descriptor import TimeDescriptor as TimeDescriptor
 from geoengine_api_client.models.time_dimension import TimeDimension as TimeDimension
 from geoengine_api_client.models.time_granularity import TimeGranularity as TimeGranularity
@@ -679,6 +730,7 @@ from geoengine_api_client.models.user_credentials import UserCredentials as User
 from geoengine_api_client.models.user_info import UserInfo as UserInfo
 from geoengine_api_client.models.user_registration import UserRegistration as UserRegistration
 from geoengine_api_client.models.user_session import UserSession as UserSession
+from geoengine_api_client.models.variable_matrix_width import VariableMatrixWidth as VariableMatrixWidth
 from geoengine_api_client.models.vec_update import VecUpdate as VecUpdate
 from geoengine_api_client.models.vector_column_info import VectorColumnInfo as VectorColumnInfo
 from geoengine_api_client.models.vector_data_type import VectorDataType as VectorDataType

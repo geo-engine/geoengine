@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TaskStatusAborted {
-    #[serde(rename = "cleanUp", deserialize_with = "Option::deserialize")]
-    pub clean_up: Option<serde_json::Value>,
     #[serde(rename = "status")]
     pub status: Status,
+    #[serde(rename = "cleanUp", deserialize_with = "Option::deserialize")]
+    pub clean_up: Option<serde_json::Value>,
 }
 
 impl TaskStatusAborted {
-    pub fn new(clean_up: Option<serde_json::Value>, status: Status) -> TaskStatusAborted {
+    pub fn new(status: Status, clean_up: Option<serde_json::Value>) -> TaskStatusAborted {
         TaskStatusAborted {
-            clean_up,
             status,
+            clean_up,
         }
     }
 }

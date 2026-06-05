@@ -35,15 +35,15 @@ class TestStacApiRetries(unittest.TestCase):
         model = StacApiRetries()
         if include_optional:
             return StacApiRetries(
-                exponential_backoff_factor = 1.337,
+                number_of_retries = 0,
                 initial_delay_ms = 0,
-                number_of_retries = 0
+                exponential_backoff_factor = 1.337
             )
         else:
             return StacApiRetries(
-                exponential_backoff_factor = 1.337,
-                initial_delay_ms = 0,
                 number_of_retries = 0,
+                initial_delay_ms = 0,
+                exponential_backoff_factor = 1.337,
         )
         """
 

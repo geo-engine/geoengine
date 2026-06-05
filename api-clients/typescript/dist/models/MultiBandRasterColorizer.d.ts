@@ -15,60 +15,11 @@
  */
 export interface MultiBandRasterColorizer {
     /**
-     * The band index of the blue channel.
-     * @type {number}
+     *
+     * @type {MultiBandRasterColorizerTypeEnum}
      * @memberof MultiBandRasterColorizer
      */
-    blueBand: number;
-    /**
-     * The maximum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
-     */
-    blueMax: number;
-    /**
-     * The minimum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
-     */
-    blueMin: number;
-    /**
-     * A scaling factor for the blue channel between 0 and 1.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
-     */
-    blueScale?: number;
-    /**
-     * The band index of the green channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
-     */
-    greenBand: number;
-    /**
-     * The maximum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
-     */
-    greenMax: number;
-    /**
-     * The minimum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
-     */
-    greenMin: number;
-    /**
-     * A scaling factor for the green channel between 0 and 1.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
-     */
-    greenScale?: number;
-    /**
-     * The color to use for no data values.
-     * If not specified, the no data values will be transparent.
-     * @type {Array<number>}
-     * @memberof MultiBandRasterColorizer
-     */
-    noDataColor?: Array<number>;
+    type: MultiBandRasterColorizerTypeEnum;
     /**
      * The band index of the red channel.
      * @type {number}
@@ -76,17 +27,17 @@ export interface MultiBandRasterColorizer {
      */
     redBand: number;
     /**
-     * The maximum value for the red channel.
-     * @type {number}
-     * @memberof MultiBandRasterColorizer
-     */
-    redMax: number;
-    /**
      * The minimum value for the red channel.
      * @type {number}
      * @memberof MultiBandRasterColorizer
      */
     redMin: number;
+    /**
+     * The maximum value for the red channel.
+     * @type {number}
+     * @memberof MultiBandRasterColorizer
+     */
+    redMax: number;
     /**
      * A scaling factor for the red channel between 0 and 1.
      * @type {number}
@@ -94,11 +45,60 @@ export interface MultiBandRasterColorizer {
      */
     redScale?: number;
     /**
-     *
-     * @type {MultiBandRasterColorizerTypeEnum}
+     * The band index of the green channel.
+     * @type {number}
      * @memberof MultiBandRasterColorizer
      */
-    type: MultiBandRasterColorizerTypeEnum;
+    greenBand: number;
+    /**
+     * The minimum value for the red channel.
+     * @type {number}
+     * @memberof MultiBandRasterColorizer
+     */
+    greenMin: number;
+    /**
+     * The maximum value for the red channel.
+     * @type {number}
+     * @memberof MultiBandRasterColorizer
+     */
+    greenMax: number;
+    /**
+     * A scaling factor for the green channel between 0 and 1.
+     * @type {number}
+     * @memberof MultiBandRasterColorizer
+     */
+    greenScale?: number;
+    /**
+     * The band index of the blue channel.
+     * @type {number}
+     * @memberof MultiBandRasterColorizer
+     */
+    blueBand: number;
+    /**
+     * The minimum value for the red channel.
+     * @type {number}
+     * @memberof MultiBandRasterColorizer
+     */
+    blueMin: number;
+    /**
+     * The maximum value for the red channel.
+     * @type {number}
+     * @memberof MultiBandRasterColorizer
+     */
+    blueMax: number;
+    /**
+     * A scaling factor for the blue channel between 0 and 1.
+     * @type {number}
+     * @memberof MultiBandRasterColorizer
+     */
+    blueScale?: number;
+    /**
+     * The color to use for no data values.
+     * If not specified, the no data values will be transparent.
+     * @type {Array<number>}
+     * @memberof MultiBandRasterColorizer
+     */
+    noDataColor?: Array<number>;
 }
 /**
  * @export

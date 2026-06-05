@@ -22,9 +22,9 @@ const CollectionType_1 = require("./CollectionType");
  * Check if a given object implements the GeoJson interface.
  */
 function instanceOfGeoJson(value) {
-    if (!('features' in value) || value['features'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('features' in value) || value['features'] === undefined)
         return false;
     return true;
 }
@@ -36,8 +36,8 @@ function GeoJsonFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'features': json['features'],
         'type': (0, CollectionType_1.CollectionTypeFromJSON)(json['type']),
+        'features': json['features'],
     };
 }
 function GeoJsonToJSON(json) {
@@ -48,7 +48,7 @@ function GeoJsonToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'features': value['features'],
         'type': (0, CollectionType_1.CollectionTypeToJSON)(value['type']),
+        'features': value['features'],
     };
 }

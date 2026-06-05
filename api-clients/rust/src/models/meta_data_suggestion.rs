@@ -12,19 +12,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MetaDataSuggestion {
-    #[serde(rename = "layerName")]
-    pub layer_name: String,
     #[serde(rename = "mainFile")]
     pub main_file: String,
+    #[serde(rename = "layerName")]
+    pub layer_name: String,
     #[serde(rename = "metaData")]
     pub meta_data: Box<models::MetaDataDefinition>,
 }
 
 impl MetaDataSuggestion {
-    pub fn new(layer_name: String, main_file: String, meta_data: models::MetaDataDefinition) -> MetaDataSuggestion {
+    pub fn new(main_file: String, layer_name: String, meta_data: models::MetaDataDefinition) -> MetaDataSuggestion {
         MetaDataSuggestion {
-            layer_name,
             main_file,
+            layer_name,
             meta_data: Box::new(meta_data),
         }
     }

@@ -35,13 +35,13 @@ class TestResource(unittest.TestCase):
         model = Resource()
         if include_optional:
             return Resource(
-                id = '',
-                type = 'layer'
+                type = 'layer',
+                id = ''
             )
         else:
             return Resource(
-                id = '',
                 type = 'layer',
+                id = '',
         )
         """
 

@@ -16,16 +16,16 @@
 export interface Rename {
     /**
      *
-     * @type {RenameTypeEnum}
-     * @memberof Rename
-     */
-    type: RenameTypeEnum;
-    /**
-     *
      * @type {Array<string>}
      * @memberof Rename
      */
     values: Array<string>;
+    /**
+     *
+     * @type {RenameTypeEnum}
+     * @memberof Rename
+     */
+    type: RenameTypeEnum;
 }
 /**
  * @export

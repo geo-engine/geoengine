@@ -23,21 +23,21 @@ export interface TimeInterval {
      * @type {number}
      * @memberof TimeInterval
      */
-    end: number;
+    start: number;
     /**
      * 
      * @type {number}
      * @memberof TimeInterval
      */
-    start: number;
+    end: number;
 }
 
 /**
  * Check if a given object implements the TimeInterval interface.
  */
 export function instanceOfTimeInterval(value: object): value is TimeInterval {
-    if (!('end' in value) || value['end'] === undefined) return false;
     if (!('start' in value) || value['start'] === undefined) return false;
+    if (!('end' in value) || value['end'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function TimeIntervalFromJSONTyped(json: any, ignoreDiscriminator: boolea
     }
     return {
         
-        'end': json['end'],
         'start': json['start'],
+        'end': json['end'],
     };
 }
 
@@ -67,8 +67,8 @@ export function TimeIntervalToJSONTyped(value?: TimeInterval | null, ignoreDiscr
 
     return {
         
-        'end': value['end'],
         'start': value['start'],
+        'end': value['end'],
     };
 }
 

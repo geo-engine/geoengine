@@ -14,9 +14,9 @@
  * Check if a given object implements the TimeInterval interface.
  */
 export function instanceOfTimeInterval(value) {
-    if (!('end' in value) || value['end'] === undefined)
-        return false;
     if (!('start' in value) || value['start'] === undefined)
+        return false;
+    if (!('end' in value) || value['end'] === undefined)
         return false;
     return true;
 }
@@ -28,8 +28,8 @@ export function TimeIntervalFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'end': json['end'],
         'start': json['start'],
+        'end': json['end'],
     };
 }
 export function TimeIntervalToJSON(json) {
@@ -40,7 +40,7 @@ export function TimeIntervalToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'end': value['end'],
         'start': value['start'],
+        'end': value['end'],
     };
 }

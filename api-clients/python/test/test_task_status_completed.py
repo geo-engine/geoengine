@@ -35,19 +35,19 @@ class TestTaskStatusCompleted(unittest.TestCase):
         model = TaskStatusCompleted()
         if include_optional:
             return TaskStatusCompleted(
-                description = '',
-                info = None,
                 status = 'completed',
                 task_type = '',
-                time_started = '',
-                time_total = ''
+                description = '',
+                info = None,
+                time_total = '',
+                time_started = ''
             )
         else:
             return TaskStatusCompleted(
                 status = 'completed',
                 task_type = '',
-                time_started = '',
                 time_total = '',
+                time_started = '',
         )
         """
 

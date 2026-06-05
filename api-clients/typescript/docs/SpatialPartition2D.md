@@ -7,8 +7,8 @@ A partition of space that include the upper left but excludes the lower right co
 
 Name | Type
 ------------ | -------------
-`lowerRightCoordinate` | [Coordinate2D](Coordinate2D.md)
 `upperLeftCoordinate` | [Coordinate2D](Coordinate2D.md)
+`lowerRightCoordinate` | [Coordinate2D](Coordinate2D.md)
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { SpatialPartition2D } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "lowerRightCoordinate": null,
   "upperLeftCoordinate": null,
+  "lowerRightCoordinate": null,
 } satisfies SpatialPartition2D
 
 console.log(example)

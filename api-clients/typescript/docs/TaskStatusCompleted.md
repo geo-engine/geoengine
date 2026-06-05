@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`info` | any
 `status` | string
 `taskType` | string
-`timeStarted` | string
+`description` | string
+`info` | any
 `timeTotal` | string
+`timeStarted` | string
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { TaskStatusCompleted } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
-  "info": null,
   "status": null,
   "taskType": null,
-  "timeStarted": null,
+  "description": null,
+  "info": null,
   "timeTotal": null,
+  "timeStarted": null,
 } satisfies TaskStatusCompleted
 
 console.log(example)

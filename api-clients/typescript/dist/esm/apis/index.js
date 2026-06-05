@@ -4,6 +4,7 @@ export * from './DatasetsApi';
 export * from './GeneralApi';
 export * from './LayersApi';
 export * from './MLApi';
+export * from './OGCAPIApi';
 export * from './OGCWCSApi';
 export * from './OGCWFSApi';
 export * from './OGCWMSApi';

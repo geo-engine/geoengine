@@ -27,10 +27,10 @@ class RasterSymbology(BaseModel):
     """
     RasterSymbology
     """ # noqa: E501
+    type: StrictStr
     opacity: Union[StrictFloat, StrictInt]
     raster_colorizer: RasterColorizer = Field(alias="rasterColorizer")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["opacity", "rasterColorizer", "type"]
+    __properties: ClassVar[List[str]] = ["type", "opacity", "rasterColorizer"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -93,9 +93,9 @@ class RasterSymbology(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
+            "type": obj.get("type"),
             "opacity": obj.get("opacity"),
-            "rasterColorizer": RasterColorizer.from_dict(obj["rasterColorizer"]) if obj.get("rasterColorizer") is not None else None,
-            "type": obj.get("type")
+            "rasterColorizer": RasterColorizer.from_dict(obj["rasterColorizer"]) if obj.get("rasterColorizer") is not None else None
         })
         return _obj
 

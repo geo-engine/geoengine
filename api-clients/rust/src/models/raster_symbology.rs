@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct RasterSymbology {
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "opacity")]
     pub opacity: f64,
     #[serde(rename = "rasterColorizer")]
     pub raster_colorizer: Box<models::RasterColorizer>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl RasterSymbology {
-    pub fn new(opacity: f64, raster_colorizer: models::RasterColorizer, r#type: Type) -> RasterSymbology {
+    pub fn new(r#type: Type, opacity: f64, raster_colorizer: models::RasterColorizer) -> RasterSymbology {
         RasterSymbology {
+            r#type,
             opacity,
             raster_colorizer: Box::new(raster_colorizer),
-            r#type,
         }
     }
 }

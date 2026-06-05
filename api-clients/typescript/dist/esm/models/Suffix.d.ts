@@ -16,16 +16,16 @@
 export interface Suffix {
     /**
      *
-     * @type {SuffixTypeEnum}
-     * @memberof Suffix
-     */
-    type: SuffixTypeEnum;
-    /**
-     *
      * @type {Array<string>}
      * @memberof Suffix
      */
     values: Array<string>;
+    /**
+     *
+     * @type {SuffixTypeEnum}
+     * @memberof Suffix
+     */
+    type: SuffixTypeEnum;
 }
 /**
  * @export

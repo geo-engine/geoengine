@@ -7,9 +7,9 @@ The `RasterStacker` stacks all of its inputs into a single raster time series. I
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [RasterStackerParameters](RasterStackerParameters.md)
 `sources` | [MultipleRasterSources](MultipleRasterSources.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { RasterStacker } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies RasterStacker
 
 console.log(example)

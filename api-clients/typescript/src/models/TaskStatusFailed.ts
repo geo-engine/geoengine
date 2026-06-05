@@ -20,10 +20,10 @@ import { mapValues } from '../runtime';
 export interface TaskStatusFailed {
     /**
      * 
-     * @type {any}
+     * @type {TaskStatusFailedStatusEnum}
      * @memberof TaskStatusFailed
      */
-    cleanUp: any | null;
+    status: TaskStatusFailedStatusEnum;
     /**
      * 
      * @type {any}
@@ -32,10 +32,10 @@ export interface TaskStatusFailed {
     error: any | null;
     /**
      * 
-     * @type {TaskStatusFailedStatusEnum}
+     * @type {any}
      * @memberof TaskStatusFailed
      */
-    status: TaskStatusFailedStatusEnum;
+    cleanUp: any | null;
 }
 
 
@@ -52,9 +52,9 @@ export type TaskStatusFailedStatusEnum = typeof TaskStatusFailedStatusEnum[keyof
  * Check if a given object implements the TaskStatusFailed interface.
  */
 export function instanceOfTaskStatusFailed(value: object): value is TaskStatusFailed {
-    if (!('cleanUp' in value) || value['cleanUp'] === undefined) return false;
-    if (!('error' in value) || value['error'] === undefined) return false;
     if (!('status' in value) || value['status'] === undefined) return false;
+    if (!('error' in value) || value['error'] === undefined) return false;
+    if (!('cleanUp' in value) || value['cleanUp'] === undefined) return false;
     return true;
 }
 
@@ -68,9 +68,9 @@ export function TaskStatusFailedFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'cleanUp': json['cleanUp'],
-        'error': json['error'],
         'status': json['status'],
+        'error': json['error'],
+        'cleanUp': json['cleanUp'],
     };
 }
 
@@ -85,9 +85,9 @@ export function TaskStatusFailedToJSONTyped(value?: TaskStatusFailed | null, ign
 
     return {
         
-        'cleanUp': value['cleanUp'],
-        'error': value['error'],
         'status': value['status'],
+        'error': value['error'],
+        'cleanUp': value['cleanUp'],
     };
 }
 

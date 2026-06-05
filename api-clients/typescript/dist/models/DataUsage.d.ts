@@ -16,24 +16,6 @@
 export interface DataUsage {
     /**
      *
-     * @type {string}
-     * @memberof DataUsage
-     */
-    computationId: string;
-    /**
-     *
-     * @type {number}
-     * @memberof DataUsage
-     */
-    count: number;
-    /**
-     *
-     * @type {string}
-     * @memberof DataUsage
-     */
-    data: string;
-    /**
-     *
      * @type {Date}
      * @memberof DataUsage
      */
@@ -44,6 +26,24 @@ export interface DataUsage {
      * @memberof DataUsage
      */
     userId: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DataUsage
+     */
+    computationId: string;
+    /**
+     *
+     * @type {string}
+     * @memberof DataUsage
+     */
+    data: string;
+    /**
+     *
+     * @type {number}
+     * @memberof DataUsage
+     */
+    count: number;
 }
 /**
  * Check if a given object implements the DataUsage interface.

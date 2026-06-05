@@ -6,13 +6,13 @@
 
 Name | Type
 ------------ | -------------
-`cacheTtl` | number
-`dataTime` | [TimeInterval](TimeInterval.md)
-`params` | [GdalDatasetParameters](GdalDatasetParameters.md)
-`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
-`step` | [TimeStep](TimeStep.md)
-`timePlaceholders` | [{ [key: string]: GdalSourceTimePlaceholder; }](GdalSourceTimePlaceholder.md)
 `type` | string
+`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
+`params` | [GdalDatasetParameters](GdalDatasetParameters.md)
+`timePlaceholders` | [{ [key: string]: GdalSourceTimePlaceholder; }](GdalSourceTimePlaceholder.md)
+`dataTime` | [TimeInterval](TimeInterval.md)
+`step` | [TimeStep](TimeStep.md)
+`cacheTtl` | number
 
 ## Example
 
@@ -21,13 +21,13 @@ import type { GdalMetaDataRegular } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "cacheTtl": null,
-  "dataTime": null,
-  "params": null,
-  "resultDescriptor": null,
-  "step": null,
-  "timePlaceholders": null,
   "type": null,
+  "resultDescriptor": null,
+  "params": null,
+  "timePlaceholders": null,
+  "dataTime": null,
+  "step": null,
+  "cacheTtl": null,
 } satisfies GdalMetaDataRegular
 
 console.log(example)

@@ -28,9 +28,9 @@ exports.NamesTypeEnum = {
  * Check if a given object implements the Names interface.
  */
 function instanceOfNames(value) {
-    if (!('type' in value) || value['type'] === undefined)
-        return false;
     if (!('values' in value) || value['values'] === undefined)
+        return false;
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -42,8 +42,8 @@ function NamesFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'type': json['type'],
         'values': json['values'],
+        'type': json['type'],
     };
 }
 function NamesToJSON(json) {
@@ -54,7 +54,7 @@ function NamesToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'type': value['type'],
         'values': value['values'],
+        'type': value['type'],
     };
 }

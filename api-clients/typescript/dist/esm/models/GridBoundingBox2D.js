@@ -15,9 +15,9 @@ import { GridIdx2DFromJSON, GridIdx2DToJSON, } from './GridIdx2D';
  * Check if a given object implements the GridBoundingBox2D interface.
  */
 export function instanceOfGridBoundingBox2D(value) {
-    if (!('bottomRightIdx' in value) || value['bottomRightIdx'] === undefined)
-        return false;
     if (!('topLeftIdx' in value) || value['topLeftIdx'] === undefined)
+        return false;
+    if (!('bottomRightIdx' in value) || value['bottomRightIdx'] === undefined)
         return false;
     return true;
 }
@@ -29,8 +29,8 @@ export function GridBoundingBox2DFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bottomRightIdx': GridIdx2DFromJSON(json['bottomRightIdx']),
         'topLeftIdx': GridIdx2DFromJSON(json['topLeftIdx']),
+        'bottomRightIdx': GridIdx2DFromJSON(json['bottomRightIdx']),
     };
 }
 export function GridBoundingBox2DToJSON(json) {
@@ -41,7 +41,7 @@ export function GridBoundingBox2DToJSONTyped(value, ignoreDiscriminator = false)
         return value;
     }
     return {
-        'bottomRightIdx': GridIdx2DToJSON(value['bottomRightIdx']),
         'topLeftIdx': GridIdx2DToJSON(value['topLeftIdx']),
+        'bottomRightIdx': GridIdx2DToJSON(value['bottomRightIdx']),
     };
 }

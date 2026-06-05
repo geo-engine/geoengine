@@ -26,21 +26,21 @@ const ProjectLayer_1 = require("./ProjectLayer");
  * Check if a given object implements the Project interface.
  */
 function instanceOfProject(value) {
-    if (!('bounds' in value) || value['bounds'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
-        return false;
     if (!('id' in value) || value['id'] === undefined)
         return false;
-    if (!('layers' in value) || value['layers'] === undefined)
+    if (!('version' in value) || value['version'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('layers' in value) || value['layers'] === undefined)
+        return false;
     if (!('plots' in value) || value['plots'] === undefined)
         return false;
-    if (!('timeStep' in value) || value['timeStep'] === undefined)
+    if (!('bounds' in value) || value['bounds'] === undefined)
         return false;
-    if (!('version' in value) || value['version'] === undefined)
+    if (!('timeStep' in value) || value['timeStep'] === undefined)
         return false;
     return true;
 }
@@ -52,14 +52,14 @@ function ProjectFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'bounds': (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
-        'description': json['description'],
         'id': json['id'],
-        'layers': (json['layers'].map(ProjectLayer_1.ProjectLayerFromJSON)),
-        'name': json['name'],
-        'plots': (json['plots'].map(Plot_1.PlotFromJSON)),
-        'timeStep': (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
         'version': (0, ProjectVersion_1.ProjectVersionFromJSON)(json['version']),
+        'name': json['name'],
+        'description': json['description'],
+        'layers': (json['layers'].map(ProjectLayer_1.ProjectLayerFromJSON)),
+        'plots': (json['plots'].map(Plot_1.PlotFromJSON)),
+        'bounds': (0, STRectangle_1.STRectangleFromJSON)(json['bounds']),
+        'timeStep': (0, TimeStep_1.TimeStepFromJSON)(json['timeStep']),
     };
 }
 function ProjectToJSON(json) {
@@ -70,13 +70,13 @@ function ProjectToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
-        'description': value['description'],
         'id': value['id'],
-        'layers': (value['layers'].map(ProjectLayer_1.ProjectLayerToJSON)),
-        'name': value['name'],
-        'plots': (value['plots'].map(Plot_1.PlotToJSON)),
-        'timeStep': (0, TimeStep_1.TimeStepToJSON)(value['timeStep']),
         'version': (0, ProjectVersion_1.ProjectVersionToJSON)(value['version']),
+        'name': value['name'],
+        'description': value['description'],
+        'layers': (value['layers'].map(ProjectLayer_1.ProjectLayerToJSON)),
+        'plots': (value['plots'].map(Plot_1.PlotToJSON)),
+        'bounds': (0, STRectangle_1.STRectangleToJSON)(value['bounds']),
+        'timeStep': (0, TimeStep_1.TimeStepToJSON)(value['timeStep']),
     };
 }

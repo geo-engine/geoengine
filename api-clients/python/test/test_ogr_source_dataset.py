@@ -35,39 +35,39 @@ class TestOgrSourceDataset(unittest.TestCase):
         model = OgrSourceDataset()
         if include_optional:
             return OgrSourceDataset(
-                attribute_query = '',
-                cache_ttl = 0,
+                file_name = '',
+                layer_name = '',
+                data_type = 'Data',
+                time = None,
+                default_geometry = None,
                 columns = geoengine_api_client.models.ogr_source_column_spec.OgrSourceColumnSpec(
+                    format_specifics = null, 
+                    x = '', 
+                    y = '', 
+                    int = [
+                        ''
+                        ], 
+                    float = [
+                        ''
+                        ], 
+                    text = [
+                        ''
+                        ], 
                     bool = [
                         ''
                         ], 
                     datetime = [
                         ''
                         ], 
-                    float = [
-                        ''
-                        ], 
-                    format_specifics = null, 
-                    int = [
-                        ''
-                        ], 
                     rename = {
                         'key' : ''
-                        }, 
-                    text = [
-                        ''
-                        ], 
-                    x = '', 
-                    y = '', ),
-                data_type = 'Data',
-                default_geometry = None,
-                file_name = '',
-                force_ogr_spatial_filter = True,
+                        }, ),
                 force_ogr_time_filter = True,
-                layer_name = '',
+                force_ogr_spatial_filter = True,
                 on_error = 'ignore',
                 sql_query = '',
-                time = None
+                attribute_query = '',
+                cache_ttl = 0
             )
         else:
             return OgrSourceDataset(

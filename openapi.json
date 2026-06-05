@@ -6478,6 +6478,12 @@
           }
         }
       },
+      "CollectionsResponseFormat": {
+        "type": "string",
+        "enum": [
+          "json"
+        ]
+      },
       "ColorParam": {
         "oneOf": [
           {

@@ -28,10 +28,10 @@ class GdalMetaDataList(BaseModel):
     """
     GdalMetaDataList
     """ # noqa: E501
-    params: List[GdalLoadingInfoTemporalSlice]
-    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["params", "resultDescriptor", "type"]
+    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
+    params: List[GdalLoadingInfoTemporalSlice]
+    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "params"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -79,6 +79,9 @@ class GdalMetaDataList(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of result_descriptor
+        if self.result_descriptor:
+            _dict['resultDescriptor'] = self.result_descriptor.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in params (list)
         _items = []
         if self.params:
@@ -86,9 +89,6 @@ class GdalMetaDataList(BaseModel):
                 if _item_params:
                     _items.append(_item_params.to_dict())
             _dict['params'] = _items
-        # override the default output from pydantic by calling `to_dict()` of result_descriptor
-        if self.result_descriptor:
-            _dict['resultDescriptor'] = self.result_descriptor.to_dict()
         return _dict
 
     @classmethod
@@ -101,9 +101,9 @@ class GdalMetaDataList(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "params": [GdalLoadingInfoTemporalSlice.from_dict(_item) for _item in obj["params"]] if obj.get("params") is not None else None,
+            "type": obj.get("type"),
             "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
-            "type": obj.get("type")
+            "params": [GdalLoadingInfoTemporalSlice.from_dict(_item) for _item in obj["params"]] if obj.get("params") is not None else None
         })
         return _obj
 

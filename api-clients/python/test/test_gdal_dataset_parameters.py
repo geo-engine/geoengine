@@ -35,24 +35,17 @@ class TestGdalDatasetParameters(unittest.TestCase):
         model = GdalDatasetParameters()
         if include_optional:
             return GdalDatasetParameters(
-                allow_alphaband_as_mask = True,
-                file_not_found_handling = 'NoData',
                 file_path = '',
-                gdal_config_options = [
-                    [
-                        ''
-                        ]
-                    ],
-                gdal_open_options = [
-                    ''
-                    ],
+                rasterband_channel = 0,
                 geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                     origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
                         y = 1.337, ), 
                     x_pixel_size = 1.337, 
                     y_pixel_size = 1.337, ),
+                width = 0,
                 height = 0,
+                file_not_found_handling = 'NoData',
                 no_data_value = 1.337,
                 properties_mapping = [
                     geoengine_api_client.models.gdal_metadata_mapping.GdalMetadataMapping(
@@ -64,22 +57,29 @@ class TestGdalDatasetParameters(unittest.TestCase):
                             key = '', ), 
                         target_type = 'Number', )
                     ],
-                rasterband_channel = 0,
-                width = 0
+                gdal_open_options = [
+                    ''
+                    ],
+                gdal_config_options = [
+                    [
+                        ''
+                        ]
+                    ],
+                allow_alphaband_as_mask = True
             )
         else:
             return GdalDatasetParameters(
-                file_not_found_handling = 'NoData',
                 file_path = '',
+                rasterband_channel = 0,
                 geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                     origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                         x = 1.337, 
                         y = 1.337, ), 
                     x_pixel_size = 1.337, 
                     y_pixel_size = 1.337, ),
-                height = 0,
-                rasterband_channel = 0,
                 width = 0,
+                height = 0,
+                file_not_found_handling = 'NoData',
         )
         """
 

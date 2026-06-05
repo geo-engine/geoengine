@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MlModelResource {
-    #[serde(rename = "id")]
-    pub id: String,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "id")]
+    pub id: String,
 }
 
 impl MlModelResource {
-    pub fn new(id: String, r#type: Type) -> MlModelResource {
+    pub fn new(r#type: Type, id: String) -> MlModelResource {
         MlModelResource {
-            id,
             r#type,
+            id,
         }
     }
 }

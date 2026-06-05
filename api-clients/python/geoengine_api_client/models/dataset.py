@@ -31,17 +31,17 @@ class Dataset(BaseModel):
     """
     Dataset
     """ # noqa: E501
-    data_path: Optional[DataPath] = Field(default=None, alias="dataPath")
-    description: StrictStr
-    display_name: StrictStr = Field(alias="displayName")
     id: UUID
     name: StrictStr
-    provenance: Optional[List[Provenance]] = None
+    display_name: StrictStr = Field(alias="displayName")
+    description: StrictStr
     result_descriptor: TypedResultDescriptor = Field(alias="resultDescriptor")
     source_operator: StrictStr = Field(alias="sourceOperator")
     symbology: Optional[Symbology] = None
+    provenance: Optional[List[Provenance]] = None
     tags: Optional[List[StrictStr]] = None
-    __properties: ClassVar[List[str]] = ["dataPath", "description", "displayName", "id", "name", "provenance", "resultDescriptor", "sourceOperator", "symbology", "tags"]
+    data_path: Optional[DataPath] = Field(default=None, alias="dataPath")
+    __properties: ClassVar[List[str]] = ["id", "name", "displayName", "description", "resultDescriptor", "sourceOperator", "symbology", "provenance", "tags", "dataPath"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -82,9 +82,12 @@ class Dataset(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of data_path
-        if self.data_path:
-            _dict['dataPath'] = self.data_path.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of result_descriptor
+        if self.result_descriptor:
+            _dict['resultDescriptor'] = self.result_descriptor.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of symbology
+        if self.symbology:
+            _dict['symbology'] = self.symbology.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in provenance (list)
         _items = []
         if self.provenance:
@@ -92,31 +95,28 @@ class Dataset(BaseModel):
                 if _item_provenance:
                     _items.append(_item_provenance.to_dict())
             _dict['provenance'] = _items
-        # override the default output from pydantic by calling `to_dict()` of result_descriptor
-        if self.result_descriptor:
-            _dict['resultDescriptor'] = self.result_descriptor.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of symbology
-        if self.symbology:
-            _dict['symbology'] = self.symbology.to_dict()
-        # set to None if data_path (nullable) is None
+        # override the default output from pydantic by calling `to_dict()` of data_path
+        if self.data_path:
+            _dict['dataPath'] = self.data_path.to_dict()
+        # set to None if symbology (nullable) is None
         # and model_fields_set contains the field
-        if self.data_path is None and "data_path" in self.model_fields_set:
-            _dict['dataPath'] = None
+        if self.symbology is None and "symbology" in self.model_fields_set:
+            _dict['symbology'] = None
 
         # set to None if provenance (nullable) is None
         # and model_fields_set contains the field
         if self.provenance is None and "provenance" in self.model_fields_set:
             _dict['provenance'] = None
 
-        # set to None if symbology (nullable) is None
-        # and model_fields_set contains the field
-        if self.symbology is None and "symbology" in self.model_fields_set:
-            _dict['symbology'] = None
-
         # set to None if tags (nullable) is None
         # and model_fields_set contains the field
         if self.tags is None and "tags" in self.model_fields_set:
             _dict['tags'] = None
+
+        # set to None if data_path (nullable) is None
+        # and model_fields_set contains the field
+        if self.data_path is None and "data_path" in self.model_fields_set:
+            _dict['dataPath'] = None
 
         return _dict
 
@@ -130,16 +130,16 @@ class Dataset(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "dataPath": DataPath.from_dict(obj["dataPath"]) if obj.get("dataPath") is not None else None,
-            "description": obj.get("description"),
-            "displayName": obj.get("displayName"),
             "id": obj.get("id"),
             "name": obj.get("name"),
-            "provenance": [Provenance.from_dict(_item) for _item in obj["provenance"]] if obj.get("provenance") is not None else None,
+            "displayName": obj.get("displayName"),
+            "description": obj.get("description"),
             "resultDescriptor": TypedResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
             "sourceOperator": obj.get("sourceOperator"),
             "symbology": Symbology.from_dict(obj["symbology"]) if obj.get("symbology") is not None else None,
-            "tags": obj.get("tags")
+            "provenance": [Provenance.from_dict(_item) for _item in obj["provenance"]] if obj.get("provenance") is not None else None,
+            "tags": obj.get("tags"),
+            "dataPath": DataPath.from_dict(obj["dataPath"]) if obj.get("dataPath") is not None else None
         })
         return _obj
 

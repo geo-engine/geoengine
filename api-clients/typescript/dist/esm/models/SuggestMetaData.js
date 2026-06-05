@@ -28,8 +28,8 @@ export function SuggestMetaDataFromJSONTyped(json, ignoreDiscriminator) {
     }
     return {
         'dataPath': DataPathFromJSON(json['dataPath']),
-        'layerName': json['layerName'] == null ? undefined : json['layerName'],
         'mainFile': json['mainFile'] == null ? undefined : json['mainFile'],
+        'layerName': json['layerName'] == null ? undefined : json['layerName'],
     };
 }
 export function SuggestMetaDataToJSON(json) {
@@ -41,7 +41,7 @@ export function SuggestMetaDataToJSONTyped(value, ignoreDiscriminator = false) {
     }
     return {
         'dataPath': DataPathToJSON(value['dataPath']),
-        'layerName': value['layerName'],
         'mainFile': value['mainFile'],
+        'layerName': value['layerName'],
     };
 }

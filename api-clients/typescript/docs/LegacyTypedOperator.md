@@ -7,8 +7,8 @@ An enum to differentiate between `Operator` variants
 
 Name | Type
 ------------ | -------------
-`operator` | [LegacyTypedOperatorOperator](LegacyTypedOperatorOperator.md)
 `type` | string
+`operator` | [LegacyTypedOperatorOperator](LegacyTypedOperatorOperator.md)
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { LegacyTypedOperator } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "operator": null,
   "type": null,
+  "operator": null,
 } satisfies LegacyTypedOperator
 
 console.log(example)

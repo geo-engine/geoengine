@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`descriptor` | [SpatialGridDescriptorState](SpatialGridDescriptorState.md)
 `spatialGrid` | [SpatialGridDefinition](SpatialGridDefinition.md)
+`descriptor` | [SpatialGridDescriptorState](SpatialGridDescriptorState.md)
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { SpatialGridDescriptor } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "descriptor": null,
   "spatialGrid": null,
+  "descriptor": null,
 } satisfies SpatialGridDescriptor
 
 console.log(example)

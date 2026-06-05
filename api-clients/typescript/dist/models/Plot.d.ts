@@ -19,13 +19,13 @@ export interface Plot {
      * @type {string}
      * @memberof Plot
      */
-    name: string;
+    workflow: string;
     /**
      *
      * @type {string}
      * @memberof Plot
      */
-    workflow: string;
+    name: string;
 }
 /**
  * Check if a given object implements the Plot interface.

@@ -6,16 +6,16 @@
 
 Name | Type
 ------------ | -------------
-`apiUrl` | string
-`cacheTtl` | number
-`description` | string
-`gdalRetries` | number
-`id` | string
-`name` | string
-`priority` | number
-`queryBuffer` | [StacQueryBuffer](StacQueryBuffer.md)
-`stacApiRetries` | [StacApiRetries](StacApiRetries.md)
 `type` | string
+`name` | string
+`id` | string
+`description` | string
+`priority` | number
+`apiUrl` | string
+`stacApiRetries` | [StacApiRetries](StacApiRetries.md)
+`gdalRetries` | number
+`cacheTtl` | number
+`queryBuffer` | [StacQueryBuffer](StacQueryBuffer.md)
 
 ## Example
 
@@ -24,16 +24,16 @@ import type { SentinelS2L2ACogsProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "apiUrl": null,
-  "cacheTtl": null,
-  "description": null,
-  "gdalRetries": null,
-  "id": null,
-  "name": null,
-  "priority": null,
-  "queryBuffer": null,
-  "stacApiRetries": null,
   "type": null,
+  "name": null,
+  "id": null,
+  "description": null,
+  "priority": null,
+  "apiUrl": null,
+  "stacApiRetries": null,
+  "gdalRetries": null,
+  "cacheTtl": null,
+  "queryBuffer": null,
 } satisfies SentinelS2L2ACogsProviderDefinition
 
 console.log(example)

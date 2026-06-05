@@ -35,20 +35,20 @@ class TestPangaeaDataProviderDefinition(unittest.TestCase):
         model = PangaeaDataProviderDefinition()
         if include_optional:
             return PangaeaDataProviderDefinition(
-                base_url = '',
-                cache_ttl = 0,
-                description = '',
+                type = 'Pangaea',
                 name = '',
+                description = '',
                 priority = 56,
-                type = 'Pangaea'
+                base_url = '',
+                cache_ttl = 0
             )
         else:
             return PangaeaDataProviderDefinition(
+                type = 'Pangaea',
+                name = '',
+                description = '',
                 base_url = '',
                 cache_ttl = 0,
-                description = '',
-                name = '',
-                type = 'Pangaea',
         )
         """
 

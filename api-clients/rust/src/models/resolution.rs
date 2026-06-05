@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// Resolution : Explicit output resolution (`x`, `y`) in target coordinates.
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct Resolution {
-    #[serde(rename = "type")]
-    pub r#type: Type,
     #[serde(rename = "x")]
     pub x: f64,
     #[serde(rename = "y")]
     pub y: f64,
+    #[serde(rename = "type")]
+    pub r#type: Type,
 }
 
 impl Resolution {
     /// Explicit output resolution (`x`, `y`) in target coordinates.
-    pub fn new(r#type: Type, x: f64, y: f64) -> Resolution {
+    pub fn new(x: f64, y: f64, r#type: Type) -> Resolution {
         Resolution {
-            r#type,
             x,
             y,
+            r#type,
         }
     }
 }

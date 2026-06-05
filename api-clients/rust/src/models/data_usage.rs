@@ -12,26 +12,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DataUsage {
-    #[serde(rename = "computationId")]
-    pub computation_id: uuid::Uuid,
-    #[serde(rename = "count")]
-    pub count: i64,
-    #[serde(rename = "data")]
-    pub data: String,
     #[serde(rename = "timestamp")]
     pub timestamp: String,
     #[serde(rename = "userId")]
     pub user_id: uuid::Uuid,
+    #[serde(rename = "computationId")]
+    pub computation_id: uuid::Uuid,
+    #[serde(rename = "data")]
+    pub data: String,
+    #[serde(rename = "count")]
+    pub count: i64,
 }
 
 impl DataUsage {
-    pub fn new(computation_id: uuid::Uuid, count: i64, data: String, timestamp: String, user_id: uuid::Uuid) -> DataUsage {
+    pub fn new(timestamp: String, user_id: uuid::Uuid, computation_id: uuid::Uuid, data: String, count: i64) -> DataUsage {
         DataUsage {
-            computation_id,
-            count,
-            data,
             timestamp,
             user_id,
+            computation_id,
+            data,
+            count,
         }
     }
 }

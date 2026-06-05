@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`count` | number
 `operatorName` | string
 `operatorPath` | string
+`count` | number
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { OperatorQuota } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "count": null,
   "operatorName": null,
   "operatorPath": null,
+  "count": null,
 } satisfies OperatorQuota
 
 console.log(example)

@@ -35,17 +35,17 @@ class TestDerivedNumber(unittest.TestCase):
         model = DerivedNumber()
         if include_optional:
             return DerivedNumber(
+                type = 'derived',
                 attribute = '',
-                default_value = 1.337,
                 factor = 1.337,
-                type = 'derived'
+                default_value = 1.337
             )
         else:
             return DerivedNumber(
-                attribute = '',
-                default_value = 1.337,
-                factor = 1.337,
                 type = 'derived',
+                attribute = '',
+                factor = 1.337,
+                default_value = 1.337,
         )
         """
 

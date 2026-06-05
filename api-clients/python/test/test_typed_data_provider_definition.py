@@ -35,29 +35,29 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
         model = TypedDataProviderDefinition()
         if include_optional:
             return TypedDataProviderDefinition(
-                api_token = '',
-                api_url = '',
-                cache_ttl = 0,
-                description = '',
-                filter_label = '',
+                type = 'Aruna',
                 id = '',
                 name = '',
+                description = '',
                 priority = 56,
+                api_url = '',
                 project_id = '',
-                type = 'Aruna',
+                api_token = '',
+                filter_label = '',
+                cache_ttl = 0,
+                stac_url = '',
+                s3_url = '',
+                s3_access_key = '',
+                s3_secret_key = '',
                 gdal_config = [
                     [
                         ''
                         ]
                     ],
-                s3_access_key = '',
-                s3_secret_key = '',
-                s3_url = '',
-                stac_url = '',
                 collections = [
                     geoengine_api_client.models.dataset_layer_listing_collection.DatasetLayerListingCollection(
-                        description = '', 
                         name = '', 
+                        description = '', 
                         tags = [
                             ''
                             ], )
@@ -65,6 +65,10 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 base_url = '',
                 data = '',
                 overviews = '',
+                vector_spec = geoengine_api_client.models.edr_vector_spec.EdrVectorSpec(
+                    x = '', 
+                    y = '', 
+                    time = '', ),
                 discrete_vrs = [
                     ''
                     ],
@@ -74,67 +78,63 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                         license = '', 
                         uri = '', )
                     ],
-                vector_spec = geoengine_api_client.models.edr_vector_spec.EdrVectorSpec(
-                    time = '', 
-                    x = '', 
-                    y = '', ),
+                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 autocomplete_timeout = 56,
                 columns = [
                     ''
                     ],
-                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                collection_api_auth_token = '',
                 collection_api_url = '',
+                collection_api_auth_token = '',
+                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 pangaea_url = '',
+                stac_api_retries = geoengine_api_client.models.stac_api_retries.StacApiRetries(
+                    number_of_retries = 0, 
+                    initial_delay_ms = 0, 
+                    exponential_backoff_factor = 1.337, ),
                 gdal_retries = 0,
                 query_buffer = geoengine_api_client.models.stac_query_buffer.StacQueryBuffer(
-                    end_seconds = 56, 
-                    start_seconds = 56, ),
-                stac_api_retries = geoengine_api_client.models.stac_api_retries.StacApiRetries(
-                    exponential_backoff_factor = 1.337, 
-                    initial_delay_ms = 0, 
-                    number_of_retries = 0, ),
-                expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f'),
+                    start_seconds = 56, 
+                    end_seconds = 56, ),
+                user = '',
                 refresh_token = '',
-                user = ''
+                expiry_date = datetime.datetime.strptime('2013-10-20 19:20:30.00', '%Y-%m-%d %H:%M:%S.%f')
             )
         else:
             return TypedDataProviderDefinition(
-                api_token = '',
-                api_url = '',
-                cache_ttl = 0,
-                description = '',
-                filter_label = '',
+                type = 'Aruna',
                 id = '',
                 name = '',
+                description = '',
+                api_url = '',
                 project_id = '',
-                type = 'Aruna',
+                api_token = '',
+                filter_label = '',
+                cache_ttl = 0,
+                stac_url = '',
+                s3_url = '',
+                s3_access_key = '',
+                s3_secret_key = '',
                 gdal_config = [
                     [
                         ''
                         ]
                     ],
-                s3_access_key = '',
-                s3_secret_key = '',
-                s3_url = '',
-                stac_url = '',
                 collections = [
                     geoengine_api_client.models.dataset_layer_listing_collection.DatasetLayerListingCollection(
-                        description = '', 
                         name = '', 
+                        description = '', 
                         tags = [
                             ''
                             ], )
@@ -142,26 +142,26 @@ class TestTypedDataProviderDefinition(unittest.TestCase):
                 base_url = '',
                 data = '',
                 overviews = '',
+                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 autocomplete_timeout = 56,
                 columns = [
                     ''
                     ],
-                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                collection_api_auth_token = '',
                 collection_api_url = '',
+                collection_api_auth_token = '',
+                abcd_db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
                 pangaea_url = '',
         )
         """

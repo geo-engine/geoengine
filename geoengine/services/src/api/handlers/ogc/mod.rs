@@ -1,5 +1,6 @@
 #![allow(clippy::needless_for_each)] // TODO: remove when clippy is fixed for utoipa <https://github.com/juhaku/utoipa/issues/1420>
 
+use crate::api::handlers::ogc::common::CollectionsResponseFormat;
 use crate::{api::handlers::ogc::error::OgcApiError, contexts::ApplicationContext, error::Result};
 use actix_web::{FromRequest, web};
 use ogcapi_types::common::{Collection, Collections, Conformance, LandingPage};
@@ -82,6 +83,7 @@ where
             // Common
             Collection,
             Collections,
+            CollectionsResponseFormat,
             Conformance,
             LandingPage,
 

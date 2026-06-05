@@ -8,8 +8,8 @@ Parameters for the `Interpolation` operator.
 Name | Type
 ------------ | -------------
 `interpolation` | [InterpolationMethod](InterpolationMethod.md)
-`outputOriginReference` | [Coordinate2D](Coordinate2D.md)
 `outputResolution` | [InterpolationResolution](InterpolationResolution.md)
+`outputOriginReference` | [Coordinate2D](Coordinate2D.md)
 
 ## Example
 
@@ -19,8 +19,8 @@ import type { InterpolationParameters } from '@geoengine/api-client'
 // TODO: Update the object below with actual values
 const example = {
   "interpolation": null,
-  "outputOriginReference": null,
   "outputResolution": null,
+  "outputOriginReference": null,
 } satisfies InterpolationParameters
 
 console.log(example)

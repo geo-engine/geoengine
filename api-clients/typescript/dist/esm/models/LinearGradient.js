@@ -21,13 +21,13 @@ export const LinearGradientTypeEnum = {
  * Check if a given object implements the LinearGradient interface.
  */
 export function instanceOfLinearGradient(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('breakpoints' in value) || value['breakpoints'] === undefined)
         return false;
     if (!('noDataColor' in value) || value['noDataColor'] === undefined)
         return false;
     if (!('overColor' in value) || value['overColor'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('underColor' in value) || value['underColor'] === undefined)
         return false;
@@ -41,10 +41,10 @@ export function LinearGradientFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'breakpoints': (json['breakpoints'].map(BreakpointFromJSON)),
         'noDataColor': json['noDataColor'],
         'overColor': json['overColor'],
-        'type': json['type'],
         'underColor': json['underColor'],
     };
 }
@@ -56,10 +56,10 @@ export function LinearGradientToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'breakpoints': (value['breakpoints'].map(BreakpointToJSON)),
         'noDataColor': value['noDataColor'],
         'overColor': value['overColor'],
-        'type': value['type'],
         'underColor': value['underColor'],
     };
 }

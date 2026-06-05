@@ -26,10 +26,10 @@ class EdrVectorSpec(BaseModel):
     """
     EdrVectorSpec
     """ # noqa: E501
-    time: StrictStr
     x: StrictStr
     y: Optional[StrictStr] = None
-    __properties: ClassVar[List[str]] = ["time", "x", "y"]
+    time: StrictStr
+    __properties: ClassVar[List[str]] = ["x", "y", "time"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -87,9 +87,9 @@ class EdrVectorSpec(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "time": obj.get("time"),
             "x": obj.get("x"),
-            "y": obj.get("y")
+            "y": obj.get("y"),
+            "time": obj.get("time")
         })
         return _obj
 

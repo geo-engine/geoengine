@@ -42,6 +42,12 @@ import {
 export interface Interpolation {
     /**
      * 
+     * @type {InterpolationTypeEnum}
+     * @memberof Interpolation
+     */
+    type: InterpolationTypeEnum;
+    /**
+     * 
      * @type {InterpolationParameters}
      * @memberof Interpolation
      */
@@ -52,12 +58,6 @@ export interface Interpolation {
      * @memberof Interpolation
      */
     sources: SingleRasterSource;
-    /**
-     * 
-     * @type {InterpolationTypeEnum}
-     * @memberof Interpolation
-     */
-    type: InterpolationTypeEnum;
 }
 
 
@@ -74,9 +74,9 @@ export type InterpolationTypeEnum = typeof InterpolationTypeEnum[keyof typeof In
  * Check if a given object implements the Interpolation interface.
  */
 export function instanceOfInterpolation(value: object): value is Interpolation {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -90,9 +90,9 @@ export function InterpolationFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
+        'type': json['type'],
         'params': InterpolationParametersFromJSON(json['params']),
         'sources': SingleRasterSourceFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -107,9 +107,9 @@ export function InterpolationToJSONTyped(value?: Interpolation | null, ignoreDis
 
     return {
         
+        'type': value['type'],
         'params': InterpolationParametersToJSON(value['params']),
         'sources': SingleRasterSourceToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

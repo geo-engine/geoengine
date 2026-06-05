@@ -12,26 +12,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GdalMetaDataStatic {
-    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
-    pub cache_ttl: Option<i32>,
+    #[serde(rename = "type")]
+    pub r#type: Type,
+    #[serde(rename = "time", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub time: Option<Option<Box<models::TimeInterval>>>,
     #[serde(rename = "params")]
     pub params: Box<models::GdalDatasetParameters>,
     #[serde(rename = "resultDescriptor")]
     pub result_descriptor: Box<models::RasterResultDescriptor>,
-    #[serde(rename = "time", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub time: Option<Option<Box<models::TimeInterval>>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "cacheTtl", skip_serializing_if = "Option::is_none")]
+    pub cache_ttl: Option<i32>,
 }
 
 impl GdalMetaDataStatic {
-    pub fn new(params: models::GdalDatasetParameters, result_descriptor: models::RasterResultDescriptor, r#type: Type) -> GdalMetaDataStatic {
+    pub fn new(r#type: Type, params: models::GdalDatasetParameters, result_descriptor: models::RasterResultDescriptor) -> GdalMetaDataStatic {
         GdalMetaDataStatic {
-            cache_ttl: None,
+            r#type,
+            time: None,
             params: Box::new(params),
             result_descriptor: Box::new(result_descriptor),
-            time: None,
-            r#type,
+            cache_ttl: None,
         }
     }
 }

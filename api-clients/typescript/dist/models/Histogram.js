@@ -30,11 +30,11 @@ exports.HistogramTypeEnum = {
  * Check if a given object implements the Histogram interface.
  */
 function instanceOfHistogram(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -46,9 +46,9 @@ function HistogramFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': (0, HistogramParameters_1.HistogramParametersFromJSON)(json['params']),
         'sources': (0, SingleVectorOrRasterSource_1.SingleVectorOrRasterSourceFromJSON)(json['sources']),
-        'type': json['type'],
     };
 }
 function HistogramToJSON(json) {
@@ -59,8 +59,8 @@ function HistogramToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'params': (0, HistogramParameters_1.HistogramParametersToJSON)(value['params']),
         'sources': (0, SingleVectorOrRasterSource_1.SingleVectorOrRasterSourceToJSON)(value['sources']),
-        'type': value['type'],
     };
 }

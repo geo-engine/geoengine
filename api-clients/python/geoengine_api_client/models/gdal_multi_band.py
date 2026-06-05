@@ -27,9 +27,9 @@ class GdalMultiBand(BaseModel):
     """
     GdalMultiBand
     """ # noqa: E501
-    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["resultDescriptor", "type"]
+    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
+    __properties: ClassVar[List[str]] = ["type", "resultDescriptor"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -92,8 +92,8 @@ class GdalMultiBand(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
-            "type": obj.get("type")
+            "type": obj.get("type"),
+            "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None
         })
         return _obj
 

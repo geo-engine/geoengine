@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GeoJson {
-    #[serde(rename = "features")]
-    pub features: Vec<serde_json::Value>,
     #[serde(rename = "type")]
     pub r#type: models::CollectionType,
+    #[serde(rename = "features")]
+    pub features: Vec<serde_json::Value>,
 }
 
 impl GeoJson {
-    pub fn new(features: Vec<serde_json::Value>, r#type: models::CollectionType) -> GeoJson {
+    pub fn new(r#type: models::CollectionType, features: Vec<serde_json::Value>) -> GeoJson {
         GeoJson {
-            features,
             r#type,
+            features,
         }
     }
 }

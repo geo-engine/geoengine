@@ -28,17 +28,17 @@ class ArunaDataProviderDefinition(BaseModel):
     """
     ArunaDataProviderDefinition
     """ # noqa: E501
-    api_token: StrictStr = Field(alias="apiToken")
-    api_url: StrictStr = Field(alias="apiUrl")
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    description: StrictStr
-    filter_label: StrictStr = Field(alias="filterLabel")
+    type: StrictStr
     id: UUID
     name: StrictStr
+    description: StrictStr
     priority: Optional[StrictInt] = None
+    api_url: StrictStr = Field(alias="apiUrl")
     project_id: StrictStr = Field(alias="projectId")
-    type: StrictStr
-    __properties: ClassVar[List[str]] = ["apiToken", "apiUrl", "cacheTtl", "description", "filterLabel", "id", "name", "priority", "projectId", "type"]
+    api_token: StrictStr = Field(alias="apiToken")
+    filter_label: StrictStr = Field(alias="filterLabel")
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "id", "name", "description", "priority", "apiUrl", "projectId", "apiToken", "filterLabel", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -103,16 +103,16 @@ class ArunaDataProviderDefinition(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "apiToken": obj.get("apiToken"),
-            "apiUrl": obj.get("apiUrl"),
-            "cacheTtl": obj.get("cacheTtl"),
-            "description": obj.get("description"),
-            "filterLabel": obj.get("filterLabel"),
+            "type": obj.get("type"),
             "id": obj.get("id"),
             "name": obj.get("name"),
+            "description": obj.get("description"),
             "priority": obj.get("priority"),
+            "apiUrl": obj.get("apiUrl"),
             "projectId": obj.get("projectId"),
-            "type": obj.get("type")
+            "apiToken": obj.get("apiToken"),
+            "filterLabel": obj.get("filterLabel"),
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

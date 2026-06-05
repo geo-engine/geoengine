@@ -32,14 +32,14 @@ class GdalMetaDataRegular(BaseModel):
     """
     GdalMetaDataRegular
     """ # noqa: E501
-    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
-    data_time: TimeInterval = Field(alias="dataTime")
-    params: GdalDatasetParameters
-    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
-    step: TimeStep
-    time_placeholders: Dict[str, GdalSourceTimePlaceholder] = Field(alias="timePlaceholders")
     type: StrictStr
-    __properties: ClassVar[List[str]] = ["cacheTtl", "dataTime", "params", "resultDescriptor", "step", "timePlaceholders", "type"]
+    result_descriptor: RasterResultDescriptor = Field(alias="resultDescriptor")
+    params: GdalDatasetParameters
+    time_placeholders: Dict[str, GdalSourceTimePlaceholder] = Field(alias="timePlaceholders")
+    data_time: TimeInterval = Field(alias="dataTime")
+    step: TimeStep
+    cache_ttl: Optional[Annotated[int, Field(strict=True, ge=0)]] = Field(default=None, alias="cacheTtl")
+    __properties: ClassVar[List[str]] = ["type", "resultDescriptor", "params", "timePlaceholders", "dataTime", "step", "cacheTtl"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -87,18 +87,12 @@ class GdalMetaDataRegular(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
-        # override the default output from pydantic by calling `to_dict()` of data_time
-        if self.data_time:
-            _dict['dataTime'] = self.data_time.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of params
-        if self.params:
-            _dict['params'] = self.params.to_dict()
         # override the default output from pydantic by calling `to_dict()` of result_descriptor
         if self.result_descriptor:
             _dict['resultDescriptor'] = self.result_descriptor.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of step
-        if self.step:
-            _dict['step'] = self.step.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of params
+        if self.params:
+            _dict['params'] = self.params.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each value in time_placeholders (dict)
         _field_dict = {}
         if self.time_placeholders:
@@ -106,6 +100,12 @@ class GdalMetaDataRegular(BaseModel):
                 if self.time_placeholders[_key_time_placeholders]:
                     _field_dict[_key_time_placeholders] = self.time_placeholders[_key_time_placeholders].to_dict()
             _dict['timePlaceholders'] = _field_dict
+        # override the default output from pydantic by calling `to_dict()` of data_time
+        if self.data_time:
+            _dict['dataTime'] = self.data_time.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of step
+        if self.step:
+            _dict['step'] = self.step.to_dict()
         return _dict
 
     @classmethod
@@ -118,18 +118,18 @@ class GdalMetaDataRegular(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "cacheTtl": obj.get("cacheTtl"),
-            "dataTime": TimeInterval.from_dict(obj["dataTime"]) if obj.get("dataTime") is not None else None,
-            "params": GdalDatasetParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
+            "type": obj.get("type"),
             "resultDescriptor": RasterResultDescriptor.from_dict(obj["resultDescriptor"]) if obj.get("resultDescriptor") is not None else None,
-            "step": TimeStep.from_dict(obj["step"]) if obj.get("step") is not None else None,
+            "params": GdalDatasetParameters.from_dict(obj["params"]) if obj.get("params") is not None else None,
             "timePlaceholders": dict(
                 (_k, GdalSourceTimePlaceholder.from_dict(_v))
                 for _k, _v in obj["timePlaceholders"].items()
             )
             if obj.get("timePlaceholders") is not None
             else None,
-            "type": obj.get("type")
+            "dataTime": TimeInterval.from_dict(obj["dataTime"]) if obj.get("dataTime") is not None else None,
+            "step": TimeStep.from_dict(obj["step"]) if obj.get("step") is not None else None,
+            "cacheTtl": obj.get("cacheTtl")
         })
         return _obj
 

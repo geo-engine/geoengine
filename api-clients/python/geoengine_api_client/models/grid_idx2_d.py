@@ -26,9 +26,9 @@ class GridIdx2D(BaseModel):
     """
     GridIdx2D
     """ # noqa: E501
-    x_idx: StrictInt = Field(alias="xIdx")
     y_idx: StrictInt = Field(alias="yIdx")
-    __properties: ClassVar[List[str]] = ["xIdx", "yIdx"]
+    x_idx: StrictInt = Field(alias="xIdx")
+    __properties: ClassVar[List[str]] = ["yIdx", "xIdx"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,8 +81,8 @@ class GridIdx2D(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "xIdx": obj.get("xIdx"),
-            "yIdx": obj.get("yIdx")
+            "yIdx": obj.get("yIdx"),
+            "xIdx": obj.get("xIdx")
         })
         return _obj
 

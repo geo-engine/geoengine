@@ -35,31 +35,31 @@ class TestGfbioAbcdDataProviderDefinition(unittest.TestCase):
         model = GfbioAbcdDataProviderDefinition()
         if include_optional:
             return GfbioAbcdDataProviderDefinition(
-                cache_ttl = 0,
-                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                description = '',
+                type = 'GfbioAbcd',
                 name = '',
+                description = '',
                 priority = 56,
-                type = 'GfbioAbcd'
+                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
+                cache_ttl = 0
             )
         else:
             return GfbioAbcdDataProviderDefinition(
-                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
-                    database = '', 
-                    host = '', 
-                    password = '', 
-                    port = 0, 
-                    schema = '', 
-                    user = '', ),
-                description = '',
-                name = '',
                 type = 'GfbioAbcd',
+                name = '',
+                description = '',
+                db_config = geoengine_api_client.models.database_connection_config.DatabaseConnectionConfig(
+                    host = '', 
+                    port = 0, 
+                    database = '', 
+                    schema = '', 
+                    user = '', 
+                    password = '', ),
         )
         """
 

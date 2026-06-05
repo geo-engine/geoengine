@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
-`time` | string
 `x` | string
 `y` | string
+`time` | string
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { EdrVectorSpec } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "time": null,
   "x": null,
   "y": null,
+  "time": null,
 } satisfies EdrVectorSpec
 
 console.log(example)

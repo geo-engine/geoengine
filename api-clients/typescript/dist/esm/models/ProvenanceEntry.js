@@ -16,9 +16,9 @@ import { DataIdFromJSON, DataIdToJSON, } from './DataId';
  * Check if a given object implements the ProvenanceEntry interface.
  */
 export function instanceOfProvenanceEntry(value) {
-    if (!('data' in value) || value['data'] === undefined)
-        return false;
     if (!('provenance' in value) || value['provenance'] === undefined)
+        return false;
+    if (!('data' in value) || value['data'] === undefined)
         return false;
     return true;
 }
@@ -30,8 +30,8 @@ export function ProvenanceEntryFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'data': (json['data'].map(DataIdFromJSON)),
         'provenance': ProvenanceFromJSON(json['provenance']),
+        'data': (json['data'].map(DataIdFromJSON)),
     };
 }
 export function ProvenanceEntryToJSON(json) {
@@ -42,7 +42,7 @@ export function ProvenanceEntryToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'data': (value['data'].map(DataIdToJSON)),
         'provenance': ProvenanceToJSON(value['provenance']),
+        'data': (value['data'].map(DataIdToJSON)),
     };
 }

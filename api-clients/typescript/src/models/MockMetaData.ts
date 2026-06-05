@@ -35,6 +35,12 @@ import {
 export interface MockMetaData {
     /**
      * 
+     * @type {MockMetaDataTypeEnum}
+     * @memberof MockMetaData
+     */
+    type: MockMetaDataTypeEnum;
+    /**
+     * 
      * @type {MockDatasetDataSourceLoadingInfo}
      * @memberof MockMetaData
      */
@@ -45,12 +51,6 @@ export interface MockMetaData {
      * @memberof MockMetaData
      */
     resultDescriptor: VectorResultDescriptor;
-    /**
-     * 
-     * @type {MockMetaDataTypeEnum}
-     * @memberof MockMetaData
-     */
-    type: MockMetaDataTypeEnum;
 }
 
 
@@ -67,9 +67,9 @@ export type MockMetaDataTypeEnum = typeof MockMetaDataTypeEnum[keyof typeof Mock
  * Check if a given object implements the MockMetaData interface.
  */
 export function instanceOfMockMetaData(value: object): value is MockMetaData {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('loadingInfo' in value) || value['loadingInfo'] === undefined) return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -83,9 +83,9 @@ export function MockMetaDataFromJSONTyped(json: any, ignoreDiscriminator: boolea
     }
     return {
         
+        'type': json['type'],
         'loadingInfo': MockDatasetDataSourceLoadingInfoFromJSON(json['loadingInfo']),
         'resultDescriptor': VectorResultDescriptorFromJSON(json['resultDescriptor']),
-        'type': json['type'],
     };
 }
 
@@ -100,9 +100,9 @@ export function MockMetaDataToJSONTyped(value?: MockMetaData | null, ignoreDiscr
 
     return {
         
+        'type': value['type'],
         'loadingInfo': MockDatasetDataSourceLoadingInfoToJSON(value['loadingInfo']),
         'resultDescriptor': VectorResultDescriptorToJSON(value['resultDescriptor']),
-        'type': value['type'],
     };
 }
 

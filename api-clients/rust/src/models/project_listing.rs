@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectListing {
-    #[serde(rename = "changed")]
-    pub changed: String,
-    #[serde(rename = "description")]
-    pub description: String,
     #[serde(rename = "id")]
     pub id: uuid::Uuid,
-    #[serde(rename = "layerNames")]
-    pub layer_names: Vec<String>,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
+    #[serde(rename = "layerNames")]
+    pub layer_names: Vec<String>,
     #[serde(rename = "plotNames")]
     pub plot_names: Vec<String>,
+    #[serde(rename = "changed")]
+    pub changed: String,
 }
 
 impl ProjectListing {
-    pub fn new(changed: String, description: String, id: uuid::Uuid, layer_names: Vec<String>, name: String, plot_names: Vec<String>) -> ProjectListing {
+    pub fn new(id: uuid::Uuid, name: String, description: String, layer_names: Vec<String>, plot_names: Vec<String>, changed: String) -> ProjectListing {
         ProjectListing {
-            changed,
-            description,
             id,
-            layer_names,
             name,
+            description,
+            layer_names,
             plot_names,
+            changed,
         }
     }
 }

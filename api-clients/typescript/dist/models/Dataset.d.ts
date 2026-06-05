@@ -20,24 +20,6 @@ import type { TypedResultDescriptor } from './TypedResultDescriptor';
 export interface Dataset {
     /**
      *
-     * @type {DataPath}
-     * @memberof Dataset
-     */
-    dataPath?: DataPath | null;
-    /**
-     *
-     * @type {string}
-     * @memberof Dataset
-     */
-    description: string;
-    /**
-     *
-     * @type {string}
-     * @memberof Dataset
-     */
-    displayName: string;
-    /**
-     *
      * @type {string}
      * @memberof Dataset
      */
@@ -50,10 +32,16 @@ export interface Dataset {
     name: string;
     /**
      *
-     * @type {Array<Provenance>}
+     * @type {string}
      * @memberof Dataset
      */
-    provenance?: Array<Provenance> | null;
+    displayName: string;
+    /**
+     *
+     * @type {string}
+     * @memberof Dataset
+     */
+    description: string;
     /**
      *
      * @type {TypedResultDescriptor}
@@ -74,10 +62,22 @@ export interface Dataset {
     symbology?: Symbology | null;
     /**
      *
+     * @type {Array<Provenance>}
+     * @memberof Dataset
+     */
+    provenance?: Array<Provenance> | null;
+    /**
+     *
      * @type {Array<string>}
      * @memberof Dataset
      */
     tags?: Array<string> | null;
+    /**
+     *
+     * @type {DataPath}
+     * @memberof Dataset
+     */
+    dataPath?: DataPath | null;
 }
 /**
  * Check if a given object implements the Dataset interface.

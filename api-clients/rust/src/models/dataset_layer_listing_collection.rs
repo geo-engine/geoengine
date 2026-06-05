@@ -12,19 +12,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct DatasetLayerListingCollection {
-    #[serde(rename = "description")]
-    pub description: String,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "tags")]
     pub tags: Vec<String>,
 }
 
 impl DatasetLayerListingCollection {
-    pub fn new(description: String, name: String, tags: Vec<String>) -> DatasetLayerListingCollection {
+    pub fn new(name: String, description: String, tags: Vec<String>) -> DatasetLayerListingCollection {
         DatasetLayerListingCollection {
-            description,
             name,
+            description,
             tags,
         }
     }

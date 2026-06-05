@@ -7,9 +7,9 @@ A `ResultDescriptor` for plot queries
 
 Name | Type
 ------------ | -------------
-`bbox` | [BoundingBox2D](BoundingBox2D.md)
 `spatialReference` | string
 `time` | [TimeInterval](TimeInterval.md)
+`bbox` | [BoundingBox2D](BoundingBox2D.md)
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { PlotResultDescriptor } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "bbox": null,
   "spatialReference": null,
   "time": null,
+  "bbox": null,
 } satisfies PlotResultDescriptor
 
 console.log(example)

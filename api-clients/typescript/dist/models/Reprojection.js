@@ -30,11 +30,11 @@ exports.ReprojectionTypeEnum = {
  * Check if a given object implements the Reprojection interface.
  */
 function instanceOfReprojection(value) {
+    if (!('type' in value) || value['type'] === undefined)
+        return false;
     if (!('params' in value) || value['params'] === undefined)
         return false;
     if (!('sources' in value) || value['sources'] === undefined)
-        return false;
-    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -46,9 +46,9 @@ function ReprojectionFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
+        'type': json['type'],
         'params': (0, ReprojectionParameters_1.ReprojectionParametersFromJSON)(json['params']),
         'sources': (0, SingleRasterOrVectorSource_1.SingleRasterOrVectorSourceFromJSON)(json['sources']),
-        'type': json['type'],
     };
 }
 function ReprojectionToJSON(json) {
@@ -59,8 +59,8 @@ function ReprojectionToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
+        'type': value['type'],
         'params': (0, ReprojectionParameters_1.ReprojectionParametersToJSON)(value['params']),
         'sources': (0, SingleRasterOrVectorSource_1.SingleRasterOrVectorSourceToJSON)(value['sources']),
-        'type': value['type'],
     };
 }

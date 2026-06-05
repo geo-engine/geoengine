@@ -20,6 +20,12 @@ import { mapValues } from '../runtime';
 export interface DerivedNumber {
     /**
      * 
+     * @type {DerivedNumberTypeEnum}
+     * @memberof DerivedNumber
+     */
+    type: DerivedNumberTypeEnum;
+    /**
+     * 
      * @type {string}
      * @memberof DerivedNumber
      */
@@ -29,19 +35,13 @@ export interface DerivedNumber {
      * @type {number}
      * @memberof DerivedNumber
      */
-    defaultValue: number;
+    factor: number;
     /**
      * 
      * @type {number}
      * @memberof DerivedNumber
      */
-    factor: number;
-    /**
-     * 
-     * @type {DerivedNumberTypeEnum}
-     * @memberof DerivedNumber
-     */
-    type: DerivedNumberTypeEnum;
+    defaultValue: number;
 }
 
 
@@ -58,10 +58,10 @@ export type DerivedNumberTypeEnum = typeof DerivedNumberTypeEnum[keyof typeof De
  * Check if a given object implements the DerivedNumber interface.
  */
 export function instanceOfDerivedNumber(value: object): value is DerivedNumber {
-    if (!('attribute' in value) || value['attribute'] === undefined) return false;
-    if (!('defaultValue' in value) || value['defaultValue'] === undefined) return false;
-    if (!('factor' in value) || value['factor'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('attribute' in value) || value['attribute'] === undefined) return false;
+    if (!('factor' in value) || value['factor'] === undefined) return false;
+    if (!('defaultValue' in value) || value['defaultValue'] === undefined) return false;
     return true;
 }
 
@@ -75,10 +75,10 @@ export function DerivedNumberFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
-        'attribute': json['attribute'],
-        'defaultValue': json['defaultValue'],
-        'factor': json['factor'],
         'type': json['type'],
+        'attribute': json['attribute'],
+        'factor': json['factor'],
+        'defaultValue': json['defaultValue'],
     };
 }
 
@@ -93,10 +93,10 @@ export function DerivedNumberToJSONTyped(value?: DerivedNumber | null, ignoreDis
 
     return {
         
-        'attribute': value['attribute'],
-        'defaultValue': value['defaultValue'],
-        'factor': value['factor'],
         'type': value['type'],
+        'attribute': value['attribute'],
+        'factor': value['factor'],
+        'defaultValue': value['defaultValue'],
     };
 }
 

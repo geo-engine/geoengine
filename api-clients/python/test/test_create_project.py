@@ -35,7 +35,10 @@ class TestCreateProject(unittest.TestCase):
         model = CreateProject()
         if include_optional:
             return CreateProject(
+                name = '',
+                description = '',
                 bounds = geoengine_api_client.models.st_rectangle.STRectangle(
+                    spatial_reference = '', 
                     bounding_box = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
                         lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
@@ -43,19 +46,19 @@ class TestCreateProject(unittest.TestCase):
                         upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, ), ), 
-                    spatial_reference = '', 
                     time_interval = geoengine_api_client.models.time_interval.TimeInterval(
-                        end = 56, 
-                        start = 56, ), ),
-                description = '',
-                name = '',
+                        start = 56, 
+                        end = 56, ), ),
                 time_step = geoengine_api_client.models.time_step.TimeStep(
                     granularity = 'millis', 
                     step = 0, )
             )
         else:
             return CreateProject(
+                name = '',
+                description = '',
                 bounds = geoengine_api_client.models.st_rectangle.STRectangle(
+                    spatial_reference = '', 
                     bounding_box = geoengine_api_client.models.bounding_box2_d.BoundingBox2D(
                         lower_left_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
@@ -63,12 +66,9 @@ class TestCreateProject(unittest.TestCase):
                         upper_right_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, ), ), 
-                    spatial_reference = '', 
                     time_interval = geoengine_api_client.models.time_interval.TimeInterval(
-                        end = 56, 
-                        start = 56, ), ),
-                description = '',
-                name = '',
+                        start = 56, 
+                        end = 56, ), ),
         )
         """
 

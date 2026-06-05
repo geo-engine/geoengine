@@ -35,17 +35,17 @@ class TestRename(unittest.TestCase):
         model = Rename()
         if include_optional:
             return Rename(
-                type = 'rename',
-                values = [
-                    ''
-                    ]
-            )
-        else:
-            return Rename(
-                type = 'rename',
                 values = [
                     ''
                     ],
+                type = 'rename'
+            )
+        else:
+            return Rename(
+                values = [
+                    ''
+                    ],
+                type = 'rename',
         )
         """
 

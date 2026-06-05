@@ -18,28 +18,10 @@ import type { UserInfo } from './UserInfo';
 export interface UserSession {
     /**
      *
-     * @type {Date}
-     * @memberof UserSession
-     */
-    created: Date;
-    /**
-     *
      * @type {string}
      * @memberof UserSession
      */
     id: string;
-    /**
-     *
-     * @type {string}
-     * @memberof UserSession
-     */
-    project?: string | null;
-    /**
-     *
-     * @type {Array<string>}
-     * @memberof UserSession
-     */
-    roles: Array<string>;
     /**
      *
      * @type {UserInfo}
@@ -51,13 +33,31 @@ export interface UserSession {
      * @type {Date}
      * @memberof UserSession
      */
+    created: Date;
+    /**
+     *
+     * @type {Date}
+     * @memberof UserSession
+     */
     validUntil: Date;
+    /**
+     *
+     * @type {string}
+     * @memberof UserSession
+     */
+    project?: string | null;
     /**
      *
      * @type {STRectangle}
      * @memberof UserSession
      */
     view?: STRectangle | null;
+    /**
+     *
+     * @type {Array<string>}
+     * @memberof UserSession
+     */
+    roles: Array<string>;
 }
 /**
  * Check if a given object implements the UserSession interface.

@@ -6,14 +6,14 @@
 
 Name | Type
 ------------ | -------------
-`autocompleteTimeout` | number
-`cacheTtl` | number
-`columns` | Array&lt;string&gt;
-`dbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
-`description` | string
-`name` | string
-`priority` | number
 `type` | string
+`name` | string
+`description` | string
+`priority` | number
+`dbConfig` | [DatabaseConnectionConfig](DatabaseConnectionConfig.md)
+`cacheTtl` | number
+`autocompleteTimeout` | number
+`columns` | Array&lt;string&gt;
 
 ## Example
 
@@ -22,14 +22,14 @@ import type { GbifDataProviderDefinition } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "autocompleteTimeout": null,
-  "cacheTtl": null,
-  "columns": null,
-  "dbConfig": null,
-  "description": null,
-  "name": null,
-  "priority": null,
   "type": null,
+  "name": null,
+  "description": null,
+  "priority": null,
+  "dbConfig": null,
+  "cacheTtl": null,
+  "autocompleteTimeout": null,
+  "columns": null,
 } satisfies GbifDataProviderDefinition
 
 console.log(example)

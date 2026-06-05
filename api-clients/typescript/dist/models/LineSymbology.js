@@ -30,11 +30,11 @@ exports.LineSymbologyTypeEnum = {
  * Check if a given object implements the LineSymbology interface.
  */
 function instanceOfLineSymbology(value) {
-    if (!('autoSimplified' in value) || value['autoSimplified'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('stroke' in value) || value['stroke'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('autoSimplified' in value) || value['autoSimplified'] === undefined)
         return false;
     return true;
 }
@@ -46,10 +46,10 @@ function LineSymbologyFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'autoSimplified': json['autoSimplified'],
+        'type': json['type'],
         'stroke': (0, StrokeParam_1.StrokeParamFromJSON)(json['stroke']),
         'text': json['text'] == null ? undefined : (0, TextSymbology_1.TextSymbologyFromJSON)(json['text']),
-        'type': json['type'],
+        'autoSimplified': json['autoSimplified'],
     };
 }
 function LineSymbologyToJSON(json) {
@@ -60,9 +60,9 @@ function LineSymbologyToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'autoSimplified': value['autoSimplified'],
+        'type': value['type'],
         'stroke': (0, StrokeParam_1.StrokeParamToJSON)(value['stroke']),
         'text': (0, TextSymbology_1.TextSymbologyToJSON)(value['text']),
-        'type': value['type'],
+        'autoSimplified': value['autoSimplified'],
     };
 }

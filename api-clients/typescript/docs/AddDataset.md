@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`displayName` | string
 `name` | string
-`provenance` | [Array&lt;Provenance&gt;](Provenance.md)
+`displayName` | string
+`description` | string
 `sourceOperator` | string
 `symbology` | [Symbology](Symbology.md)
+`provenance` | [Array&lt;Provenance&gt;](Provenance.md)
 `tags` | Array&lt;string&gt;
 
 ## Example
@@ -21,12 +21,12 @@ import type { AddDataset } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": null,
-  "displayName": null,
   "name": null,
-  "provenance": null,
+  "displayName": null,
+  "description": null,
   "sourceOperator": null,
   "symbology": null,
+  "provenance": null,
   "tags": null,
 } satisfies AddDataset
 

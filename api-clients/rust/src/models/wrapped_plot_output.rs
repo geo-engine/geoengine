@@ -12,20 +12,20 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct WrappedPlotOutput {
-    #[serde(rename = "data")]
-    pub data: serde_json::Value,
     #[serde(rename = "outputFormat")]
     pub output_format: models::PlotOutputFormat,
     #[serde(rename = "plotType")]
     pub plot_type: String,
+    #[serde(rename = "data")]
+    pub data: serde_json::Value,
 }
 
 impl WrappedPlotOutput {
-    pub fn new(data: serde_json::Value, output_format: models::PlotOutputFormat, plot_type: String) -> WrappedPlotOutput {
+    pub fn new(output_format: models::PlotOutputFormat, plot_type: String, data: serde_json::Value) -> WrappedPlotOutput {
         WrappedPlotOutput {
-            data,
             output_format,
             plot_type,
+            data,
         }
     }
 }

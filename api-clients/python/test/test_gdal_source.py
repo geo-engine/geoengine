@@ -35,17 +35,17 @@ class TestGdalSource(unittest.TestCase):
         model = GdalSource()
         if include_optional:
             return GdalSource(
+                type = 'GdalSource',
                 params = geoengine_api_client.models.gdal_source_parameters.GdalSourceParameters(
                     data = '', 
-                    overview_level = 0, ),
-                type = 'GdalSource'
+                    overview_level = 0, )
             )
         else:
             return GdalSource(
+                type = 'GdalSource',
                 params = geoengine_api_client.models.gdal_source_parameters.GdalSourceParameters(
                     data = '', 
                     overview_level = 0, ),
-                type = 'GdalSource',
         )
         """
 

@@ -4,11 +4,11 @@
 
 Name | Type | Description | Notes
 ------------ | ------------- | ------------- | -------------
-**cache_ttl** | Option<**i32**> |  | [optional]
+**r#type** | **Type** |  (enum: GdalStatic) | 
+**time** | Option<[**models::TimeInterval**](TimeInterval.md)> |  | [optional]
 **params** | [**models::GdalDatasetParameters**](GdalDatasetParameters.md) |  | 
 **result_descriptor** | [**models::RasterResultDescriptor**](RasterResultDescriptor.md) |  | 
-**time** | Option<[**models::TimeInterval**](TimeInterval.md)> |  | [optional]
-**r#type** | **Type** |  (enum: GdalStatic) | 
+**cache_ttl** | Option<**i32**> |  | [optional]
 
 [[Back to Model list]](../README.md#documentation-for-models) [[Back to API list]](../README.md#documentation-for-api-endpoints) [[Back to README]](../README.md)
 

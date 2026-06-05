@@ -12,29 +12,29 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct TaskStatusCompleted {
-    #[serde(rename = "description", skip_serializing_if = "Option::is_none")]
-    pub description: Option<String>,
-    #[serde(rename = "info", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
-    pub info: Option<Option<serde_json::Value>>,
     #[serde(rename = "status")]
     pub status: Status,
     #[serde(rename = "taskType")]
     pub task_type: String,
-    #[serde(rename = "timeStarted")]
-    pub time_started: String,
+    #[serde(rename = "description", skip_serializing_if = "Option::is_none")]
+    pub description: Option<String>,
+    #[serde(rename = "info", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
+    pub info: Option<Option<serde_json::Value>>,
     #[serde(rename = "timeTotal")]
     pub time_total: String,
+    #[serde(rename = "timeStarted")]
+    pub time_started: String,
 }
 
 impl TaskStatusCompleted {
-    pub fn new(status: Status, task_type: String, time_started: String, time_total: String) -> TaskStatusCompleted {
+    pub fn new(status: Status, task_type: String, time_total: String, time_started: String) -> TaskStatusCompleted {
         TaskStatusCompleted {
-            description: None,
-            info: None,
             status,
             task_type,
-            time_started,
+            description: None,
+            info: None,
             time_total,
+            time_started,
         }
     }
 }

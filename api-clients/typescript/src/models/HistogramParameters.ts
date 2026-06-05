@@ -34,6 +34,12 @@ import {
  */
 export interface HistogramParameters {
     /**
+     * Name of the (numeric) vector attribute or raster band to compute the histogram on.
+     * @type {string}
+     * @memberof HistogramParameters
+     */
+    columnName: string;
+    /**
      * If `data`, it computes the bounds of the underlying data.
      * If `{ "min": ..., "max": ... }`, one can specify custom bounds.
      * @type {HistogramBounds}
@@ -47,12 +53,6 @@ export interface HistogramParameters {
      */
     buckets: HistogramBuckets;
     /**
-     * Name of the (numeric) vector attribute or raster band to compute the histogram on.
-     * @type {string}
-     * @memberof HistogramParameters
-     */
-    columnName: string;
-    /**
      * Flag, if the histogram should have user interactions for a range selection. It is `false` by default.
      * @type {boolean}
      * @memberof HistogramParameters
@@ -64,9 +64,9 @@ export interface HistogramParameters {
  * Check if a given object implements the HistogramParameters interface.
  */
 export function instanceOfHistogramParameters(value: object): value is HistogramParameters {
+    if (!('columnName' in value) || value['columnName'] === undefined) return false;
     if (!('bounds' in value) || value['bounds'] === undefined) return false;
     if (!('buckets' in value) || value['buckets'] === undefined) return false;
-    if (!('columnName' in value) || value['columnName'] === undefined) return false;
     return true;
 }
 
@@ -80,9 +80,9 @@ export function HistogramParametersFromJSONTyped(json: any, ignoreDiscriminator:
     }
     return {
         
+        'columnName': json['columnName'],
         'bounds': HistogramBoundsFromJSON(json['bounds']),
         'buckets': HistogramBucketsFromJSON(json['buckets']),
-        'columnName': json['columnName'],
         'interactive': json['interactive'] == null ? undefined : json['interactive'],
     };
 }
@@ -98,9 +98,9 @@ export function HistogramParametersToJSONTyped(value?: HistogramParameters | nul
 
     return {
         
+        'columnName': value['columnName'],
         'bounds': HistogramBoundsToJSON(value['bounds']),
         'buckets': HistogramBucketsToJSON(value['buckets']),
-        'columnName': value['columnName'],
         'interactive': value['interactive'],
     };
 }

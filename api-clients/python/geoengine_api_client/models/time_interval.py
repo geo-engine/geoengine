@@ -26,9 +26,9 @@ class TimeInterval(BaseModel):
     """
     Stores time intervals in ms in close-open semantic [start, end)
     """ # noqa: E501
-    end: StrictInt
     start: StrictInt
-    __properties: ClassVar[List[str]] = ["end", "start"]
+    end: StrictInt
+    __properties: ClassVar[List[str]] = ["start", "end"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -81,8 +81,8 @@ class TimeInterval(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "end": obj.get("end"),
-            "start": obj.get("start")
+            "start": obj.get("start"),
+            "end": obj.get("end")
         })
         return _obj
 

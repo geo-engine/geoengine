@@ -6,9 +6,9 @@
 
 Name | Type
 ------------ | -------------
+`type` | string
 `loadingInfo` | [OgrSourceDataset](OgrSourceDataset.md)
 `resultDescriptor` | [VectorResultDescriptor](VectorResultDescriptor.md)
-`type` | string
 
 ## Example
 
@@ -17,9 +17,9 @@ import type { OgrMetaData } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "loadingInfo": null,
   "resultDescriptor": null,
-  "type": null,
 } satisfies OgrMetaData
 
 console.log(example)

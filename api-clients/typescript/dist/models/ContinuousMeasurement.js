@@ -28,9 +28,9 @@ exports.ContinuousMeasurementTypeEnum = {
  * Check if a given object implements the ContinuousMeasurement interface.
  */
 function instanceOfContinuousMeasurement(value) {
-    if (!('measurement' in value) || value['measurement'] === undefined)
-        return false;
     if (!('type' in value) || value['type'] === undefined)
+        return false;
+    if (!('measurement' in value) || value['measurement'] === undefined)
         return false;
     return true;
 }
@@ -42,8 +42,8 @@ function ContinuousMeasurementFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'measurement': json['measurement'],
         'type': json['type'],
+        'measurement': json['measurement'],
         'unit': json['unit'] == null ? undefined : json['unit'],
     };
 }
@@ -55,8 +55,8 @@ function ContinuousMeasurementToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'measurement': value['measurement'],
         'type': value['type'],
+        'measurement': value['measurement'],
         'unit': value['unit'],
     };
 }

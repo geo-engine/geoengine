@@ -7,14 +7,14 @@ Meta data for 4D `NetCDF` CF datasets
 
 Name | Type
 ------------ | -------------
+`type` | string
+`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
+`params` | [GdalDatasetParameters](GdalDatasetParameters.md)
+`start` | number
+`end` | number
+`step` | [TimeStep](TimeStep.md)
 `bandOffset` | number
 `cacheTtl` | number
-`end` | number
-`params` | [GdalDatasetParameters](GdalDatasetParameters.md)
-`resultDescriptor` | [RasterResultDescriptor](RasterResultDescriptor.md)
-`start` | number
-`step` | [TimeStep](TimeStep.md)
-`type` | string
 
 ## Example
 
@@ -23,14 +23,14 @@ import type { GdalMetadataNetCdfCf } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
+  "resultDescriptor": null,
+  "params": null,
+  "start": null,
+  "end": null,
+  "step": null,
   "bandOffset": null,
   "cacheTtl": null,
-  "end": null,
-  "params": null,
-  "resultDescriptor": null,
-  "start": null,
-  "step": null,
-  "type": null,
 } satisfies GdalMetadataNetCdfCf
 
 console.log(example)

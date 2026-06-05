@@ -12,27 +12,27 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct LayerListing {
-    #[serde(rename = "description")]
-    pub description: String,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "id")]
     pub id: Box<models::ProviderLayerId>,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     /// properties, for instance, to be rendered in the UI
     #[serde(rename = "properties", skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<Vec<String>>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
 }
 
 impl LayerListing {
-    pub fn new(description: String, id: models::ProviderLayerId, name: String, r#type: Type) -> LayerListing {
+    pub fn new(r#type: Type, id: models::ProviderLayerId, name: String, description: String) -> LayerListing {
         LayerListing {
-            description,
+            r#type,
             id: Box::new(id),
             name,
+            description,
             properties: None,
-            r#type,
         }
     }
 }

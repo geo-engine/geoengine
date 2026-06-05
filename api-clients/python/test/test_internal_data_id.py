@@ -35,13 +35,13 @@ class TestInternalDataId(unittest.TestCase):
         model = InternalDataId()
         if include_optional:
             return InternalDataId(
-                dataset_id = '',
-                type = 'internal'
+                type = 'internal',
+                dataset_id = ''
             )
         else:
             return InternalDataId(
-                dataset_id = '',
                 type = 'internal',
+                dataset_id = '',
         )
         """
 

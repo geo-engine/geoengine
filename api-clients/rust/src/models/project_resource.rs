@@ -12,17 +12,17 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct ProjectResource {
-    #[serde(rename = "id")]
-    pub id: uuid::Uuid,
     #[serde(rename = "type")]
     pub r#type: Type,
+    #[serde(rename = "id")]
+    pub id: uuid::Uuid,
 }
 
 impl ProjectResource {
-    pub fn new(id: uuid::Uuid, r#type: Type) -> ProjectResource {
+    pub fn new(r#type: Type, id: uuid::Uuid) -> ProjectResource {
         ProjectResource {
-            id,
             r#type,
+            id,
         }
     }
 }

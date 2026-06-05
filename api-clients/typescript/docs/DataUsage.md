@@ -6,11 +6,11 @@
 
 Name | Type
 ------------ | -------------
-`computationId` | string
-`count` | number
-`data` | string
 `timestamp` | Date
 `userId` | string
+`computationId` | string
+`data` | string
+`count` | number
 
 ## Example
 
@@ -19,11 +19,11 @@ import type { DataUsage } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "computationId": null,
-  "count": null,
-  "data": null,
   "timestamp": null,
   "userId": null,
+  "computationId": null,
+  "data": null,
+  "count": null,
 } satisfies DataUsage
 
 console.log(example)

@@ -21,17 +21,17 @@ export const GbifDataProviderDefinitionTypeEnum = {
  * Check if a given object implements the GbifDataProviderDefinition interface.
  */
 export function instanceOfGbifDataProviderDefinition(value) {
-    if (!('autocompleteTimeout' in value) || value['autocompleteTimeout'] === undefined)
-        return false;
-    if (!('columns' in value) || value['columns'] === undefined)
-        return false;
-    if (!('dbConfig' in value) || value['dbConfig'] === undefined)
-        return false;
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     if (!('name' in value) || value['name'] === undefined)
         return false;
-    if (!('type' in value) || value['type'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('dbConfig' in value) || value['dbConfig'] === undefined)
+        return false;
+    if (!('autocompleteTimeout' in value) || value['autocompleteTimeout'] === undefined)
+        return false;
+    if (!('columns' in value) || value['columns'] === undefined)
         return false;
     return true;
 }
@@ -43,14 +43,14 @@ export function GbifDataProviderDefinitionFromJSONTyped(json, ignoreDiscriminato
         return json;
     }
     return {
-        'autocompleteTimeout': json['autocompleteTimeout'],
-        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
-        'columns': json['columns'],
-        'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
-        'description': json['description'],
-        'name': json['name'],
-        'priority': json['priority'] == null ? undefined : json['priority'],
         'type': json['type'],
+        'name': json['name'],
+        'description': json['description'],
+        'priority': json['priority'] == null ? undefined : json['priority'],
+        'dbConfig': DatabaseConnectionConfigFromJSON(json['dbConfig']),
+        'cacheTtl': json['cacheTtl'] == null ? undefined : json['cacheTtl'],
+        'autocompleteTimeout': json['autocompleteTimeout'],
+        'columns': json['columns'],
     };
 }
 export function GbifDataProviderDefinitionToJSON(json) {
@@ -61,13 +61,13 @@ export function GbifDataProviderDefinitionToJSONTyped(value, ignoreDiscriminator
         return value;
     }
     return {
-        'autocompleteTimeout': value['autocompleteTimeout'],
-        'cacheTtl': value['cacheTtl'],
-        'columns': value['columns'],
-        'dbConfig': DatabaseConnectionConfigToJSON(value['dbConfig']),
-        'description': value['description'],
-        'name': value['name'],
-        'priority': value['priority'],
         'type': value['type'],
+        'name': value['name'],
+        'description': value['description'],
+        'priority': value['priority'],
+        'dbConfig': DatabaseConnectionConfigToJSON(value['dbConfig']),
+        'cacheTtl': value['cacheTtl'],
+        'autocompleteTimeout': value['autocompleteTimeout'],
+        'columns': value['columns'],
     };
 }

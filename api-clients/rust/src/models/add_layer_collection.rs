@@ -12,19 +12,19 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct AddLayerCollection {
-    #[serde(rename = "description")]
-    pub description: String,
     #[serde(rename = "name")]
     pub name: String,
+    #[serde(rename = "description")]
+    pub description: String,
     #[serde(rename = "properties", skip_serializing_if = "Option::is_none")]
     pub properties: Option<Vec<Vec<String>>>,
 }
 
 impl AddLayerCollection {
-    pub fn new(description: String, name: String) -> AddLayerCollection {
+    pub fn new(name: String, description: String) -> AddLayerCollection {
         AddLayerCollection {
-            description,
             name,
+            description,
             properties: None,
         }
     }

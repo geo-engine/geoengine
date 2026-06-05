@@ -14,9 +14,9 @@
  * Check if a given object implements the ProviderLayerCollectionId interface.
  */
 export function instanceOfProviderLayerCollectionId(value) {
-    if (!('collectionId' in value) || value['collectionId'] === undefined)
-        return false;
     if (!('providerId' in value) || value['providerId'] === undefined)
+        return false;
+    if (!('collectionId' in value) || value['collectionId'] === undefined)
         return false;
     return true;
 }
@@ -28,8 +28,8 @@ export function ProviderLayerCollectionIdFromJSONTyped(json, ignoreDiscriminator
         return json;
     }
     return {
-        'collectionId': json['collectionId'],
         'providerId': json['providerId'],
+        'collectionId': json['collectionId'],
     };
 }
 export function ProviderLayerCollectionIdToJSON(json) {
@@ -40,7 +40,7 @@ export function ProviderLayerCollectionIdToJSONTyped(value, ignoreDiscriminator 
         return value;
     }
     return {
-        'collectionId': value['collectionId'],
         'providerId': value['providerId'],
+        'collectionId': value['collectionId'],
     };
 }

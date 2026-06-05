@@ -39,9 +39,9 @@ function TemporalRasterAggregationParametersFromJSONTyped(json, ignoreDiscrimina
     }
     return {
         'aggregation': (0, Aggregation_1.AggregationFromJSON)(json['aggregation']),
-        'outputType': json['outputType'] == null ? undefined : (0, RasterDataType_1.RasterDataTypeFromJSON)(json['outputType']),
         'window': (0, TimeStep_1.TimeStepFromJSON)(json['window']),
         'windowReference': json['windowReference'] == null ? undefined : json['windowReference'],
+        'outputType': json['outputType'] == null ? undefined : (0, RasterDataType_1.RasterDataTypeFromJSON)(json['outputType']),
     };
 }
 function TemporalRasterAggregationParametersToJSON(json) {
@@ -53,8 +53,8 @@ function TemporalRasterAggregationParametersToJSONTyped(value, ignoreDiscriminat
     }
     return {
         'aggregation': (0, Aggregation_1.AggregationToJSON)(value['aggregation']),
-        'outputType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['outputType']),
         'window': (0, TimeStep_1.TimeStepToJSON)(value['window']),
         'windowReference': value['windowReference'],
+        'outputType': (0, RasterDataType_1.RasterDataTypeToJSON)(value['outputType']),
     };
 }

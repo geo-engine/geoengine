@@ -30,14 +30,14 @@ class UserSession(BaseModel):
     """
     UserSession
     """ # noqa: E501
-    created: datetime
     id: UUID
-    project: Optional[UUID] = None
-    roles: List[UUID]
     user: UserInfo
+    created: datetime
     valid_until: datetime = Field(alias="validUntil")
+    project: Optional[UUID] = None
     view: Optional[STRectangle] = None
-    __properties: ClassVar[List[str]] = ["created", "id", "project", "roles", "user", "validUntil", "view"]
+    roles: List[UUID]
+    __properties: ClassVar[List[str]] = ["id", "user", "created", "validUntil", "project", "view", "roles"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -106,13 +106,13 @@ class UserSession(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "created": obj.get("created"),
             "id": obj.get("id"),
-            "project": obj.get("project"),
-            "roles": obj.get("roles"),
             "user": UserInfo.from_dict(obj["user"]) if obj.get("user") is not None else None,
+            "created": obj.get("created"),
             "validUntil": obj.get("validUntil"),
-            "view": STRectangle.from_dict(obj["view"]) if obj.get("view") is not None else None
+            "project": obj.get("project"),
+            "view": STRectangle.from_dict(obj["view"]) if obj.get("view") is not None else None,
+            "roles": obj.get("roles")
         })
         return _obj
 

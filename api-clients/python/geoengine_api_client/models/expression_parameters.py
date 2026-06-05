@@ -29,10 +29,10 @@ class ExpressionParameters(BaseModel):
     ## Types  The following describes the types used in the parameters.
     """ # noqa: E501
     expression: StrictStr = Field(description="Expression script  Example: `\"(A - B) / (A + B)\"`")
-    map_no_data: StrictBool = Field(description="Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.", alias="mapNoData")
-    output_band: Optional[RasterBandDescriptor] = Field(default=None, description="Description about the output", alias="outputBand")
     output_type: RasterDataType = Field(description="A raster data type for the output", alias="outputType")
-    __properties: ClassVar[List[str]] = ["expression", "mapNoData", "outputBand", "outputType"]
+    output_band: Optional[RasterBandDescriptor] = Field(default=None, description="Description about the output", alias="outputBand")
+    map_no_data: StrictBool = Field(description="Should NO DATA values be mapped with the `expression`? Otherwise, they are mapped automatically to NO DATA.", alias="mapNoData")
+    __properties: ClassVar[List[str]] = ["expression", "outputType", "outputBand", "mapNoData"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -89,9 +89,9 @@ class ExpressionParameters(BaseModel):
 
         _obj = cls.model_validate({
             "expression": obj.get("expression"),
-            "mapNoData": obj.get("mapNoData"),
+            "outputType": obj.get("outputType"),
             "outputBand": RasterBandDescriptor.from_dict(obj["outputBand"]) if obj.get("outputBand") is not None else None,
-            "outputType": obj.get("outputType")
+            "mapNoData": obj.get("mapNoData")
         })
         return _obj
 

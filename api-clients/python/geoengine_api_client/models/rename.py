@@ -26,9 +26,9 @@ class Rename(BaseModel):
     """
     Rename
     """ # noqa: E501
-    type: StrictStr
     values: List[StrictStr]
-    __properties: ClassVar[List[str]] = ["type", "values"]
+    type: StrictStr
+    __properties: ClassVar[List[str]] = ["values", "type"]
 
     @field_validator('type')
     def type_validate_enum(cls, value):
@@ -88,8 +88,8 @@ class Rename(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "type": obj.get("type"),
-            "values": obj.get("values")
+            "values": obj.get("values"),
+            "type": obj.get("type")
         })
         return _obj
 

@@ -20,24 +20,24 @@ import { mapValues } from '../runtime';
 export interface Breakpoint {
     /**
      * 
-     * @type {Array<number>}
-     * @memberof Breakpoint
-     */
-    color: Array<number>;
-    /**
-     * 
      * @type {number}
      * @memberof Breakpoint
      */
     value: number;
+    /**
+     * 
+     * @type {Array<number>}
+     * @memberof Breakpoint
+     */
+    color: Array<number>;
 }
 
 /**
  * Check if a given object implements the Breakpoint interface.
  */
 export function instanceOfBreakpoint(value: object): value is Breakpoint {
-    if (!('color' in value) || value['color'] === undefined) return false;
     if (!('value' in value) || value['value'] === undefined) return false;
+    if (!('color' in value) || value['color'] === undefined) return false;
     return true;
 }
 
@@ -51,8 +51,8 @@ export function BreakpointFromJSONTyped(json: any, ignoreDiscriminator: boolean)
     }
     return {
         
-        'color': json['color'],
         'value': json['value'],
+        'color': json['color'],
     };
 }
 
@@ -67,8 +67,8 @@ export function BreakpointToJSONTyped(value?: Breakpoint | null, ignoreDiscrimin
 
     return {
         
-        'color': value['color'],
         'value': value['value'],
+        'color': value['color'],
     };
 }
 

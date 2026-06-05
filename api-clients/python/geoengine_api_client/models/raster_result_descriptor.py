@@ -30,12 +30,12 @@ class RasterResultDescriptor(BaseModel):
     """
     A `ResultDescriptor` for raster queries
     """ # noqa: E501
-    bands: List[RasterBandDescriptor]
     data_type: RasterDataType = Field(alias="dataType")
-    spatial_grid: SpatialGridDescriptor = Field(alias="spatialGrid")
     spatial_reference: StrictStr = Field(alias="spatialReference")
     time: TimeDescriptor
-    __properties: ClassVar[List[str]] = ["bands", "dataType", "spatialGrid", "spatialReference", "time"]
+    spatial_grid: SpatialGridDescriptor = Field(alias="spatialGrid")
+    bands: List[RasterBandDescriptor]
+    __properties: ClassVar[List[str]] = ["dataType", "spatialReference", "time", "spatialGrid", "bands"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -76,6 +76,12 @@ class RasterResultDescriptor(BaseModel):
             exclude=excluded_fields,
             exclude_none=True,
         )
+        # override the default output from pydantic by calling `to_dict()` of time
+        if self.time:
+            _dict['time'] = self.time.to_dict()
+        # override the default output from pydantic by calling `to_dict()` of spatial_grid
+        if self.spatial_grid:
+            _dict['spatialGrid'] = self.spatial_grid.to_dict()
         # override the default output from pydantic by calling `to_dict()` of each item in bands (list)
         _items = []
         if self.bands:
@@ -83,12 +89,6 @@ class RasterResultDescriptor(BaseModel):
                 if _item_bands:
                     _items.append(_item_bands.to_dict())
             _dict['bands'] = _items
-        # override the default output from pydantic by calling `to_dict()` of spatial_grid
-        if self.spatial_grid:
-            _dict['spatialGrid'] = self.spatial_grid.to_dict()
-        # override the default output from pydantic by calling `to_dict()` of time
-        if self.time:
-            _dict['time'] = self.time.to_dict()
         return _dict
 
     @classmethod

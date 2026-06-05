@@ -45,6 +45,12 @@ import {
 export interface RasterStacker {
     /**
      * 
+     * @type {RasterStackerTypeEnum}
+     * @memberof RasterStacker
+     */
+    type: RasterStackerTypeEnum;
+    /**
+     * 
      * @type {RasterStackerParameters}
      * @memberof RasterStacker
      */
@@ -55,12 +61,6 @@ export interface RasterStacker {
      * @memberof RasterStacker
      */
     sources: MultipleRasterSources;
-    /**
-     * 
-     * @type {RasterStackerTypeEnum}
-     * @memberof RasterStacker
-     */
-    type: RasterStackerTypeEnum;
 }
 
 
@@ -77,9 +77,9 @@ export type RasterStackerTypeEnum = typeof RasterStackerTypeEnum[keyof typeof Ra
  * Check if a given object implements the RasterStacker interface.
  */
 export function instanceOfRasterStacker(value: object): value is RasterStacker {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('params' in value) || value['params'] === undefined) return false;
     if (!('sources' in value) || value['sources'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -93,9 +93,9 @@ export function RasterStackerFromJSONTyped(json: any, ignoreDiscriminator: boole
     }
     return {
         
+        'type': json['type'],
         'params': RasterStackerParametersFromJSON(json['params']),
         'sources': MultipleRasterSourcesFromJSON(json['sources']),
-        'type': json['type'],
     };
 }
 
@@ -110,9 +110,9 @@ export function RasterStackerToJSONTyped(value?: RasterStacker | null, ignoreDis
 
     return {
         
+        'type': value['type'],
         'params': RasterStackerParametersToJSON(value['params']),
         'sources': MultipleRasterSourcesToJSON(value['sources']),
-        'type': value['type'],
     };
 }
 

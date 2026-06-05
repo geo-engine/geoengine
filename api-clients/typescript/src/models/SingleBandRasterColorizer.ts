@@ -28,6 +28,12 @@ import {
 export interface SingleBandRasterColorizer {
     /**
      * 
+     * @type {SingleBandRasterColorizerTypeEnum}
+     * @memberof SingleBandRasterColorizer
+     */
+    type: SingleBandRasterColorizerTypeEnum;
+    /**
+     * 
      * @type {number}
      * @memberof SingleBandRasterColorizer
      */
@@ -38,12 +44,6 @@ export interface SingleBandRasterColorizer {
      * @memberof SingleBandRasterColorizer
      */
     bandColorizer: Colorizer;
-    /**
-     * 
-     * @type {SingleBandRasterColorizerTypeEnum}
-     * @memberof SingleBandRasterColorizer
-     */
-    type: SingleBandRasterColorizerTypeEnum;
 }
 
 
@@ -60,9 +60,9 @@ export type SingleBandRasterColorizerTypeEnum = typeof SingleBandRasterColorizer
  * Check if a given object implements the SingleBandRasterColorizer interface.
  */
 export function instanceOfSingleBandRasterColorizer(value: object): value is SingleBandRasterColorizer {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('band' in value) || value['band'] === undefined) return false;
     if (!('bandColorizer' in value) || value['bandColorizer'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -76,9 +76,9 @@ export function SingleBandRasterColorizerFromJSONTyped(json: any, ignoreDiscrimi
     }
     return {
         
+        'type': json['type'],
         'band': json['band'],
         'bandColorizer': ColorizerFromJSON(json['bandColorizer']),
-        'type': json['type'],
     };
 }
 
@@ -93,9 +93,9 @@ export function SingleBandRasterColorizerToJSONTyped(value?: SingleBandRasterCol
 
     return {
         
+        'type': value['type'],
         'band': value['band'],
         'bandColorizer': ColorizerToJSON(value['bandColorizer']),
-        'type': value['type'],
     };
 }
 

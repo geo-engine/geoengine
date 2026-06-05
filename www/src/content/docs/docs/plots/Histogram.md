@@ -22,9 +22,9 @@ If the `buckets` parameter is set to `squareRootChoiceRule`, the operator estima
 
 | Name        | Type             | Description                                                                                                                  | Examples        |
 | ----------- | ---------------- | ---------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| columnName  | string           | Name of the (numeric) vector attribute or raster band to compute the histogram on.                                           | `"temperature"` |
 | bounds      | HistogramBounds  | If `data`, it computes the bounds of the underlying data.<br>If `{ "min": ..., "max": ... }`, one can specify custom bounds. |                 |
 | buckets     | HistogramBuckets | The number of buckets. The value can be specified or calculated.                                                             |                 |
-| columnName  | string           | Name of the (numeric) vector attribute or raster band to compute the histogram on.                                           | `"temperature"` |
 | interactive | boolean          | Flag, if the histogram should have user interactions for a range selection. It is `false` by default.                        | `true`          |
 
 ## Sources

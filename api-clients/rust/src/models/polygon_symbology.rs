@@ -12,26 +12,26 @@ use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct PolygonSymbology {
-    #[serde(rename = "autoSimplified")]
-    pub auto_simplified: bool,
+    #[serde(rename = "type")]
+    pub r#type: Type,
     #[serde(rename = "fillColor")]
     pub fill_color: Box<models::ColorParam>,
     #[serde(rename = "stroke")]
     pub stroke: Box<models::StrokeParam>,
     #[serde(rename = "text", default, with = "::serde_with::rust::double_option", skip_serializing_if = "Option::is_none")]
     pub text: Option<Option<Box<models::TextSymbology>>>,
-    #[serde(rename = "type")]
-    pub r#type: Type,
+    #[serde(rename = "autoSimplified")]
+    pub auto_simplified: bool,
 }
 
 impl PolygonSymbology {
-    pub fn new(auto_simplified: bool, fill_color: models::ColorParam, stroke: models::StrokeParam, r#type: Type) -> PolygonSymbology {
+    pub fn new(r#type: Type, fill_color: models::ColorParam, stroke: models::StrokeParam, auto_simplified: bool) -> PolygonSymbology {
         PolygonSymbology {
-            auto_simplified,
+            r#type,
             fill_color: Box::new(fill_color),
             stroke: Box::new(stroke),
             text: None,
-            r#type,
+            auto_simplified,
         }
     }
 }

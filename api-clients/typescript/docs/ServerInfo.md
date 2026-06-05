@@ -8,8 +8,8 @@ Name | Type
 ------------ | -------------
 `buildDate` | string
 `commitHash` | string
-`features` | string
 `version` | string
+`features` | string
 
 ## Example
 
@@ -20,8 +20,8 @@ import type { ServerInfo } from '@geoengine/api-client'
 const example = {
   "buildDate": null,
   "commitHash": null,
-  "features": null,
   "version": null,
+  "features": null,
 } satisfies ServerInfo
 
 console.log(example)

@@ -31,13 +31,13 @@ export interface MetaDataSuggestion {
      * @type {string}
      * @memberof MetaDataSuggestion
      */
-    layerName: string;
+    mainFile: string;
     /**
      * 
      * @type {string}
      * @memberof MetaDataSuggestion
      */
-    mainFile: string;
+    layerName: string;
     /**
      * 
      * @type {MetaDataDefinition}
@@ -50,8 +50,8 @@ export interface MetaDataSuggestion {
  * Check if a given object implements the MetaDataSuggestion interface.
  */
 export function instanceOfMetaDataSuggestion(value: object): value is MetaDataSuggestion {
-    if (!('layerName' in value) || value['layerName'] === undefined) return false;
     if (!('mainFile' in value) || value['mainFile'] === undefined) return false;
+    if (!('layerName' in value) || value['layerName'] === undefined) return false;
     if (!('metaData' in value) || value['metaData'] === undefined) return false;
     return true;
 }
@@ -66,8 +66,8 @@ export function MetaDataSuggestionFromJSONTyped(json: any, ignoreDiscriminator: 
     }
     return {
         
-        'layerName': json['layerName'],
         'mainFile': json['mainFile'],
+        'layerName': json['layerName'],
         'metaData': MetaDataDefinitionFromJSON(json['metaData']),
     };
 }
@@ -83,8 +83,8 @@ export function MetaDataSuggestionToJSONTyped(value?: MetaDataSuggestion | null,
 
     return {
         
-        'layerName': value['layerName'],
         'mainFile': value['mainFile'],
+        'layerName': value['layerName'],
         'metaData': MetaDataDefinitionToJSON(value['metaData']),
     };
 }

@@ -27,10 +27,10 @@ class StacApiRetries(BaseModel):
     """
     StacApiRetries
     """ # noqa: E501
-    exponential_backoff_factor: Union[StrictFloat, StrictInt] = Field(alias="exponentialBackoffFactor")
-    initial_delay_ms: Annotated[int, Field(strict=True, ge=0)] = Field(alias="initialDelayMs")
     number_of_retries: Annotated[int, Field(strict=True, ge=0)] = Field(alias="numberOfRetries")
-    __properties: ClassVar[List[str]] = ["exponentialBackoffFactor", "initialDelayMs", "numberOfRetries"]
+    initial_delay_ms: Annotated[int, Field(strict=True, ge=0)] = Field(alias="initialDelayMs")
+    exponential_backoff_factor: Union[StrictFloat, StrictInt] = Field(alias="exponentialBackoffFactor")
+    __properties: ClassVar[List[str]] = ["numberOfRetries", "initialDelayMs", "exponentialBackoffFactor"]
 
     model_config = ConfigDict(
         populate_by_name=True,
@@ -83,9 +83,9 @@ class StacApiRetries(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "exponentialBackoffFactor": obj.get("exponentialBackoffFactor"),
+            "numberOfRetries": obj.get("numberOfRetries"),
             "initialDelayMs": obj.get("initialDelayMs"),
-            "numberOfRetries": obj.get("numberOfRetries")
+            "exponentialBackoffFactor": obj.get("exponentialBackoffFactor")
         })
         return _obj
 

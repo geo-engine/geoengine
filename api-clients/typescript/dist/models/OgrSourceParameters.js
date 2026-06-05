@@ -33,8 +33,8 @@ function OgrSourceParametersFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'attributeProjection': json['attributeProjection'] == null ? undefined : json['attributeProjection'],
         'data': json['data'],
+        'attributeProjection': json['attributeProjection'] == null ? undefined : json['attributeProjection'],
     };
 }
 function OgrSourceParametersToJSON(json) {
@@ -45,7 +45,7 @@ function OgrSourceParametersToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'attributeProjection': value['attributeProjection'],
         'data': value['data'],
+        'attributeProjection': value['attributeProjection'],
     };
 }

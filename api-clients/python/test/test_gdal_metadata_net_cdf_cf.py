@@ -35,28 +35,46 @@ class TestGdalMetadataNetCdfCf(unittest.TestCase):
         model = GdalMetadataNetCdfCf()
         if include_optional:
             return GdalMetadataNetCdfCf(
-                band_offset = 0,
-                cache_ttl = 0,
-                end = 56,
+                type = 'GdalMetaDataNetCdfCf',
+                result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
+                    data_type = 'U8', 
+                    spatial_reference = '', 
+                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
+                        bounds = null, 
+                        dimension = null, ), 
+                    spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
+                        spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
+                            geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
+                                origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                                    x = 1.337, 
+                                    y = 1.337, ), 
+                                x_pixel_size = 1.337, 
+                                y_pixel_size = 1.337, ), 
+                            grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
+                                top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                    y_idx = 56, 
+                                    x_idx = 56, ), 
+                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                    y_idx = 56, 
+                                    x_idx = 56, ), ), ), 
+                        descriptor = 'source', ), 
+                    bands = [
+                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
+                            name = '', 
+                            measurement = null, )
+                        ], ),
                 params = geoengine_api_client.models.gdal_dataset_parameters.GdalDatasetParameters(
-                    allow_alphaband_as_mask = True, 
-                    file_not_found_handling = 'NoData', 
                     file_path = '', 
-                    gdal_config_options = [
-                        [
-                            ''
-                            ]
-                        ], 
-                    gdal_open_options = [
-                        ''
-                        ], 
+                    rasterband_channel = 0, 
                     geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                         origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, ), 
                         x_pixel_size = 1.337, 
                         y_pixel_size = 1.337, ), 
+                    width = 0, 
                     height = 0, 
+                    file_not_found_handling = 'NoData', 
                     no_data_value = 1.337, 
                     properties_mapping = [
                         geoengine_api_client.models.gdal_metadata_mapping.GdalMetadataMapping(
@@ -68,64 +86,65 @@ class TestGdalMetadataNetCdfCf(unittest.TestCase):
                                 key = '', ), 
                             target_type = 'Number', )
                         ], 
-                    rasterband_channel = 0, 
-                    width = 0, ),
-                result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
-                    bands = [
-                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
-                            measurement = null, 
-                            name = '', )
+                    gdal_open_options = [
+                        ''
                         ], 
-                    data_type = 'U8', 
-                    spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                        descriptor = 'source', 
-                        spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
-                            geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
-                                origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
-                                    x = 1.337, 
-                                    y = 1.337, ), 
-                                x_pixel_size = 1.337, 
-                                y_pixel_size = 1.337, ), 
-                            grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), 
-                                top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), ), ), ), 
-                    spatial_reference = '', 
-                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
-                        bounds = null, 
-                        dimension = null, ), ),
+                    gdal_config_options = [
+                        [
+                            ''
+                            ]
+                        ], 
+                    allow_alphaband_as_mask = True, ),
                 start = 56,
+                end = 56,
                 step = geoengine_api_client.models.time_step.TimeStep(
                     granularity = 'millis', 
                     step = 0, ),
-                type = 'GdalMetaDataNetCdfCf'
+                band_offset = 0,
+                cache_ttl = 0
             )
         else:
             return GdalMetadataNetCdfCf(
-                band_offset = 0,
-                end = 56,
+                type = 'GdalMetaDataNetCdfCf',
+                result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
+                    data_type = 'U8', 
+                    spatial_reference = '', 
+                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
+                        bounds = null, 
+                        dimension = null, ), 
+                    spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
+                        spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
+                            geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
+                                origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
+                                    x = 1.337, 
+                                    y = 1.337, ), 
+                                x_pixel_size = 1.337, 
+                                y_pixel_size = 1.337, ), 
+                            grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
+                                top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                    y_idx = 56, 
+                                    x_idx = 56, ), 
+                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
+                                    y_idx = 56, 
+                                    x_idx = 56, ), ), ), 
+                        descriptor = 'source', ), 
+                    bands = [
+                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
+                            name = '', 
+                            measurement = null, )
+                        ], ),
                 params = geoengine_api_client.models.gdal_dataset_parameters.GdalDatasetParameters(
-                    allow_alphaband_as_mask = True, 
-                    file_not_found_handling = 'NoData', 
                     file_path = '', 
-                    gdal_config_options = [
-                        [
-                            ''
-                            ]
-                        ], 
-                    gdal_open_options = [
-                        ''
-                        ], 
+                    rasterband_channel = 0, 
                     geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
                         origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
                             x = 1.337, 
                             y = 1.337, ), 
                         x_pixel_size = 1.337, 
                         y_pixel_size = 1.337, ), 
+                    width = 0, 
                     height = 0, 
+                    file_not_found_handling = 'NoData', 
                     no_data_value = 1.337, 
                     properties_mapping = [
                         geoengine_api_client.models.gdal_metadata_mapping.GdalMetadataMapping(
@@ -137,40 +156,21 @@ class TestGdalMetadataNetCdfCf(unittest.TestCase):
                                 key = '', ), 
                             target_type = 'Number', )
                         ], 
-                    rasterband_channel = 0, 
-                    width = 0, ),
-                result_descriptor = geoengine_api_client.models.raster_result_descriptor.RasterResultDescriptor(
-                    bands = [
-                        geoengine_api_client.models.raster_band_descriptor.RasterBandDescriptor(
-                            measurement = null, 
-                            name = '', )
+                    gdal_open_options = [
+                        ''
                         ], 
-                    data_type = 'U8', 
-                    spatial_grid = geoengine_api_client.models.spatial_grid_descriptor.SpatialGridDescriptor(
-                        descriptor = 'source', 
-                        spatial_grid = geoengine_api_client.models.spatial_grid_definition.SpatialGridDefinition(
-                            geo_transform = geoengine_api_client.models.geo_transform.GeoTransform(
-                                origin_coordinate = geoengine_api_client.models.coordinate2_d.Coordinate2D(
-                                    x = 1.337, 
-                                    y = 1.337, ), 
-                                x_pixel_size = 1.337, 
-                                y_pixel_size = 1.337, ), 
-                            grid_bounds = geoengine_api_client.models.grid_bounding_box2_d.GridBoundingBox2D(
-                                bottom_right_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), 
-                                top_left_idx = geoengine_api_client.models.grid_idx2_d.GridIdx2D(
-                                    x_idx = 56, 
-                                    y_idx = 56, ), ), ), ), 
-                    spatial_reference = '', 
-                    time = geoengine_api_client.models.time_descriptor.TimeDescriptor(
-                        bounds = null, 
-                        dimension = null, ), ),
+                    gdal_config_options = [
+                        [
+                            ''
+                            ]
+                        ], 
+                    allow_alphaband_as_mask = True, ),
                 start = 56,
+                end = 56,
                 step = geoengine_api_client.models.time_step.TimeStep(
                     granularity = 'millis', 
                     step = 0, ),
-                type = 'GdalMetaDataNetCdfCf',
+                band_offset = 0,
         )
         """
 

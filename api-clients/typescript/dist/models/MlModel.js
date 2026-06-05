@@ -22,17 +22,17 @@ const MlModelMetadata_1 = require("./MlModelMetadata");
  * Check if a given object implements the MlModel interface.
  */
 function instanceOfMlModel(value) {
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('displayName' in value) || value['displayName'] === undefined)
         return false;
-    if (!('fileName' in value) || value['fileName'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
+        return false;
+    if (!('upload' in value) || value['upload'] === undefined)
         return false;
     if (!('metadata' in value) || value['metadata'] === undefined)
         return false;
-    if (!('name' in value) || value['name'] === undefined)
-        return false;
-    if (!('upload' in value) || value['upload'] === undefined)
+    if (!('fileName' in value) || value['fileName'] === undefined)
         return false;
     return true;
 }
@@ -44,12 +44,12 @@ function MlModelFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
-        'displayName': json['displayName'],
-        'fileName': json['fileName'],
-        'metadata': (0, MlModelMetadata_1.MlModelMetadataFromJSON)(json['metadata']),
         'name': json['name'],
+        'displayName': json['displayName'],
+        'description': json['description'],
         'upload': json['upload'],
+        'metadata': (0, MlModelMetadata_1.MlModelMetadataFromJSON)(json['metadata']),
+        'fileName': json['fileName'],
     };
 }
 function MlModelToJSON(json) {
@@ -60,11 +60,11 @@ function MlModelToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'displayName': value['displayName'],
-        'fileName': value['fileName'],
-        'metadata': (0, MlModelMetadata_1.MlModelMetadataToJSON)(value['metadata']),
         'name': value['name'],
+        'displayName': value['displayName'],
+        'description': value['description'],
         'upload': value['upload'],
+        'metadata': (0, MlModelMetadata_1.MlModelMetadataToJSON)(value['metadata']),
+        'fileName': value['fileName'],
     };
 }

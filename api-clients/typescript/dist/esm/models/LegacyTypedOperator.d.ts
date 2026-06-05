@@ -17,16 +17,16 @@ import type { LegacyTypedOperatorOperator } from './LegacyTypedOperatorOperator'
 export interface LegacyTypedOperator {
     /**
      *
-     * @type {LegacyTypedOperatorOperator}
-     * @memberof LegacyTypedOperator
-     */
-    operator: LegacyTypedOperatorOperator;
-    /**
-     *
      * @type {LegacyTypedOperatorTypeEnum}
      * @memberof LegacyTypedOperator
      */
     type: LegacyTypedOperatorTypeEnum;
+    /**
+     *
+     * @type {LegacyTypedOperatorOperator}
+     * @memberof LegacyTypedOperator
+     */
+    operator: LegacyTypedOperatorOperator;
 }
 /**
  * @export

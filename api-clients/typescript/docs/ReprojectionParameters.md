@@ -7,8 +7,8 @@ Parameters for the `Reprojection` operator.
 
 Name | Type
 ------------ | -------------
-`deriveOutSpec` | [DeriveOutRasterSpecsSource](DeriveOutRasterSpecsSource.md)
 `targetSpatialReference` | string
+`deriveOutSpec` | [DeriveOutRasterSpecsSource](DeriveOutRasterSpecsSource.md)
 
 ## Example
 
@@ -17,8 +17,8 @@ import type { ReprojectionParameters } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "deriveOutSpec": null,
   "targetSpatialReference": null,
+  "deriveOutSpec": null,
 } satisfies ReprojectionParameters
 
 console.log(example)

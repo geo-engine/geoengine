@@ -19,28 +19,10 @@ import type { VecUpdate } from './VecUpdate';
 export interface UpdateProject {
     /**
      *
-     * @type {STRectangle}
-     * @memberof UpdateProject
-     */
-    bounds?: STRectangle | null;
-    /**
-     *
-     * @type {string}
-     * @memberof UpdateProject
-     */
-    description?: string | null;
-    /**
-     *
      * @type {string}
      * @memberof UpdateProject
      */
     id: string;
-    /**
-     *
-     * @type {Array<VecUpdate>}
-     * @memberof UpdateProject
-     */
-    layers?: Array<VecUpdate> | null;
     /**
      *
      * @type {string}
@@ -49,10 +31,28 @@ export interface UpdateProject {
     name?: string | null;
     /**
      *
+     * @type {string}
+     * @memberof UpdateProject
+     */
+    description?: string | null;
+    /**
+     *
+     * @type {Array<VecUpdate>}
+     * @memberof UpdateProject
+     */
+    layers?: Array<VecUpdate> | null;
+    /**
+     *
      * @type {Array<VecUpdate>}
      * @memberof UpdateProject
      */
     plots?: Array<VecUpdate> | null;
+    /**
+     *
+     * @type {STRectangle}
+     * @memberof UpdateProject
+     */
+    bounds?: STRectangle | null;
     /**
      *
      * @type {TimeStep}

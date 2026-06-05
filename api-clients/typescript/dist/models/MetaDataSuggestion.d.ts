@@ -20,13 +20,13 @@ export interface MetaDataSuggestion {
      * @type {string}
      * @memberof MetaDataSuggestion
      */
-    layerName: string;
+    mainFile: string;
     /**
      *
      * @type {string}
      * @memberof MetaDataSuggestion
      */
-    mainFile: string;
+    layerName: string;
     /**
      *
      * @type {MetaDataDefinition}

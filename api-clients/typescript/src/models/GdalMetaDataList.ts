@@ -35,10 +35,10 @@ import {
 export interface GdalMetaDataList {
     /**
      * 
-     * @type {Array<GdalLoadingInfoTemporalSlice>}
+     * @type {GdalMetaDataListTypeEnum}
      * @memberof GdalMetaDataList
      */
-    params: Array<GdalLoadingInfoTemporalSlice>;
+    type: GdalMetaDataListTypeEnum;
     /**
      * 
      * @type {RasterResultDescriptor}
@@ -47,10 +47,10 @@ export interface GdalMetaDataList {
     resultDescriptor: RasterResultDescriptor;
     /**
      * 
-     * @type {GdalMetaDataListTypeEnum}
+     * @type {Array<GdalLoadingInfoTemporalSlice>}
      * @memberof GdalMetaDataList
      */
-    type: GdalMetaDataListTypeEnum;
+    params: Array<GdalLoadingInfoTemporalSlice>;
 }
 
 
@@ -67,9 +67,9 @@ export type GdalMetaDataListTypeEnum = typeof GdalMetaDataListTypeEnum[keyof typ
  * Check if a given object implements the GdalMetaDataList interface.
  */
 export function instanceOfGdalMetaDataList(value: object): value is GdalMetaDataList {
-    if (!('params' in value) || value['params'] === undefined) return false;
-    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
     if (!('type' in value) || value['type'] === undefined) return false;
+    if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
+    if (!('params' in value) || value['params'] === undefined) return false;
     return true;
 }
 
@@ -83,9 +83,9 @@ export function GdalMetaDataListFromJSONTyped(json: any, ignoreDiscriminator: bo
     }
     return {
         
-        'params': ((json['params'] as Array<any>).map(GdalLoadingInfoTemporalSliceFromJSON)),
-        'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
         'type': json['type'],
+        'resultDescriptor': RasterResultDescriptorFromJSON(json['resultDescriptor']),
+        'params': ((json['params'] as Array<any>).map(GdalLoadingInfoTemporalSliceFromJSON)),
     };
 }
 
@@ -100,9 +100,9 @@ export function GdalMetaDataListToJSONTyped(value?: GdalMetaDataList | null, ign
 
     return {
         
-        'params': ((value['params'] as Array<any>).map(GdalLoadingInfoTemporalSliceToJSON)),
-        'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
         'type': value['type'],
+        'resultDescriptor': RasterResultDescriptorToJSON(value['resultDescriptor']),
+        'params': ((value['params'] as Array<any>).map(GdalLoadingInfoTemporalSliceToJSON)),
     };
 }
 

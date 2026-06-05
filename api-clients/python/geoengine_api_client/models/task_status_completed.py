@@ -26,13 +26,13 @@ class TaskStatusCompleted(BaseModel):
     """
     TaskStatusCompleted
     """ # noqa: E501
-    description: Optional[StrictStr] = None
-    info: Optional[Any] = None
     status: StrictStr
     task_type: StrictStr = Field(alias="taskType")
-    time_started: StrictStr = Field(alias="timeStarted")
+    description: Optional[StrictStr] = None
+    info: Optional[Any] = None
     time_total: StrictStr = Field(alias="timeTotal")
-    __properties: ClassVar[List[str]] = ["description", "info", "status", "taskType", "timeStarted", "timeTotal"]
+    time_started: StrictStr = Field(alias="timeStarted")
+    __properties: ClassVar[List[str]] = ["status", "taskType", "description", "info", "timeTotal", "timeStarted"]
 
     @field_validator('status')
     def status_validate_enum(cls, value):
@@ -97,12 +97,12 @@ class TaskStatusCompleted(BaseModel):
             return cls.model_validate(obj)
 
         _obj = cls.model_validate({
-            "description": obj.get("description"),
-            "info": obj.get("info"),
             "status": obj.get("status"),
             "taskType": obj.get("taskType"),
-            "timeStarted": obj.get("timeStarted"),
-            "timeTotal": obj.get("timeTotal")
+            "description": obj.get("description"),
+            "info": obj.get("info"),
+            "timeTotal": obj.get("timeTotal"),
+            "timeStarted": obj.get("timeStarted")
         })
         return _obj
 

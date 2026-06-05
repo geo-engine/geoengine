@@ -7,9 +7,9 @@ The `BandFilter` operator selects bands from a raster source by band names or ba
 
 Name | Type
 ------------ | -------------
+`type` | string
 `params` | [BandFilterParameters](BandFilterParameters.md)
 `sources` | [SingleRasterSource](SingleRasterSource.md)
-`type` | string
 
 ## Example
 
@@ -18,9 +18,9 @@ import type { BandFilter } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
+  "type": null,
   "params": null,
   "sources": null,
-  "type": null,
 } satisfies BandFilter
 
 console.log(example)

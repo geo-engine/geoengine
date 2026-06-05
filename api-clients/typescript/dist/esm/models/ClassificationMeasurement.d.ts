@@ -16,12 +16,10 @@
 export interface ClassificationMeasurement {
     /**
      *
-     * @type {{ [key: string]: string; }}
+     * @type {ClassificationMeasurementTypeEnum}
      * @memberof ClassificationMeasurement
      */
-    classes: {
-        [key: string]: string;
-    };
+    type: ClassificationMeasurementTypeEnum;
     /**
      *
      * @type {string}
@@ -30,10 +28,12 @@ export interface ClassificationMeasurement {
     measurement: string;
     /**
      *
-     * @type {ClassificationMeasurementTypeEnum}
+     * @type {{ [key: string]: string; }}
      * @memberof ClassificationMeasurement
      */
-    type: ClassificationMeasurementTypeEnum;
+    classes: {
+        [key: string]: string;
+    };
 }
 /**
  * @export

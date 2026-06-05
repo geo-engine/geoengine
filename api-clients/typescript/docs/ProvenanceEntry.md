@@ -6,8 +6,8 @@
 
 Name | Type
 ------------ | -------------
-`data` | [Array&lt;DataId&gt;](DataId.md)
 `provenance` | [Provenance](Provenance.md)
+`data` | [Array&lt;DataId&gt;](DataId.md)
 
 ## Example
 
@@ -16,8 +16,8 @@ import type { ProvenanceEntry } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "data": null,
   "provenance": null,
+  "data": null,
 } satisfies ProvenanceEntry
 
 console.log(example)

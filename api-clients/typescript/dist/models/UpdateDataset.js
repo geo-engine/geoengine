@@ -21,11 +21,11 @@ exports.UpdateDatasetToJSONTyped = UpdateDatasetToJSONTyped;
  * Check if a given object implements the UpdateDataset interface.
  */
 function instanceOfUpdateDataset(value) {
-    if (!('description' in value) || value['description'] === undefined)
+    if (!('name' in value) || value['name'] === undefined)
         return false;
     if (!('displayName' in value) || value['displayName'] === undefined)
         return false;
-    if (!('name' in value) || value['name'] === undefined)
+    if (!('description' in value) || value['description'] === undefined)
         return false;
     if (!('tags' in value) || value['tags'] === undefined)
         return false;
@@ -39,9 +39,9 @@ function UpdateDatasetFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'description': json['description'],
-        'displayName': json['display_name'],
         'name': json['name'],
+        'displayName': json['display_name'],
+        'description': json['description'],
         'tags': json['tags'],
     };
 }
@@ -53,9 +53,9 @@ function UpdateDatasetToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'description': value['description'],
-        'display_name': value['displayName'],
         'name': value['name'],
+        'display_name': value['displayName'],
+        'description': value['description'],
         'tags': value['tags'],
     };
 }

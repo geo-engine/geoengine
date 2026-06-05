@@ -35,6 +35,12 @@ import {
 export interface OgrMetaData {
     /**
      * 
+     * @type {OgrMetaDataTypeEnum}
+     * @memberof OgrMetaData
+     */
+    type: OgrMetaDataTypeEnum;
+    /**
+     * 
      * @type {OgrSourceDataset}
      * @memberof OgrMetaData
      */
@@ -45,12 +51,6 @@ export interface OgrMetaData {
      * @memberof OgrMetaData
      */
     resultDescriptor: VectorResultDescriptor;
-    /**
-     * 
-     * @type {OgrMetaDataTypeEnum}
-     * @memberof OgrMetaData
-     */
-    type: OgrMetaDataTypeEnum;
 }
 
 
@@ -67,9 +67,9 @@ export type OgrMetaDataTypeEnum = typeof OgrMetaDataTypeEnum[keyof typeof OgrMet
  * Check if a given object implements the OgrMetaData interface.
  */
 export function instanceOfOgrMetaData(value: object): value is OgrMetaData {
+    if (!('type' in value) || value['type'] === undefined) return false;
     if (!('loadingInfo' in value) || value['loadingInfo'] === undefined) return false;
     if (!('resultDescriptor' in value) || value['resultDescriptor'] === undefined) return false;
-    if (!('type' in value) || value['type'] === undefined) return false;
     return true;
 }
 
@@ -83,9 +83,9 @@ export function OgrMetaDataFromJSONTyped(json: any, ignoreDiscriminator: boolean
     }
     return {
         
+        'type': json['type'],
         'loadingInfo': OgrSourceDatasetFromJSON(json['loadingInfo']),
         'resultDescriptor': VectorResultDescriptorFromJSON(json['resultDescriptor']),
-        'type': json['type'],
     };
 }
 
@@ -100,9 +100,9 @@ export function OgrMetaDataToJSONTyped(value?: OgrMetaData | null, ignoreDiscrim
 
     return {
         
+        'type': value['type'],
         'loadingInfo': OgrSourceDatasetToJSON(value['loadingInfo']),
         'resultDescriptor': VectorResultDescriptorToJSON(value['resultDescriptor']),
-        'type': value['type'],
     };
 }
 

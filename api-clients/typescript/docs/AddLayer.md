@@ -6,12 +6,12 @@
 
 Name | Type
 ------------ | -------------
-`description` | string
-`metadata` | { [key: string]: string; }
 `name` | string
-`properties` | Array&lt;Array&lt;string&gt;&gt;
-`symbology` | [Symbology](Symbology.md)
+`description` | string
 `workflow` | [Workflow](Workflow.md)
+`symbology` | [Symbology](Symbology.md)
+`properties` | Array&lt;Array&lt;string&gt;&gt;
+`metadata` | { [key: string]: string; }
 
 ## Example
 
@@ -20,12 +20,12 @@ import type { AddLayer } from '@geoengine/api-client'
 
 // TODO: Update the object below with actual values
 const example = {
-  "description": Example layer description,
-  "metadata": null,
   "name": Example Layer,
-  "properties": null,
-  "symbology": null,
+  "description": Example layer description,
   "workflow": null,
+  "symbology": null,
+  "properties": null,
+  "metadata": null,
 } satisfies AddLayer
 
 console.log(example)

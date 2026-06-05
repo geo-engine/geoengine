@@ -13,21 +13,21 @@ use serde::{Deserialize, Serialize};
 /// MlTensorShape3D : A struct describing tensor shape for `MlModelMetadata`
 #[derive(Clone, Default, Debug, PartialEq, Serialize, Deserialize)]
 pub struct MlTensorShape3D {
-    #[serde(rename = "bands")]
-    pub bands: i32,
-    #[serde(rename = "x")]
-    pub x: i32,
     #[serde(rename = "y")]
     pub y: i32,
+    #[serde(rename = "x")]
+    pub x: i32,
+    #[serde(rename = "bands")]
+    pub bands: i32,
 }
 
 impl MlTensorShape3D {
     /// A struct describing tensor shape for `MlModelMetadata`
-    pub fn new(bands: i32, x: i32, y: i32) -> MlTensorShape3D {
+    pub fn new(y: i32, x: i32, bands: i32) -> MlTensorShape3D {
         MlTensorShape3D {
-            bands,
-            x,
             y,
+            x,
+            bands,
         }
     }
 }

@@ -20,9 +20,9 @@ export const SuffixTypeEnum = {
  * Check if a given object implements the Suffix interface.
  */
 export function instanceOfSuffix(value) {
-    if (!('type' in value) || value['type'] === undefined)
-        return false;
     if (!('values' in value) || value['values'] === undefined)
+        return false;
+    if (!('type' in value) || value['type'] === undefined)
         return false;
     return true;
 }
@@ -34,8 +34,8 @@ export function SuffixFromJSONTyped(json, ignoreDiscriminator) {
         return json;
     }
     return {
-        'type': json['type'],
         'values': json['values'],
+        'type': json['type'],
     };
 }
 export function SuffixToJSON(json) {
@@ -46,7 +46,7 @@ export function SuffixToJSONTyped(value, ignoreDiscriminator = false) {
         return value;
     }
     return {
-        'type': value['type'],
         'values': value['values'],
+        'type': value['type'],
     };
 }

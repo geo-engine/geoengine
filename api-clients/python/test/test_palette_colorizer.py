@@ -35,33 +35,33 @@ class TestPaletteColorizer(unittest.TestCase):
         model = PaletteColorizer()
         if include_optional:
             return PaletteColorizer(
+                type = 'palette',
                 colors = {
                     'key' : [
                         56
                         ]
                     },
-                default_color = [
-                    56
-                    ],
                 no_data_color = [
                     56
                     ],
-                type = 'palette'
+                default_color = [
+                    56
+                    ]
             )
         else:
             return PaletteColorizer(
+                type = 'palette',
                 colors = {
                     'key' : [
                         56
                         ]
                     },
-                default_color = [
-                    56
-                    ],
                 no_data_color = [
                     56
                     ],
-                type = 'palette',
+                default_color = [
+                    56
+                    ],
         )
         """
 
