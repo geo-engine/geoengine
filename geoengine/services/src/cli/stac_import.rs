@@ -19,6 +19,7 @@ use geoengine_datatypes::{
 };
 use serde::Deserialize;
 use stac::Asset;
+use tracing::{debug, error, info, warn};
 
 use crate::{
     api::{
@@ -223,8 +224,23 @@ pub struct StacImport {
 /// --file-types jp2
 /// ```
 pub async fn stac_import(params: StacImport) -> Result<(), anyhow::Error> {
+    init_stac_import_logging(params.verbose);
+
     let mut importer = StacImporter::new(params).await?;
     importer.run().await
+}
+
+fn init_stac_import_logging(verbose: bool) {
+    let level = if verbose {
+        tracing::Level::DEBUG
+    } else {
+        tracing::Level::WARN
+    };
+
+    let _ = tracing_subscriber::fmt()
+        .with_max_level(level)
+        .with_writer(std::io::stderr)
+        .try_init();
 }
 
 struct StacImporter {
@@ -265,10 +281,10 @@ impl StacImporter {
 
     async fn run(&mut self) -> Result<(), anyhow::Error> {
         if self.params.verbose {
-            println!("[INFO] Scanned collection, found bands for data type and resolution:");
+            info!("Scanned collection, found bands for data type and resolution:");
             for (partial_dataset_key, bands) in &self.bands {
-                println!(
-                    "[INFO]  {:?}, {}: {}",
+                info!(
+                    "  {:?}, {}: {}",
                     partial_dataset_key.data_type,
                     partial_dataset_key.resolution,
                     bands
@@ -300,7 +316,7 @@ impl StacImporter {
         self.process_pages(pages).await?;
 
         if self.params.verbose {
-            println!("[INFO] Dataset tiles added successfully");
+            info!("Dataset tiles added successfully");
         }
 
         self.create_collections_and_layers().await?;
@@ -321,13 +337,13 @@ impl StacImporter {
                     return None;
                 }
 
-                println!("[DEBUG] Fetching page: {state:?}");
+                debug!("Fetching page: {state:?}");
 
                 let start = Instant::now();
                 let result = query_item_collection(&client, &state).await;
                 let elapsed = start.elapsed();
 
-                println!("[DEBUG] Page fetched in {:.2}s", elapsed.as_secs_f64());
+                debug!("Page fetched in {:.2}s", elapsed.as_secs_f64());
 
                 match result {
                     Ok((item_collection, new_state)) => {
@@ -339,7 +355,7 @@ impl StacImporter {
                     }
                     Err(e) => {
                         // TODO: abort or retry
-                        println!("[ERROR]Error fetching page: {e:#}");
+                        error!("Error fetching page: {e:#}");
                         Some((Err(e), (client, QueryState::Finished)))
                     }
                 }
@@ -365,11 +381,7 @@ impl StacImporter {
             for (dataset_key, tiles) in &dataset_tiles {
                 let dataset_name = dataset_key.dataset_name(&self.params.stac_collection);
 
-                println!(
-                    "[DEBUG] Adding {} tiles to dataset {}",
-                    tiles.len(),
-                    dataset_name,
-                );
+                debug!("Adding {} tiles to dataset {}", tiles.len(), dataset_name,);
 
                 let response = retry_with_backoff(
                     || async {
@@ -419,7 +431,7 @@ impl StacImporter {
             if let Err(err) = self.process_item(item, &mut dataset_tiles).await
                 && self.params.verbose
             {
-                println!("[ERROR] Skipping item {item_id}: {err:#}");
+                warn!("Skipping item {item_id}: {err:#}");
             }
         }
 
@@ -518,8 +530,8 @@ impl StacImporter {
 
         for (asset_key, asset) in &item.assets {
             if !matches_selected_file_types(asset.r#type.as_deref(), &self.params.file_types) {
-                println!(
-                    "[DEBUG] skipping {asset_key}: unsupported asset type: {:?}",
+                debug!(
+                    "Skipping {asset_key}: unsupported asset type: {:?}",
                     asset.r#type
                 );
                 continue;
@@ -562,10 +574,7 @@ impl StacImporter {
                 }
                 Err(err) => {
                     if self.params.verbose {
-                        println!(
-                            "[ERROR] Skipping asset {asset_key} of item {}: {err:#}",
-                            item.id
-                        );
+                        warn!("Skipping asset {asset_key} of item {}: {err:#}", item.id);
                     }
                 }
             }
@@ -604,8 +613,8 @@ impl StacImporter {
 
         if !self.bands.contains_key(&partial_key) {
             if self.params.verbose {
-                println!(
-                    "[DEBUG] skipping asset {}: no scanned dataset definition for {:?}",
+                debug!(
+                    "Skipping asset {}: no scanned dataset definition for {:?}",
                     asset.href, dataset_key
                 );
             }
@@ -709,8 +718,8 @@ impl StacImporter {
 
         if !self.bands.contains_key(&partial_key) {
             if self.params.verbose {
-                println!(
-                    "[DEBUG] skipping asset {}: no scanned dataset definition for {:?}",
+                debug!(
+                    "Skipping asset {}: no scanned dataset definition for {:?}",
                     asset.href, dataset_key
                 );
             }
@@ -947,7 +956,7 @@ impl StacImporter {
             .context("Failed to add permission")?;
 
             if self.params.verbose {
-                println!(
+                info!(
                     "Dataset '{}' shared with role {}: {}",
                     dataset_name,
                     permission.role_id,
@@ -994,7 +1003,7 @@ impl StacImporter {
         } else if !item_collection.items.is_empty() {
             // If number_matched is not available, just show the count and rate
             println!(
-                "[INFO] Processed {} items ({:.1} items/s)",
+                "Processed {} items ({:.1} items/s)",
                 self.items_processed_total, items_per_sec
             );
         }
@@ -1092,7 +1101,7 @@ impl StacImporter {
             .context("Failed to query existing child collections")?
         {
             if self.params.verbose {
-                println!("Found existing layer collection '{name}' with id {existing_id}");
+                info!("Found existing layer collection '{name}' with id {existing_id}");
             }
 
             return Ok(existing_id);
@@ -1128,8 +1137,8 @@ impl StacImporter {
         self.share_layer_collection(&response.id).await?;
 
         if self.params.verbose {
-            println!(
-                "[DEBUG] Created layer collection '{}' with id {}",
+            debug!(
+                "Created layer collection '{}' with id {}",
                 name, response.id.0
             );
         }
@@ -1238,7 +1247,7 @@ impl StacImporter {
         self.share_layer(&response.id).await?;
 
         if self.params.verbose {
-            println!("[DEBUG] Created layer '{layer_name}' in collection {collection_id}");
+            debug!("Created layer '{layer_name}' in collection {collection_id}");
         }
 
         Ok(response.id)
@@ -1266,10 +1275,7 @@ impl StacImporter {
         .context("Failed to add existing layer to collection")?;
 
         if self.params.verbose {
-            println!(
-                "[DEBUG] Added layer {} to collection {}",
-                layer_id.0, collection_id
-            );
+            debug!("Added layer {} to collection {}", layer_id.0, collection_id);
         }
 
         Ok(())
@@ -1657,11 +1663,11 @@ impl AssetBandProcessor<'_> {
             }
 
             Some(vec![
-                (("AWS_S3_ENDPOINT".to_string(), s3_endpoint.clone())).into(),
-                (("AWS_ACCESS_KEY_ID".to_string(), s3_access_key.clone())).into(),
-                (("AWS_SECRET_ACCESS_KEY".to_string(), s3_secret_key.clone())).into(),
+                ("AWS_S3_ENDPOINT".to_string(), s3_endpoint.clone()).into(),
+                ("AWS_ACCESS_KEY_ID".to_string(), s3_access_key.clone()).into(),
+                ("AWS_SECRET_ACCESS_KEY".to_string(), s3_secret_key.clone()).into(),
                 // StringPair(("AWS_HTTPS".to_string(), "YES".to_string())), // TODO: make configurable?
-                (("AWS_VIRTUAL_HOSTING".to_string(), "FALSE".to_string())).into(), // TODO: make configurable?
+                ("AWS_VIRTUAL_HOSTING".to_string(), "FALSE".to_string()).into(), // TODO: make configurable?
             ])
         } else {
             None
