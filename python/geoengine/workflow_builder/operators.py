@@ -241,8 +241,8 @@ class Interpolation(RasterOperator):
                         "x": self.output_origin_reference[0],
                         "y": self.output_origin_reference[1],
                     },
-                    "sources": {"raster": self.source.to_dict()},
                 },
+                "sources": {"raster": self.source.to_dict()},
             }
 
         return {
@@ -250,8 +250,8 @@ class Interpolation(RasterOperator):
             "params": {
                 "interpolation": self.interpolation,
                 "outputResolution": input_res,
-                "sources": {"raster": self.source.to_dict()},
             },
+            "sources": {"raster": self.source.to_dict()},
         }
 
     @classmethod
@@ -345,8 +345,8 @@ class Downsampling(RasterOperator):
                         "x": self.output_origin_reference[0],
                         "y": self.output_origin_reference[1],
                     },
-                    "sources": {"raster": self.source.to_dict()},
                 },
+                "sources": {"raster": self.source.to_dict()},
             }
 
         return {
@@ -354,8 +354,8 @@ class Downsampling(RasterOperator):
             "params": {
                 "samplingMethod": self.sample_method,
                 "outputResolution": input_res,
-                "sources": {"raster": self.source.to_dict()},
             },
+            "sources": {"raster": self.source.to_dict()},
         }
 
     @classmethod
