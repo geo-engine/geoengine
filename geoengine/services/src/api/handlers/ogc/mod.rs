@@ -2,12 +2,14 @@
 
 use crate::{api::handlers::ogc::error::OgcApiError, contexts::ApplicationContext, error::Result};
 use actix_web::{FromRequest, web};
-use ogcapi_types::common::{Collection, Collections, LandingPage};
+use ogcapi_types::common::{Collection, Collections, Conformance, LandingPage};
+use ogcapi_types::tiles::{TileMatrixSet, TileMatrixSetItem, TileMatrixSets};
 use utoipa::OpenApi;
 
 mod common;
 mod error;
 mod tiles;
+mod tms;
 mod util;
 
 pub(crate) fn init_ogc_routes<C>(cfg: &mut web::ServiceConfig)
@@ -28,6 +30,16 @@ where
                         web::resource("/{collectionId}")
                             .route(web::get().to(common::collection::<C>)),
                     ),
+            )
+            .service(
+                web::scope("/tileMatrixSets")
+                    .service(
+                        web::resource(["", "/"]).route(web::get().to(tms::tile_matrix_sets::<C>)),
+                    )
+                    .service(
+                        web::resource("/{tileMatrixSetId}")
+                            .route(web::get().to(tms::tile_matrix_set::<C>)),
+                    ),
             ),
     );
 }
@@ -41,15 +53,25 @@ where
         common::collections,
         common::collection,
 
+        // Tile Matrix Sets
+        tms::tile_matrix_sets,
+        tms::tile_matrix_set,
+
         // Tiles
 
     ),
     components(
         schemas(
             // Common
-            LandingPage,
-            Collections,
             Collection,
+            Collections,
+            Conformance,
+            LandingPage,
+
+            // Tile Matrix Sets
+            TileMatrixSet,
+            TileMatrixSetItem,
+            TileMatrixSets,
 
             // Tiles
         )

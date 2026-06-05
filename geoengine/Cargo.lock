@@ -4604,7 +4604,7 @@ dependencies = [
 [[package]]
 name = "ogcapi-types"
 version = "0.3.0"
-source = "git+https://github.com/georust/ogcapi?branch=main#29c158f1978deccc4e8c883f4573d7c68a312ba9"
+source = "git+https://github.com/georust/ogcapi?branch=fix%2Ftms#72776a70afc8e5e11ab8bab9566dce68caeb1813"
 dependencies = [
  "chrono",
  "geojson 1.0.0",

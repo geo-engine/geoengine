@@ -3,9 +3,12 @@ use crate::{
         ogc::{
             OgcApiResult,
             error::{self, OgcApiError},
-            util::{LinkCreator, link_creator, parse_bbox_option, parse_datetime_option},
+            util::{
+                LinkCreator, crs_from_spatial_reference_option, link_creator, parse_bbox_option,
+                parse_datetime_option, raster_workflow_metadata,
+            },
         },
-        workflows::{ProvenanceEntry, workflow_metadata, workflow_provenance},
+        workflows::{ProvenanceEntry, workflow_provenance},
     },
     contexts::{ApplicationContext, SessionContext},
     workflows::{
@@ -24,7 +27,7 @@ use geoengine_operators::{
     call_on_generic_raster_processor,
     engine::{
         RasterQueryProcessor, RasterResultDescriptor, TypedOperator, TypedRasterQueryProcessor,
-        TypedResultDescriptor, WorkflowOperatorPath,
+        WorkflowOperatorPath,
     },
 };
 use itertools::Itertools;
@@ -147,10 +150,12 @@ pub async fn conformance<C: ApplicationContext>(
         "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/oas30",
         "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
         "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
-        // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
-        // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
-        // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
-        // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+        "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+        "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+        "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+        "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+        "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
+        "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset",
     ]))
 }
 
@@ -258,22 +263,6 @@ pub async fn collections<C: ApplicationContext>(
     };
 
     Ok(web::Json(collections))
-}
-
-async fn raster_workflow_metadata<C: SessionContext>(
-    processing_graph: Workflow,
-    execution_context: C::ExecutionContext,
-) -> OgcApiResult<RasterResultDescriptor> {
-    let result_descriptor = workflow_metadata::<C>(processing_graph, execution_context).await?;
-    match result_descriptor.into() {
-        TypedResultDescriptor::Raster(descriptor) => Ok(descriptor),
-        TypedResultDescriptor::Vector(_) => Err(OgcApiError::ExpectedRaster {
-            found: "vector".to_string(),
-        })?,
-        TypedResultDescriptor::Plot(_) => Err(OgcApiError::ExpectedRaster {
-            found: "plot".to_string(),
-        })?,
-    }
 }
 
 #[derive(Debug, serde::Deserialize, IntoParams)]
@@ -425,10 +414,13 @@ async fn build_collection(
         futures::try_join!(descriptor, provenance, futures::future::ok(None))?
     };
 
-    let crs = descriptor
-        .spatial_reference
-        .as_option()
-        .map(|spatial_reference| Crs::from_srid(spatial_reference.code() as i32));
+    let crs = if descriptor.spatial_reference.is_unreferenced() {
+        None
+    } else {
+        Some(crs_from_spatial_reference_option(
+            descriptor.spatial_reference,
+        )?)
+    };
 
     Ok(Collection {
         id: collection_id.to_string(),

@@ -127,7 +127,7 @@ ndarray = { version = "0.17", features = ["approx"] }     # has to match with `o
 num = "0.4"
 num-traits = "0.2"
 oauth2 = "5.0"
-ogcapi-types = { git = "https://github.com/georust/ogcapi", branch = "main", features = ["common", "tiles"], default-features = false }
+ogcapi-types = { git = "https://github.com/georust/ogcapi", branch = "fix/tms", features = ["common", "tiles"], default-features = false }
 openidconnect = "4.0"
 # `opentelemetry` version has to be compatible with `tracing-opentelemetry` & `opentelemetry-*`
 opentelemetry = { version = "0.31", default-features = false, features = [

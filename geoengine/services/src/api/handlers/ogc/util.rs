@@ -1,9 +1,18 @@
-use crate::{api::handlers::ogc::OgcApiResult, workflows::workflow::WorkflowId};
+use crate::{
+    api::handlers::{
+        ogc::{OgcApiResult, error::OgcApiError},
+        workflows::workflow_metadata,
+    },
+    contexts::SessionContext,
+    workflows::workflow::{Workflow, WorkflowId},
+};
+use geoengine_datatypes::spatial_reference::{SpatialReferenceAuthority, SpatialReferenceOption};
+use geoengine_operators::engine::{RasterResultDescriptor, TypedResultDescriptor};
 // use geoengine_datatypes::{
 //     error::BoxedResultExt,
 //     primitives::{BoundingBox2D, Coordinate2D},
 // };
-use ogcapi_types::common::{Bbox as OgcBbox, Datetime as OgcDatetime, Link};
+use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
 use serde::{Deserialize, de::Error as _};
 use std::str::FromStr;
 use url::Url;
@@ -53,6 +62,48 @@ where
     };
 
     OgcBbox::from_str(&s).map(Some).map_err(D::Error::custom)
+}
+
+pub async fn raster_workflow_metadata<C: SessionContext>(
+    processing_graph: Workflow,
+    execution_context: C::ExecutionContext,
+) -> OgcApiResult<RasterResultDescriptor> {
+    let result_descriptor = workflow_metadata::<C>(processing_graph, execution_context).await?;
+    match result_descriptor.into() {
+        TypedResultDescriptor::Raster(descriptor) => Ok(descriptor),
+        TypedResultDescriptor::Vector(_) => Err(OgcApiError::ExpectedRaster {
+            found: "vector".to_string(),
+        })?,
+        TypedResultDescriptor::Plot(_) => Err(OgcApiError::ExpectedRaster {
+            found: "plot".to_string(),
+        })?,
+    }
+}
+
+pub fn crs_from_spatial_reference_option(
+    spatial_reference_option: SpatialReferenceOption,
+) -> OgcApiResult<Crs> {
+    let SpatialReferenceOption::SpatialReference(spatial_reference) = spatial_reference_option
+    else {
+        return Err(OgcApiError::MissingSpatialReference);
+    };
+
+    let authority = match spatial_reference.authority() {
+        SpatialReferenceAuthority::Epsg => Authority::EPSG,
+        SpatialReferenceAuthority::SrOrg
+        | SpatialReferenceAuthority::Iau2000
+        | SpatialReferenceAuthority::Esri => {
+            return Err(OgcApiError::UnsupportedSpatialReferenceAuthority {
+                from: (*spatial_reference.authority()).into(),
+            });
+        }
+    };
+
+    Ok(Crs::new(
+        authority,
+        0, // it is generally 0 by default, e.g., <https://www.opengis.net/def/crs/EPSG/0/4326>
+        spatial_reference.code(),
+    ))
 }
 
 // fn to_bounding_box2d(bbox: OgcBbox) -> OgcApiResult<BoundingBox2D> {

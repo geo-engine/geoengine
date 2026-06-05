@@ -1,4 +1,4 @@
-use crate::workflows::workflow::WorkflowId;
+use crate::{api::model::datatypes::SpatialReferenceAuthority, workflows::workflow::WorkflowId};
 use actix_http::StatusCode;
 use geoengine_datatypes::error::ErrorSource;
 use ogcapi_types::common::Exception;
@@ -19,6 +19,9 @@ pub enum OgcApiError {
     #[snafu(display("Collection `{collection_id}` does not exist"))]
     CollectionNotFound { collection_id: WorkflowId },
 
+    #[snafu(display("Tile matrix set `{tile_matrix_set_id}` does not exist"))]
+    TileMatrixSetNotFound { tile_matrix_set_id: String },
+
     #[snafu(display("Received 3D bounding box, but only 2D is supported."))]
     Unsupported3DBoundingBox { coords: [f64; 6] },
 
@@ -27,16 +30,27 @@ pub enum OgcApiError {
 
     #[snafu(display("Error while initializing processing graph: {source}"))]
     InitializingProcessingGraph { source: Box<dyn ErrorSource> },
+
+    #[snafu(display("Missing spatial reference in result descriptor"))]
+    MissingSpatialReference,
+
+    #[snafu(display("Unsupported spatial reference authority: {from}"))]
+    UnsupportedSpatialReferenceAuthority { from: SpatialReferenceAuthority },
 }
 
 impl OgcApiError {
     pub fn status_code(&self) -> StatusCode {
         match self {
-            OgcApiError::CollectionNotFound { .. } => StatusCode::NOT_FOUND,
+            OgcApiError::CollectionNotFound { .. } | OgcApiError::TileMatrixSetNotFound { .. } => {
+                StatusCode::NOT_FOUND
+            }
             OgcApiError::ExpectedRaster { .. }
             | OgcApiError::Unsupported3DBoundingBox { .. }
-            | OgcApiError::InvalidBoundingBox { .. } => StatusCode::BAD_REQUEST,
-            OgcApiError::Internal { .. } | OgcApiError::InitializingProcessingGraph { .. } => {
+            | OgcApiError::InvalidBoundingBox { .. }
+            | OgcApiError::MissingSpatialReference => StatusCode::BAD_REQUEST,
+            OgcApiError::Internal { .. }
+            | OgcApiError::InitializingProcessingGraph { .. }
+            | OgcApiError::UnsupportedSpatialReferenceAuthority { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         }
@@ -47,10 +61,15 @@ impl OgcApiError {
             OgcApiError::Internal { .. } => "An internal error occurred",
             OgcApiError::ExpectedRaster { .. } => "Invalid processing graph",
             OgcApiError::CollectionNotFound { .. } => "Collection not found",
+            OgcApiError::TileMatrixSetNotFound { .. } => "Tile matrix set not found",
             OgcApiError::Unsupported3DBoundingBox { .. } => "Unsupported 3D bounding box",
             OgcApiError::InvalidBoundingBox { .. } => "Invalid bounding box",
             OgcApiError::InitializingProcessingGraph { .. } => {
                 "Error while initializing processing graph"
+            }
+            OgcApiError::MissingSpatialReference => "Missing spatial reference",
+            OgcApiError::UnsupportedSpatialReferenceAuthority { .. } => {
+                "Unsupported spatial reference authority"
             }
         }
     }
