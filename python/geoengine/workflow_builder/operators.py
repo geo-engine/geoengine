@@ -231,21 +231,28 @@ class Interpolation(RasterOperator):
         else:
             input_res = {"type": "resolution", "x": self.output_x, "y": self.output_y}
 
-        res = {
-            "type": self.name(),
-            "params": {"interpolation": self.interpolation, "outputResolution": input_res},
-            "sources": {"raster": self.source.to_dict()},
-        }
-
         if self.output_origin_reference is not None:
-            res["params"]["outputOriginReference"] = {
-                "x": self.output_origin_reference[0],
-                "y": self.output_origin_reference[1],
+            return {
+                "type": self.name(),
+                "params": {
+                    "interpolation": self.interpolation,
+                    "outputResolution": input_res,
+                    "outputOriginReference": {
+                        "x": self.output_origin_reference[0],
+                        "y": self.output_origin_reference[1],
+                    },
+                    "sources": {"raster": self.source.to_dict()},
+                },
             }
 
-        print(res)
-
-        return res
+        return {
+            "type": self.name(),
+            "params": {
+                "interpolation": self.interpolation,
+                "outputResolution": input_res,
+                "sources": {"raster": self.source.to_dict()},
+            },
+        }
 
     @classmethod
     def from_operator_dict(cls, operator_dict: dict[str, Any]) -> Interpolation:
@@ -328,19 +335,28 @@ class Downsampling(RasterOperator):
         else:
             input_res = {"type": "resolution", "x": self.output_x, "y": self.output_y}
 
-        res = {
-            "type": self.name(),
-            "params": {"samplingMethod": self.sample_method, "outputResolution": input_res},
-            "sources": {"raster": self.source.to_dict()},
-        }
-
         if self.output_origin_reference is not None:
-            res["params"]["outputOriginReference"] = {
-                "x": self.output_origin_reference[0],
-                "y": self.output_origin_reference[1],
+            return {
+                "type": self.name(),
+                "params": {
+                    "samplingMethod": self.sample_method,
+                    "outputResolution": input_res,
+                    "outputOriginReference": {
+                        "x": self.output_origin_reference[0],
+                        "y": self.output_origin_reference[1],
+                    },
+                    "sources": {"raster": self.source.to_dict()},
+                },
             }
 
-        return res
+        return {
+            "type": self.name(),
+            "params": {
+                "samplingMethod": self.sample_method,
+                "outputResolution": input_res,
+                "sources": {"raster": self.source.to_dict()},
+            },
+        }
 
     @classmethod
     def from_operator_dict(cls, operator_dict: dict[str, Any]) -> Downsampling:

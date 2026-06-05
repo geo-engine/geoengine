@@ -279,7 +279,7 @@ class SpatialResolution:
     @staticmethod
     def from_response(response: SpatialResolutionDict) -> SpatialResolution:
         """create a `SpatialResolution` from an API response"""
-        return SpatialResolution(x_resolution=response.x, y_resolution=response.y)
+        return SpatialResolution(x_resolution=response["x"], y_resolution=response["y"])
 
     def as_tuple(self) -> tuple[float, float]:
         return (self.x_resolution, self.y_resolution)
