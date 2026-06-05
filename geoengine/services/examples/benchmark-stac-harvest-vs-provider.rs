@@ -22,7 +22,7 @@ const TIME: &str = "2026-01-03T00:00:00.000Z";
 const IMAGE_WIDTH: i32 = 1830;
 const IMAGE_HEIGHT: i32 = 1830;
 const IMPORT_BBOX: &str = "7.560547850100084 50.45526533913283 9.140457957690465 51.45116832125808";
-const DEFAULT_SERVER_RUST_LOG: &str = "debug";
+const DEFAULT_SERVER_RUST_LOG: &str = "trace";
 #[derive(Debug, Clone)]
 struct Config {
     runs: u32,
