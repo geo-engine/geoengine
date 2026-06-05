@@ -128,6 +128,12 @@ pub async fn landing_page<C: ApplicationContext>(
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+                    "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
+                    "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset",
                 ]
             })
         )
@@ -591,9 +597,12 @@ mod tests {
                 "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/oas30",
                 "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/json",
                 "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
-                // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
-                // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
-                // "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+                "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+                "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+                "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
+                "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset",
               ]
             })
         );
@@ -632,11 +641,11 @@ mod tests {
                     "extent": {
                         "spatial": {
                             "bbox": [[-180.0, -90.0, 180.0, 90.0]],
-                            "crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+                            "crs": "http://www.opengis.net/def/crs/EPSG/0/4326"
                         }
                     },
                     "itemType": "tile",
-                    "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"],
+                    "crs": ["http://www.opengis.net/def/crs/EPSG/0/4326"],
                     "links": [
                         {
                             "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}"),
@@ -650,7 +659,7 @@ mod tests {
                         }
                     ]
                 }],
-                "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"]
+                "crs": ["http://www.opengis.net/def/crs/EPSG/0/4326"]
             })
         );
     }
@@ -679,11 +688,10 @@ mod tests {
                 "title": format!("Raster Layer [{processing_graph_id}]"),
                 "description": format!("Raster collection generated from processing graph `{processing_graph_id}`"),
                 "attribution": "Sample Citation",
-                "itemType": "tile",
                 "extent": {
                     "spatial": {
                         "bbox": [[-180.0, -90.0, 180.0, 90.0]],
-                        "crs": "http://www.opengis.net/def/crs/OGC/1.3/CRS84"
+                        "crs": "http://www.opengis.net/def/crs/EPSG/0/4326"
                     },
                     "temporal": {
                         "interval": [
@@ -697,7 +705,8 @@ mod tests {
                         "trs": "http://www.opengis.net/def/uom/ISO-8601/0/Gregorian"
                     }
                 },
-                "crs": ["http://www.opengis.net/def/crs/OGC/1.3/CRS84"],
+                "crs": ["http://www.opengis.net/def/crs/EPSG/0/4326"],
+                "itemType": "tile",
                 "links": [
                     {
                         "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}"),
