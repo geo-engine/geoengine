@@ -223,8 +223,14 @@ fn parse_profile_metrics(log_file: &Path) -> Result<ProfileMetrics> {
             }
         }
 
-        if let Some((_, rest)) = clean_line.split_once("read raster band in")
-            && let Some(seconds) = first_f64(rest)
+        if let Some(seconds) =
+            extract_timing_seconds(&clean_line, &["raster_band_read_s=", "read raster band in"])
+        {
+            metrics.raster_read_time_seconds += seconds;
+        }
+
+        if let Some(seconds) =
+            extract_timing_seconds(&clean_line, &["mask_band_read_s=", "read mask band in"])
         {
             metrics.raster_read_time_seconds += seconds;
         }
@@ -260,6 +266,18 @@ fn first_f64(input: &str) -> Option<f64> {
     } else {
         token.parse::<f64>().ok()
     }
+}
+
+fn extract_timing_seconds(line: &str, markers: &[&str]) -> Option<f64> {
+    for marker in markers {
+        if let Some((_, rest)) = line.split_once(marker)
+            && let Some(seconds) = first_f64(rest)
+        {
+            return Some(seconds);
+        }
+    }
+
+    None
 }
 
 fn strip_ansi_escape_sequences(input: &str) -> String {

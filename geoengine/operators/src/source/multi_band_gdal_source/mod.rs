@@ -464,7 +464,7 @@ where
             }
         };
 
-        let loading_info_start = Instant::now();
+        let loading_info_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
         let loading_info = self
             .meta_data
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
@@ -473,8 +473,10 @@ where
                 true,
             ))
             .await?;
-        let loading_info_ms = loading_info_start.elapsed().as_millis();
-        debug!(loading_info_ms, "loading_info timing");
+        if let Some(loading_info_start) = loading_info_start {
+            let loading_info_ms = loading_info_start.elapsed().as_millis();
+            trace!(loading_info_ms, "loading_info timing");
+        }
 
         let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes().clone().as_vec();
@@ -894,14 +896,17 @@ where
 {
     let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
 
-    let start = std::time::Instant::now();
+    let raster_read_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
     let buffer = rasterband.read_as::<T>(
         read_window.gdal_window_start(), // pixelspace origin
         read_window.gdal_window_size(),  // pixelspace size
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
-    debug!("read raster band in {:?} s", start.elapsed().as_secs_f64());
+    if let Some(raster_read_start) = raster_read_start {
+        let raster_band_read_s = raster_read_start.elapsed().as_secs_f64();
+        trace!(raster_band_read_s, "read raster band timing");
+    }
 
     let (_, buffer_data) = buffer.into_shape_and_vec();
     let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
@@ -941,7 +946,7 @@ where
 
     let mask_band = rasterband.open_mask_band()?;
 
-    let start = std::time::Instant::now();
+    let mask_read_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
     let mask_buffer = mask_band.read_as::<u8>(
         read_window.gdal_window_start(), // pixelspace origin
         read_window.gdal_window_size(),  // pixelspace size
@@ -949,7 +954,10 @@ where
         None,                            // sampling mode
     )?;
 
-    debug!("read mask band in {:?} s", start.elapsed().as_secs_f64());
+    if let Some(mask_read_start) = mask_read_start {
+        let mask_band_read_s = mask_read_start.elapsed().as_secs_f64();
+        trace!(mask_band_read_s, "read mask band timing");
+    }
 
     let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
     let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);
