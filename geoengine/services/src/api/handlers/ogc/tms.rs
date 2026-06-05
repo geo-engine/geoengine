@@ -20,10 +20,10 @@ use ogcapi_types::{
 };
 use std::num::{NonZeroU16, NonZeroU64};
 
-const CUSTOM_TILE_MATRIX_SET_ID: &str = "GeoEngineCustomTMS";
+pub(super) const CUSTOM_TILE_MATRIX_SET_ID: &str = "GeoEngineCustomTMS";
 const CUSTOM_TILE_MATRIX_SET_TITLE: &str = "Custom Grid for Geo Engine";
 const STANDARD_PIXEL_SIZE_METERS: f64 = 0.00028;
-const MAX_TILE_MATRIX_LEVEL: u8 = 22;
+pub(super) const MAX_TILE_MATRIX_LEVEL: u8 = 22;
 
 /// OGC API Tile Matrix Set List
 ///

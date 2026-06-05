@@ -6,9 +6,11 @@ POST http://localhost:3030/api/anonymous
 
 ###
 
-@processingGraphId = {{rasterWorkflow.response.body.$.id}}
+@processingGraphId = {{rasterProcessGraph.response.body.$.id}}
+@endpoint = http://localhost:3030/api/ogc/{{processingGraphId}}
+@collectionEndpoint = {{endpoint}}/collections/{{processingGraphId}}
 
-# @name rasterWorkflow
+# @name rasterProcessGraph
 POST http://localhost:3030/api/workflow
 Authorization: Bearer {{token}}
 Content-Type: application/json
@@ -24,11 +26,55 @@ Content-Type: application/json
 ###
 
 # Landing Page
-GET http://localhost:3030/api/ogc/{{processingGraphId}}/
+GET {{endpoint}}
 Authorization: Bearer {{token}}
 
 ###
 
 # Conformance Classes
-GET http://localhost:3030/api/ogc/{{processingGraphId}}/conformance
+GET {{endpoint}}/conformance
 Authorization: Bearer {{token}}
+
+###
+
+# Tile Matrix Sets
+GET {{endpoint}}/tileMatrixSets
+Authorization: Bearer {{token}}
+
+###
+
+# Tile Matrix Set
+GET {{endpoint}}/tileMatrixSets/GeoEngineCustomTMS
+Authorization: Bearer {{token}}
+
+###
+
+# Collections
+GET {{endpoint}}/collections
+Authorization: Bearer {{token}}
+
+###
+
+# Collection
+GET {{collectionEndpoint}}
+Authorization: Bearer {{token}}
+
+###
+
+# Tiles
+GET {{collectionEndpoint}}/tiles
+Authorization: Bearer {{token}}
+
+###
+
+# Tileset
+GET {{collectionEndpoint}}/tiles/GeoEngineCustomTMS
+Authorization: Bearer {{token}}
+
+###
+
+# Tile
+GET {{collectionEndpoint}}/tiles/GeoEngineCustomTMS/0/0/0?datetime=2014-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+###

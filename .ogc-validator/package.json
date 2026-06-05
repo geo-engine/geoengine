@@ -1,0 +1,5 @@
+{
+  "devDependencies": {
+    "ogc-validator": "https://github.com/geo-engine/ogc-validator.git#v3"
+  }
+}

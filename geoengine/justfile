@@ -56,6 +56,11 @@ test-coverage output_path="lcov.info":
 run: common::_clear
     cargo run
 
+# Run the CLI
+[group("run")]
+cli *parameters: common::_clear
+    cargo run --bin geoengine-cli -- {{ parameters }}
+
 # Run the tests. Optionally, a filter can be provided to run only a subset of the tests.
 [group("test")]
 test filter="": common::_clear
@@ -80,3 +85,38 @@ test-doc:
 [group("debug")]
 expand-macro crate macro_path:
     cargo expand --locked -p {{ crate }} --lib {{ macro_path }}
+
+[group("run")]
+[script("bash")]
+validate-ogc-compliance: common::_clear
+    # 1. Start the cargo server in the background
+    GEOENGINE__SESSION__FIXED_SESSION_ID=00000000-0000-0000-a000-000000000000 \
+    cargo run & CARGO_PID=$!
+
+    # 2. Trap exits (success or failure) to kill the server process
+    trap 'kill $CARGO_PID 2>/dev/null || true' EXIT
+
+    # 3. Poll the port until it is active (Change 8080 to your actual port)
+    echo "Waiting for Rust server to spin up..."
+    while ! nc -z localhost 3030; do 
+        sleep 0.5
+    done
+    echo "Server is up! Starting compliance validation..."
+
+    # 4. Get session and register processing graph
+    SESSION_TOKEN=$(curl -s -X POST http://localhost:3030/api/anonymous | jq -r '.id')
+    PROCESSING_GRAPH_ID=$(curl -s -X POST http://localhost:3030/api/workflow \
+        -H "Authorization: Bearer $SESSION_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{ "type": "Raster", "operator": { "type": "GdalSource", "params": {"data": "ndvi"} } }' | jq -r '.id')
+    echo "Got session token: $SESSION_TOKEN"
+    echo "Registered processing graph with ID: $PROCESSING_GRAPH_ID"
+
+    # 5. Run the OGC compliance validation action
+    cd ../.ogc-validator
+
+    cp .env.template .env
+    sed -i "s|\$PROCESSING_GRAPH_ID|$PROCESSING_GRAPH_ID|g" .env
+
+    npm install
+    npx @github/local-action ./node_modules/ogc-validator src/main.ts .env

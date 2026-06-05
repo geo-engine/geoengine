@@ -1,5 +1,3 @@
-use float_cmp::approx_eq;
-
 use crate::{
     primitives::TimeInterval,
     raster::{
@@ -7,7 +5,8 @@ use crate::{
         MaskedGrid, Pixel, RasterTile2D, grid_idx_iter_2d,
     },
 };
-use std::panic;
+use float_cmp::approx_eq;
+use std::{panic, path::Path};
 
 pub trait TestDefault {
     /// Generate a default value used for testing. Use this instead of the `Default` trait
@@ -76,7 +75,7 @@ where
 ///
 /// This function panics if the file cannot be created or written.
 ///
-pub fn save_test_bytes(bytes: &[u8], filename: &str) {
+pub fn save_test_bytes<P: AsRef<Path>>(bytes: &[u8], filename: P) {
     use std::io::Write;
 
     std::fs::File::create(filename)

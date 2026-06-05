@@ -22,6 +22,9 @@ pub enum OgcApiError {
     #[snafu(display("Tile matrix set `{tile_matrix_set_id}` does not exist"))]
     TileMatrixSetNotFound { tile_matrix_set_id: String },
 
+    #[snafu(display("Invalid tile coordinates: matrix={matrix}, row={row}, col={col}"))]
+    InvalidTileCoordinates { matrix: u8, row: u64, col: u64 },
+
     #[snafu(display("Received 3D bounding box, but only 2D is supported."))]
     Unsupported3DBoundingBox { coords: [f64; 6] },
 
@@ -45,6 +48,7 @@ impl OgcApiError {
                 StatusCode::NOT_FOUND
             }
             OgcApiError::ExpectedRaster { .. }
+            | OgcApiError::InvalidTileCoordinates { .. }
             | OgcApiError::Unsupported3DBoundingBox { .. }
             | OgcApiError::InvalidBoundingBox { .. }
             | OgcApiError::MissingSpatialReference => StatusCode::BAD_REQUEST,
@@ -62,6 +66,7 @@ impl OgcApiError {
             OgcApiError::ExpectedRaster { .. } => "Invalid processing graph",
             OgcApiError::CollectionNotFound { .. } => "Collection not found",
             OgcApiError::TileMatrixSetNotFound { .. } => "Tile matrix set not found",
+            OgcApiError::InvalidTileCoordinates { .. } => "Invalid tile coordinates",
             OgcApiError::Unsupported3DBoundingBox { .. } => "Unsupported 3D bounding box",
             OgcApiError::InvalidBoundingBox { .. } => "Invalid bounding box",
             OgcApiError::InitializingProcessingGraph { .. } => {

@@ -29,6 +29,20 @@ where
                     .service(
                         web::resource("/{collectionId}")
                             .route(web::get().to(common::collection::<C>)),
+                    )
+                    .service(
+                        web::resource("/{collectionId}/tiles")
+                            .route(web::get().to(tiles::collection_tilesets::<C>)),
+                    )
+                    .service(
+                        web::resource("/{collectionId}/tiles/{tileMatrixSetId}")
+                            .route(web::get().to(tiles::collection_tileset::<C>)),
+                    )
+                    .service(
+                        web::resource(
+                            "/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}",
+                        )
+                        .route(web::get().to(tiles::tile::<C>)),
                     ),
             )
             .service(
@@ -58,6 +72,9 @@ where
         tms::tile_matrix_set,
 
         // Tiles
+        tiles::collection_tilesets,
+        tiles::collection_tileset,
+        tiles::tile,
 
     ),
     components(
@@ -74,6 +91,10 @@ where
             TileMatrixSets,
 
             // Tiles
+            tiles::TileSetsResponse,
+            tiles::TileSetListItemResponse,
+            tiles::TileSetMetadataResponse,
+            tiles::TemplatedTileLink,
         )
     )
 )]
