@@ -364,17 +364,39 @@ impl StacMultiBandMetaData {
         files: &mut Vec<TileFile>,
         fetch_tiles: bool,
     ) -> Result<()> {
+        let Some((time, z_index)) = self.item_time_and_z_index(item)? else {
+            return Ok(());
+        };
+
+        time_steps.push(time);
+
+        if !fetch_tiles {
+            tracing::trace!(
+                "STAC query does not require fetching tiles, skipping item with id: {}",
+                item.id
+            );
+            return Ok(());
+        }
+
+        for asset in item.assets.values() {
+            self.process_stac_asset(asset, time, z_index, files)?;
+        }
+
+        Ok(())
+    }
+
+    fn item_time_and_z_index(&self, item: &Item) -> Result<Option<(TimeInterval, i64)>> {
         if item.version != stac::Version::v1_1_0 {
             tracing::warn!(
                 "Skipping STAC item with unsupported version: {:?}",
                 item.version
             );
-            return Ok(());
+            return Ok(None);
         }
 
         let Some(item_datetime) = item.properties.datetime else {
             tracing::warn!("Skipping STAC item without datetime: {}", item.id);
-            return Ok(());
+            return Ok(None);
         };
 
         let z_index = item
@@ -406,133 +428,144 @@ impl StacMultiBandMetaData {
             }
         };
 
-        time_steps.push(time);
+        Ok(Some((time, z_index)))
+    }
 
-        if !fetch_tiles {
-            tracing::trace!(
-                "STAC query does not require fetching tiles, skipping item with id: {}",
-                item.id
-            );
+    fn process_stac_asset(
+        &self,
+        asset: &stac::Asset,
+        time: TimeInterval,
+        z_index: i64,
+        files: &mut Vec<TileFile>,
+    ) -> Result<()> {
+        if data_type_from_asset_v1_1_0(asset) != Some(self.dataset.data_type) {
             return Ok(());
         }
 
-        for (_asset_key, asset) in &item.assets {
-            if data_type_from_asset_v1_1_0(&asset) != Some(self.dataset.data_type) {
+        if !proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
+            return Ok(());
+        }
+
+        let Some(geo_transform) = geo_transform_from_fields(&asset.additional_fields) else {
+            tracing::warn!(
+                "Skipping asset with href {} due to missing geo transform",
+                asset.href
+            );
+            return Ok(());
+        };
+
+        let Some((height, width)) = proj_shape_from_fields(&asset.additional_fields) else {
+            tracing::warn!(
+                "Skipping asset with href {} due to missing projection shape",
+                asset.href
+            );
+            return Ok(());
+        };
+
+        if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x).abs() > 1e-9
+            || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y).abs() > 1e-9
+        {
+            return Ok(());
+        }
+
+        let Some(asset_title) = asset.title.as_deref() else {
+            tracing::warn!(
+                "Skipping asset with href {} due to missing title",
+                asset.href
+            );
+            return Ok(());
+        };
+
+        let grid_bounds = GridBoundingBox2D::new(
+            GridIdx2D::new([0, 0]),
+            GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
+        )
+        .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+        let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
+
+        let file_path = gdal_file_path(&asset.href)
+            .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
+
+        let gdal_config_options = self.gdal_config_options_for_file_path(&file_path);
+
+        for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
+            if dataset_band.asset_title != asset_title {
                 continue;
             }
 
-            if !proj_code_matches_dataset(&asset.additional_fields, self.dataset.projection) {
-                continue;
-            }
-
-            let Some(geo_transform) = geo_transform_from_fields(&asset.additional_fields) else {
-                tracing::warn!(
-                    "Skipping asset with href {} due to missing geo transform",
-                    asset.href
-                );
+            let Some(rasterband_channel) =
+                Self::rasterband_channel_for_dataset_band(asset, dataset_band.band_name.as_deref())
+            else {
                 continue;
             };
 
-            let Some((height, width)) = proj_shape_from_fields(&asset.additional_fields) else {
-                tracing::warn!(
-                    "Skipping asset with href {} due to missing projection shape",
-                    asset.href
-                );
-                continue;
-            };
-
-            if (geo_transform.x_pixel_size().abs() - self.dataset.resolution.x).abs() > 1e-9
-                || (geo_transform.y_pixel_size().abs() - self.dataset.resolution.y).abs() > 1e-9
-            {
-                continue;
-            }
-
-            let Some(asset_title) = asset.title.as_deref() else {
-                tracing::warn!(
-                    "Skipping asset with href {} due to missing title",
-                    asset.href
-                );
-                continue;
-            };
-
-            let grid_bounds = GridBoundingBox2D::new(
-                GridIdx2D::new([0, 0]),
-                GridIdx2D::new([(width as isize) - 1, (height as isize) - 1]),
-            )
-            .map_err(|_e| geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-            let spatial_partition = geo_transform.grid_to_spatial_bounds(&grid_bounds);
-
-            let file_path = gdal_file_path(&asset.href)
-                .ok_or(geoengine_operators::error::Error::InvalidDataProviderConfig)?;
-
-            let gdal_config_options = self.gdal_config_options_for_file_path(&file_path);
-
-            for (dataset_band_idx, dataset_band) in self.dataset.bands.iter().enumerate() {
-                if dataset_band.asset_title != asset_title {
-                    continue;
-                }
-
-                let rasterband_channel = if asset.bands.is_empty() {
-                    if dataset_band.band_name.is_some() {
-                        tracing::warn!(
-                            "STAC asset with href {} does not include bands, but dataset configuration requires a band name. Skipping asset.",
-                            asset.href
-                        );
-                        continue;
-                    }
-
-                    1
-                } else {
-                    let Some(required_band_name) = dataset_band.band_name.as_deref() else {
-                        tracing::warn!(
-                            "STAC asset with href {} includes bands, but dataset configuration does not specify a band name. Skipping asset.",
-                            asset.href
-                        );
-                        continue;
-                    };
-
-                    let Some(asset_band_idx) = asset.bands.iter().position(|asset_band| {
-                        asset_band.name.as_deref() == Some(required_band_name)
-                    }) else {
-                        tracing::debug!(
-                            "Skipping asset with href {} due to missing required band {}",
-                            asset.href,
-                            required_band_name
-                        );
-                        continue;
-                    };
-
-                    asset_band_idx + 1
-                };
-
-                files.push(TileFile {
-                    time,
-                    spatial_partition,
-                    band: dataset_band_idx as u32,
-                    z_index,
-                    params: GdalDatasetParameters {
-                        file_path: file_path.clone(),
-                        rasterband_channel,
-                        geo_transform: GdalDatasetGeoTransform {
-                            origin_coordinate: geo_transform.origin_coordinate(),
-                            x_pixel_size: geo_transform.x_pixel_size(),
-                            y_pixel_size: geo_transform.y_pixel_size(),
-                        },
-                        width,
-                        height,
-                        file_not_found_handling: FileNotFoundHandling::Error,
-                        no_data_value: None,
-                        properties_mapping: None,
-                        gdal_open_options: None,
-                        gdal_config_options: gdal_config_options.clone(),
-                        allow_alphaband_as_mask: false,
-                        retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
+            files.push(TileFile {
+                time,
+                spatial_partition,
+                band: dataset_band_idx as u32,
+                z_index,
+                params: GdalDatasetParameters {
+                    file_path: file_path.clone(),
+                    rasterband_channel,
+                    geo_transform: GdalDatasetGeoTransform {
+                        origin_coordinate: geo_transform.origin_coordinate(),
+                        x_pixel_size: geo_transform.x_pixel_size(),
+                        y_pixel_size: geo_transform.y_pixel_size(),
                     },
-                });
-            }
+                    width,
+                    height,
+                    file_not_found_handling: FileNotFoundHandling::Error,
+                    no_data_value: None,
+                    properties_mapping: None,
+                    gdal_open_options: None,
+                    gdal_config_options: gdal_config_options.clone(),
+                    allow_alphaband_as_mask: false,
+                    retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
+                },
+            });
         }
 
         Ok(())
+    }
+
+    fn rasterband_channel_for_dataset_band(
+        asset: &stac::Asset,
+        required_band_name: Option<&str>,
+    ) -> Option<usize> {
+        if asset.bands.is_empty() {
+            if required_band_name.is_some() {
+                tracing::warn!(
+                    "STAC asset with href {} does not include bands, but dataset configuration requires a band name. Skipping asset.",
+                    asset.href
+                );
+                return None;
+            }
+
+            return Some(1);
+        }
+
+        let Some(required_band_name) = required_band_name else {
+            tracing::warn!(
+                "STAC asset with href {} includes bands, but dataset configuration does not specify a band name. Skipping asset.",
+                asset.href
+            );
+            return None;
+        };
+
+        let Some(asset_band_idx) = asset
+            .bands
+            .iter()
+            .position(|asset_band| asset_band.name.as_deref() == Some(required_band_name))
+        else {
+            tracing::debug!(
+                "Skipping asset with href {} due to missing required band {}",
+                asset.href,
+                required_band_name
+            );
+            return None;
+        };
+
+        Some(asset_band_idx + 1)
     }
 
     fn gdal_config_options_for_file_path(&self, file_path: &Path) -> Option<Vec<(String, String)>> {
