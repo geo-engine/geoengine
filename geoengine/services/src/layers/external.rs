@@ -30,6 +30,7 @@ use geoengine_operators::source::{
     OgrSourceDataset,
 };
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
 #[async_trait]
 pub trait DataProviderDefinition<D: GeoEngineDb>: Send + Sync + std::fmt::Debug {
@@ -80,6 +81,135 @@ pub trait DataProvider: LayerCollectionProvider
 {
     // TODO: unify provenance method for internal and external provider as a separate trait. We need to figure out session handling before, though.
     async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput>;
+}
+
+#[derive(Debug, Clone)]
+pub struct SharedDataProvider(pub Arc<dyn DataProvider>);
+
+#[async_trait]
+impl LayerCollectionProvider for SharedDataProvider {
+    fn capabilities(&self) -> crate::layers::listing::ProviderCapabilities {
+        self.0.capabilities()
+    }
+
+    fn name(&self) -> &str {
+        self.0.name()
+    }
+
+    fn description(&self) -> &str {
+        self.0.description()
+    }
+
+    async fn search(
+        &self,
+        collection_id: &crate::layers::listing::LayerCollectionId,
+        search: crate::layers::listing::SearchParameters,
+    ) -> Result<crate::layers::layer::LayerCollection> {
+        self.0.search(collection_id, search).await
+    }
+
+    async fn autocomplete_search(
+        &self,
+        collection_id: &crate::layers::listing::LayerCollectionId,
+        search: crate::layers::listing::SearchParameters,
+    ) -> Result<Vec<String>> {
+        self.0.autocomplete_search(collection_id, search).await
+    }
+
+    async fn load_layer_collection(
+        &self,
+        collection: &crate::layers::listing::LayerCollectionId,
+        options: crate::layers::layer::LayerCollectionListOptions,
+    ) -> Result<crate::layers::layer::LayerCollection> {
+        self.0.load_layer_collection(collection, options).await
+    }
+
+    async fn get_root_layer_collection_id(&self) -> Result<crate::layers::listing::LayerCollectionId> {
+        self.0.get_root_layer_collection_id().await
+    }
+
+    async fn load_layer(&self, id: &geoengine_datatypes::dataset::LayerId) -> Result<crate::layers::layer::Layer> {
+        self.0.load_layer(id).await
+    }
+}
+
+#[async_trait]
+impl MetaDataProvider<MockDatasetDataSourceLoadingInfo, VectorResultDescriptor, VectorQueryRectangle>
+    for SharedDataProvider
+{
+    async fn meta_data(
+        &self,
+        id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<
+            dyn geoengine_operators::engine::MetaData<
+                    MockDatasetDataSourceLoadingInfo,
+                    VectorResultDescriptor,
+                    VectorQueryRectangle,
+                >,
+        >,
+    > {
+        self.0.meta_data(id).await
+    }
+}
+
+#[async_trait]
+impl MetaDataProvider<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>
+    for SharedDataProvider
+{
+    async fn meta_data(
+        &self,
+        id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<dyn geoengine_operators::engine::MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+    > {
+        self.0.meta_data(id).await
+    }
+}
+
+#[async_trait]
+impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>
+    for SharedDataProvider
+{
+    async fn meta_data(
+        &self,
+        id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<dyn geoengine_operators::engine::MetaData<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectangle>>,
+    > {
+        self.0.meta_data(id).await
+    }
+}
+
+#[async_trait]
+impl
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for SharedDataProvider
+{
+    async fn meta_data(
+        &self,
+        id: &DataId,
+    ) -> geoengine_operators::util::Result<
+        Box<
+            dyn geoengine_operators::engine::MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
+    > {
+        self.0.meta_data(id).await
+    }
+}
+
+#[async_trait]
+impl DataProvider for SharedDataProvider {
+    async fn provenance(&self, id: &DataId) -> Result<ProvenanceOutput> {
+        self.0.provenance(id).await
+    }
 }
 
 #[derive(PartialEq, Debug, Serialize, Deserialize, Clone)]
