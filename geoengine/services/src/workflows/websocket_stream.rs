@@ -46,7 +46,7 @@ impl WebsocketStreamTask {
                 .query_into_owned_stream(query_rectangle, Box::new(query_ctx))
                 .await?;
 
-            tile_stream.and_then(
+            tile_stream.inspect_err(|e| tracing::error!("WebsocketStreamTask got error elem: {e}")).and_then(
                 move |tile| crate::util::spawn_blocking(
                     move || raster_tile_2d_to_arrow_ipc_file(tile, spatial_reference).map_err(Into::into)
                 ).err_into().map(| r | r.and_then(std::convert::identity))

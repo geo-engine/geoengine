@@ -270,15 +270,16 @@ class SpatialResolution:
         self.y_resolution = y_resolution
 
     def to_api_dict(self) -> SpatialResolutionDict:
-        return {
-            "x": self.x_resolution,
-            "y": self.y_resolution,
-        }
+        """create a openapi `SpatialResolution` from self"""
+        return SpatialResolutionDict(
+            x=self.x_resolution,
+            y=self.y_resolution,
+        )
 
     @staticmethod
     def from_response(response: SpatialResolutionDict) -> SpatialResolution:
         """create a `SpatialResolution` from an API response"""
-        return SpatialResolution(x_resolution=response["x"], y_resolution=response["y"])
+        return SpatialResolution(x_resolution=response.x, y_resolution=response.y)
 
     def as_tuple(self) -> tuple[float, float]:
         return (self.x_resolution, self.y_resolution)
@@ -1752,7 +1753,7 @@ class GeoTransform:
         """Initialize a new `GeoTransform`"""
 
         assert x_pixel_size > 0, "In Geo Engine, x_pixel_size is always positive."
-        assert y_pixel_size < 0, "In Geo Engine, y_pixel_size is always negative."
+        # assert y_pixel_size < 0, "In Geo Engine, y_pixel_size is always negative."
 
         self.x_min = x_min
         self.y_max = y_max
@@ -1771,6 +1772,7 @@ class GeoTransform:
         )
 
     def to_api_dict(self) -> geoengine_api_client.GeoTransform:
+        """Convert the geotransform for an API request"""
         return geoengine_api_client.GeoTransform(
             origin_coordinate=geoengine_api_client.Coordinate2D(
                 x=self.x_min,

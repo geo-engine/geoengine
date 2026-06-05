@@ -73,6 +73,8 @@ class RasterOperator(Operator):
             return RasterTypeConversion.from_operator_dict(operator_dict)
         if operator_dict["type"] == "Reprojection":
             return Reprojection.from_operator_dict(operator_dict).as_raster()
+        if operator_dict["type"] == "Downsampling":
+            return Downsampling.from_operator_dict(operator_dict)
         if operator_dict["type"] == "Interpolation":
             return Interpolation.from_operator_dict(operator_dict)
         if operator_dict["type"] == "Expression":
@@ -200,7 +202,7 @@ class Interpolation(RasterOperator):
     output_method: Literal["resolution", "fraction"] = "resolution"
     output_x: float
     output_y: float
-    # outputOriginReference: Optional[Coordinate2D]
+    output_origin_reference: tuple[float, float] | None
 
     def __init__(
         self,
@@ -209,6 +211,7 @@ class Interpolation(RasterOperator):
         output_y: float,
         output_method: Literal["resolution", "fraction"] = "resolution",
         interpolation: Literal["biLinear", "nearestNeighbor"] = "biLinear",
+        output_origin_reference: tuple[float, float] | None = None,
     ):
         # pylint: disable=too-many-arguments,too-many-positional-arguments
         """Creates a new interpolation operator."""
@@ -217,6 +220,7 @@ class Interpolation(RasterOperator):
         self.output_method = output_method
         self.output_x = output_x
         self.output_y = output_y
+        self.output_origin_reference = output_origin_reference
 
     def name(self) -> str:
         return "Interpolation"
@@ -227,11 +231,21 @@ class Interpolation(RasterOperator):
         else:
             input_res = {"type": "resolution", "x": self.output_x, "y": self.output_y}
 
-        return {
+        res = {
             "type": self.name(),
             "params": {"interpolation": self.interpolation, "outputResolution": input_res},
             "sources": {"raster": self.source.to_dict()},
         }
+
+        if self.output_origin_reference is not None:
+            res["params"]["outputOriginReference"] = {
+                "x": self.output_origin_reference[0],
+                "y": self.output_origin_reference[1],
+            }
+
+        print(res)
+
+        return res
 
     @classmethod
     def from_operator_dict(cls, operator_dict: dict[str, Any]) -> Interpolation:
@@ -249,21 +263,32 @@ class Interpolation(RasterOperator):
                 raise KeyError("Interpolation outputResolution must contain a type: resolution OR fraction")
             if params["type"] == "fraction":
                 return ("fraction", output_x, output_y)
-            if params["type"] == "fraction":
-                return ("fraction", output_x, output_y)
+            if params["type"] == "resolution":
+                return ("resolution", output_x, output_y)
             raise ValueError(f"Invalid interpolation outputResolution type {params['type']}")
 
         (output_method, output_x, output_y) = parse_input_params(
             cast(dict[str, Any], operator_dict["params"]["outputResolution"])
         )
 
-        return Interpolation(
+        op = Interpolation(
             source_operator=source,
             output_method=output_method,
             output_x=output_x,
             output_y=output_y,
             interpolation=cast(Literal["biLinear", "nearestNeighbor"], operator_dict["params"]["interpolation"]),
         )
+
+        if (
+            "outputOriginReference" in operator_dict["params"]
+            and operator_dict["params"]["outputOriginReference"] is not None
+        ):
+            op.output_origin_reference = (
+                float(operator_dict["params"]["outputOriginReference"]["x"]),
+                float(operator_dict["params"]["outputOriginReference"]["y"]),
+            )
+
+        return op
 
 
 class Downsampling(RasterOperator):
@@ -274,7 +299,7 @@ class Downsampling(RasterOperator):
     output_method: Literal["resolution", "fraction"] = "resolution"
     output_x: float
     output_y: float
-    # outputOriginReference: Optional[Coordinate2D]
+    output_origin_reference: tuple[float, float] | None
 
     def __init__(
         self,
@@ -283,6 +308,7 @@ class Downsampling(RasterOperator):
         output_y: float,
         output_method: Literal["resolution", "fraction"] = "resolution",
         sample_method: Literal["nearestNeighbor"] = "nearestNeighbor",
+        output_origin_reference: tuple[float, float] | None = None,
     ):
         # pylint: disable=too-many-arguments,too-many-positional-arguments
         """Creates a new Downsampling operator."""
@@ -291,6 +317,7 @@ class Downsampling(RasterOperator):
         self.output_method = output_method
         self.output_x = output_x
         self.output_y = output_y
+        self.output_origin_reference = output_origin_reference
 
     def name(self) -> str:
         return "Downsampling"
@@ -301,11 +328,19 @@ class Downsampling(RasterOperator):
         else:
             input_res = {"type": "resolution", "x": self.output_x, "y": self.output_y}
 
-        return {
+        res = {
             "type": self.name(),
             "params": {"samplingMethod": self.sample_method, "outputResolution": input_res},
             "sources": {"raster": self.source.to_dict()},
         }
+
+        if self.output_origin_reference is not None:
+            res["params"]["outputOriginReference"] = {
+                "x": self.output_origin_reference[0],
+                "y": self.output_origin_reference[1],
+            }
+
+        return res
 
     @classmethod
     def from_operator_dict(cls, operator_dict: dict[str, Any]) -> Downsampling:
@@ -323,21 +358,33 @@ class Downsampling(RasterOperator):
                 raise KeyError("Downsampling outputResolution must contain a type: resolution OR fraction")
             if params["type"] == "fraction":
                 return ("fraction", output_x, output_y)
-            if params["type"] == "fraction":
-                return ("fraction", output_x, output_y)
+            if params["type"] == "resolution":
+                return ("resolution", output_x, output_y)
             raise ValueError(f"Invalid Downsampling outputResolution type {params['type']}")
 
         (output_method, output_x, output_y) = parse_input_params(
             cast(dict[str, Any], operator_dict["params"]["outputResolution"])
         )
 
-        return Downsampling(
+        op = Downsampling(
             source_operator=source,
             output_method=output_method,
             output_x=output_x,
             output_y=output_y,
             sample_method=cast(Literal["nearestNeighbor"], operator_dict["params"]["samplingMethod"]),
+            output_origin_reference=None,
         )
+
+        if (
+            "outputOriginReference" in operator_dict["params"]
+            and operator_dict["params"]["outputOriginReference"] is not None
+        ):
+            op.output_origin_reference = (
+                float(operator_dict["params"]["outputOriginReference"]["x"]),
+                float(operator_dict["params"]["outputOriginReference"]["y"]),
+            )
+
+        return op
 
 
 class ColumnNames:
