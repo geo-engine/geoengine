@@ -899,6 +899,26 @@ pub struct StacProviderS3Config {
     pub secret_key: Option<Secret<String>>,
 }
 
+impl From<StacProviderS3Config> for crate::datasets::external::stac::StacProviderS3Config {
+    fn from(value: StacProviderS3Config) -> Self {
+        Self {
+            endpoint: value.endpoint,
+            access_key: value.access_key.map(|v| v.0),
+            secret_key: value.secret_key.map(|v| v.0),
+        }
+    }
+}
+
+impl From<crate::datasets::external::stac::StacProviderS3Config> for StacProviderS3Config {
+    fn from(value: crate::datasets::external::stac::StacProviderS3Config) -> Self {
+        Self {
+            endpoint: value.endpoint,
+            access_key: value.access_key.map(Secret),
+            secret_key: value.secret_key.map(Secret),
+        }
+    }
+}
+
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct StacProviderDatasetBand {
