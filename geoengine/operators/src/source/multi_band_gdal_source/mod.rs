@@ -3,18 +3,17 @@ use crate::engine::{
     SpatialGridDescriptor, WorkflowOperatorPath,
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
-use crate::source::gdal_source::LazyGdalWorkerInstance;
-use crate::source::gdal_source::process::GdalErrorKind;
-use crate::source::gdal_source::process_pool_7::GdalProcessPoolError;
 use crate::source::gdal_source::reader::{
     GdalReadAdvise as PoolGdalReadAdvise, GdalReadWindow as PoolGdalReadWindow,
+};
+use crate::source::gdal_source::{
+    GdalPoolWorkerInstance, GdalProcessPoolError, process::GdalErrorKind,
 };
 use crate::source::multi_band_gdal_source::reader::GdalReadAdvise;
 use crate::source::{
     FileNotFoundHandling, GdalDatasetParameters, IpcChannelMessage, IpcChannelMessagePayload,
     IpcProcessError,
 };
-
 use crate::{
     engine::{
         InitializedRasterOperator, RasterOperator, RasterQueryProcessor, RasterResultDescriptor,
@@ -24,22 +23,19 @@ use crate::{
 };
 use async_trait::async_trait;
 pub use error::GdalSourceError;
-
 use futures::stream::{self, BoxStream, StreamExt};
-
 use gdal::raster::GdalType;
-
-use geoengine_datatypes::primitives::{
-    QueryRectangle, SpatialPartition2D, SpatialResolution, find_next_best_overview_level,
-};
-use geoengine_datatypes::raster::{MaskedGrid, TilingSpatialGridDefinition};
 use geoengine_datatypes::{
     dataset::NamedData,
-    primitives::{BandSelection, RasterQueryRectangle, TimeInterval},
+    primitives::{
+        BandSelection, QueryRectangle, RasterQueryRectangle, SpatialPartition2D, SpatialResolution,
+        TimeInterval, find_next_best_overview_level,
+    },
     raster::{
         ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridIdx2D,
-        GridOrEmpty, GridShape2D, Pixel, RasterDataType, RasterProperties, RasterTile2D,
-        SpatialGridDefinition, TileInformation, TilingSpecification,
+        GridOrEmpty, GridShape2D, MaskedGrid, Pixel, RasterDataType, RasterProperties,
+        RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpatialGridDefinition,
+        TilingSpecification,
     },
 };
 pub use loading_info::{GdalMultiBand, MultiBandGdalLoadingInfo, TileFile};
@@ -47,9 +43,7 @@ use num::{FromPrimitive, integer::div_ceil, integer::div_floor};
 use reader::{GdalReaderMode, GridAndProperties, OverviewReaderState, ReaderState};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
-
 use std::marker::PhantomData;
-
 use tracing::{debug, trace};
 
 mod error;
@@ -178,7 +172,7 @@ impl GdalRasterLoader {
     pub async fn load_tile_data_process<T: Pixel + GdalType + FromPrimitive>(
         dataset_params: GdalDatasetParameters,
         local_read_advise: GdalReadAdvise,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
     ) -> Result<Option<GridAndProperties<T, GridBoundingBox2D>>, GdalSourceError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
@@ -249,7 +243,7 @@ impl GdalRasterLoader {
         dataset_params: GdalDatasetParameters,
         reader_mode: GdalReaderMode,
         tile_information: TileInformation,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
     ) -> Result<Option<GridAndProperties<T>>> {
         let ds_spatial_grid = dataset_params.spatial_grid_definition();
         let tile_spatial_grid = tile_information.spatial_grid_definition();
@@ -276,7 +270,7 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
         time: TimeInterval,
         band: u32,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
     ) -> Result<RasterTile2D<T>> {
         debug!(
             "loading tile {:?} for time: {}, band: {band}",

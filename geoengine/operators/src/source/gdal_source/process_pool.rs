@@ -725,11 +725,11 @@ fn calculate_grid_distance(a: &GridBoundingBox2D, b: &GridBoundingBox2D) -> f64 
 }
 
 #[derive(Clone)]
-pub struct LazyGdalWorkerInstance {
+pub struct GdalPoolWorkerInstance {
     pool: Arc<GdalProcessPool>,
 }
 
-impl LazyGdalWorkerInstance {
+impl GdalPoolWorkerInstance {
     pub fn new(pool: Arc<GdalProcessPool>) -> Self {
         Self { pool }
     }

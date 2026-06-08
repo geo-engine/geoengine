@@ -6,7 +6,7 @@ use snafu::Snafu;
 
 use crate::source::{
     IpcProcessError,
-    gdal_source::{GdalRasterLoaderError, process_pool_7::GdalProcessPoolError},
+    gdal_source::{GdalProcessPoolError, GdalRasterLoaderError},
 };
 
 #[derive(Debug, Snafu)]

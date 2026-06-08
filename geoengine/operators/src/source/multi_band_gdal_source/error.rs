@@ -1,7 +1,7 @@
 use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
 use snafu::Snafu;
 
-use crate::source::{IpcProcessError, gdal_source::process_pool_7::GdalProcessPoolError};
+use crate::source::{IpcProcessError, gdal_source::GdalProcessPoolError};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]

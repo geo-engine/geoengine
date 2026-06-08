@@ -6,10 +6,10 @@ use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNot
 use crate::source::gdal_source::process::{
     GdalDataVariant, GdalErrorKind, GdalIpcPayload, IpcChannelMessage, IpcChannelMessagePayload,
 };
-use crate::source::gdal_source::process_pool_7::GdalProcessPoolError;
+pub use crate::source::gdal_source::process_pool::{
+    GdalPoolWorkerInstance, GdalProcessPool, GdalProcessPoolError,
+};
 use crate::source::{GdalDatasetCache, IpcProcessError};
-
-pub use crate::source::gdal_source::process_pool_7::{GdalProcessPool, LazyGdalWorkerInstance};
 use crate::util::input::float_option_with_nan;
 use crate::util::retry::retry_sync;
 use crate::{
@@ -28,50 +28,59 @@ use futures::{
     Stream,
     stream::{self, BoxStream, StreamExt},
 };
-use gdal::errors::GdalError;
-use gdal::raster::{GdalType, RasterBand as GdalRasterBand};
-use gdal::{Dataset as GdalDataset, Metadata as GdalMetadata};
+use gdal::{
+    Dataset as GdalDataset, Metadata as GdalMetadata,
+    errors::GdalError,
+    raster::{GdalType, RasterBand as GdalRasterBand},
+};
 use gdal_sys::VSICurlPartialClearCache;
-use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::primitives::{
-    BandSelection, CacheHint, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
-    SpatialResolution, TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
-    find_next_best_overview_level,
+use geoengine_datatypes::{
+    dataset::NamedData,
+    primitives::{
+        BandSelection, CacheHint, Coordinate2D, DateTimeParseFormat, RasterQueryRectangle,
+        SpatialResolution, TimeInterval, TryIrregularTimeFillIterExt, TryRegularTimeFillIterExt,
+        find_next_best_overview_level,
+    },
+    raster::{
+        ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
+        GridShape2D, GridShapeAccess, GridSize, MaskedGrid, Pixel, RasterDataType,
+        RasterProperties, RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey,
+        RasterTile2D, SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
+    },
+    util::test::TestDefault,
 };
-use reader::{GdalReadAdvise, GridAndProperties, ReaderState};
-
-use geoengine_datatypes::raster::{
-    ChangeGridBounds, EmptyGrid, GeoTransform, GridBlit, GridBoundingBox2D, GridOrEmpty,
-    GridShape2D, GridShapeAccess, GridSize, MaskedGrid, Pixel, RasterDataType, RasterProperties,
-    RasterPropertiesEntry, RasterPropertiesEntryType, RasterPropertiesKey, RasterTile2D,
-    SpatialGridDefinition, TileInformation, TilingSpecification, TilingStrategy,
-};
-use geoengine_datatypes::util::test::TestDefault;
 use itertools::Itertools;
 pub use loading_info::{
     GdalLoadingInfo, GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator,
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
-use num::FromPrimitive;
-use num::integer::{div_ceil, div_floor};
+use num::{
+    FromPrimitive,
+    integer::{div_ceil, div_floor},
+};
 use postgres_types::{FromSql, ToSql};
-use reader::{GdalReadWindow, GdalReaderMode, OverviewReaderState};
+use reader::{
+    GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties, OverviewReaderState,
+    ReaderState,
+};
 use serde::{Deserialize, Serialize};
 use snafu::{Snafu, ensure};
-use std::collections::HashMap;
-use std::convert::TryFrom;
-use std::ffi::CString;
-use std::hash::{Hash, Hasher};
-use std::marker::PhantomData;
-use std::path::{Path, PathBuf};
-use std::time::Instant;
+use std::{
+    collections::HashMap,
+    convert::TryFrom,
+    ffi::CString,
+    hash::{Hash, Hasher},
+    marker::PhantomData,
+    path::{Path, PathBuf},
+    time::Instant,
+};
 use tracing::{debug, warn};
 
 mod db_types;
 pub mod error;
 pub mod loading_info;
 pub mod process;
-pub mod process_pool_7;
+pub mod process_pool;
 pub mod reader;
 
 static GDAL_RETRY_INITIAL_BACKOFF_MS: u64 = 1000;
@@ -80,8 +89,8 @@ static GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR: f64 = 2.;
 
 pub trait GdalProcessPoolAccess {
     fn get_gdal_pool(&self) -> &std::sync::Arc<GdalProcessPool>;
-    fn get_gdal_worker(&self) -> LazyGdalWorkerInstance {
-        LazyGdalWorkerInstance::new(self.get_gdal_pool().clone())
+    fn get_gdal_worker(&self) -> GdalPoolWorkerInstance {
+        GdalPoolWorkerInstance::new(self.get_gdal_pool().clone())
     }
 }
 
@@ -371,7 +380,7 @@ impl GdalRasterLoader {
     pub async fn load_tile_data_process<T: Pixel + GdalType + FromPrimitive>(
         dataset_params: GdalDatasetParameters,
         read_advise: GdalReadAdvise,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
     ) -> Result<GridAndProperties<T, GridBoundingBox2D>, GdalSourceError> {
         let file_not_found_as_no_data =
             dataset_params.file_not_found_handling == FileNotFoundHandling::NoData;
@@ -511,7 +520,7 @@ impl GdalRasterLoader {
         dataset_params: GdalDatasetParameters,
         reader_mode: GdalReaderMode,
         tile_information: TileInformation,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
     ) -> Result<Option<GridAndProperties<T, GridBoundingBox2D>>, GdalSourceError> {
         tracing::trace!(
             "Loading tile {:?}, from {}, band: {}",
@@ -547,7 +556,7 @@ impl GdalRasterLoader {
         tile_information: TileInformation,
         tile_time: TimeInterval,
         cache_hint: CacheHint,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
     ) -> Result<RasterTile2D<T>, GdalSourceError> {
         match dataset_params {
             // TODO: discuss if we need this check here. The metadata provider should only pass on loading infos if the query intersects the datasets bounds! And the tiling strategy should only generate tiles that intersect the querys bbox.
@@ -673,7 +682,7 @@ impl GdalRasterLoader {
         info: GdalLoadingInfoTemporalSlice,
         tiling_strategy: TilingStrategy,
         reader_mode: GdalReaderMode,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
     ) -> impl Stream<Item = impl Future<Output = Result<RasterTile2D<T>>>> + use<T> {
         stream::iter(tiling_strategy.tile_information_iterator_from_pixel_bounds(spatial_bounds))
             .map(move |tile| {
@@ -697,7 +706,7 @@ impl GdalRasterLoader {
         loading_info_stream: S,
         spatial_query: GridBoundingBox2D,
         tiling_strategy: TilingStrategy,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
         reader_mode: GdalReaderMode,
     ) -> impl Stream<Item = Result<RasterTile2D<T>>> + use<S, T> {
         loading_info_stream
@@ -1123,7 +1132,7 @@ fn load_source_stream<P, S>(
     query: &RasterQueryRectangle,
     tiling_strategy: TilingStrategy,
     reader_mode: GdalReaderMode,
-    gdal_worker: LazyGdalWorkerInstance,
+    gdal_worker: GdalPoolWorkerInstance,
 ) -> impl Stream<Item = Result<RasterTile2D<P>>> + use<P, S>
 where
     P: Pixel + GdalType + FromPrimitive,
@@ -1871,7 +1880,7 @@ mod tests {
     async fn load_ndvi_jan_2014_by_process(
         gdal_read_advice: GdalReadAdvise,
         tile_information: TileInformation,
-        gdal_worker: LazyGdalWorkerInstance,
+        gdal_worker: GdalPoolWorkerInstance,
     ) -> Result<RasterTile2D<u8>> {
         let dataset_params = GdalDatasetParameters {
             file_path: test_data!("raster/modis_ndvi/MOD13A2_M_NDVI_2014-01-01.TIFF").into(),
@@ -2519,7 +2528,7 @@ mod tests {
         });
 
         let gpp = GdalProcessPool::new(8, 4, 2);
-        let gw: LazyGdalWorkerInstance = gpp.get_gdal_worker();
+        let gw: GdalPoolWorkerInstance = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
             params,
@@ -3156,7 +3165,7 @@ mod tests {
         let params = None;
 
         let gpp = GdalProcessPool::new(8, 4, 2);
-        let gw: LazyGdalWorkerInstance = gpp.get_gdal_worker();
+        let gw: GdalPoolWorkerInstance = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
             params,
