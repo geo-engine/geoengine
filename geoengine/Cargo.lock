@@ -1700,6 +1700,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d0a5c400df2834b80a4c3327b3aad3a4c4cd4de0629063962b03235697506a28"
 
 [[package]]
+name = "crs-bounds"
+version = "0.9.2"
+
+[[package]]
 name = "crunchy"
 version = "0.2.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2621,6 +2625,7 @@ dependencies = [
  "bytes",
  "chrono",
  "codspeed-criterion-compat",
+ "crs-bounds",
  "fallible-iterator",
  "float-cmp",
  "futures",
