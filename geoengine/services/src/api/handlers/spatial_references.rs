@@ -295,7 +295,7 @@ mod tests {
     use actix_web;
     use actix_web::http::header;
     use actix_web_httpauth::headers::authorization::Bearer;
-    use float_cmp::approx_eq;
+    use float_cmp::assert_approx_eq;
     use geoengine_datatypes::primitives::BoundingBox2D;
     use geoengine_datatypes::spatial_reference::{SpatialReference, SpatialReferenceAuthority};
     use tokio_postgres::NoTls;
@@ -350,15 +350,15 @@ mod tests {
             spec.proj_string,
             "+proj=merc +a=6378137 +b=6378137 +lat_ts=0 +lon_0=0 +x_0=0 +y_0=0 +k=1 +units=m +nadgrids=@null +wktext +no_defs +type=crs",
         );
-        assert!(approx_eq!(
+        assert_approx_eq!(
             BoundingBox2D,
             spec.extent.into(),
             BoundingBox2D::new_unchecked(
                 (-20_037_508.342_789_244, -20_048_966.104_014_6).into(),
                 (20_037_508.342_789_244, 20_048_966.104_014_594).into()
             ),
-            epsilon = 0.000_001
-        ));
+            epsilon = 0.001 // NOTE: changed to match with shortened numbers in static crs-bounds crate.
+        );
         assert_eq!(
             spec.axis_labels,
             Some(("Easting".to_owned(), "Northing".to_owned()).into())
@@ -398,22 +398,31 @@ mod tests {
             SpatialReference::from_str("EPSG:32632").unwrap().into(),
         )
         .unwrap();
+        assert_eq!(spec.name, "WGS 84 / UTM zone 32N");
         assert_eq!(
-            SpatialReferenceSpecification {
-                name: "WGS 84 / UTM zone 32N".to_owned(),
-                spatial_reference: SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632)
-                    .into(),
-                proj_string: "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs +type=crs".into(),
-                extent: BoundingBox2D::new_unchecked(
-                    (166_021.443_080_539_64, 0.0).into(),
-                    (833_978.556_919_460_4, 9_329_005.182_447_437).into()
-                )
-                .into(),
-                axis_labels: Some(("Easting".to_owned(), "Northing".to_owned()).into()),
-                axis_order: Some(AxisOrder::EastNorth),
-            },
-            spec
+            spec.spatial_reference,
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 32632).into()
         );
+        assert_eq!(
+            spec.proj_string,
+            "+proj=utm +zone=32 +datum=WGS84 +units=m +no_defs +type=crs",
+        );
+        assert_approx_eq!(
+            BoundingBox2D,
+            spec.extent.into(),
+            BoundingBox2D::new_unchecked(
+                (166_021.443_080_539_64, 0.0).into(),
+                (833_978.556_919_460_4, 9_329_005.182_447_437).into()
+            )
+            .into(),
+            epsilon = 0.001 // NOTE: changed to match with shortened numbers in static crs-bounds crate.
+        );
+
+        assert_eq!(
+            spec.axis_labels,
+            Some(("Easting".to_owned(), "Northing".to_owned()).into())
+        );
+        assert_eq!(spec.axis_order, Some(AxisOrder::EastNorth));
     }
 
     #[test]
