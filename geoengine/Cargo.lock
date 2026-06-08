@@ -2642,6 +2642,7 @@ dependencies = [
  "snafu",
  "strum",
  "tempfile",
+ "tracing",
  "uuid",
  "wkt 0.14.0",
 ]
