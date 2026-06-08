@@ -1,7 +1,7 @@
 use geoengine_datatypes::{
-    operations::reproject::{CoordinateProjection, CoordinateProjector, ReprojectClipped},
+    operations::reproject::ReprojectClipped,
     primitives::{AxisAlignedRectangle, BoundingBox2D, DateTime, Duration, QueryRectangle},
-    spatial_reference::SpatialReference,
+    spatial_reference::{CoordinateProjection, DefaultCoordinateProjector, SpatialReference},
 };
 use snafu::{ResultExt, Snafu};
 use url::Url;
@@ -47,8 +47,9 @@ fn bbox_time_query(
     let time_start = query.time_interval().start();
     let time_end = query.time_interval().end();
 
+    // Note: this uses the `DefaultCoordinateProjector`, which may change.
     let projector =
-        CoordinateProjector::from_known_srs(query_projection, SpatialReference::epsg_4326())
+        DefaultCoordinateProjector::from_known_srs(query_projection, SpatialReference::epsg_4326())
             .context(CannotReprojectBbox)?;
 
     let bbox = query.spatial_bounds(); // TODO: use SpatialPartition2D directly
