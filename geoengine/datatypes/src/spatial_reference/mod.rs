@@ -1,3 +1,4 @@
+use crate::spatial_reference::mixed_area_of_use_provider::MixedAreaOfUseProvider;
 use crate::{
     error::{self, BoxedResultExt},
     operations::reproject::Reproject,
@@ -32,11 +33,16 @@ use proj_projector::{ProjAreaOfUseProvider, ProjCoordinateProjector};
 //mod geodesy_projector;
 //pub use geodesy_projector::GeodesyCoordinateProjector;
 
+mod static_epsg_area_provider;
+use static_epsg_area_provider::StaticEpsgAreaProvider;
+
+mod mixed_area_of_use_provider;
+
 mod projection_provider;
 pub use projection_provider::CoordinateProjection;
 
 pub type DefaultCoordinateProjector = ProjCoordinateProjector;
-pub type DefaultAreaOfUseProvider = ProjAreaOfUseProvider;
+pub type DefaultAreaOfUseProvider = MixedAreaOfUseProvider;
 
 /// A spatial reference authority that is part of a spatial reference definition
 #[derive(
@@ -119,8 +125,8 @@ impl SpatialReference {
         if self == Self::epsg_4326() {
             return self.area_of_use();
         }
-        let p = DefaultCoordinateProjector::from_known_srs(Self::epsg_4326(), self)?;
-        self.area_of_use::<A>()?.reproject(&p)
+        let provider = DefaultAreaOfUseProvider::new_known_crs(self)?;
+        provider.area_of_use_projected()
     }
 
     /// Return the srs-string "authority:code"
