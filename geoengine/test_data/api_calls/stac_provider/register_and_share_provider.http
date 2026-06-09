@@ -1,0 +1,32 @@
+###
+
+# @name session
+POST http://localhost:3030/api/anonymous
+Content-Type: application/json
+
+###
+
+# @name provider
+POST http://localhost:3030/api/layerDb/providers
+Authorization: Bearer {{session.response.body.$.id}}
+Content-Type: application/json
+
+< ../../provider_defs_api/stac_sentinel2.json
+
+###
+
+@providerId = b274275c-373d-4a3f-8b45-9b48e9614329
+@anonymousRoleId = fd8e87bf-515c-4f36-8da6-1a53702ff102
+
+PUT http://localhost:3030/api/permissions
+Authorization: Bearer {{session.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "resource": {
+        "type": "provider",
+        "id": "{{providerId}}"
+    },
+    "roleId": "{{anonymousRoleId}}",
+    "permission": "Read"
+}

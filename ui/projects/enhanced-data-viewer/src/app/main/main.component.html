@@ -114,22 +114,20 @@
                 <div>
                     <h4>Vizualization Presets</h4>
                     <mat-nav-list class="visualization-presets">
-                        <mat-list-item [activated]="true">
-                            <img matListItemTitle src="assets/rgb.jpg" alt="RGB" class="preset-icon" />
-                            <span matListItemTitle>RGB</span>
-                        </mat-list-item>
-                        <mat-list-item [activated]="false">
-                            <img matListItemTitle src="assets/ndvi.jpg" alt="NDVI" class="preset-icon" />
-                            <span matListItemTitle>NDVI</span>
-                        </mat-list-item>
-                        <mat-list-item [activated]="false">
-                            <img matListItemTitle src="assets/false-color.jpg" alt="False Color" class="preset-icon" />
-                            <span matListItemTitle>False Color</span>
-                        </mat-list-item>
-                        <mat-list-item [activated]="false">
-                            <img matListItemTitle src="assets/swi.jpg" alt="SWI" class="preset-icon" />
-                            <span matListItemTitle>SWI</span>
-                        </mat-list-item>
+                        @for (preset of visualizationPresets; track preset.preset) {
+                            <mat-list-item
+                                [activated]="preset.enabled && activePreset() === preset.preset"
+                                [class.preset-active]="preset.enabled && activePreset() === preset.preset"
+                                [class.preset-disabled]="!preset.enabled"
+                                [disabled]="!preset.enabled"
+                                [tabindex]="preset.enabled ? 0 : -1"
+                                [attr.aria-disabled]="!preset.enabled"
+                                (click)="activatePreset(preset.preset)"
+                            >
+                                <img matListItemTitle [src]="preset.imageSrc" [alt]="preset.altText" class="preset-icon" />
+                                <span matListItemTitle>{{ preset.label }}</span>
+                            </mat-list-item>
+                        }
                     </mat-nav-list>
                 </div>
                 <mat-divider></mat-divider>
@@ -163,6 +161,10 @@
                 }
             }
         </geoengine-map-container>
+
+        @if (isLoading()) {
+            <mat-progress-bar class="loading-indicator" mode="query"></mat-progress-bar>
+        }
 
         <div class="side-buttons">
             <mat-button-toggle-group
