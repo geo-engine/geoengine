@@ -545,8 +545,8 @@ impl GdalReadWindow {
     }
 }
 
-pub struct GridAndProperties<T> {
-    pub grid: GridOrEmpty<GridBoundingBox2D, T>,
+pub struct GridAndProperties<T, D = GridBoundingBox2D> {
+    pub grid: GridOrEmpty<D, T>,
     pub properties: RasterProperties,
 }
 

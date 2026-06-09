@@ -10,6 +10,9 @@ function print_headline() {
 print_headline "Install cargo-llvm-cov"
 just backend install
 
+print_headline "Run build gdalsource-process"
+just backend build-gdalsource-process || exit 1
+
 print_headline "Run Tests & Generate Code Coverage"
 just backend test-coverage || exit 1
 

@@ -1,17 +1,22 @@
 mod csv;
-mod gdal_source;
+pub mod gdal_source;
 mod multi_band_gdal_source;
 mod ogr_source;
 
 pub use self::csv::{
     CsvGeometrySpecification, CsvSource, CsvSourceParameters, CsvSourceStream, CsvTimeSpecification,
 };
+
 pub use self::gdal_source::{
     FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalLoadingInfo,
     GdalLoadingInfoTemporalSlice, GdalLoadingInfoTemporalSliceIterator, GdalMetaDataList,
     GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataMapping, GdalMetadataNetCdfCf,
     GdalRetryOptions, GdalSource, GdalSourceError, GdalSourceParameters, GdalSourceProcessor,
     GdalSourceTimePlaceholder, TimeReference,
+    process::{
+        GdalDatasetCache, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+        IpcProcessRasterResult, setup_client,
+    },
 };
 pub use self::multi_band_gdal_source::{
     GdalMultiBand, GdalSourceError as MultiBandGdalSourceError,

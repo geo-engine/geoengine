@@ -1,8 +1,9 @@
 use geoengine_datatypes::raster::{
-    GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty2D, GridShape2D,
-    GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
+    ChangeGridBounds, GridBoundingBox2D, GridBounds, GridContains, GridIdx2D, GridOrEmpty,
+    GridShape2D, GridShapeAccess, GridSize, RasterProperties, SpatialGridDefinition,
 };
 use num::Zero;
+use serde::{Deserialize, Serialize};
 
 /// This struct is used to advise the GDAL reader how to read the data from the dataset.
 /// The Workflow is as follows:
@@ -14,7 +15,7 @@ use num::Zero;
 ///    3.1 The `read_window_bounds` might be offset from the `bounds_of_target` or might have a different size.
 ///    Then, the data needs to be placed in the target pixel space accordingly. Other parts of the target pixel space should be filled with nodata.
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub struct GdalReadAdvise {
     pub gdal_read_widow: GdalReadWindow,
     pub read_window_bounds: GridBoundingBox2D,
@@ -175,6 +176,19 @@ impl OverviewReaderState {
         }
     }
 
+    /// Returns the read advise for the tiling based bounds
+    /// This is a bit more complex than for the original resolution reader, because we need to consider that the overview grid might not match the gdal dataset grid. This happens when files cover different areas, then the overview grid is based on the largest area covered by all files. In this case, we need to shift the tile to match the gdal dataset grid and calculate the read window accordingly.
+    /// The workflow is as follows:
+    /// 1. We first check if the y-axis is flipped between the overview grid and the gdal dataset grid. If it is, we flip the gdal dataset grid to match the overview grid. This simplifies the calculations later on, because we can work with matching grids. We just need to remember to unflip the data after reading.
+    /// 2. We calculate the intersection of the gdal dataset grid and the overview grid. This is the area where we can read data from the gdal dataset. If there is no intersection, we can return early and load nothing.
+    /// 3. We map the tile we want to fill to the original grid. First, we set the tile to use the same origin coordinate as the gdal dataset grid. Then, we calculate the distance between the tile and the gdal dataset grid. If there is a distance, we need to shift the tile to match the gdal dataset grid.
+    /// 4. We calculate the intersection of the tile and the actual bounds to use to identify what we can really read. This is the area where we can read data from the gdal dataset to fill the tile.
+    /// 5. If we need to unflip the dataset grid, we unflip the read window to match the original grid.
+    /// 6. If we needed to shift the tile, we need to shift the read window accordingly to match the gdal dataset grid.
+    /// 7. Finally, we generate the read window for GDAL and return the read advise.
+    ///
+    /// # Panics
+    /// Panics if the tile cannot be mapped to the gdal dataset grid, which should never happen, because the overview grid is based on the largest area covered by all files. But if it does, it means that there is a bug in the code or a mismatch between the overview grid and the gdal dataset grid.
     #[allow(clippy::too_many_lines)]
     pub fn tiling_to_dataset_read_advise(
         &self,
@@ -343,7 +357,7 @@ impl OverviewReaderState {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 pub struct GdalReadWindow {
     start_x: isize, // pixelspace origin
     start_y: isize,
@@ -370,9 +384,21 @@ impl GdalReadWindow {
     }
 }
 
-pub struct GridAndProperties<T> {
-    pub grid: GridOrEmpty2D<T>,
+pub struct GridAndProperties<T, D = GridShape2D> {
+    pub grid: GridOrEmpty<D, T>,
     pub properties: RasterProperties,
+}
+
+impl<T> From<GridAndProperties<T, GridBoundingBox2D>> for GridAndProperties<T, GridShape2D>
+where
+    T: Copy,
+{
+    fn from(value: GridAndProperties<T, GridBoundingBox2D>) -> Self {
+        GridAndProperties {
+            grid: value.grid.unbounded(),
+            properties: value.properties,
+        }
+    }
 }
 
 #[cfg(test)]

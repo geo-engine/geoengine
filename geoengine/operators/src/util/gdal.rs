@@ -13,7 +13,7 @@ use crate::{
     test_data,
     util::Result,
 };
-use gdal::{Dataset, DatasetOptions, DriverManager};
+use gdal::{Dataset, DatasetOptions, DriverManager, errors::GdalError};
 use geoengine_datatypes::{
     collections::VectorDataType,
     dataset::{DataId, DatasetId, NamedData},
@@ -395,13 +395,20 @@ pub fn gdal_open_dataset(path: &Path) -> Result<Dataset> {
 /// Opens a Gdal Dataset with the given `path` and `dataset_options`.
 /// Other crates should use this method for Gdal Dataset access as a workaround to avoid strange errors.
 pub fn gdal_open_dataset_ex(path: &Path, dataset_options: DatasetOptions) -> Result<Dataset> {
+    gdal_open_ex_gdal_error(path, dataset_options).context(error::Gdal)
+}
+
+pub fn gdal_open_ex_gdal_error(
+    path: &Path,
+    dataset_options: DatasetOptions,
+) -> Result<Dataset, GdalError> {
     let dataset_options = {
         let mut dataset_options = dataset_options;
         dataset_options.open_flags |= gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR;
         dataset_options
     };
 
-    Dataset::open_ex(path, dataset_options).context(error::Gdal)
+    Dataset::open_ex(path, dataset_options)
 }
 
 /// Create a `RasterResultDescriptor` for the given `band` and `dataset`. If the raster data type is
