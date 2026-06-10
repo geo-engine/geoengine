@@ -632,18 +632,17 @@ mod tests {
         use crate::operations::reproject::Reproject;
         use crate::primitives::FeatureData;
         use crate::spatial_reference::{
-            CoordinateProjection, DefaultCoordinateProjector, SpatialReference,
-            SpatialReferenceAuthority,
+            DefaultCoordinateProjector, SpatialReference, SpatialReferenceAuthority,
         };
 
         use crate::util::well_known_data::{
-            COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
-            MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
+            COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
+            MARBURG_EPSG_3857, MARBURG_EPSG_4326,
         };
 
         let from = SpatialReference::epsg_4326();
         let to = SpatialReference::new(SpatialReferenceAuthority::Epsg, 900_913);
-        let projector = DefaultCoordinateProjector::from_known_srs(from, to).unwrap();
+        let projector = DefaultCoordinateProjector::new(from, to).unwrap();
 
         let collection = MultiLineStringCollection::from_slices(
             &[
@@ -660,14 +659,10 @@ mod tests {
         .unwrap();
 
         let expected = [
-            MultiLineString::new(vec![vec![MARBURG_EPSG_900_913, HAMBURG_EPSG_900_913]]).unwrap(),
+            MultiLineString::new(vec![vec![MARBURG_EPSG_3857, HAMBURG_EPSG_3857]]).unwrap(),
             MultiLineString::new(vec![
-                vec![
-                    COLOGNE_EPSG_900_913,
-                    MARBURG_EPSG_900_913,
-                    HAMBURG_EPSG_900_913,
-                ],
-                vec![HAMBURG_EPSG_900_913, COLOGNE_EPSG_900_913],
+                vec![COLOGNE_EPSG_3857, MARBURG_EPSG_3857, HAMBURG_EPSG_3857],
+                vec![HAMBURG_EPSG_3857, COLOGNE_EPSG_3857],
             ])
             .unwrap(),
         ];
