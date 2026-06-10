@@ -22,7 +22,7 @@ use snafu::Snafu;
 use super::{GdalDatasetParameters, GdalReadAdvise};
 use crate::source::gdal_source::GdalRasterLoaderError;
 use crate::source::gdal_source::reader::GridAndProperties;
-use crate::util::TemporaryGdalThreadLocalConfigOptions;
+use crate::util::GdalConfigOptions;
 use crate::util::gdal::gdal_open_ex_gdal_error;
 
 /// Global storage for the detected path, initialized on first access.
@@ -611,7 +611,7 @@ where
 pub struct GdalDatasetCache {
     params: Option<GdalDatasetParameters>,
     dataset: Option<GdalDataset>,
-    thread_local: Option<TemporaryGdalThreadLocalConfigOptions>,
+    thread_local: Option<GdalConfigOptions>,
 }
 
 struct PrevDatasetOpt {
@@ -629,17 +629,17 @@ impl GdalDatasetCache {
 
     fn open_ex(
         dataset_params: &GdalDatasetParameters,
-    ) -> Result<(GdalDataset, Option<TemporaryGdalThreadLocalConfigOptions>), GdalError> {
+    ) -> Result<(GdalDataset, Option<GdalConfigOptions>), GdalError> {
         let options = dataset_params
             .gdal_open_options
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
         // reverts the thread local configs on drop
-        let thread_local_configs: Option<TemporaryGdalThreadLocalConfigOptions> = dataset_params
+        let thread_local_configs: Option<GdalConfigOptions> = dataset_params
             .gdal_config_options
             .as_ref()
-            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options))
+            .map(|config_options| GdalConfigOptions::new(config_options))
             .transpose()
             .expect("Thread local options must not fail");
 

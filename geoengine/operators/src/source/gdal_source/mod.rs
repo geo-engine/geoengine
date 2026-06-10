@@ -1548,7 +1548,7 @@ mod tests {
     use crate::source::gdal_source::process::GdalIpcPayload;
     use crate::test_data;
     use crate::util::gdal::{add_ndvi_dataset, gdal_open_ex_gdal_error};
-    use crate::util::{Result, TemporaryGdalThreadLocalConfigOptions};
+    use crate::util::{GdalConfigOptions, Result};
     use float_cmp::assert_approx_eq;
     use gdal::{DatasetOptions, GdalOpenFlags};
     use geoengine_datatypes::hashmap;
@@ -3105,7 +3105,7 @@ mod tests {
 
         let _thread_local_configs = options
             .as_ref()
-            .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
+            .map(|config_options| GdalConfigOptions::new(config_options));
 
         // first fail
         let result = gdal_open_ex_gdal_error(
