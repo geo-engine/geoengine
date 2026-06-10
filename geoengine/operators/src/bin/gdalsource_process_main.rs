@@ -12,6 +12,7 @@ use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
 
 use tracing::Level;
+use tracing_subscriber::fmt;
 
 fn exit_with_error(msg: impl Display) -> ! {
     tracing::error!("Error: {msg}");
@@ -34,6 +35,15 @@ fn setup() -> (Token, Level) {
     }
 }
 
+fn setup_logging(level: Level) {
+    fmt()
+        .with_max_level(level)
+        .with_writer(std::io::stderr)
+        .with_target(true)
+        .with_ansi(false)
+        .init();
+}
+
 /// We install a GDAL error handler that logs all messages with our log macros.
 fn reroute_gdal_logging() {
     gdal::config::set_error_handler(|error_type, error_num, error_msg| {
@@ -44,7 +54,7 @@ fn reroute_gdal_logging() {
                 tracing::info!(target: LOG_TARGET, "GDAL None {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Debug => {
-                tracing::debug!(target: LOG_TARGET, "GDAL Debug {error_num}: {error_msg}");
+                tracing::info!(target: LOG_TARGET, "GDAL Debug {error_num}: {error_msg}");
             }
             gdal::errors::CplErrType::Warning => {
                 tracing::warn!(target: LOG_TARGET, "GDAL Warning {error_num}: {error_msg}");
@@ -60,10 +70,9 @@ fn reroute_gdal_logging() {
 }
 
 fn main() {
-    let (token, _debug_lvl) = setup();
+    let (token, debug_lvl) = setup();
+    setup_logging(debug_lvl);
     reroute_gdal_logging();
-
-    // TODO: add a logger?
 
     run(token);
 }
@@ -125,7 +134,7 @@ fn run(token: Token) {
 
         // If helper returns an error, it means the underlying IPC channel is completely broken
         if let Err(err) = raster_type_dispatch(payload, &mut dataset_cache, &sender) {
-            eprintln!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
+            tracing::error!("Fatal IPC channel error: {err:?}. Exiting worker thread.");
             break;
         }
     }
