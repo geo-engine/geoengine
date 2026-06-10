@@ -426,7 +426,7 @@ where
                 .map(move |collection_result| {
                     collection_result.and_then(|collection| {
                         DefaultCoordinateProjector::from_known_srs(self.from, self.to)
-                            .and_then(|projector| collection.reproject(projector.as_ref()))
+                            .and_then(|projector| collection.reproject(&projector))
                             .map_err(Into::into)
                     })
                 })
@@ -872,8 +872,8 @@ mod tests {
             Identifier,
             test::TestDefault,
             well_known_data::{
-                COLOGNE_EPSG_900_913, COLOGNE_EPSG_4326, HAMBURG_EPSG_900_913, HAMBURG_EPSG_4326,
-                MARBURG_EPSG_900_913, MARBURG_EPSG_4326,
+                COLOGNE_EPSG_3857, COLOGNE_EPSG_4326, HAMBURG_EPSG_3857, HAMBURG_EPSG_4326,
+                MARBURG_EPSG_3857, MARBURG_EPSG_4326,
             },
         },
     };
@@ -896,9 +896,9 @@ mod tests {
         )?;
 
         let expected = MultiPoint::many(vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
         ])
         .unwrap();
 
@@ -972,9 +972,9 @@ mod tests {
         )?;
 
         let expected = [MultiLineString::new(vec![vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
         ]])
         .unwrap()];
 
@@ -1054,10 +1054,10 @@ mod tests {
         )?;
 
         let expected = [MultiPolygon::new(vec![vec![vec![
-            MARBURG_EPSG_900_913,
-            COLOGNE_EPSG_900_913,
-            HAMBURG_EPSG_900_913,
-            MARBURG_EPSG_900_913,
+            MARBURG_EPSG_3857,
+            COLOGNE_EPSG_3857,
+            HAMBURG_EPSG_3857,
+            MARBURG_EPSG_3857,
         ]]])
         .unwrap()];
 
@@ -1897,12 +1897,14 @@ mod tests {
 
         let out_spatial_grid = spatial_grid.reproject(&projector).unwrap();
 
-        assert_eq!(
+        assert_approx_eq!(
+            Coordinate2D,
             out_spatial_grid.geo_transform.origin_coordinate(),
             Coordinate2D::new(0., 0.)
         );
 
-        assert_eq!(
+        assert_approx_eq!(
+            SpatialResolution,
             out_spatial_grid.geo_transform.spatial_resolution(),
             SpatialResolution::new_unchecked(14_212.246_793_017_477, 14_212.246_793_017_477)
         );

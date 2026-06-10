@@ -115,6 +115,8 @@ gdal-sys = "0.12"
 geo = "0.32.0"
 geo-types = "0.7.18"                                      # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
+geodesy = {version = "0.15"}
+crs-definitions = { version = "0.4.0", features = ["proj4"] }
 httptest = "0.16"
 image = "0.25"
 indoc = "2.0"

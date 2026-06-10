@@ -14,6 +14,7 @@ bench = false
 [features]
 
 [dependencies]
+geodesy = { workspace = true }
 arrow = { workspace = true }
 arrow-array = { workspace = true }
 arrow-ord = { workspace = true }
@@ -44,7 +45,8 @@ wkt = { workspace = true }
 strum = { workspace = true }
 tempfile = { workspace = true }
 tracing = { workspace = true }
-crs-bounds = { version = "0.9.2", path = "../crs-bounds" }
+crs-bounds = { path = "../crs-bounds", features = [] }
+crs-definitions = { workspace = true }
 
 [dev-dependencies]
 criterion = { workspace = true }

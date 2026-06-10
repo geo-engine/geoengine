@@ -1,4 +1,3 @@
-use crate::spatial_reference::mixed_area_of_use_provider::MixedAreaOfUseProvider;
 use crate::{
     error, operations::reproject::Reproject, primitives::AxisAlignedRectangle, util::Result,
 };
@@ -21,18 +20,22 @@ pub use area_of_use_provider::AreaOfUseProvider;
 mod proj_projector;
 use proj_projector::{ProjAreaOfUseProvider, ProjCoordinateProjector};
 
-//mod geodesy_projector;
-//pub use geodesy_projector::GeodesyCoordinateProjector;
+mod geodesy_projector;
+pub use geodesy_projector::{Error as GeodesyProjectorError, GeodesyCoordinateProjector};
 
 mod static_epsg_area_provider;
 use static_epsg_area_provider::StaticEpsgAreaProvider;
 
-mod mixed_area_of_use_provider;
-
 mod projection_provider;
 pub use projection_provider::CoordinateProjection;
 
-pub type DefaultCoordinateProjector = ProjCoordinateProjector;
+mod mixed_area_of_use_provider;
+use mixed_area_of_use_provider::MixedAreaOfUseProvider;
+
+mod mixed_projector;
+use mixed_projector::MixedCoordinateProjector;
+
+pub type DefaultCoordinateProjector = MixedCoordinateProjector;
 pub type DefaultAreaOfUseProvider = MixedAreaOfUseProvider;
 
 /// A spatial reference authority that is part of a spatial reference definition
