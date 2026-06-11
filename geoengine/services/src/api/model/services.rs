@@ -1435,8 +1435,15 @@ mod tests {
 
         let api: StacProviderS3Config = internal.into();
 
-        assert_eq!(api.endpoint, "https://example-s3.local");
-        assert_eq!(api.access_key.0.as_deref(), Some(SECRET_REPLACEMENT));
-        assert_eq!(api.secret_key.0.as_deref(), Some(SECRET_REPLACEMENT));
+        let api_json = serde_json::to_value(&api).expect("api config must serialize to json");
+
+        assert_eq!(
+            api_json,
+            serde_json::json!({
+                "endpoint":"https://example-s3.local",
+                "accessKey": SECRET_REPLACEMENT,
+                "secretKey": SECRET_REPLACEMENT
+            })
+        );
     }
 }
