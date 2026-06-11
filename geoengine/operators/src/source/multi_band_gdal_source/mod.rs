@@ -299,13 +299,18 @@ impl GdalRasterLoader {
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
-        let config_options = if let Some(config_options) = &dataset_params.gdal_config_options {
-            // ensure that GDAL only uses a single thread because otherweise the thread local configs may not be used by all gdal threads
-            let mut options = config_options.clone();
-            options.push(("GDAL_NUM_THREADS".to_string(), "1".to_string()));
-            Some(options)
+        let config_options = if dataset_params.file_path.extension() == Some("jp2".as_ref()) {
+            // ensure that GDAL only uses a single thread for JP2 files because otherwise the thread local configs may not be used by all GDAL threads
+            // TODO: remove this workaround once raster loading is done via separate subprocesses
+            if let Some(config_options) = &dataset_params.gdal_config_options {
+                let mut options = config_options.clone();
+                options.push(("GDAL_NUM_THREADS".to_string(), "1".to_string()));
+                Some(options)
+            } else {
+                Some(vec![("GDAL_NUM_THREADS".to_string(), "1".to_string())])
+            }
         } else {
-            None
+            dataset_params.gdal_config_options.clone()
         };
 
         // reverts the thread local configs on drop
