@@ -11060,18 +11060,26 @@
         ],
         "properties": {
           "accessKey": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Secret_String"
+              }
             ]
           },
           "endpoint": {
             "type": "string"
           },
           "secretKey": {
-            "type": [
-              "string",
-              "null"
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/Secret_String"
+              }
             ]
           }
         }
