@@ -1707,7 +1707,7 @@ mod tests {
 
         let (sender, receiver) = ipc_channel::ipc::channel().unwrap();
 
-        sender.send(msg.clone()).unwrap();
+        sender.send(msg).unwrap();
         let recv = receiver.recv().unwrap();
         assert_eq!(msg, recv);
     }
@@ -1718,7 +1718,7 @@ mod tests {
 
         let (sender, receiver) = ipc_channel::ipc::channel().unwrap();
 
-        sender.send(msg.clone()).unwrap();
+        sender.send(msg).unwrap();
         let recv = receiver.recv().unwrap();
         assert_eq!(msg, recv);
     }
@@ -1859,12 +1859,12 @@ mod tests {
         sender.send(msg).unwrap();
         let rx_result = receiver
             .recv()
-            .inspect_err(|e| panic!("IPC receive: {:?}", e))
+            .inspect_err(|e| panic!("IPC receive: {e:?}"))
             .unwrap();
 
         let payload = match rx_result {
             Ok(r) => r,
-            Err(e) => panic!("Error receiving from IPC process: {:?}", e),
+            Err(e) => panic!("Error receiving from IPC process: {e:?}"),
         };
 
         let result_2: GdalIpcPayload<u8> = payload.into();
@@ -2271,7 +2271,6 @@ mod tests {
 
         assert!((properties.scale_option()).is_none());
         assert!(properties.offset_option().is_none());
-        dbg!("properties: {:?}", &properties);
         assert_eq!(
             properties.get_property(&RasterPropertiesKey {
                 domain: Some("IMAGE_STRUCTURE_INFO".to_string()),

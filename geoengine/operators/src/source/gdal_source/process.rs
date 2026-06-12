@@ -1,8 +1,10 @@
 use std::borrow::Cow;
 use std::env;
+use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, Stdio};
 use std::sync::OnceLock;
+use std::thread::JoinHandle;
 
 use bytemuck::{AnyBitPattern, NoUninit};
 use gdal::errors::GdalError;
@@ -542,6 +544,7 @@ impl IpcChannelMessage {
 
 pub struct ChildProcessGuard {
     child: std::process::Child,
+    log_threads: Vec<JoinHandle<()>>,
 }
 
 impl Drop for ChildProcessGuard {
@@ -549,7 +552,62 @@ impl Drop for ChildProcessGuard {
         // Forcefully kill the process when the guard is dropped
         let _ = self.child.kill();
         let _ = self.child.wait(); // Prevent zombie processes
+
+        for handle in self.log_threads.drain(..) {
+            let _ = handle.join();
+        }
     }
+}
+
+#[derive(Clone, Copy)]
+enum ChildLogStream {
+    Stdout,
+    Stderr,
+}
+
+impl ChildLogStream {
+    fn as_str(self) -> &'static str {
+        match self {
+            Self::Stdout => "stdout",
+            Self::Stderr => "stderr",
+        }
+    }
+}
+
+fn spawn_child_log_reader<R>(reader: R, child_pid: u32, stream: ChildLogStream) -> JoinHandle<()>
+where
+    R: Read + Send + 'static,
+{
+    std::thread::spawn(move || {
+        let mut reader = BufReader::new(reader);
+        let mut line = String::new();
+
+        loop {
+            line.clear();
+
+            match reader.read_line(&mut line) {
+                Ok(0) => break,
+                Ok(_) => {
+                    tracing::info!(
+                        target: "gdalsource-process",
+                        child_pid,
+                        stream = stream.as_str(),
+                        "{}",
+                        line.trim_end_matches(['\r', '\n'])
+                    );
+                }
+                Err(error) => {
+                    tracing::warn!(
+                        target: "gdalsource-process",
+                        child_pid,
+                        stream = stream.as_str(),
+                        "Failed to read child process log output: {error}"
+                    );
+                    break;
+                }
+            }
+        }
+    })
 }
 
 /// Spawns the IPC server process and establishes the communication channels.
@@ -573,17 +631,39 @@ pub fn spawn_ipc_server_process<S, R>()
 
     let exe_path = get_gdalsource_path();
 
-    let child = Command::new(exe_path)
+    let mut child = Command::new(exe_path)
         .arg(token)
         .arg("debug") // FIXME: paste log level here!
         .env_remove("LLVM_PROFILE_FILE")
         .env_remove("LLVM_PROFILE_FILE_NAME")
-        .stderr(std::process::Stdio::inherit()) // This sends child logs to the parent's stderr
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
         .map_err(IpcProcessError::from)?;
 
+    let child_pid = child.id();
+
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| IpcProcessError::IpcOther {
+            msg: "Child stdout was not piped".to_owned(),
+        })?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| IpcProcessError::IpcOther {
+            msg: "Child stderr was not piped".to_owned(),
+        })?;
+
+    let log_threads = vec![
+        spawn_child_log_reader(stdout, child_pid, ChildLogStream::Stdout),
+        spawn_child_log_reader(stderr, child_pid, ChildLogStream::Stderr),
+    ];
+
+    let guard = ChildProcessGuard { child, log_threads };
     let (_rx, channels) = server.accept().map_err(IpcProcessError::from)?;
-    Ok((ChildProcessGuard { child }, channels.0, channels.1))
+    Ok((guard, channels.0, channels.1))
 }
 
 /// Creates channels and connects to the IPC server with the given token,

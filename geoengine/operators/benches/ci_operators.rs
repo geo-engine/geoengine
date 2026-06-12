@@ -62,7 +62,7 @@ async fn raster_vector_join(
 
 fn raster_vector_join_benchmark(c: &mut Criterion) {
     let runtime = tokio::runtime::Runtime::new().unwrap();
-    let _guard = runtime.enter();
+    let guard = runtime.enter();
 
     let mut execution_context = MockExecutionContext::new_with_tiling_spec_and_tokio_handle(
         geoengine_datatypes::raster::TilingSpecification::test_default(),
@@ -101,7 +101,7 @@ fn raster_vector_join_benchmark(c: &mut Criterion) {
             .iter(|| raster_vector_join(&execution_context, &query_context, operator.clone()));
     });
 
-    drop(_guard)
+    drop(guard);
 }
 
 criterion_group!(operators, raster_vector_join_benchmark);
