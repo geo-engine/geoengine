@@ -62,19 +62,29 @@ Authorization: Bearer {{token}}
 ###
 
 # Tiles
-GET {{collectionEndpoint}}/tiles
+GET {{collectionEndpoint}}/map/tiles
 Authorization: Bearer {{token}}
 
 ###
 
 # Tileset
-GET {{collectionEndpoint}}/tiles/GeoEngineCustomTMS
+GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS
 Authorization: Bearer {{token}}
 
 ###
 
 # Tile
-GET {{collectionEndpoint}}/tiles/GeoEngineCustomTMS/0/0/0?datetime=2014-01-01T00:00:00Z
+GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/0/0/0?datetime=2014-01-01T00:00:00Z
 Authorization: Bearer {{token}}
 
 ###
+
+# Tile
+GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/0/0/1?datetime=2014-01-01T00:00:00Z
+Authorization: Bearer {{token}}
+
+###
+
+# Tile
+GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/1/0/0?datetime=2014-01-01T00:00:00Z
+Authorization: Bearer {{token}}

@@ -2905,7 +2905,13 @@
                     "http://www.opengis.net/spec/ogcapi-common-2/1.0/conf/collections",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
                     "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
-                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list"
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/core",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tileset",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/tilesets-list",
+                    "http://www.opengis.net/spec/ogcapi-tiles-1/1.0/conf/png",
+                    "http://www.opengis.net/spec/tms/2.0/conf/tilematrixset",
+                    "http://www.opengis.net/spec/tms/2.0/conf/json-tilematrixset"
                   ]
                 }
               }

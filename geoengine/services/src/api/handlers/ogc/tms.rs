@@ -18,10 +18,14 @@ use ogcapi_types::{
         TileMatrixSets, TilesCrs,
     },
 };
-use std::num::{NonZeroU16, NonZeroU64};
+use std::{
+    f64,
+    num::{NonZeroU16, NonZeroU64},
+};
 
 pub(super) const CUSTOM_TILE_MATRIX_SET_ID: &str = "GeoEngineCustomTMS";
 const CUSTOM_TILE_MATRIX_SET_TITLE: &str = "Custom Grid for Geo Engine";
+const METERS_PER_DEGREE: f64 = 2.0 * f64::consts::PI * /* SEMI_MAJOR_METRE */ 6_378_137.0 / 360.0;
 const STANDARD_PIXEL_SIZE_METERS: f64 = 0.00028;
 pub(super) const MAX_TILE_MATRIX_LEVEL: u8 = 22;
 
@@ -117,7 +121,7 @@ pub async fn tile_matrix_set<C: ApplicationContext>(
         crs: TilesCrs::Simple(crs_from_spatial_reference_option(
             descriptor.spatial_reference,
         )?),
-        ordered_axes: Vec::new(),
+        ordered_axes: vec!["Lon".into(), "Lat".into()],
         well_known_scale_set: None,
         bounding_box: None,
         tile_matrices: build_tile_matrices(&tile_size, &descriptor),
@@ -137,9 +141,11 @@ fn build_tile_matrices(
 
     (0..=MAX_TILE_MATRIX_LEVEL)
         .map(|level| {
-            let matrix_size = 1_u64 << level;
+            let matrix_y_size = 1_u64 << level;
+            let matrix_x_size = matrix_y_size * 2; // TODO: works only for EPSG:4326
             let resolution = z0_resolution / f64::from(1_u32 << level);
-            let scale_denominator = resolution / STANDARD_PIXEL_SIZE_METERS;
+            // TODO: this only works for EPSG:4326
+            let scale_denominator = resolution * METERS_PER_DEGREE / STANDARD_PIXEL_SIZE_METERS;
 
             TileMatrix {
                 id: level.to_string(),
@@ -152,8 +158,8 @@ fn build_tile_matrices(
                 point_of_origin: [point_of_origin.x, point_of_origin.y],
                 tile_width,
                 tile_height,
-                matrix_width: to_non_zero_u64(matrix_size),
-                matrix_height: to_non_zero_u64(matrix_size),
+                matrix_width: to_non_zero_u64(matrix_x_size),
+                matrix_height: to_non_zero_u64(matrix_y_size),
                 variable_matrix_widths: Vec::new(),
             }
         })

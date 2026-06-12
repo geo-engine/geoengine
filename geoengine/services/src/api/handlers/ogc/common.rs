@@ -5,7 +5,7 @@ use crate::{
             error::{self, OgcApiError},
             util::{
                 LinkCreator, crs_from_spatial_reference_option, link_creator, parse_bbox_option,
-                parse_datetime_option, raster_workflow_metadata,
+                parse_datetime_option, raster_workflow_metadata, to_ogc_bbox,
             },
         },
         workflows::{ProvenanceEntry, workflow_provenance},
@@ -21,7 +21,7 @@ use chrono::{DateTime, Utc};
 use futures::{Stream, StreamExt, TryFutureExt, TryStreamExt, stream::BoxStream};
 use geoengine_datatypes::{
     error::BoxedResultExt,
-    primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance, TimeInterval},
+    primitives::{TimeInstance, TimeInterval},
 };
 use geoengine_operators::{
     call_on_generic_raster_processor,
@@ -444,7 +444,10 @@ async fn build_collection(
             )?,
         ],
         extent: Some(Extent {
-            spatial: Some(spatial_extent(descriptor.spatial_bounds(), crs.clone())),
+            spatial: Some(SpatialExtent {
+                bbox: vec![to_ogc_bbox(descriptor.spatial_bounds())],
+                crs: crs.clone(),
+            }),
             temporal: timestamps.map(|timestamps| TemporalExtent {
                 interval: timestamps,
                 ..TemporalExtent::default()
@@ -466,21 +469,6 @@ fn attribution_from_provenance(provenance: &[ProvenanceEntry]) -> Option<String>
         .filter_map(ProvenanceEntry::attribution)
         .join(", ")
         .into()
-}
-
-fn spatial_extent(spatial_bounds: SpatialPartition2D, crs: Option<Crs>) -> SpatialExtent {
-    let lower_left = spatial_bounds.lower_left();
-    let upper_right = spatial_bounds.upper_right();
-
-    SpatialExtent {
-        bbox: vec![OgcBbox::Bbox2D([
-            lower_left.x,
-            lower_left.y,
-            upper_right.x,
-            upper_right.y,
-        ])],
-        crs,
-    }
 }
 
 fn ogc_interval(interval: TimeInterval) -> [Option<DateTime<Utc>>; 2] {

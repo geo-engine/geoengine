@@ -3,8 +3,10 @@
 use crate::api::handlers::ogc::common::CollectionsResponseFormat;
 use crate::{api::handlers::ogc::error::OgcApiError, contexts::ApplicationContext, error::Result};
 use actix_web::{FromRequest, web};
-use ogcapi_types::common::{Collection, Collections, Conformance, LandingPage};
-use ogcapi_types::tiles::{TileMatrixSet, TileMatrixSetItem, TileMatrixSets};
+use ogcapi_types::{
+    common::{Collection, Collections, Conformance, LandingPage},
+    tiles::{TileMatrixSet, TileMatrixSetItem, TileMatrixSets, TileSet, TileSetItem, TileSets},
+};
 use utoipa::OpenApi;
 
 mod common;
@@ -18,45 +20,32 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    cfg.service(
-        web::scope("/ogc/{processingGraphId}")
-            .service(web::resource(["", "/"]).route(web::get().to(common::landing_page::<C>)))
-            .service(web::resource("/conformance").route(web::get().to(common::conformance::<C>)))
-            .service(
-                web::scope("/collections")
-                    .service(
-                        web::resource(["", "/"]).route(web::get().to(common::collections::<C>)),
-                    )
-                    .service(
-                        web::resource("/{collectionId}")
-                            .route(web::get().to(common::collection::<C>)),
-                    )
-                    .service(
-                        web::resource("/{collectionId}/tiles")
-                            .route(web::get().to(tiles::collection_tilesets::<C>)),
-                    )
-                    .service(
-                        web::resource("/{collectionId}/tiles/{tileMatrixSetId}")
-                            .route(web::get().to(tiles::collection_tileset::<C>)),
-                    )
-                    .service(
-                        web::resource(
-                            "/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}",
-                        )
-                        .route(web::get().to(tiles::tile::<C>)),
-                    ),
-            )
-            .service(
-                web::scope("/tileMatrixSets")
-                    .service(
-                        web::resource(["", "/"]).route(web::get().to(tms::tile_matrix_sets::<C>)),
-                    )
-                    .service(
-                        web::resource("/{tileMatrixSetId}")
-                            .route(web::get().to(tms::tile_matrix_set::<C>)),
-                    ),
-            ),
+    let mut scope = web::scope("/ogc/{processingGraphId}");
+
+    macro_rules! bind_routes {
+        ($($path:literal -> $handler:expr),* $(,)? ) => {
+            $( scope = scope.route($path, web::get().to($handler)); )*
+        };
+    }
+
+    bind_routes!(
+        "" -> common::landing_page::<C>,
+        "/" -> common::landing_page::<C>,
+        "/conformance" -> common::conformance::<C>,
+        "/collections" -> common::collections::<C>,
+        "/collections/" -> common::collections::<C>,
+        "/collections/{collectionId}" -> common::collection::<C>,
+        "/collections/{collectionId}/" -> common::collection::<C>,
+        "/collections/{collectionId}/map/tiles" -> tiles::collection_tilesets::<C>,
+        "/collections/{collectionId}/map/tiles/" -> tiles::collection_tilesets::<C>,
+        "/collections/{collectionId}/map/tiles/{tileMatrixSetId}" -> tiles::collection_tileset::<C>,
+        "/collections/{collectionId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}" -> tiles::tile::<C>,
+        "/tileMatrixSets" -> tms::tile_matrix_sets::<C>,
+        "/tileMatrixSets/" -> tms::tile_matrix_sets::<C>,
+        "/tileMatrixSets/{tileMatrixSetId}" -> tms::tile_matrix_set::<C>,
     );
+
+    cfg.service(scope);
 }
 
 #[derive(OpenApi)]
@@ -93,10 +82,9 @@ where
             TileMatrixSets,
 
             // Tiles
-            tiles::TileSetsResponse,
-            tiles::TileSetListItemResponse,
-            tiles::TileSetMetadataResponse,
-            tiles::TemplatedTileLink,
+            TileSets,
+            TileSetItem,
+            TileSet,
         )
     )
 )]

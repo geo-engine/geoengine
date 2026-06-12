@@ -6,7 +6,10 @@ use crate::{
     contexts::SessionContext,
     workflows::workflow::{Workflow, WorkflowId},
 };
-use geoengine_datatypes::spatial_reference::{SpatialReferenceAuthority, SpatialReferenceOption};
+use geoengine_datatypes::{
+    primitives::{AxisAlignedRectangle, SpatialPartition2D},
+    spatial_reference::{SpatialReferenceAuthority, SpatialReferenceOption},
+};
 use geoengine_operators::engine::{RasterResultDescriptor, TypedResultDescriptor};
 // use geoengine_datatypes::{
 //     error::BoxedResultExt,
@@ -104,6 +107,13 @@ pub fn crs_from_spatial_reference_option(
         0, // it is generally 0 by default, e.g., <https://www.opengis.net/def/crs/EPSG/0/4326>
         spatial_reference.code(),
     ))
+}
+
+pub fn to_ogc_bbox(spatial_bounds: SpatialPartition2D) -> OgcBbox {
+    let lower_left = spatial_bounds.lower_left();
+    let upper_right = spatial_bounds.upper_right();
+
+    OgcBbox::Bbox2D([lower_left.x, lower_left.y, upper_right.x, upper_right.y])
 }
 
 // fn to_bounding_box2d(bbox: OgcBbox) -> OgcApiResult<BoundingBox2D> {

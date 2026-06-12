@@ -3,7 +3,10 @@ use crate::{
         OgcApiResult,
         error::{self, OgcApiError},
         tms::{CUSTOM_TILE_MATRIX_SET_ID, MAX_TILE_MATRIX_LEVEL},
-        util::{link_creator, parse_datetime_option},
+        util::{
+            crs_from_spatial_reference_option, link_creator, parse_datetime_option,
+            raster_workflow_metadata,
+        },
     },
     config::get_config_element,
     contexts::{ApplicationContext, SessionContext},
@@ -30,18 +33,22 @@ use geoengine_operators::{
     },
     util::raster_stream_to_png::raster_stream_to_png_bytes,
 };
-use ogcapi_types::common::{
-    Datetime as OgcDatetime, IntervalDatetime, Link,
-    link_rel::{ITEM, SELF},
-    media_type::{JSON, PNG},
+use ogcapi_types::{
+    common::{
+        Datetime as OgcDatetime, IntervalDatetime,
+        link_rel::{ITEM, SELF, TILING_SCHEME},
+        media_type::{JSON, PNG},
+    },
+    tiles::{
+        BoundingBox2D, DataType, GeospatialData, TileMatrixLimits, TileSet, TileSetItem, TileSets,
+        TilesCrs,
+    },
 };
-use serde::Serialize;
-use utoipa::{IntoParams, ToSchema};
+use utoipa::IntoParams;
 use uuid::Uuid;
 
 const TILESET_TITLE: &str = "Tileset Metadata";
 const TILESET_LIST_TITLE: &str = "Tiles in GeoEngine custom TMS";
-const RASTER_DATA_TYPE: &str = "raster";
 
 #[derive(Debug, serde::Deserialize, IntoParams)]
 #[serde(rename_all = "camelCase")]
@@ -53,47 +60,15 @@ pub struct TileQueryParams {
     pub datetime: Option<OgcDatetime>,
 }
 
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TileSetsResponse {
-    tilesets: Vec<TileSetListItemResponse>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TileSetListItemResponse {
-    title: String,
-    data_type: String,
-    tile_matrix_set_id: String,
-    links: Vec<Link>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-#[serde(rename_all = "camelCase")]
-pub struct TileSetMetadataResponse {
-    title: String,
-    data_type: String,
-    tile_matrix_set_id: String,
-    links: Vec<TemplatedTileLink>,
-}
-
-#[derive(Debug, Serialize, ToSchema)]
-pub struct TemplatedTileLink {
-    href: String,
-    rel: String,
-    r#type: String,
-    templated: bool,
-}
-
 /// OGC API Collection Tilesets List
 ///
 /// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 #[utoipa::path(
 	tag = "OGC API",
 	get,
-	path = "/ogc/{processingGraphId}/collections/{collectionId}/tiles",
+	path = "/ogc/{processingGraphId}/collections/{collectionId}/map/tiles",
 	responses(
-		(status = 200, description = "OK", body = TileSetsResponse),
+		(status = 200, description = "OK", body = TileSets),
 		(status = 404, description = "Collection not found")
 	),
 	params(
@@ -105,27 +80,42 @@ pub struct TemplatedTileLink {
 	)
 )]
 pub async fn collection_tilesets<C: ApplicationContext>(
-    _session: C::Session,
-    _app_ctx: web::Data<C>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
     path: web::Path<(WorkflowId, WorkflowId)>,
-) -> OgcApiResult<web::Json<TileSetsResponse>> {
+) -> OgcApiResult<web::Json<TileSets>> {
     let (processing_graph_id, collection_id) = path.into_inner();
 
     ensure_matching_collection(processing_graph_id, collection_id)?;
 
+    let ctx = app_ctx.session_context(session);
+    let processing_graph = ctx.db().load_workflow(&processing_graph_id).await?;
+    let descriptor =
+        raster_workflow_metadata::<C::SessionContext>(processing_graph, ctx.execution_context()?)
+            .await?;
+
     let create_link = link_creator(processing_graph_id);
 
-    Ok(web::Json(TileSetsResponse {
-        tilesets: vec![TileSetListItemResponse {
-            title: TILESET_LIST_TITLE.to_string(),
-            data_type: RASTER_DATA_TYPE.to_string(),
-            tile_matrix_set_id: CUSTOM_TILE_MATRIX_SET_ID.to_string(),
+    Ok(web::Json(TileSets {
+        tilesets: vec![TileSetItem {
+            title: Some(TILESET_LIST_TITLE.to_string()),
+            data_type: DataType::Map,
+            // tile_matrix_set_id: CUSTOM_TILE_MATRIX_SET_ID.to_string(),
+            crs: TilesCrs::Simple(crs_from_spatial_reference_option(
+                descriptor.spatial_reference,
+            )?),
+            tile_matrix_set_uri: None,
             links: vec![create_link(
-                &format!("collections/{collection_id}/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"),
+                &format!("collections/{collection_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"),
                 SELF,
                 JSON,
             )?],
         }],
+        links: vec![create_link(
+            &format!("collections/{collection_id}/map/tiles"),
+            SELF,
+            JSON,
+        )?],
     }))
 }
 
@@ -135,9 +125,9 @@ pub async fn collection_tilesets<C: ApplicationContext>(
 #[utoipa::path(
 	tag = "OGC API",
 	get,
-	path = "/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}",
+	path = "/ogc/{processingGraphId}/collections/{collectionId}/map/tiles/{tileMatrixSetId}",
 	responses(
-		(status = 200, description = "OK", body = TileSetMetadataResponse),
+		(status = 200, description = "OK", body = TileSet),
 		(status = 404, description = "Collection or tile matrix set not found")
 	),
 	params(
@@ -150,35 +140,124 @@ pub async fn collection_tilesets<C: ApplicationContext>(
 	)
 )]
 pub async fn collection_tileset<C: ApplicationContext>(
-    _session: C::Session,
-    _app_ctx: web::Data<C>,
+    session: C::Session,
+    app_ctx: web::Data<C>,
     path: web::Path<(WorkflowId, WorkflowId, String)>,
-) -> OgcApiResult<web::Json<TileSetMetadataResponse>> {
+) -> OgcApiResult<web::Json<TileSet>> {
     let (processing_graph_id, collection_id, tile_matrix_set_id) = path.into_inner();
 
     ensure_matching_collection(processing_graph_id, collection_id)?;
     ensure_matching_tile_matrix_set(tile_matrix_set_id.as_str())?;
 
-    let create_link = link_creator(processing_graph_id);
-    let base_tile_href = create_link(
-        &format!("collections/{collection_id}/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/"),
-        ITEM,
-        PNG,
-    )?
-    .href;
+    let ctx = app_ctx.session_context(session);
+    let processing_graph = ctx.db().load_workflow(&processing_graph_id).await?;
+    let descriptor =
+        raster_workflow_metadata::<C::SessionContext>(processing_graph, ctx.execution_context()?)
+            .await?;
 
-    Ok(web::Json(TileSetMetadataResponse {
-        title: TILESET_TITLE.to_string(),
-        data_type: RASTER_DATA_TYPE.to_string(),
-        tile_matrix_set_id,
-        links: vec![TemplatedTileLink {
-            href: format!(
-                "{base_tile_href}{{tileMatrix}}/{{tileRow}}/{{tileCol}}?datetime={{datetime}}"
-            ),
-            rel: ITEM.to_string(),
-            r#type: PNG.to_string(),
-            templated: true,
+    let create_link = link_creator(processing_graph_id);
+    let crs = TilesCrs::Simple(crs_from_spatial_reference_option(
+        descriptor.spatial_reference,
+    )?);
+    let spatial_bounds = descriptor.spatial_bounds();
+
+    Ok(web::Json(TileSet {
+        title: Some(TILESET_TITLE.to_string()),
+        data_type: DataType::Map,
+        description: None,
+        keywords: vec![],
+        tile_matrix_set_uri: None,
+        // tile_matrix_set_limits: vec![
+        //     // TileMatrixLimits {
+        //     //     tile_matrix: tile_matrix_set_id.clone(),
+        //     //     min_tile_row: 0,
+        //     //     max_tile_row: MAX_TILE_MATRIX_LEVEL.into(),
+        //     //     min_tile_col: 0,
+        //     //     max_tile_col: MAX_TILE_MATRIX_LEVEL.into(),
+        //     // }
+        // ],
+        tile_matrix_set_limits: (0..=MAX_TILE_MATRIX_LEVEL)
+            .map(|tile_matrix| {
+                let max = 2_u64.pow(u32::from(tile_matrix));
+                TileMatrixLimits {
+                    tile_matrix: tile_matrix.to_string(),
+                    min_tile_row: 0,
+                    max_tile_row: max,
+                    min_tile_col: 0,
+                    max_tile_col: max,
+                }
+            })
+            .collect(),
+        crs: crs.clone(),
+        epoch: None,
+        layers: vec![GeospatialData {
+            id: processing_graph_id.to_string(),
+            title: None,
+            description: None,
+            keywords: vec![],
+            data_type: DataType::Map,
+            geometry_dimension: None,
+            feature_type: None,
+            attribution: None,
+            license: None,
+            point_of_contact: None,
+            publisher: None,
+            theme: None,
+            crs: None,
+            epoch: None,
+            min_scale_denominator: None,
+            max_scale_denominator: None,
+            min_cell_size: None,
+            max_cell_size: None,
+            max_tile_matrix: Some(MAX_TILE_MATRIX_LEVEL.to_string()),
+            min_tile_matrix: Some(0.to_string()), // TODO: add lower limits if data is expensive to process
+            bounding_box: None,
+            created: None,
+            updated: None,
+            style: None,
+            geo_data_classes: vec![],
+            properties_schema: None,
+            links: vec![],
         }],
+        bounding_box: Some(BoundingBox2D {
+            lower_left: spatial_bounds.lower_left().into(),
+            upper_right: spatial_bounds.upper_right().into(),
+            crs: Some(crs),
+            ordered_axes: None, // TODO: should we add this?
+        }),
+        center_point: None,
+        style: None,
+        attribution: None, // TODO: Is this the license of the tileset or data?
+        license: None,     // TODO: Is this the license of the tileset or data?
+        access_constraints: None,
+        // access_constraints: Some(AccessConstraints::Restricted), // TODO: re-iterate about this
+        version: None,
+        created: None,
+        updated: None,
+        point_of_contact: None,
+        media_types: vec![PNG.to_string()],
+        links: vec![
+            create_link(
+                &format!("collections/{collection_id}/map/tiles/{tile_matrix_set_id}"),
+                SELF,
+                JSON,
+            )?,
+            create_link(
+                &format!("tileMatrixSets/{tile_matrix_set_id}"),
+                TILING_SCHEME,
+                JSON,
+            )?,
+            {
+                let mut link = create_link(
+                    &format!("collections/{collection_id}/map/tiles/{tile_matrix_set_id}"),
+                    ITEM,
+                    PNG,
+                )?
+                .templated(true);
+                link.href += "/{tileMatrix}/{tileRow}/{tileCol}?datetime={datetime}"; // prevents it from being urlencoded
+                link
+            },
+        ],
     }))
 }
 
@@ -188,7 +267,7 @@ pub async fn collection_tileset<C: ApplicationContext>(
 #[utoipa::path(
 	tag = "OGC API",
 	get,
-	path = "/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}",
+	path = "/ogc/{processingGraphId}/collections/{collectionId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}",
 	responses(
 		(status = 200, response = crate::api::model::responses::PngResponse),
 		(status = 400, description = "Invalid tile coordinates or datetime"),
@@ -456,7 +535,7 @@ mod tests {
 
         let req = test::TestRequest::get()
             .uri(&format!(
-                "/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles"
+                "/ogc/{processing_graph_id}/collections/{processing_graph_id}/map/tiles"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -472,12 +551,12 @@ mod tests {
                 "tilesets": [
                     {
                         "title": TILESET_LIST_TITLE,
-                        "dataType": RASTER_DATA_TYPE,
+                        "dataType": "map",
                         "tileMatrixSetId": CUSTOM_TILE_MATRIX_SET_ID,
                         "links": [
                             {
                                 "href": format!(
-                                    "{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"
+                                    "{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"
                                 ),
                                 "rel": "self",
                                 "type": "application/json"
@@ -496,7 +575,7 @@ mod tests {
 
         let req = test::TestRequest::get()
 			.uri(&format!(
-				"/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"
+				"/ogc/{processing_graph_id}/collections/{processing_graph_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}"
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -510,12 +589,12 @@ mod tests {
             body,
             serde_json::json!({
                 "title": TILESET_TITLE,
-                "dataType": RASTER_DATA_TYPE,
+                "dataType": "map",
                 "tileMatrixSetId": CUSTOM_TILE_MATRIX_SET_ID,
                 "links": [
                     {
                         "href": format!(
-                            "{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/{{tileMatrix}}/{{tileRow}}/{{tileCol}}?datetime={{datetime}}"
+                            "{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/{{tileMatrix}}/{{tileRow}}/{{tileCol}}?datetime={{datetime}}"
                         ),
                         "rel": "item",
                         "type": "image/png",
@@ -532,7 +611,7 @@ mod tests {
 
         let req = test::TestRequest::get()
 			.uri(&format!(
-				"/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-01-01T00:00:00Z"
+				"/ogc/{processing_graph_id}/collections/{processing_graph_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-01-01T00:00:00Z"
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
