@@ -77,7 +77,7 @@ fn open_telemetry_layer<S>(
 ) -> Result<
     tracing_opentelemetry::OpenTelemetryLayer<
         S,
-        impl opentelemetry::trace::Tracer<Span: Send + Sync> + use<S>,
+        impl opentelemetry::trace::Tracer<Span: Send + Sync>,
     >,
 >
 where
@@ -87,10 +87,12 @@ where
     use opentelemetry_otlp::WithExportConfig;
     use opentelemetry_sdk::trace::Sampler;
     use opentelemetry_sdk::trace::SdkTracerProvider;
+
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()
-        .with_endpoint(open_telemetry_config.endpoint.to_string())
+        .with_endpoint(open_telemetry_config.endpoint.clone())
         .build()?;
+
     let provider = SdkTracerProvider::builder()
         .with_batch_exporter(exporter)
         .with_sampler(Sampler::AlwaysOn)
