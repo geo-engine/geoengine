@@ -6,22 +6,30 @@ POST http://localhost:3030/api/anonymous
 
 ###
 
-@processingGraphId = {{rasterProcessGraph.response.body.$.id}}
-@endpoint = http://localhost:3030/api/ogc/{{processingGraphId}}
-@collectionEndpoint = {{endpoint}}/collections/{{processingGraphId}}
-
-# @name rasterProcessGraph
-POST http://localhost:3030/api/workflow
+# @name collections
+GET http://localhost:3030/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20
 Authorization: Bearer {{token}}
-Content-Type: application/json
 
-{
-    "type": "Raster",
-    "operator": {
-        "type": "GdalSource",
-        "params": {"data": "ndvi"}
-    }
-}
+@dataConnectorId = {{collections.response.body.$.items[?(@.name=='NDVI')].id.providerId}}
+@layerId = {{collections.response.body.$.items[?(@.name=='NDVI')].id.layerId}}
+
+@endpoint = http://localhost:3030/api/ogc/{{dataConnectorId}}/{{layerId}}
+@collectionEndpoint = {{endpoint}}/collections/{{layerId}}
+
+###
+
+# # @name rasterProcessGraph
+# POST http://localhost:3030/api/workflow
+# Authorization: Bearer {{token}}
+# Content-Type: application/json
+
+# {
+#     "type": "Raster",
+#     "operator": {
+#         "type": "GdalSource",
+#         "params": {"data": "ndvi"}
+#     }
+# }
 
 ###
 

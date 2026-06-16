@@ -1,20 +1,21 @@
 use crate::{
-    api::handlers::{
-        ogc::{
-            OgcApiResult,
-            error::{self, OgcApiError},
-            util::{
-                LinkCreator, crs_from_spatial_reference_option, link_creator, parse_bbox_option,
-                parse_datetime_option, raster_workflow_metadata, to_ogc_bbox,
+    api::{
+        handlers::{
+            ogc::{
+                OgcApiResult,
+                error::{self, OgcApiError},
+                util::{
+                    LinkCreator, crs_from_spatial_reference_option, link_creator, load_layer,
+                    parse_bbox_option, parse_datetime_option, raster_workflow_metadata,
+                    to_ogc_bbox,
+                },
             },
+            workflows::{ProvenanceEntry, workflow_provenance},
         },
-        workflows::{ProvenanceEntry, workflow_provenance},
+        model::datatypes::{DataProviderId, LayerId},
     },
     contexts::{ApplicationContext, SessionContext},
-    workflows::{
-        registry::WorkflowRegistry,
-        workflow::{Workflow, WorkflowId},
-    },
+    workflows::{registry::WorkflowRegistry, workflow::Workflow},
 };
 use actix_web::web;
 use chrono::{DateTime, Utc};
@@ -50,7 +51,7 @@ const TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets";
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{processingGraphId}/",
+    path = "/ogc/{dataConnectorId}/{layerId}/",
     responses(
         (status = 200, description = "OK", body = LandingPage,
             example = json!({
@@ -82,7 +83,8 @@ const TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets";
         )
     ),
     params(
-        ("processingGraphId" = WorkflowId, description = "ID of the processing graph, which is used as collection ID")
+        ("dataConnectorId" = DataProviderId, description = "ID of the data connector"),
+        ("layerId" = LayerId, description = "ID of the layer, which is used as collection ID"),
     ),
     security(
         ("session_token" = [])
@@ -91,15 +93,17 @@ const TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets";
 pub async fn landing_page<C: ApplicationContext>(
     _session: C::Session,
     _app_ctx: web::Data<C>,
-    processing_graph_id: web::Path<WorkflowId>,
+    path: web::Path<(DataProviderId, LayerId)>,
 ) -> OgcApiResult<web::Json<LandingPage>> {
-    let processing_graph_id = processing_graph_id.into_inner();
-    let create_link = link_creator(processing_graph_id);
+    let (data_connector_id, layer_id) = path.into_inner();
+    let create_link = link_creator(data_connector_id, layer_id.clone());
 
     Ok(web::Json(LandingPage {
-        title: Some(format!("Geo Engine OGC API [{processing_graph_id}]")),
+        title: Some(format!(
+            "Geo Engine OGC API [{data_connector_id}/{layer_id}]"
+        )),
         description: Some(format!(
-            "OGC API Landing Page for Geo Engine and processing graph {processing_graph_id}"
+            "OGC API Landing Page for Geo Engine and layer {layer_id} of data connector {data_connector_id}"
         )),
         links: vec![
             create_link("", SELF, JSON)?,
@@ -117,7 +121,7 @@ pub async fn landing_page<C: ApplicationContext>(
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{processingGraphId}/conformance",
+    path = "/ogc/{dataConnectorId}/{layerId}/conformance",
     responses(
         (status = 200, description = "OK", body = Conformance,
             example = json!({
@@ -139,7 +143,8 @@ pub async fn landing_page<C: ApplicationContext>(
         )
     ),
     params(
-        ("processingGraphId" = WorkflowId, description = "ID of the processing graph, which is used as collection ID")
+        ("dataConnectorId" = DataProviderId, description = "ID of the data connector"),
+        ("layerId" = LayerId, description = "ID of the layer, which is used as collection ID"),
     ),
     security(
         ("session_token" = [])
@@ -148,7 +153,7 @@ pub async fn landing_page<C: ApplicationContext>(
 pub async fn conformance<C: ApplicationContext>(
     _session: C::Session,
     _app_ctx: web::Data<C>,
-    _processing_graph_id: web::Path<WorkflowId>,
+    _path: web::Path<(DataProviderId, LayerId)>,
 ) -> web::Json<Conformance> {
     web::Json(Conformance::new(&[
         "http://www.opengis.net/spec/ogcapi-common-1/1.0/conf/core",
@@ -212,12 +217,13 @@ pub enum CollectionsResponseFormat {
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{processingGraphId}/collections",
+    path = "/ogc/{dataConnectorId}/{layerId}/collections",
     responses(
         (status = 200, description = "OK", body = Collections)
     ),
     params(
-        ("processingGraphId" = WorkflowId, description = "ID of the processing graph, which is used as collection ID"),
+        ("dataConnectorId" = DataProviderId, description = "ID of the data connector"),
+        ("layerId" = LayerId, description = "ID of the layer, which is used as collection ID"),
         CollectionsQueryParams,
     ),
     security(
@@ -227,25 +233,25 @@ pub enum CollectionsResponseFormat {
 pub async fn collections<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    processing_graph_id: web::Path<WorkflowId>,
+    path: web::Path<(DataProviderId, LayerId)>,
     _query: web::Query<CollectionsQueryParams>,
 ) -> OgcApiResult<web::Json<Collections>> {
-    let processing_graph_id = processing_graph_id.into_inner();
+    let (data_connector_id, layer_id) = path.into_inner();
 
     let ctx = app_ctx.session_context(session);
-    let processing_graph = ctx.db().load_workflow(&processing_graph_id).await?;
+    let layer = load_layer::<C>(&ctx, data_connector_id, layer_id.clone()).await?;
 
-    let create_link = link_creator(processing_graph_id);
+    let create_link = link_creator(data_connector_id, layer_id.clone());
 
     let collections = vec![
         build_collection(
-            processing_graph_id,
+            layer_id,
             &create_link,
             raster_workflow_metadata::<C::SessionContext>(
-                processing_graph.clone(),
+                layer.workflow.clone(),
                 ctx.execution_context()?,
             ),
-            workflow_provenance(&processing_graph, &ctx).map_err(Into::into),
+            workflow_provenance(&layer.workflow, &ctx).map_err(Into::into),
             no_timestamps(),
         )
         .await?,
@@ -286,12 +292,13 @@ pub struct CollectionQueryParams {
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{processingGraphId}/collections/{processingGraphId}",
+    path = "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}",
     responses(
         (status = 200, description = "OK", body = Collection)
     ),
     params(
-        ("processingGraphId" = WorkflowId, description = "ID of the processing graph, which is used as collection ID")
+        ("dataConnectorId" = DataProviderId, description = "ID of the data connector"),
+        ("layerId" = LayerId, description = "ID of the layer, which is used as collection ID"),
     ),
     security(
         ("session_token" = [])
@@ -300,38 +307,41 @@ pub struct CollectionQueryParams {
 pub async fn collection<C: ApplicationContext>(
     session: C::Session,
     app_ctx: web::Data<C>,
-    path: web::Path<(WorkflowId, WorkflowId)>,
+    path: web::Path<(DataProviderId, LayerId, LayerId)>,
     _query: web::Query<CollectionQueryParams>,
 ) -> OgcApiResult<web::Json<Collection>> {
-    let (processing_graph_id, collection_id) = path.into_inner();
+    let (data_connector_id, layer_id, collection_id) = path.into_inner();
 
-    if processing_graph_id != collection_id {
+    if layer_id != collection_id {
         return Err(OgcApiError::CollectionNotFound { collection_id })?;
     }
 
     let ctx = app_ctx.session_context(session);
-    let processing_graph = ctx.db().load_workflow(&processing_graph_id).await?;
+    let layer = load_layer::<C>(&ctx, data_connector_id, layer_id.clone()).await?;
+
+    let processing_graph_id = ctx.db().register_workflow(layer.workflow.clone()).await?;
+
     let query_context = ctx.query_context(processing_graph_id.0, Uuid::new_v4())?;
 
-    let create_link = link_creator(processing_graph_id);
-
     let descriptor = raster_workflow_metadata::<C::SessionContext>(
-        processing_graph.clone(),
+        layer.workflow.clone(),
         ctx.execution_context()?,
     )
     .await?;
 
     let raster_query_processor = raster_query_processor::<C::SessionContext>(
-        processing_graph.clone(),
+        layer.workflow.clone(),
         ctx.execution_context()?,
     )
     .await?;
 
+    let create_link = link_creator(data_connector_id, layer_id.clone());
+
     let collection = build_collection(
-        processing_graph_id,
+        layer_id,
         &create_link,
         futures::future::ready(Ok(descriptor.clone())),
-        workflow_provenance(&processing_graph, &ctx).map_err(Into::into),
+        workflow_provenance(&layer.workflow, &ctx).map_err(Into::into),
         Some(
             time_stream::<C::SessionContext>(
                 &query_context,
@@ -408,7 +418,7 @@ fn no_timestamps() -> Option<impl Stream<Item = OgcApiResult<TimeInterval>>> {
 }
 
 async fn build_collection(
-    collection_id: WorkflowId,
+    collection_id: LayerId,
     create_link: &LinkCreator,
     descriptor: impl Future<Output = OgcApiResult<RasterResultDescriptor>>,
     provenance: impl Future<Output = OgcApiResult<Vec<ProvenanceEntry>>>,
@@ -432,7 +442,7 @@ async fn build_collection(
         id: collection_id.to_string(),
         title: Some(format!("Raster Layer [{collection_id}]")),
         description: Some(format!(
-            "Raster collection generated from processing graph `{collection_id}`"
+            "Raster collection generated from layer `{collection_id}`"
         )),
         item_type: "tile".to_string(), // TODO: investigate appropriate item type
         links: vec![
@@ -490,39 +500,37 @@ fn time_instance_to_ogc_datetime(time_instance: TimeInstance) -> Option<DateTime
 
 #[cfg(test)]
 mod tests {
-    use super::TILESETS_REL;
-    use crate::contexts::{
-        ApplicationContext, PostgresContext, Session, SessionContext, SessionId,
+    use super::*;
+    use crate::{
+        api::model::datatypes::DataProviderId,
+        contexts::{ApplicationContext, PostgresContext, Session, SessionContext, SessionId},
+        ge_context,
+        util::tests::{add_ndvi_to_layers, admin_login, read_body_json, send_test_request},
     };
-    use crate::ge_context;
-    use crate::users::UserAuth;
-    use crate::util::tests::{read_body_json, register_ndvi_workflow_helper, send_test_request};
-    use crate::workflows::workflow::WorkflowId;
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use pretty_assertions::assert_eq;
     use tokio_postgres::NoTls;
 
-    async fn session_and_processing_graph_id(
+    async fn session_and_layer_id(
         app_ctx: &PostgresContext<NoTls>,
-    ) -> (SessionId, WorkflowId) {
-        let session = app_ctx.create_anonymous_session().await.unwrap();
+    ) -> (SessionId, DataProviderId, LayerId) {
+        let session = admin_login(app_ctx).await;
         let ctx = app_ctx.session_context(session.clone());
 
         let session_id = ctx.session().id();
+        let (data_connector_id, layer_id) = add_ndvi_to_layers(app_ctx).await;
 
-        let (_, processing_graph_id) = register_ndvi_workflow_helper(app_ctx).await;
-
-        (session_id, processing_graph_id)
+        (session_id, data_connector_id.into(), layer_id.into())
     }
 
     #[ge_context::test]
     async fn it_returns_ogc_landing_page(app_ctx: PostgresContext<NoTls>) {
         let server_url = "http://127.0.0.1:3030";
-        let (session_id, processing_graph_id) = session_and_processing_graph_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
-            .uri(&format!("/ogc/{processing_graph_id}/"))
+            .uri(&format!("/ogc/{data_connector_id}/{layer_id}"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx).await;
@@ -534,26 +542,26 @@ mod tests {
         assert_eq!(
             body,
             serde_json::json!({
-              "title": format!("Geo Engine OGC API [{processing_graph_id}]"),
-              "description": format!("OGC API Landing Page for Geo Engine and processing graph {processing_graph_id}"),
+              "title": format!("Geo Engine OGC API [{data_connector_id}/{layer_id}]"),
+              "description": format!("OGC API Landing Page for Geo Engine and layer {layer_id} of data connector {data_connector_id}"),
               "links": [
                 {
-                  "href": format!("{server_url}/api/ogc/{processing_graph_id}/"),
+                  "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/"),
                   "rel": "self",
                   "type": "application/json"
                 },
                 {
-                  "href": format!("{server_url}/api/ogc/{processing_graph_id}/conformance"),
+                  "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/conformance"),
                   "rel": "conformance",
                   "type": "application/json"
                 },
                 {
-                  "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections"),
+                  "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections"),
                   "rel": "data",
                   "type": "application/json"
                 },
                 {
-                  "href": format!("{server_url}/api/ogc/{processing_graph_id}/tileMatrixSets"),
+                  "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/tileMatrixSets"),
                   "rel": "http://www.opengis.net/def/rel/ogc/1.0/tiling-schemes",
                   "type": "application/json"
                 }
@@ -564,10 +572,10 @@ mod tests {
 
     #[ge_context::test]
     async fn it_returns_ogc_conformance_classes(app_ctx: PostgresContext<NoTls>) {
-        let (session_id, processing_graph_id) = session_and_processing_graph_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
-            .uri(&format!("/ogc/{processing_graph_id}/conformance"))
+            .uri(&format!("/ogc/{data_connector_id}/{layer_id}/conformance"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx).await;
@@ -599,11 +607,10 @@ mod tests {
     #[ge_context::test]
     async fn it_returns_ogc_collections(app_ctx: PostgresContext<NoTls>) {
         let server_url = "http://127.0.0.1:3030";
-        let (session_id, processing_graph_id) = session_and_processing_graph_id(&app_ctx).await;
-        let collection_id = processing_graph_id.to_string();
+        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
-            .uri(&format!("/ogc/{processing_graph_id}/collections"))
+            .uri(&format!("/ogc/{data_connector_id}/{layer_id}/collections"))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
         let res = send_test_request(req, app_ctx).await;
@@ -616,15 +623,15 @@ mod tests {
             body,
             serde_json::json!({
                 "links": [{
-                    "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections"),
+                    "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections"),
                     "rel": "self",
                     "type": "application/json"
                 }],
                 "numberReturned": 1,
                 "collections": [{
-                    "id": collection_id,
-                    "title": format!("Raster Layer [{processing_graph_id}]"),
-                    "description": format!("Raster collection generated from processing graph `{processing_graph_id}`"),
+                    "id": layer_id,
+                    "title": format!("Raster Layer [{layer_id}]"),
+                    "description": format!("Raster collection generated from layer `{layer_id}`"),
                     "attribution": "Sample Citation",
                     "extent": {
                         "spatial": {
@@ -636,12 +643,12 @@ mod tests {
                     "crs": ["http://www.opengis.net/def/crs/EPSG/0/4326"],
                     "links": [
                         {
-                            "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}"),
+                            "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}"),
                             "rel": "self",
                             "type": "application/json"
                         },
                         {
-                            "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles"),
+                            "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/tiles"),
                             "rel": TILESETS_REL,
                             "type": "application/json"
                         }
@@ -655,11 +662,11 @@ mod tests {
     #[ge_context::test]
     async fn it_returns_ogc_collection_metadata(app_ctx: PostgresContext<NoTls>) {
         let server_url = "http://127.0.0.1:3030";
-        let (session_id, processing_graph_id) = session_and_processing_graph_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(
-                "/ogc/{processing_graph_id}/collections/{processing_graph_id}"
+                "/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}"
             ))
             .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -672,9 +679,9 @@ mod tests {
         assert_eq!(
             body,
             serde_json::json!({
-                "id": processing_graph_id,
-                "title": format!("Raster Layer [{processing_graph_id}]"),
-                "description": format!("Raster collection generated from processing graph `{processing_graph_id}`"),
+                "id": layer_id,
+                "title": format!("Raster Layer [{layer_id}]"),
+                "description": format!("Raster collection generated from layer `{layer_id}`"),
                 "attribution": "Sample Citation",
                 "extent": {
                     "spatial": {
@@ -697,12 +704,12 @@ mod tests {
                 "itemType": "tile",
                 "links": [
                     {
-                        "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}"),
+                        "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}"),
                         "rel": "self",
                         "type": "application/json"
                     },
                     {
-                        "href": format!("{server_url}/api/ogc/{processing_graph_id}/collections/{processing_graph_id}/tiles"),
+                        "href": format!("{server_url}/api/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/tiles"),
                         "rel": TILESETS_REL,
                         "type": "application/json"
                     }

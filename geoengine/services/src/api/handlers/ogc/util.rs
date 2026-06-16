@@ -1,10 +1,19 @@
+use super::error;
 use crate::{
-    api::handlers::{
-        ogc::{OgcApiResult, error::OgcApiError},
-        workflows::workflow_metadata,
+    api::{
+        handlers::{
+            ogc::{OgcApiResult, error::OgcApiError},
+            workflows::workflow_metadata,
+        },
+        model::datatypes::{DataProviderId, LayerId},
     },
-    contexts::SessionContext,
-    workflows::workflow::{Workflow, WorkflowId},
+    contexts::{ApplicationContext, SessionContext},
+    layers::{
+        layer::Layer,
+        listing::LayerCollectionProvider,
+        storage::{INTERNAL_PROVIDER_ID, LayerProviderDb},
+    },
+    workflows::workflow::Workflow,
 };
 use geoengine_datatypes::{
     primitives::{AxisAlignedRectangle, SpatialPartition2D},
@@ -17,16 +26,18 @@ use geoengine_operators::engine::{RasterResultDescriptor, TypedResultDescriptor}
 // };
 use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
 use serde::{Deserialize, de::Error as _};
+use snafu::ResultExt;
 use std::str::FromStr;
 use url::Url;
 
 pub type LinkCreator = dyn Fn(&str, &'static str, &'static str) -> OgcApiResult<Link>;
 
 pub fn link_creator(
-    processing_graph_id: WorkflowId,
+    data_connector_id: DataProviderId,
+    layer_id: LayerId,
 ) -> impl Fn(&str, &'static str, &'static str) -> OgcApiResult<Link> {
     move |path: &str, rel: &'static str, mediatype: &'static str| -> OgcApiResult<Link> {
-        let base_url = ogc_base_url(processing_graph_id)?;
+        let base_url = ogc_base_url(data_connector_id, &layer_id)?;
 
         let href = base_url.join(path).map_err(crate::error::Error::from)?;
 
@@ -34,12 +45,12 @@ pub fn link_creator(
     }
 }
 
-fn ogc_base_url(processing_graph_id: WorkflowId) -> OgcApiResult<Url> {
+fn ogc_base_url(data_connector_id: DataProviderId, layer_id: &LayerId) -> OgcApiResult<Url> {
     let web_config = crate::config::get_config_element::<crate::config::Web>()?;
     let base = web_config.api_url()?;
 
     Ok(base
-        .join(&format!("ogc/{processing_graph_id}/"))
+        .join(&format!("ogc/{data_connector_id}/{layer_id}/"))
         .map_err(crate::error::Error::from)?)
 }
 
@@ -130,3 +141,33 @@ pub fn to_ogc_bbox(spatial_bounds: SpatialPartition2D) -> OgcBbox {
 //     )
 //     .boxed_context(error::InvalidBoundingBox)
 // }
+
+pub async fn load_layer<C: ApplicationContext>(
+    ctx: &C::SessionContext,
+    data_connector_id: DataProviderId,
+    layer_id: LayerId,
+) -> OgcApiResult<Layer> {
+    let data_connector_id = data_connector_id.into();
+    let layer_id = layer_id.into();
+
+    if data_connector_id == INTERNAL_PROVIDER_ID {
+        return ctx
+            .db()
+            .load_layer(&layer_id)
+            .await
+            .context(error::LayerNotFound {
+                data_connector_id,
+                layer_id,
+            });
+    }
+
+    ctx.db()
+        .load_layer_provider(data_connector_id)
+        .await?
+        .load_layer(&layer_id)
+        .await
+        .context(error::LayerNotFound {
+            data_connector_id,
+            layer_id,
+        })
+}

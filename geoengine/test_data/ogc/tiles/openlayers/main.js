@@ -14,11 +14,22 @@ import Fill from "ol/style/Fill.js";
 import Text from "ol/style/Text.js";
 import Stroke from "ol/style/Stroke.js";
 
-const processingGraphId = "1e415c9c-55f3-51a2-b50b-b5053d1debbb";
-// const sessionToken = "73f61f5d-7da8-46d5-98f7-a7485759e68c";
+const sessionToken = "00000000-0000-0000-a000-000000000000";
+
+const collections = await (
+  await fetch(
+    "http://localhost:3030/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20",
+  )
+).json();
+const collection = collections.items.find((c) => c.name === "NDVI");
+const dataConnectorId = collection.id.providerId;
+const layerId = collection.id.layerId;
+
+console.log("Layer:", dataConnectorId, layerId);
+
 const tms = "GeoEngineCustomTMS";
 
-const tileUrl = `http://localhost:3030/api/ogc/${processingGraphId}/collections/${processingGraphId}/map/tiles/${tms}`;
+const tileUrl = `http://localhost:3030/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
 console.log(tileUrl);
 
 const map = new Map({

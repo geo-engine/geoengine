@@ -66,6 +66,11 @@ cli *parameters: common::_clear
 test filter="": common::_clear
     cargo test -- {{ filter }} --nocapture
 
+# Run the tests for the geoengine-datatypes package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-datatypes workflows::workflow::tests
+[group("test")]
+test-datatypes filter="": common::_clear
+    cargo test --package geoengine-datatypes -- {{ filter }} --nocapture
+
 # Run the tests for the geoengine-services package. Optionally, a filter can be provided to run only a subset of the tests. Example: just test-services workflows::workflow::tests
 [group("test")]
 test-services filter="": common::_clear

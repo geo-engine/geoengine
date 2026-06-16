@@ -20,7 +20,7 @@ where
     C: ApplicationContext,
     C::Session: FromRequest,
 {
-    let mut scope = web::scope("/ogc/{processingGraphId}");
+    let mut scope = web::scope("/ogc/{dataConnectorId}/{layerId}");
 
     macro_rules! bind_routes {
         ($($path:literal -> $handler:expr),* $(,)? ) => {

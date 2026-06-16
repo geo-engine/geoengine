@@ -2643,6 +2643,7 @@ dependencies = [
  "postgres-protocol",
  "postgres-types",
  "proj",
+ "proj-sys",
  "rayon",
  "serde",
  "serde_json",

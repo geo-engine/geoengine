@@ -1,40 +1,47 @@
 #![allow(clippy::unwrap_used)] // okay in tests
 
-use super::postgres::DatabaseConnectionConfig;
-use crate::api::model::responses::ErrorResponse;
-use crate::config::{Postgres, get_config_element};
-use crate::contexts::ApplicationContext;
-use crate::contexts::GeoEngineDb;
-use crate::contexts::PostgresContext;
-use crate::datasets::AddDataset;
-use crate::datasets::DatasetIdAndName;
-use crate::datasets::DatasetName;
-use crate::datasets::listing::Provenance;
-use crate::datasets::storage::DatasetStore;
-use crate::datasets::upload::UploadId;
-use crate::datasets::upload::UploadRootPath;
-use crate::permissions::Permission;
-use crate::permissions::PermissionDb;
-use crate::permissions::Role;
-use crate::projects::{
-    CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology, STRectangle,
-    Symbology, UpdateProject,
-};
-use crate::users::OidcManager;
-use crate::util::Identifier;
-use crate::util::middleware::OutputRequestId;
-use crate::util::server::{configure_extractors, render_404, render_405};
-use crate::workflows::registry::WorkflowRegistry;
-use crate::workflows::workflow::{Workflow, WorkflowId};
 use crate::{
-    api::handlers,
-    contexts::SessionContext,
-    datasets::storage::{DatasetDefinition, MetaDataDefinition},
-};
-use crate::{
-    config::Quota,
-    contexts::SessionId,
-    users::{UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession},
+    api::{
+        handlers::{self},
+        model::{
+            processing_graphs::{
+                GdalSource as NewGdalSource, GdalSourceParameters as NewGdalSourceParameters,
+                RasterOperator as NewRasterOperator, TypedOperator as NewTypedOperator,
+            },
+            responses::ErrorResponse,
+        },
+    },
+    config::{Postgres, Quota, get_config_element},
+    contexts::{ApplicationContext, GeoEngineDb, PostgresContext, SessionContext, SessionId},
+    datasets::{
+        AddDataset, DatasetIdAndName, DatasetName,
+        listing::Provenance,
+        storage::{DatasetDefinition, DatasetStore, MetaDataDefinition},
+        upload::{UploadId, UploadRootPath},
+    },
+    layers::{
+        layer::AddLayer,
+        listing::LayerCollectionProvider,
+        storage::{INTERNAL_PROVIDER_ID, LayerDb},
+    },
+    permissions::{Permission, PermissionDb, Role},
+    projects::{
+        CreateProject, LayerUpdate, ProjectDb, ProjectId, ProjectLayer, RasterSymbology,
+        STRectangle, Symbology, UpdateProject,
+    },
+    users::{
+        OidcManager, UserAuth, UserCredentials, UserId, UserInfo, UserRegistration, UserSession,
+    },
+    util::{
+        Identifier,
+        middleware::OutputRequestId,
+        postgres::DatabaseConnectionConfig,
+        server::{configure_extractors, render_404, render_405},
+    },
+    workflows::{
+        registry::WorkflowRegistry,
+        workflow::{Workflow, WorkflowId},
+    },
 };
 use actix_web::dev::ServiceResponse;
 use actix_web::{
@@ -44,39 +51,31 @@ use bb8_postgres::PostgresConnectionManager;
 use bb8_postgres::bb8::ManageConnection;
 use flexi_logger::Logger;
 use futures_util::Future;
-use geoengine_datatypes::dataset::DatasetId;
-use geoengine_datatypes::dataset::NamedData;
-use geoengine_datatypes::operations::image::Colorizer;
-use geoengine_datatypes::operations::image::RasterColorizer;
-use geoengine_datatypes::operations::image::RgbaColor;
-use geoengine_datatypes::primitives::CacheTtlSeconds;
-use geoengine_datatypes::primitives::Coordinate2D;
-use geoengine_datatypes::raster::GeoTransform;
-use geoengine_datatypes::raster::GridBoundingBox2D;
-use geoengine_datatypes::raster::RasterDataType;
-use geoengine_datatypes::raster::RenameBands;
-use geoengine_datatypes::spatial_reference::SpatialReference;
-use geoengine_datatypes::spatial_reference::SpatialReferenceOption;
-use geoengine_datatypes::test_data;
-use geoengine_datatypes::util::test::TestDefault;
-use geoengine_datatypes::{primitives::DateTime, raster::TilingSpecification};
-use geoengine_operators::engine::RasterBandDescriptor;
-use geoengine_operators::engine::RasterBandDescriptors;
-use geoengine_operators::engine::RasterResultDescriptor;
-use geoengine_operators::engine::SpatialGridDescriptor;
-use geoengine_operators::engine::WorkflowOperatorPath;
-use geoengine_operators::engine::{ChunkByteSize, MultipleRasterSources};
-use geoengine_operators::engine::{QueryContext, TimeDescriptor};
-use geoengine_operators::engine::{RasterOperator, TypedOperator};
-use geoengine_operators::meta::quota::QuotaTracking;
-use geoengine_operators::processing::RasterStacker;
-use geoengine_operators::processing::RasterStackerParams;
-use geoengine_operators::source::GdalDatasetGeoTransform;
-use geoengine_operators::source::GdalMetaDataStatic;
-use geoengine_operators::source::{FileNotFoundHandling, GdalDatasetParameters};
-use geoengine_operators::source::{GdalSource, GdalSourceParameters};
-use geoengine_operators::util::gdal::create_ndvi_meta_data_with_cache_ttl;
-use geoengine_operators::util::gdal::{create_ndvi_meta_data, create_ports_meta_data};
+use geoengine_datatypes::{
+    dataset::{DataProviderId, DatasetId, LayerId, NamedData},
+    operations::image::{Colorizer, RasterColorizer, RgbaColor},
+    primitives::{CacheTtlSeconds, Coordinate2D, DateTime},
+    raster::{GeoTransform, GridBoundingBox2D, RasterDataType, RenameBands, TilingSpecification},
+    spatial_reference::{SpatialReference, SpatialReferenceOption},
+    test_data,
+    util::test::TestDefault,
+};
+use geoengine_operators::{
+    engine::{
+        ChunkByteSize, MultipleRasterSources, QueryContext, RasterBandDescriptor,
+        RasterBandDescriptors, RasterOperator, RasterResultDescriptor, SpatialGridDescriptor,
+        TimeDescriptor, TypedOperator, WorkflowOperatorPath,
+    },
+    meta::quota::QuotaTracking,
+    processing::{RasterStacker, RasterStackerParams},
+    source::{
+        FileNotFoundHandling, GdalDatasetGeoTransform, GdalDatasetParameters, GdalMetaDataStatic,
+        GdalSource, GdalSourceParameters,
+    },
+    util::gdal::{
+        create_ndvi_meta_data, create_ndvi_meta_data_with_cache_ttl, create_ports_meta_data,
+    },
+};
 use rand::Rng;
 use std::fs::File;
 use std::io::BufReader;
@@ -903,6 +902,60 @@ pub async fn add_ndvi_to_datasets2<C: ApplicationContext<Session = UserSession>>
     }
 
     (dataset_id, dataset_name.into())
+}
+
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
+    app_ctx: &C,
+) -> (DataProviderId, LayerId) {
+    let (dataset_id, named_data) = add_ndvi_to_datasets2(app_ctx, true, true).await;
+    let layer_id = LayerId(dataset_id.to_string());
+
+    let system_session = UserSession::admin_session();
+    let db = app_ctx.session_context(system_session).db();
+
+    let root_collection_id = db.get_root_layer_collection_id().await.unwrap();
+
+    db.add_layer_with_id(
+        &layer_id,
+        AddLayer {
+            name: "NDVI".to_string(),
+            description: "NDVI Layer".to_string(),
+            workflow: Workflow::Typed {
+                operator: NewTypedOperator::Raster(NewRasterOperator::GdalSource(NewGdalSource {
+                    r#type: Default::default(),
+                    params: NewGdalSourceParameters {
+                        data: named_data.to_string(),
+                        overview_level: None,
+                    },
+                })),
+            },
+            symbology: Some(Symbology::Raster(RasterSymbology {
+                r#type: Default::default(),
+                opacity: 1.0,
+                raster_colorizer: RasterColorizer::SingleBand {
+                    band: 0,
+                    band_colorizer: Colorizer::linear_gradient(
+                        vec![
+                            (0.0.try_into().unwrap(), RgbaColor::black()).into(),
+                            (255.0.try_into().unwrap(), RgbaColor::white()).into(),
+                        ],
+                        RgbaColor::transparent(),
+                        RgbaColor::transparent(),
+                        RgbaColor::transparent(),
+                    )
+                    .unwrap(),
+                },
+            })),
+            properties: vec![],
+            metadata: Default::default(),
+        },
+        &root_collection_id,
+    )
+    .await
+    .unwrap();
+
+    (INTERNAL_PROVIDER_ID, layer_id)
 }
 
 #[allow(clippy::missing_panics_doc)]
