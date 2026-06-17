@@ -82,13 +82,13 @@ Authorization: Bearer {{token}}
 ###
 
 # Tile
-GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/0/0/0?datetime=2014-01-01T00:00:00Z
+GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/0/0/0?datetime=2014-04-01T00:00:00Z
 Authorization: Bearer {{token}}
 
 ###
 
 # Tile
-GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/0/0/1?datetime=2014-01-01T00:00:00Z
+GET {{collectionEndpoint}}/map/tiles/GeoEngineCustomTMS/0/1/4?datetime=2014-04-01T00:00:00Z
 Authorization: Bearer {{token}}
 
 ###

@@ -291,10 +291,16 @@ pub struct TimeStartEnd {
 #[derive(Debug, Deserialize)]
 pub struct Ogc {
     pub default_time: Option<OgcDefaultTime>,
+    pub tiles: Option<OgcApiTilesConfig>,
 }
 
 impl ConfigElement for Ogc {
     const KEY: &'static str = "ogc";
+}
+
+#[derive(Debug, Deserialize)]
+pub struct OgcApiTilesConfig {
+    pub request_timeout_seconds: Option<u64>,
 }
 
 #[derive(Debug, Deserialize)]

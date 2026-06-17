@@ -75,6 +75,10 @@ impl SpatialReference {
         Self::new(SpatialReferenceAuthority::Epsg, 4326)
     }
 
+    pub fn web_mercator() -> Self {
+        Self::new(SpatialReferenceAuthority::Epsg, 3857)
+    }
+
     pub fn proj_string(self) -> Result<String> {
         match self.authority {
             SpatialReferenceAuthority::Epsg | SpatialReferenceAuthority::Iau2000 | SpatialReferenceAuthority::Esri => {

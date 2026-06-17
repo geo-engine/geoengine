@@ -40,7 +40,7 @@ pub enum OgcApiError {
     },
 
     #[snafu(display("Invalid tile coordinates: matrix={matrix}, row={row}, col={col}"))]
-    InvalidTileCoordinates { matrix: String, row: u64, col: u64 },
+    InvalidTileCoordinates { matrix: String, row: u32, col: u32 },
 
     #[snafu(display("Received 3D bounding box, but only 2D is supported."))]
     Unsupported3DBoundingBox { coords: [f64; 6] },

@@ -15,7 +15,6 @@ use crate::{
 use actix_web::web;
 use float_cmp::approx_eq;
 use geoengine_datatypes::{
-    primitives::AxisAlignedRectangle,
     raster::{GridBounds, GridShapeAccess, TilingSpatialGridDefinition, TilingSpecification},
     spatial_reference::SpatialReference,
 };
@@ -31,6 +30,7 @@ use std::{
     f64,
     num::{NonZeroU16, NonZeroU64},
 };
+use tracing::warn;
 
 pub(super) const CUSTOM_TILE_MATRIX_SET_ID: &str = "GeoEngineCustomTMS";
 const CUSTOM_TILE_MATRIX_SET_TITLE: &str = "Custom Grid for Geo Engine";
@@ -168,14 +168,11 @@ pub fn build_tile_matrices(
     );
 
     if !approx_eq!(f64, x_resolution.abs(), y_resolution.abs()) {
-        return Err(OgcApiError::TileMatrixSetDefinitionNotAvailable {
-            tile_matrix_set_id: CUSTOM_TILE_MATRIX_SET_ID.to_string(),
-            reason: format!(
-                "Non-square pixels are not supported (x resolution: {x_resolution}, y resolution: {y_resolution})",
-            ),
-        });
+        warn!(
+            "Non-square pixels detected (x resolution: {x_resolution}, y resolution: {y_resolution})"
+        );
     }
-    let resolution = x_resolution.abs();
+    let resolution = f64::min(x_resolution.abs(), y_resolution.abs());
 
     // let spatial_bounds = descriptor.spatial_bounds();
     // let z0_resolution = spatial_bounds.size_x() / f64::from(tile_width.get());
@@ -192,8 +189,6 @@ pub fn build_tile_matrices(
     let original_x_size = to_non_zero_u64((grid_bounds.x_max() - grid_bounds.x_min() + 1) as u64);
     let original_y_size = to_non_zero_u64((grid_bounds.y_max() - grid_bounds.y_min() + 1) as u64);
 
-    let spatial_bounds = tiling_geo_transform.grid_to_spatial_bounds(&grid_bounds);
-
     let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
     let tile_grid_bounds = tiling_strategy.raster_spatial_query_to_tiling_grid_box(grid_bounds);
     let min_pixel_index =
@@ -201,7 +196,6 @@ pub fn build_tile_matrices(
 
     let min_coordinate =
         tiling_geo_transform.grid_idx_to_pixel_upper_left_coordinate_2d(min_pixel_index);
-    dbg!(min_pixel_index, min_coordinate);
 
     Ok(vec![TileMatrix {
         id: 0.to_string(),
@@ -211,7 +205,6 @@ pub fn build_tile_matrices(
         scale_denominator: scale_denominator(resolution, meters_per_unit),
         cell_size: resolution,
         corner_of_origin: CornerOfOrigin::TopLeft,
-        // point_of_origin: [spatial_bounds.upper_left().x, spatial_bounds.upper_left().y],
         point_of_origin: [min_coordinate.x, min_coordinate.y],
         tile_width,
         tile_height,
@@ -274,14 +267,17 @@ mod tests {
         contexts::{ApplicationContext, PostgresContext, Session, SessionContext, SessionId},
         ge_context,
         layers::listing::LayerCollectionProvider,
-        util::tests::{add_ndvi_to_layers, admin_login, read_body_json, send_test_request},
+        util::tests::{
+            add_ndvi_3857_to_layers, add_ndvi_to_layers, admin_login, read_body_json,
+            send_test_request,
+        },
     };
     use actix_web::{http::header, test};
     use actix_web_httpauth::headers::authorization::Bearer;
     use pretty_assertions::assert_eq;
     use tokio_postgres::NoTls;
 
-    async fn session_and_layer_id(
+    async fn session_and_4326_layer_id(
         app_ctx: &PostgresContext<NoTls>,
     ) -> (SessionId, DataProviderId, LayerId) {
         let session = admin_login(app_ctx).await;
@@ -293,10 +289,22 @@ mod tests {
         (session_id, data_connector_id.into(), layer_id.into())
     }
 
+    async fn session_and_3857_layer_id(
+        app_ctx: &PostgresContext<NoTls>,
+    ) -> (SessionId, DataProviderId, LayerId) {
+        let session = admin_login(app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = ctx.session().id();
+        let (data_connector_id, layer_id) = add_ndvi_3857_to_layers(app_ctx).await;
+
+        (session_id, data_connector_id.into(), layer_id.into())
+    }
+
     #[ge_context::test]
     async fn it_lists_custom_tile_matrix_set(app_ctx: PostgresContext<NoTls>) {
         let server_url = "http://127.0.0.1:3030";
-        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(
@@ -333,8 +341,8 @@ mod tests {
     }
 
     #[ge_context::test]
-    async fn it_returns_custom_tile_matrix_set_definition(app_ctx: PostgresContext<NoTls>) {
-        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
+    async fn it_returns_custom_4326_tile_matrix_set_definition(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
         let session = app_ctx.session_by_id(session_id).await.unwrap();
         let ctx = app_ctx.session_context(session);
         let execution_context = ctx.execution_context().unwrap();
@@ -344,20 +352,6 @@ mod tests {
         >(layer.workflow, execution_context)
         .await
         .unwrap();
-
-        // let spatial_bounds = descriptor.spatial_bounds();
-        // let point_of_origin = spatial_bounds.upper_left();
-        // let z0_resolution = spatial_bounds.size_x() / tile_width as f64;
-        // let expected_crs = crs_from_spatial_reference_option(descriptor.spatial_reference)
-        //     .unwrap()
-        //     .to_string();
-
-        // let tiling_specification = app_ctx
-        //     .session_context(app_ctx.session_by_id(session_id).await.unwrap())
-        //     .unwrap()
-        //     .execution_context()
-        //     .unwrap()
-        //     .tiling_specification();
 
         let execution_context = ctx.execution_context().unwrap();
         let tiling_grid_definition =
@@ -404,6 +398,9 @@ mod tests {
             .as_array()
             .expect("tileMatrices should be an array");
 
+        assert_eq!(x_indices.len(), 8);
+        assert_eq!(y_indices.len(), 4);
+
         assert_eq!(
             tile_matrices[0],
             serde_json::json!({
@@ -411,7 +408,7 @@ mod tests {
                 "scaleDenominator": 39_756_960.997_597_71,
                 "cellSize": 0.1,
                 "cornerOfOrigin": "topLeft",
-                "pointOfOrigin": [-180., 90.],
+                "pointOfOrigin": [-204.8, 102.4],
                 "tileWidth": 512,
                 "tileHeight": 512,
                 "matrixWidth": x_indices.len(), // 8
@@ -423,8 +420,87 @@ mod tests {
     }
 
     #[ge_context::test]
+    async fn it_returns_custom_3857_tile_matrix_set_definition(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, data_connector_id, layer_id) = session_and_3857_layer_id(&app_ctx).await;
+        let session = app_ctx.session_by_id(session_id).await.unwrap();
+        let ctx = app_ctx.session_context(session);
+        let execution_context = ctx.execution_context().unwrap();
+        let layer = ctx.db().load_layer(&layer_id.clone().into()).await.unwrap();
+        let descriptor = super::raster_workflow_metadata::<
+            crate::contexts::PostgresSessionContext<NoTls>,
+        >(layer.workflow, execution_context)
+        .await
+        .unwrap();
+
+        let execution_context = ctx.execution_context().unwrap();
+        let tiling_grid_definition =
+            descriptor.tiling_grid_definition(execution_context.tiling_specification());
+
+        let tiling_strategy = tiling_grid_definition.generate_data_tiling_strategy();
+
+        let (x_indices, y_indices) = tiling_strategy
+            .tile_idx_iterator_from_grid_bounds(tiling_grid_definition.tiling_grid_bounds())
+            .fold(
+                (HashSet::<isize>::new(), HashSet::<isize>::new()),
+                |acc, tile_idx| {
+                    let (mut x_indices, mut y_indices) = acc;
+                    x_indices.insert(tile_idx.x());
+                    y_indices.insert(tile_idx.y());
+                    (x_indices, y_indices)
+                },
+            );
+
+        let req = test::TestRequest::get()
+            .uri(&format!(
+                "/ogc/{data_connector_id}/{layer_id}/tileMatrixSets/{CUSTOM_TILE_MATRIX_SET_ID}"
+            ))
+            .append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let body = read_body_json(res).await;
+
+        assert_eq!(status, 200, "{body}");
+
+        assert_eq!(body["id"], serde_json::json!(CUSTOM_TILE_MATRIX_SET_ID));
+        assert_eq!(
+            body["title"],
+            serde_json::json!(CUSTOM_TILE_MATRIX_SET_TITLE)
+        );
+        assert_eq!(body["uri"], serde_json::Value::Null);
+        assert_eq!(
+            body["crs"],
+            serde_json::json!("http://www.opengis.net/def/crs/EPSG/0/3857")
+        );
+
+        let tile_matrices = body["tileMatrices"]
+            .as_array()
+            .expect("tileMatrices should be an array");
+
+        assert_eq!(x_indices.len(), 6);
+        assert_eq!(y_indices.len(), 6);
+
+        assert_eq!(
+            tile_matrices[0],
+            serde_json::json!({
+                "id": "0",
+                "scaleDenominator": 50_910_769.674_345_896,
+                "cellSize": 14_255.015_508_816_849,
+                "cornerOfOrigin": "topLeft",
+                "pointOfOrigin": [-21_890_660.358_935_43, 21_897_016.897_822_894],
+                "tileWidth": 512,
+                "tileHeight": 512,
+                "matrixWidth": x_indices.len(), // 6
+                "matrixHeight": y_indices.len(), // 6
+            })
+        );
+
+        // TODO: test more levels
+    }
+
+    #[ge_context::test]
     async fn it_returns_not_found_for_unknown_tile_matrix_set(app_ctx: PostgresContext<NoTls>) {
-        let (session_id, data_connector_id, layer_id) = session_and_layer_id(&app_ctx).await;
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
 
         let req = test::TestRequest::get()
             .uri(&format!(

@@ -84,6 +84,26 @@ pub fn save_test_bytes<P: AsRef<Path>>(bytes: &[u8], filename: P) {
         .expect("it should be possible to write this file for testing");
 }
 
+/// Save bytes into a file to be used for testing.
+///
+/// If the file already exists, it will not be overwritten.
+///
+/// # Panics
+///
+/// This function panics if the file cannot be created or written.
+///
+pub fn save_test_bytes_if_not_exists<P: AsRef<Path>>(bytes: &[u8], filename: P) {
+    use std::io::{ErrorKind, Write};
+
+    let mut file = match std::fs::File::create_new(filename) {
+        Ok(file) => file,
+        Err(error) if error.kind() == ErrorKind::AlreadyExists => return,
+        Err(error) => panic!("It should be possible to create this file for testing: {error:?}"),
+    };
+    file.write_all(bytes)
+        .expect("it should be possible to write this file for testing");
+}
+
 /// Method that compares two lists of tiles and panics with a message why there is a difference.
 ///
 /// # Panics

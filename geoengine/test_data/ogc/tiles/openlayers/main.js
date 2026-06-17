@@ -14,98 +14,134 @@ import Fill from "ol/style/Fill.js";
 import Text from "ol/style/Text.js";
 import Stroke from "ol/style/Stroke.js";
 
-const sessionToken = "00000000-0000-0000-a000-000000000000";
+const SERVER_URL = "http://localhost:3030";
 
-const collections = await (
-  await fetch(
-    "http://localhost:3030/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20",
-  )
-).json();
-const collection = collections.items.find((c) => c.name === "NDVI");
-const dataConnectorId = collection.id.providerId;
-const layerId = collection.id.layerId;
+async function getSessionToken() {
+  try {
+    const response = await fetch("http://localhost:3030/api/anonymous", {
+      method: "POST",
+    });
+    const data = await response.json();
+    return data.id;
+  } catch (error) {
+    // do nothing, we will use the default token which should work for testing
+    console.warn("Failed to get session token, using default token");
+    return "00000000-0000-0000-a000-000000000000";
+  }
+}
 
-console.log("Layer:", dataConnectorId, layerId);
+async function addWgs84TileLayer(map) {
+  const collections = await (
+    await fetch(
+      `${SERVER_URL}/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20`,
+    )
+  ).json();
+  const collection = collections.items.find((c) => c.name === "NDVI");
+  const dataConnectorId = collection.id.providerId;
+  const layerId = collection.id.layerId;
 
-const tms = "GeoEngineCustomTMS";
+  const tms = "GeoEngineCustomTMS";
 
-const tileUrl = `http://localhost:3030/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
-console.log(tileUrl);
+  const tileUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
+  console.log("Layer WGS84:", dataConnectorId, layerId, "\n" + tileUrl);
 
-const map = new Map({
-  target: "map",
-  layers: [
-    // new TileLayer({
-    //   source: new OSM(),
-    // }),
-    // new TileLayer({
-    //   source: new OGCMapTile({
-    //     url: tileUrl,
-    //     context: {
-    //       datetime: "2014-06-01T00:00:00Z",
-    //     },
-    //   }),
-    // }),
-    // new TileLayer({
-    //   source: new OGCMapTile({
-    //     url: "https://maps.gnosis.earth/ogcapi/collections/blueMarble/map/tiles/WorldCRS84Quad",
-    //   }),
-    // }),
-    // new TileLayer({
-    //   source: new OGCMapTile({
-    //     url: "http://localhost:8080/tiles/gebco",
-    //   }),
-    // }),
+  map.addLayer(
     new TileLayer({
       source: new OGCMapTile({
         url: tileUrl,
         context: {
-          datetime: "2014-06-01T00:00:00Z",
+          datetime: "2014-04-01T00:00:00Z",
         },
       }),
     }),
+  );
+  map.addLayer(
     new TileLayer({
       source: new TileDebug({
         source: new OGCMapTile({
           url: tileUrl,
           context: {
-            datetime: "2014-06-01T00:00:00Z",
+            datetime: "2014-04-01T00:00:00Z",
           },
         }),
       }),
     }),
+  );
+}
 
-    // new TileLayer({
-    //   source: new OGCMapTile({
-    //     url: "http://localhost:5000/collections/nasa-world-crs84/tiles/WorldCRS84Quad",
-    //   }),
-    // }),
+async function addWebMercatorTileLayer(map) {
+  const collections = await (
+    await fetch(
+      `${SERVER_URL}/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20`,
+    )
+  ).json();
+  const collection = collections.items.find((c) => c.name === "NDVI3857");
+  const dataConnectorId = collection.id.providerId;
+  const layerId = collection.id.layerId;
 
+  const tms = "GeoEngineCustomTMS";
+
+  const tileUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
+  console.log("Layer WebMercator:", dataConnectorId, layerId, "\n" + tileUrl);
+
+  map.addLayer(
+    new TileLayer({
+      source: new OGCMapTile({
+        url: tileUrl,
+        context: {
+          datetime: "2014-04-01T00:00:00Z",
+        },
+      }),
+    }),
+  );
+  map.addLayer(
+    new TileLayer({
+      source: new TileDebug({
+        source: new OGCMapTile({
+          url: tileUrl,
+          context: {
+            datetime: "2014-04-01T00:00:00Z",
+          },
+        }),
+      }),
+    }),
+  );
+}
+
+async function addCitiesLayer(map) {
+  const sourceProjection = "EPSG:4326";
+  const targetProjection = map.getView().getProjection().getCode();
+  const features = [
+    new Feature({
+      geometry: new Point([0, 0]),
+      properties: { name: "Origin" },
+    }),
+    new Feature({
+      geometry: new Point([6.960162, 50.93804]),
+      properties: { name: "Cologne" },
+    }),
+    new Feature({
+      geometry: new Point([13.404954, 52.520008]),
+      properties: { name: "Berlin" },
+    }),
+    new Feature({
+      geometry: new Point([2.352222, 48.856613]),
+      properties: { name: "Paris" },
+    }),
+    new Feature({
+      geometry: new Point([-0.127758, 51.507351]),
+      properties: { name: "London" },
+    }),
+  ].map((feature) => {
+    const geom = feature.getGeometry();
+    geom.transform(sourceProjection, targetProjection);
+    return feature;
+  });
+  map.addLayer(
     new VectorLayer({
       source: new VectorSource({
-        crs: "EPSG:4326",
-        features: [
-          new Feature({
-            geometry: new Point([0, 0]),
-            properties: { name: "Origin" },
-          }),
-          new Feature({
-            geometry: new Point([6.960162, 50.93804]),
-            properties: { name: "Cologne" },
-          }),
-          new Feature({
-            geometry: new Point([13.404954, 52.520008]),
-            properties: { name: "Berlin" },
-          }),
-          new Feature({
-            geometry: new Point([2.352222, 48.856613]),
-            properties: { name: "Paris" },
-          }),
-          new Feature({
-            geometry: new Point([-0.127758, 51.507351]),
-            properties: { name: "London" },
-          }),
-        ],
+        projection: targetProjection,
+        features,
       }),
       style: function (feature) {
         const iconStyle = new Style({
@@ -132,6 +168,15 @@ const map = new Map({
         return [iconStyle, labelStyle];
       },
     }),
+  );
+}
+
+const wgs84Map = new Map({
+  target: "wgs84Map",
+  layers: [
+    // new TileLayer({
+    //   source: new OSM(),
+    // }),
   ],
   view: new View({
     center: [0, 0],
@@ -140,3 +185,28 @@ const map = new Map({
     projection: "EPSG:4326",
   }),
 });
+
+const webMercatorMap = new Map({
+  target: "webMercatorMap",
+  layers: [
+    // new TileLayer({
+    //   source: new OSM(),
+    // }),
+  ],
+  view: new View({
+    center: [0, 0],
+    extent: [
+      -20037508.342789244, -20037508.342789244, 20037508.342789244,
+      20037508.342789244,
+    ],
+    zoom: 0,
+    projection: "EPSG:3857",
+  }),
+});
+
+const sessionToken = await getSessionToken();
+await Promise.all([
+  addWgs84TileLayer(wgs84Map),
+  addWebMercatorTileLayer(webMercatorMap),
+]);
+await Promise.all([addCitiesLayer(wgs84Map), addCitiesLayer(webMercatorMap)]);
