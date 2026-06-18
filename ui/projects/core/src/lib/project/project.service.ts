@@ -1558,7 +1558,6 @@ export class ProjectService implements OnDestroy {
     addCollectionLayersToProject(collectionItems: Array<CollectionItem>): Observable<void> {
         const layersObservable = collectionItems
             .filter((layer) => layer.type === 'layer')
-            .map((layer) => layer)
             .map((layer) => this.layersService.resolveLayer(layer.id));
 
         // TODO: lookup in parallel
