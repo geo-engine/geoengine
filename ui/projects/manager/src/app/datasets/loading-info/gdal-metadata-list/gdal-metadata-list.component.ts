@@ -270,7 +270,7 @@ export class GdalMetadataListComponent implements OnChanges {
                 return;
             }
 
-            const gdalMetaDataList = suggestion.metaData as GdalMetaDataList;
+            const gdalMetaDataList = suggestion.metaData;
             const slices = gdalMetaDataList.params;
 
             if (slices.length === 0) {

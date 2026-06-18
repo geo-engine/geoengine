@@ -6,8 +6,7 @@ import {ColorBreakpoint} from '../color-breakpoint.model';
 import {geoengineValidators} from '../../util/form.validators';
 import {UUID} from '../../datasets/dataset.model';
 import {WorkflowsService} from '../../workflows/workflows.service';
-import {StatisticsDict, StatisticsParams} from '../../operators/operator.model';
-import {Workflow} from '@geoengine/api-client';
+import {StatisticsDict} from '../../operators/operator.model';
 import {SymbologyQueryParams} from '../../symbology/symbology.model';
 import {PlotsService} from '../../plots/plots.service';
 import {ALL_COLORMAPS} from '../colormaps/colormaps';
@@ -268,12 +267,12 @@ export class PercentileBreakpointSelectorComponent {
                     params: {
                         columnNames: [this.band()],
                         percentiles,
-                    } as StatisticsParams,
+                    },
                     sources: {
                         source: [workflow.operator],
                     },
                 } as StatisticsDict,
-            } as Workflow),
+            }),
         );
     }
 }

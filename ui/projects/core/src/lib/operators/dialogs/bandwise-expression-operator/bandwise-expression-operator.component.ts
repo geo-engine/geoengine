@@ -225,7 +225,7 @@ export class BandwiseExpressionOperatorComponent implements AfterViewInit {
                                 raster: inputWorkflow.operator,
                             },
                         } as BandwiseExpressionDict,
-                    } as WorkflowDict;
+                    };
 
                     return this.projectService.registerWorkflow(workflow);
                 }),

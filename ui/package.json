@@ -106,8 +106,8 @@
         "@types/jasminewd2": "~2.0.13",
         "@types/node": "^25.3.2",
         "@types/topojson-specification": "^1.0.5",
-        "@vitest/browser-playwright": "^4.0.8",
-        "@vitest/coverage-v8": "^4.0.8",
+        "@vitest/browser-playwright": "^4.1.9",
+        "@vitest/coverage-v8": "^4.1.9",
         "angular-eslint": "^21.2.0",
         "eslint": "^9.39.3",
         "eslint-config-prettier": "^10.1.8",
@@ -118,12 +118,12 @@
         "jasmine-core": "~6.1.0",
         "jsdom": "^28.1.0",
         "ng-packagr": "^21.2.0",
-        "playwright-ng-schematics": "^21.0.4",
+        "playwright-ng-schematics": "^21.1.0",
         "prettier": "3.8.1",
         "ts-node": "~10.9.2",
         "typescript": "5.9.3",
         "typescript-eslint": "^8.56.1",
-        "vitest": "^4.0.8"
+        "vitest": "^4.1.9"
     },
     "overrides": {
         "@angular-devkit/build-angular": {
