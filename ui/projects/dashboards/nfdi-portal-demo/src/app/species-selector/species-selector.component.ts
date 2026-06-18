@@ -14,22 +14,14 @@ import {BehaviorSubject, combineLatest, combineLatestWith, first, mergeMap, Obse
 import {DataSelectionService} from '../data-selection.service';
 import moment from 'moment';
 import {
-    ClassHistogramDict,
-    ClassHistogramParams,
     ClusteredPointSymbology,
     Dataset,
     ExpressionDict,
-    HistogramDict,
-    HistogramParams,
     Layer,
-    OgrSourceDict,
-    PieChartCountParams,
-    PieChartDict,
     PointSymbology,
     RasterLayer,
     RasterSymbology,
     RasterVectorJoinDict,
-    ReprojectionDict,
     Time,
     TimeProjectionDict,
     UserService,
@@ -552,7 +544,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 },
                             ],
                         },
-                    } as OgrSourceDict,
+                    },
                 },
             } as TimeProjectionDict,
         };
@@ -628,7 +620,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 },
                             ],
                         },
-                    } as OgrSourceDict,
+                    },
                 },
             } as TimeProjectionDict,
         };
@@ -854,7 +846,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                             sources: {
                                 source: rasterOperator,
                             },
-                        } as ReprojectionDict;
+                        };
                     }
 
                     let vectorOperator = speciesWorkflow.operator;
@@ -867,7 +859,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                             sources: {
                                 source: vectorOperator,
                             },
-                        } as ReprojectionDict;
+                        };
                     }
 
                     return this.projectService.registerWorkflow({
@@ -932,11 +924,11 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 type: 'count',
                                 columnName: environmentColumnName,
                                 donut: false,
-                            } as PieChartCountParams,
+                            },
                             sources: {
                                 vector: workflow.operator,
                             },
-                        } as PieChartDict;
+                        };
                     } else {
                         plotWorkflow = {
                             type: 'Histogram',
@@ -949,11 +941,11 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 },
                                 bounds: dataRange,
                                 columnName: environmentColumnName,
-                            } as HistogramParams,
+                            },
                             sources: {
                                 source: workflow.operator,
                             },
-                        } as HistogramDict;
+                        };
                     }
 
                     return this.projectService.registerWorkflow({
@@ -1063,7 +1055,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                             sources: {
                                 source: rasterOperator,
                             },
-                        } as ReprojectionDict;
+                        };
                     }
 
                     let vectorOperator = speciesWorkflow.operator;
@@ -1076,7 +1068,7 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                             sources: {
                                 source: vectorOperator,
                             },
-                        } as ReprojectionDict;
+                        };
                     }
 
                     return this.projectService.registerWorkflow({
@@ -1116,11 +1108,11 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                             type: 'ClassHistogram',
                             params: {
                                 columnName: environmentColumnName,
-                            } as ClassHistogramParams,
+                            },
                             sources: {
                                 source: workflow.operator,
                             },
-                        } as ClassHistogramDict;
+                        };
                     } else {
                         plotWorkflow = {
                             type: 'Histogram',
@@ -1133,11 +1125,11 @@ export class SpeciesSelectorComponent implements OnInit, OnDestroy {
                                 },
                                 bounds: dataRange,
                                 columnName: environmentColumnName,
-                            } as HistogramParams,
+                            },
                             sources: {
                                 source: workflow.operator,
                             },
-                        } as HistogramDict;
+                        };
                     }
 
                     return this.projectService.registerWorkflow({

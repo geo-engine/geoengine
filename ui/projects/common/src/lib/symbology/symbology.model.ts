@@ -1059,7 +1059,7 @@ export class DerivedColor implements ColorParam {
     }
 
     clone(): ColorParam {
-        return new DerivedColor(this.attribute, this.colorizer.clone()) as ColorParam;
+        return new DerivedColor(this.attribute, this.colorizer.clone());
     }
 
     toDict(): ColorParamDict {

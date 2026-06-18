@@ -70,7 +70,7 @@ export class BasemapService {
         this.selectedBasemap.set({
             name,
             ...basemap,
-        } as NamedBasemap);
+        });
     }
 }
 

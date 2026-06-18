@@ -51,7 +51,6 @@ import {
     RasterData,
     RasterLayer,
     RasterLayerMetadata,
-    ReprojectionDict,
     SpatialReference,
     SpatialReferenceSpecification,
     subscribeAndProvide,
@@ -66,13 +65,11 @@ import {
     VectorData,
     VectorLayer,
     VectorLayerMetadata,
-    VisualPointClusteringParams,
     WorkflowsService,
 } from '@geoengine/common';
 import {
     CollectionItem,
     GeoJson,
-    LayerListing,
     OGCWFSApi,
     ProjectLayer as ProjectLayerDict,
     ProviderLayerId,
@@ -178,7 +175,7 @@ export class ProjectService implements OnDestroy {
                 );
             }
         } else {
-            const timeConfigDict = timeConfig as {start: string; end?: string};
+            const timeConfigDict = timeConfig;
             const isRange = this.config.TIME.ALLOW_RANGES && timeConfigDict.end;
             time = isRange ? new Time(timeConfigDict.start, timeConfigDict.end) : new Time(timeConfigDict.start, timeConfigDict.start);
 
@@ -503,7 +500,7 @@ export class ProjectService implements OnDestroy {
                                     sources: {
                                         source: operator,
                                     },
-                                } as ReprojectionDict);
+                                });
                             }
                         }
 
@@ -592,14 +589,14 @@ export class ProjectService implements OnDestroy {
             case 'raster': {
                 this.layerDataSubscriptions.set(
                     layer.id,
-                    this.createRasterLayerDataSubscription(layer as RasterLayer, layerData$ as Observer<RasterData>, layerDataState$),
+                    this.createRasterLayerDataSubscription(layer as RasterLayer, layerData$, layerDataState$),
                 );
                 break;
             }
             case 'vector': {
                 this.layerDataSubscriptions.set(
                     layer.id,
-                    this.createVectorLayerDataSubscription(layer as VectorLayer, layerData$ as Observer<VectorData>, layerDataState$),
+                    this.createVectorLayerDataSubscription(layer as VectorLayer, layerData$, layerDataState$),
                 );
                 break;
             }
@@ -1060,7 +1057,7 @@ export class ProjectService implements OnDestroy {
             sources: {
                 source: inputOperator,
             },
-        } as ReprojectionDict;
+        };
     }
 
     protected async createTemporaryProject(sessionToken: string): Promise<Project> {
@@ -1561,7 +1558,7 @@ export class ProjectService implements OnDestroy {
     addCollectionLayersToProject(collectionItems: Array<CollectionItem>): Observable<void> {
         const layersObservable = collectionItems
             .filter((layer) => layer.type === 'layer')
-            .map((layer) => layer as LayerListing)
+            .map((layer) => layer)
             .map((layer) => this.layersService.resolveLayer(layer.id));
 
         // TODO: lookup in parallel
@@ -1637,7 +1634,7 @@ function createClusteredPointLayerQueryWorkflow(
                 radiusColumn: ClusteredPointSymbology.RADIUS_COLUMN,
                 countColumn: ClusteredPointSymbology.COUNT_COLUMN,
                 columnAggregates,
-            } as VisualPointClusteringParams,
+            },
             sources: {
                 vector: createProjectedOperator(workflow.operator, metadata, mapSpatialReference),
             },
@@ -1691,5 +1688,5 @@ function createProjectedOperator(
         sources: {
             source: inputOperator,
         },
-    } as ReprojectionDict;
+    };
 }
