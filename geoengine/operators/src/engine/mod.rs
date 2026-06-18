@@ -190,7 +190,7 @@ macro_rules! span_fn {
     ($op: ty) => {
         fn span(&self) -> crate::engine::CreateSpan {
             |path, query_counter| tracing::span!(
-                tracing::Level::TRACE,
+                tracing::Level::DEBUG,
                 <$op>::TYPE_NAME,
                 path = %path,
                 query_counter = %query_counter,

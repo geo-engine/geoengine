@@ -59,8 +59,30 @@ pub async fn start_server() -> Result<()> {
 
     // create a telemetry layer for output to opentelemetry and add it to the registry
     let open_telemetry_config: geoengine_services::config::OpenTelemetry = get_config_element()?;
+
+    // Export the OTLP endpoint as an environment variable so that GDAL worker
+    // subprocesses (which inherit the env) can initialise their own OpenTelemetry
+    // tracer and attach spans to the parent request trace in Jaeger.
+    if open_telemetry_config.enabled {
+        // SAFETY: set_var is safe here because we are in a single-threaded
+        // initialization context before any concurrent access to the env var.
+        unsafe {
+            std::env::set_var(
+                "OTEL_EXPORTER_OTLP_ENDPOINT",
+                &open_telemetry_config.endpoint,
+            );
+        }
+    }
+
     let opentelemetry_layer = if open_telemetry_config.enabled {
-        Some(open_telemetry_layer(&open_telemetry_config)?)
+        // create a filter for the telemetry layer to avoid flooding Jaeger with low-level spans
+        let otel_filter_spec = open_telemetry_config
+            .tracing_log_spec
+            .clone()
+            .unwrap_or_else(|| String::from("info,geoengine=debug"));
+        let otel_filter =
+            EnvFilter::try_new(&otel_filter_spec).expect("to have a valid tracing log spec");
+        Some(open_telemetry_layer(&open_telemetry_config)?.with_filter(otel_filter))
     } else {
         None
     };
@@ -77,16 +99,22 @@ fn open_telemetry_layer<S>(
 ) -> Result<
     tracing_opentelemetry::OpenTelemetryLayer<
         S,
-        impl opentelemetry::trace::Tracer<Span: Send + Sync>,
+        impl opentelemetry::trace::Tracer<Span: Send + Sync> + use<S>,
     >,
 >
 where
     S: Subscriber + for<'a> LookupSpan<'a>,
 {
+    use opentelemetry::global;
     use opentelemetry::trace::TracerProvider as _;
     use opentelemetry_otlp::WithExportConfig;
+    use opentelemetry_sdk::propagation::TraceContextPropagator;
     use opentelemetry_sdk::trace::Sampler;
     use opentelemetry_sdk::trace::SdkTracerProvider;
+
+    // Register the W3C Trace Context propagator so that GDAL IPC messages
+    // sent via the process pool carry the parent trace context.
+    global::set_text_map_propagator(TraceContextPropagator::new());
 
     let exporter = opentelemetry_otlp::SpanExporter::builder()
         .with_tonic()

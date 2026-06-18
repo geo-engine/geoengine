@@ -181,6 +181,8 @@ scopes = []
 [open_telemetry]
 enabled = false
 endpoint = "127.0.0.1:6831"
+# Filter spec for spans sent to Jaeger. Default: "info,geoengine=debug"
+tracing_log_spec = "info,geoengine=debug"
 
 [data]
 volumes = { test_data = "test_data/" }

@@ -100,6 +100,7 @@ where
             gdal_process_pool_config.max_processes as usize,
             gdal_process_pool_config.global_active_worker as usize,
             gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.otlp_endpoint.clone(),
         );
 
         Ok(PostgresContext {
@@ -143,6 +144,7 @@ where
             gdal_process_pool_config.max_processes as usize,
             gdal_process_pool_config.global_active_worker as usize,
             gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.otlp_endpoint.clone(),
         );
 
         Ok(PostgresContext {
@@ -196,6 +198,7 @@ where
             gdal_process_pool_config.max_processes as usize,
             gdal_process_pool_config.global_active_worker as usize,
             gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.otlp_endpoint.clone(),
         );
 
         let app_ctx = PostgresContext {

@@ -368,6 +368,13 @@ pub struct GdalProcessPool {
     pub max_processes: u64,
     pub global_active_worker: u64,
     pub worker_per_dataset: u64,
+    /// Optional OpenTelemetry OTLP/gRPC endpoint (e.g. `http://jaeger:4317`).
+    /// When set, each GDAL worker subprocess will initialize OpenTelemetry tracing
+    /// and connect to this endpoint so that its spans appear as children of the
+    /// parent request trace in Jaeger.
+    /// If not set, the subprocesses run without OpenTelemetry tracing.
+    #[serde(default)]
+    pub otlp_endpoint: Option<String>,
 }
 
 impl ConfigElement for GdalProcessPool {
@@ -464,6 +471,10 @@ impl ConfigElement for Oidc {
 pub struct OpenTelemetry {
     pub enabled: bool,
     pub endpoint: String,
+    /// Filter spec for spans sent to OpenTelemetry/Jaeger.
+    /// Uses the same syntax as `logging.log_spec`.
+    /// If not set, defaults to `"info"` (INFO level and above only).
+    pub tracing_log_spec: Option<String>,
 }
 
 impl ConfigElement for OpenTelemetry {

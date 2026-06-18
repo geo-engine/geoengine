@@ -28,7 +28,9 @@ CREATE TYPE "StacDataProviderDefinition" AS (
     collection_name text,
     s3_config "StacProviderS3Config",
     time_dimension "TimeDimension",
-    datasets "StacProviderDataset" []
+    datasets "StacProviderDataset" [],
+    gdal_open_options text[],
+    gdal_config_options "StringPair" []
 );
 
 ALTER TYPE "DataProviderDefinition" ADD ATTRIBUTE

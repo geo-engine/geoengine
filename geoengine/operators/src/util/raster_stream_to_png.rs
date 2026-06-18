@@ -39,7 +39,7 @@ pub async fn raster_stream_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
         "bands must be sorted and at most three bands can be queried"
     );
 
-    let span = span!(Level::TRACE, "raster_stream_to_png_bytes");
+    let span = span!(Level::DEBUG, "raster_stream_to_png.composite");
     let _enter = span.enter();
 
     let raster_colorizer = match raster_colorizer {
@@ -154,7 +154,12 @@ async fn single_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>
 
     let (result, ch) =
         abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-    Ok((result.unbounded().to_png(width, height, &colorizer)?, ch))
+
+    let png_bytes = {
+        let _png_span = tracing::debug_span!("png.encode", width, height).entered();
+        result.unbounded().to_png(width, height, &colorizer)?
+    };
+    Ok((png_bytes, ch))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -214,12 +219,14 @@ async fn multi_band_colorizer_to_png_bytes<T: Pixel, C: QueryContext + 'static>(
 
     let (result, ch) =
         abortable_query_execution(output_tile, conn_closed, query_abort_trigger).await?;
-    Ok((
+
+    let png_bytes = {
+        let _png_span = tracing::debug_span!("png.encode", width, height).entered();
         result
             .unbounded()
-            .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)?,
-        ch,
-    ))
+            .to_png_with_mapper(width, height, ColorMapper::Rgba, no_data_color)?
+    };
+    Ok((png_bytes, ch))
 }
 
 fn blit_tile<T>(

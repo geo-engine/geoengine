@@ -2247,6 +2247,13 @@ impl From<StringPair> for geoengine_datatypes::util::StringPair {
     }
 }
 
+impl From<geoengine_datatypes::util::StringPair> for StringPair {
+    fn from(value: geoengine_datatypes::util::StringPair) -> Self {
+        let (a, b) = value.into_inner();
+        Self((a, b))
+    }
+}
+
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq, Serialize, ToSchema)]
 pub enum PlotOutputFormat {
     JsonPlain,

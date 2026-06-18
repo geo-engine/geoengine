@@ -28,7 +28,6 @@ use stac::Item;
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 use std::time::Duration;
-use tracing::debug;
 use url::Url;
 
 const STAC_QUERY_TIMEOUT_SECS: u64 = 60;
@@ -40,6 +39,8 @@ struct StacMultiBandMetaData {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     dataset: StacProviderDataset,
+    gdal_open_options: Option<Vec<String>>,
+    gdal_config_options: Option<Vec<geoengine_datatypes::util::StringPair>>,
 }
 
 #[derive(Debug, Clone)]
@@ -63,32 +64,35 @@ async fn query_stac_item_collection(
             query_url,
             query_params,
         } => {
-            debug!("STAC query first page with parameters: {:?}", query_params);
-
-            let request_started = std::time::Instant::now();
-
-            let item_collection: stac::ItemCollection = client
-                .get(query_url.clone())
-                .query(query_params)
-                .send()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?
-                .json()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?;
-
-            debug!(
-                "STAC response received in {:?} s",
-                request_started.elapsed().as_secs_f64()
+            let span = tracing::info_span!(
+                "stac.query.first_page",
+                url = %query_url,
+                params = ?query_params,
             );
+
+            let item_collection: stac::ItemCollection = tracing::Instrument::instrument(
+                async {
+                    client
+                        .get(query_url.clone())
+                        .query(query_params)
+                        .send()
+                        .await
+                        .map_err(
+                            |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                                source: Box::new(e),
+                            },
+                        )?
+                        .json()
+                        .await
+                        .map_err(
+                            |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                                source: Box::new(e),
+                            },
+                        )
+                },
+                span,
+            )
+            .await?;
 
             let next_state = item_collection
                 .links
@@ -102,31 +106,33 @@ async fn query_stac_item_collection(
             Ok((item_collection, next_state))
         }
         StacQueryState::NextPage { next_url } => {
-            debug!("STAC query next page with url: {}", next_url);
-
-            let request_started = std::time::Instant::now();
-
-            let item_collection: stac::ItemCollection = client
-                .get(next_url.clone())
-                .send()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?
-                .json()
-                .await
-                .map_err(
-                    |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                        source: Box::new(e),
-                    },
-                )?;
-
-            debug!(
-                "STAC response received in {:?} s",
-                request_started.elapsed().as_secs_f64()
+            let span = tracing::info_span!(
+                "stac.query.next_page",
+                url = %next_url,
             );
+
+            let item_collection: stac::ItemCollection = tracing::Instrument::instrument(
+                async {
+                    client
+                        .get(next_url.clone())
+                        .send()
+                        .await
+                        .map_err(
+                            |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                                source: Box::new(e),
+                            },
+                        )?
+                        .json()
+                        .await
+                        .map_err(
+                            |e| geoengine_operators::error::Error::QueryingProcessorFailed {
+                                source: Box::new(e),
+                            },
+                        )
+                },
+                span,
+            )
+            .await?;
 
             let next_state = item_collection
                 .links
@@ -523,7 +529,7 @@ impl StacMultiBandMetaData {
                         file_not_found_handling: FileNotFoundHandling::Error,
                         no_data_value: None,
                         properties_mapping: None,
-                        gdal_open_options: None,
+                        gdal_open_options: self.gdal_open_options.clone(),
                         gdal_config_options: gdal_config_options.clone(),
                         allow_alphaband_as_mask: false,
                         retry: Some(GdalRetryOptions { max_retries: 99 }), // TODO: make configurable?
@@ -540,35 +546,42 @@ impl StacMultiBandMetaData {
         let is_vsi_s3 = file_path_str.starts_with("/vsis3/");
         let is_vsi_curl = file_path_str.starts_with("/vsicurl/");
 
-        if !is_vsi_s3 && !is_vsi_curl {
+        if !is_vsi_s3 && !is_vsi_curl && self.gdal_config_options.is_none() {
             return None;
         }
 
-        let mut options = vec![
-            (
-                "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
-                "EMPTY_DIR".to_owned(),
-            ),
-            (
-                "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
-                ".tif,.tiff,.jp2".to_owned(),
-            ),
-        ];
+        let mut options = Vec::new();
 
-        if !is_vsi_s3 {
-            return Some(options);
+        // Add provider-level static config options first (as base)
+        if let Some(provider_options) = &self.gdal_config_options {
+            for pair in provider_options {
+                let (key, value) = pair.clone().into_inner();
+                options.push((key, value));
+            }
         }
 
-        if let Some(config) = self.s3_config.as_ref() {
-            options.push(("AWS_S3_ENDPOINT".to_owned(), config.endpoint.clone()));
-            options.push(("AWS_VIRTUAL_HOSTING".to_owned(), "FALSE".to_owned())); // TODO: make configurable?
+        // Add auto-generated options (these may override provider-level options with same keys)
+        options.push((
+            "GDAL_DISABLE_READDIR_ON_OPEN".to_owned(),
+            "EMPTY_DIR".to_owned(),
+        ));
+        options.push((
+            "CPL_VSIL_CURL_ALLOWED_EXTENSIONS".to_owned(),
+            ".tif,.tiff,.jp2".to_owned(),
+        ));
 
-            if let Some(access_key) = &config.access_key {
-                options.push(("AWS_ACCESS_KEY_ID".to_owned(), access_key.clone()));
-            }
+        if is_vsi_s3 {
+            if let Some(config) = self.s3_config.as_ref() {
+                options.push(("AWS_S3_ENDPOINT".to_owned(), config.endpoint.clone()));
+                options.push(("AWS_VIRTUAL_HOSTING".to_owned(), "FALSE".to_owned())); // TODO: make configurable?
 
-            if let Some(secret_key) = &config.secret_key {
-                options.push(("AWS_SECRET_ACCESS_KEY".to_owned(), secret_key.clone()));
+                if let Some(access_key) = &config.access_key {
+                    options.push(("AWS_ACCESS_KEY_ID".to_owned(), access_key.clone()));
+                }
+
+                if let Some(secret_key) = &config.secret_key {
+                    options.push(("AWS_SECRET_ACCESS_KEY".to_owned(), secret_key.clone()));
+                }
             }
         }
 
@@ -745,6 +758,8 @@ impl
             s3_config: self.s3_config.clone(),
             time_dimension: self.time_dimension,
             dataset: dataset.clone(),
+            gdal_open_options: self.gdal_open_options.clone(),
+            gdal_config_options: self.gdal_config_options.clone(),
         }))
     }
 }
@@ -815,6 +830,8 @@ mod tests {
                     },
                 ],
             }],
+            gdal_open_options: None,
+            gdal_config_options: None,
         }
     }
 
@@ -1050,6 +1067,8 @@ mod tests {
                     ],
                 },
             ],
+            gdal_open_options: None,
+            gdal_config_options: None,
         };
 
         admin_ctx

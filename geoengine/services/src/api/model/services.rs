@@ -1054,6 +1054,12 @@ pub struct StacDataProviderDefinition {
     pub s3_config: Option<StacProviderS3Config>,
     pub time_dimension: TimeDimension,
     pub datasets: Vec<StacProviderDataset>,
+    // GDAL dataset open options, e.g. `["UserPwd=geoengine:pwd", "HttpAuth=BASIC"]`
+    #[serde(default)]
+    pub gdal_open_options: Option<Vec<String>>,
+    // GDAL config options as key-value pairs, e.g. `[["AWS_REGION", "eu-central-1"]]`
+    #[serde(default)]
+    pub gdal_config_options: Option<Vec<GdalConfigOption>>,
 }
 
 impl From<StacDataProviderDefinition>
@@ -1070,6 +1076,10 @@ impl From<StacDataProviderDefinition>
             s3_config: value.s3_config.map(Into::into),
             time_dimension: api_time_dimension_to_datatypes(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
+            gdal_open_options: value.gdal_open_options,
+            gdal_config_options: value
+                .gdal_config_options
+                .map(|opts| opts.into_iter().map(Into::into).collect()),
         }
     }
 }
@@ -1089,6 +1099,10 @@ impl From<crate::datasets::external::stac::StacDataProviderDefinition>
             s3_config: value.s3_config.map(Into::into),
             time_dimension: datatypes_time_dimension_to_api(value.time_dimension),
             datasets: value.datasets.into_iter().map(Into::into).collect(),
+            gdal_open_options: value.gdal_open_options,
+            gdal_config_options: value
+                .gdal_config_options
+                .map(|opts| opts.into_iter().map(Into::into).collect()),
         }
     }
 }

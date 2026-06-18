@@ -194,6 +194,7 @@ impl GdalRasterLoader {
             dataset_params,
             read_advise,
             data_type: T::TYPE,
+            span_context: Default::default(),
         });
 
         let res: Result<_, _> = gdal_worker.read_data(message).await;

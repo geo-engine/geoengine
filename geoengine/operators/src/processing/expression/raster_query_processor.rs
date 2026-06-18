@@ -95,9 +95,20 @@ where
                     let program = self.program.clone();
                     let map_no_data: bool = self.map_no_data;
 
+                    let span = tracing::info_span!(
+                        "expression.compute",
+                        num_bands = Tuple::num_bands(),
+                        output_type = ?TO::TYPE,
+                    );
                     let out = crate::util::spawn_blocking_with_thread_pool(
                         ctx.thread_pool().clone(),
-                        move || Tuple::compute_expression(rasters, &program, map_no_data),
+                        {
+                            let span = span.clone();
+                            move || {
+                                let _guard = span.entered();
+                                Tuple::compute_expression(rasters, &program, map_no_data)
+                            }
+                        },
                     )
                     .await??;
 

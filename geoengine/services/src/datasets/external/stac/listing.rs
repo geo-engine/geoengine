@@ -527,6 +527,8 @@ mod tests {
                 ),
                 bands: vec![],
             }],
+            None,
+            None,
         )
     }
 
@@ -592,6 +594,8 @@ mod tests {
                     bands: vec![],
                 },
             ],
+            None,
+            None,
         )
     }
 

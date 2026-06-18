@@ -10964,6 +10964,24 @@
           "description": {
             "type": "string"
           },
+          "gdalConfigOptions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "$ref": "#/components/schemas/StringPair"
+            }
+          },
+          "gdalOpenOptions": {
+            "type": [
+              "array",
+              "null"
+            ],
+            "items": {
+              "type": "string"
+            }
+          },
           "id": {
             "$ref": "#/components/schemas/DataProviderId"
           },

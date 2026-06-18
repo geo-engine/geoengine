@@ -389,6 +389,7 @@ impl GdalRasterLoader {
             dataset_params,
             read_advise,
             data_type: T::TYPE,
+            span_context: Default::default(),
         });
 
         let res: Result<_, _> = gdal_worker.read_data(message).await;
@@ -465,8 +466,8 @@ impl GdalRasterLoader {
             GDAL_RETRY_EXPONENTIAL_BACKOFF_FACTOR,
             Some(GDAL_RETRY_MAX_BACKOFF_MS),
             || {
-                // 1. Attempt to grab or open the dataset
-                let ds = match cache.get_or_open(dp) {
+                // 1. Attempt to grab or open the dataset (span only on cache miss)
+                let ds = match cache.get_or_open_traced(dp) {
                     Ok(dataset) => dataset,
                     Err(gdal_error) => {
                         // If the file explicitly does not exist, do not waste time retrying
@@ -606,6 +607,23 @@ impl GdalRasterLoader {
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<GdalIpcPayload<T>, GdalRasterLoaderError> {
+        let _read_span = tracing::debug_span!(
+            target: "gdalsource-process",
+            "gdal.rasterband_read",
+            file_path = %dataset_params.file_path.display(),
+            band = dataset_params.rasterband_channel,
+            window_x = read_advise.gdal_read_widow.gdal_window_start().0,
+            window_y = read_advise.gdal_read_widow.gdal_window_start().1,
+            window_w = read_advise.gdal_read_widow.gdal_window_size().0,
+            window_h = read_advise.gdal_read_widow.gdal_window_size().1,
+        )
+        .entered();
+
+        // Flush the GDAL VSICurl cache before reading to force re-fetching from the server
+        if dataset_params.file_path.starts_with("/vsis3/") {
+            clear_gdal_vsi_cache_for_path(dataset_params.file_path.as_path());
+        }
+
         let start = Instant::now();
 
         debug!(
@@ -746,7 +764,22 @@ impl GdalRasterLoader {
             gdal_out_shape,                  // requested raster size
             None,                            // sampling mode
         )?;
-        debug!("read raster band in {:?} s", start.elapsed().as_secs_f64());
+        let elapsed_secs = start.elapsed().as_secs_f64();
+        let (window_start_x, window_start_y) = read_window.gdal_window_start();
+        let (window_size_x, window_size_y) = read_window.gdal_window_size();
+        let (out_shape_x, out_shape_y) = gdal_out_shape;
+        debug!(
+            elapsed_secs,
+            window_start_x,
+            window_start_y,
+            window_size_x,
+            window_size_y,
+            out_shape_x,
+            out_shape_y,
+            dataset_size_x = dataset_params.width,
+            dataset_size_y = dataset_params.height,
+            "read raster band"
+        );
 
         let (_, buffer_data) = buffer.into_shape_and_vec();
 
@@ -754,6 +787,8 @@ impl GdalRasterLoader {
 
         if dataset_mask_flags.is_all_valid() {
             debug!("all pixels are valid --> skip no-data and mask handling.");
+            let valid_pixel_count = buffer_data.len();
+            debug!(valid_pixel_count, "raster data: all valid");
             return Ok(GdalDataVariant::AllValid { data: buffer_data });
         }
 
@@ -764,11 +799,23 @@ impl GdalRasterLoader {
                 .or_else(|| rasterband.no_data_value());
 
             if let Some(no_data_value) = no_data_value {
+                let ndv: T = T::from_f64(no_data_value).expect("no_data_value must fit into T");
+                let valid_pixel_count = buffer_data.iter().filter(|v| **v != ndv).count();
+                debug!(
+                    valid_pixel_count,
+                    total_pixel_count = buffer_data.len(),
+                    "raster data: with nodata"
+                );
                 return Ok(GdalDataVariant::WithNoData {
                     data: buffer_data,
                     no_data_value,
                 });
             }
+            let valid_pixel_count = buffer_data.len();
+            debug!(
+                valid_pixel_count,
+                "raster data: all valid (no nodata value found)"
+            );
             return Ok(GdalDataVariant::AllValid { data: buffer_data });
         }
 
@@ -789,6 +836,12 @@ impl GdalRasterLoader {
             None,                            // sampling mode
         )?;
         let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
+        let valid_pixel_count = mask_buffer_data.iter().filter(|&&b| b != 0).count();
+        debug!(
+            valid_pixel_count,
+            total_pixel_count = buffer_data.len(),
+            "raster data: with explicit mask"
+        );
         Ok(GdalDataVariant::WithExplicitMask {
             data: buffer_data,
             validity_mask: mask_buffer_data,
@@ -1780,6 +1833,7 @@ mod tests {
                 retry: None,
             },
             read_advise,
+            span_context: Default::default(),
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
@@ -1849,12 +1903,13 @@ mod tests {
                 retry: None,
             },
             read_advise,
+            span_context: Default::default(),
         };
 
         let msg = IpcChannelMessage::new_request_tile_message(payload);
 
         let (_child_guard, sender, receiver) =
-            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>().unwrap();
+            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>(None).unwrap();
 
         sender.send(msg).unwrap();
         let rx_result = receiver
@@ -2236,7 +2291,7 @@ mod tests {
         let tile_information =
             tile_information_with_partition_and_shape(output_bounds, output_shape);
 
-        let gpp = GdalProcessPool::new(8, 4, 2);
+        let gpp = GdalProcessPool::new(8, 4, 2, None);
         let gw = gpp.get_gdal_worker();
 
         let RasterTile2D {
@@ -2529,7 +2584,7 @@ mod tests {
             ),
         });
 
-        let gpp = GdalProcessPool::new(8, 4, 2);
+        let gpp = GdalProcessPool::new(8, 4, 2, None);
         let gw: GdalPoolWorkerInstance = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(
@@ -3166,7 +3221,7 @@ mod tests {
         let time_interval = TimeInterval::new_unchecked(1_388_534_400_000, 1_391_212_800_000); // 2014-01-01 - 2014-01-15
         let params = None;
 
-        let gpp = GdalProcessPool::new(8, 4, 2);
+        let gpp = GdalProcessPool::new(8, 4, 2, None);
         let gw: GdalPoolWorkerInstance = gpp.get_gdal_worker();
 
         let tile = GdalRasterLoader::load_tile_async::<f64>(

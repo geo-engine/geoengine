@@ -7,6 +7,7 @@ use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{SpatialResolution, TimeDimension};
 use geoengine_datatypes::raster::RasterDataType;
 use geoengine_datatypes::spatial_reference::SpatialReference;
+use geoengine_datatypes::util::StringPair;
 use geoengine_operators::engine::SpatialGridDescriptor;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,10 @@ pub struct StacDataProviderDefinition {
     pub s3_config: Option<StacProviderS3Config>,
     pub time_dimension: TimeDimension, // TODO: should this be on dataset level?
     pub datasets: Vec<StacProviderDataset>,
+    // GDAL dataset open options, e.g. `["UserPwd=geoengine:pwd", "HttpAuth=BASIC"]`
+    pub gdal_open_options: Option<Vec<String>>,
+    // GDAL config options as key-value pairs, e.g. `[["AWS_REGION", "eu-central-1"]]`
+    pub gdal_config_options: Option<Vec<StringPair>>,
     // TODO: page limit(?)
 }
 
@@ -81,6 +86,8 @@ impl<D: GeoEngineDb> DataProviderDefinition<D> for StacDataProviderDefinition {
             self.s3_config,
             self.time_dimension,
             self.datasets,
+            self.gdal_open_options,
+            self.gdal_config_options,
         )))
     }
 
@@ -136,6 +143,8 @@ pub struct StacDataProvider {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     datasets: Vec<StacProviderDataset>,
+    gdal_open_options: Option<Vec<String>>,
+    gdal_config_options: Option<Vec<StringPair>>,
 }
 
 impl StacDataProvider {
@@ -149,6 +158,8 @@ impl StacDataProvider {
         s3_config: Option<StacProviderS3Config>,
         time_dimension: TimeDimension,
         datasets: Vec<StacProviderDataset>,
+        gdal_open_options: Option<Vec<String>>,
+        gdal_config_options: Option<Vec<StringPair>>,
     ) -> Self {
         Self {
             id,
@@ -159,6 +170,8 @@ impl StacDataProvider {
             s3_config,
             time_dimension,
             datasets,
+            gdal_open_options,
+            gdal_config_options,
         }
     }
 }

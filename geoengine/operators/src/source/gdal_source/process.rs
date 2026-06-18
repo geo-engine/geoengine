@@ -1,4 +1,5 @@
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::env;
 use std::io::{BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
@@ -79,6 +80,11 @@ pub struct IpcChannelMessagePayload {
     pub read_advise: GdalReadAdvise,
     /// We use this to know what type we serialize
     pub data_type: RasterDataType,
+    /// W3C Trace Context propagated from the parent process.
+    /// Contains `traceparent` (and optionally `tracestate`) so the
+    /// GDAL subprocess can attach its spans to the correct parent trace.
+    /// The map is empty when no tracing context is available.
+    pub span_context: HashMap<String, String>,
 }
 
 pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
@@ -622,8 +628,13 @@ where
 ///
 /// # Panics
 /// Panics if the current executable path cannot be determined, or if the executable has no parent directory, which should not happen under normal circumstances.
-pub fn spawn_ipc_server_process<S, R>()
--> Result<(ChildProcessGuard, IpcSender<S>, IpcReceiver<R>), IpcProcessError> {
+/// Spawns the IPC server process and establishes the communication channels.
+///
+/// `otlp_endpoint` is the OpenTelemetry OTLP/gRPC endpoint (e.g. `http://jaeger:4317`).
+/// Pass `None` to disable OpenTelemetry tracing in the child process.
+pub fn spawn_ipc_server_process<S, R>(
+    otlp_endpoint: Option<String>,
+) -> Result<(ChildProcessGuard, IpcSender<S>, IpcReceiver<R>), IpcProcessError> {
     let (server, token) = ipc::IpcOneShotServer::<(IpcSender<S>, IpcReceiver<R>)>::new()
         .map_err(IpcProcessError::from)?;
 
@@ -631,9 +642,15 @@ pub fn spawn_ipc_server_process<S, R>()
 
     let exe_path = get_gdalsource_path();
 
-    let mut child = Command::new(exe_path)
-        .arg(token)
-        .arg("debug") // FIXME: paste log level here!
+    let mut cmd = Command::new(exe_path);
+    cmd.arg(&token).arg("debug"); // FIXME: paste log level here!
+
+    // Pass OTLP endpoint as third argument if available
+    if let Some(ref endpoint) = otlp_endpoint {
+        cmd.arg(endpoint);
+    }
+
+    let mut child = cmd
         .env_remove("LLVM_PROFILE_FILE")
         .env_remove("LLVM_PROFILE_FILE_NAME")
         .stdout(Stdio::piped())
@@ -797,6 +814,28 @@ impl GdalDatasetCache {
 
     pub fn contains(&self, params: &GdalDatasetParameters) -> bool {
         Self::is_hit(self.params.as_ref(), params)
+    }
+
+    /// Same as [`get_or_open`], but wraps the open in a `debug_span!` only on cache miss.
+    /// This is atomic — the cache-hit check and span creation happen inside a single `&mut self` call.
+    pub fn get_or_open_traced(
+        &mut self,
+        params: &GdalDatasetParameters,
+    ) -> Result<&mut GdalDataset, GdalError> {
+        let hit = Self::is_hit(self.params.as_ref(), params);
+        let _open_span = if !hit {
+            Some(
+                tracing::debug_span!(
+                    target: "gdalsource-process",
+                    "gdal.dataset_open",
+                    file_path = %params.file_path.display(),
+                )
+                .entered(),
+            )
+        } else {
+            None
+        };
+        self.get_or_open(params)
     }
 }
 

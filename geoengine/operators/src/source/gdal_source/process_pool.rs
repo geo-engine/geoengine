@@ -15,6 +15,9 @@ use crate::source::gdal_source::process::{GdalIpcPayload, spawn_ipc_server_proce
 use crate::source::{IpcChannelMessage, gdal_source::process::ChildProcessGuard};
 use crate::source::{IpcProcessError, IpcProcessRasterResult};
 
+use opentelemetry::global;
+use tracing_opentelemetry::OpenTelemetrySpanExt;
+
 // --- Core Structural Parameters & Tuning Constants ---
 
 /// Capacity for the broker incoming request multi-producer mpsc channel.
@@ -233,6 +236,8 @@ impl GdalProcessPool {
     /// - `max_total`: The total number of GDAL worker processes to spawn and maintain in the pool.
     /// - `max_active_global`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
     /// - `max_parallel_per_dataset`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `otlp_endpoint`: Optional OpenTelemetry OTLP/gRPC endpoint (e.g. `http://jaeger:4317`).
+    ///   When set, the child processes will initialize OpenTelemetry tracing and connect to this endpoint.
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
     pub fn new_with_tokio_handle(
@@ -240,18 +245,22 @@ impl GdalProcessPool {
         max_total: usize,
         max_active_global: usize,
         max_parallel_per_dataset: usize,
+        otlp_endpoint: Option<String>,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
 
         handle.spawn(async move {
             let b_tx_clone_2 = b_tx_clone.clone();
+            let endpoint = otlp_endpoint.clone();
             let workers = tokio::task::spawn_blocking(move || {
                 let mut w = Vec::with_capacity(max_total);
                 for id in 0..max_total {
-                    let (guard, tx, rx) =
-                        spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
-                            .expect("Error while spawning GDAL worker process");
+                    let (guard, tx, rx) = spawn_ipc_server_process::<
+                        IpcChannelMessage,
+                        IpcProcessRasterResult,
+                    >(endpoint.clone())
+                    .expect("Error while spawning GDAL worker process");
 
                     let (job_tx, mut job_rx) = mpsc::unbounded_channel();
                     let b_tx_worker = b_tx_clone_2.clone();
@@ -282,6 +291,7 @@ impl GdalProcessPool {
                 max_active_global,
                 max_parallel_per_dataset,
                 b_tx_clone,
+                otlp_endpoint.clone(),
             )
             .await;
         });
@@ -299,6 +309,8 @@ impl GdalProcessPool {
     /// - `max_total`: The total number of GDAL worker processes to spawn and maintain in the pool.
     /// - `max_active_global`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
     /// - `max_parallel_per_dataset`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `otlp_endpoint`: Optional OpenTelemetry OTLP/gRPC endpoint (e.g. `http://jaeger:4317`).
+    ///   When set, the child processes will initialize OpenTelemetry tracing and connect to this endpoint.
     ///
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
@@ -308,18 +320,22 @@ impl GdalProcessPool {
         max_total: usize,
         max_active_global: usize,
         max_parallel_per_dataset: usize,
+        otlp_endpoint: Option<String>,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
 
         tokio::spawn(async move {
             let b_tx_clone_2 = b_tx_clone.clone();
+            let endpoint = otlp_endpoint.clone();
             let workers = tokio::task::spawn_blocking(move || {
                 let mut w = Vec::with_capacity(max_total);
                 for id in 0..max_total {
-                    let (guard, tx, rx) =
-                        spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
-                            .expect("Error while spawning GDAL worker process");
+                    let (guard, tx, rx) = spawn_ipc_server_process::<
+                        IpcChannelMessage,
+                        IpcProcessRasterResult,
+                    >(endpoint.clone())
+                    .expect("Error while spawning GDAL worker process");
 
                     let (job_tx, mut job_rx) = mpsc::unbounded_channel();
                     let b_tx_worker = b_tx_clone_2.clone();
@@ -350,6 +366,7 @@ impl GdalProcessPool {
                 max_active_global,
                 max_parallel_per_dataset,
                 b_tx_clone,
+                otlp_endpoint.clone(),
             )
             .await;
         });
@@ -403,12 +420,14 @@ impl GdalProcessPool {
         max_active_global: usize,
         max_parallel_per_dataset: usize,
         broker_tx: mpsc::Sender<BrokerCommand>,
+        otlp_endpoint: Option<String>,
     ) {
         let mut state = BrokerState::new(
             workers,
             max_parallel_per_dataset,
             max_active_global,
             Self::STRATEGY,
+            otlp_endpoint,
         );
 
         while let Some(first_cmd) = rx.recv().await {
@@ -445,11 +464,13 @@ impl GdalProcessPool {
                         state.global_active_count = state.global_active_count.saturating_sub(1);
 
                         let b_tx = broker_tx.clone();
+                        let otlp = state.otlp_endpoint.clone();
                         tokio::task::spawn_blocking(move || {
                             if let Ok((guard, tx, rx)) = spawn_ipc_server_process::<
                                 IpcChannelMessage,
                                 IpcProcessRasterResult,
-                            >() {
+                            >(otlp)
+                            {
                                 let (job_tx, mut job_rx) = mpsc::unbounded_channel();
                                 let b_tx_worker = b_tx.clone();
 
@@ -515,6 +536,7 @@ struct BrokerState {
     max_parallel_per_dataset: usize,
     max_active_global: usize,
     strategy: SchedulingStrategy,
+    otlp_endpoint: Option<String>,
 }
 
 impl BrokerState {
@@ -523,6 +545,7 @@ impl BrokerState {
         max_parallel_per_dataset: usize,
         max_active_global: usize,
         strategy: SchedulingStrategy,
+        otlp_endpoint: Option<String>,
     ) -> Self {
         let idle_workers = (0..workers.len()).collect();
         Self {
@@ -534,6 +557,7 @@ impl BrokerState {
             max_parallel_per_dataset,
             max_active_global,
             strategy,
+            otlp_endpoint,
         }
     }
 
@@ -736,8 +760,15 @@ impl GdalPoolWorkerInstance {
 
     pub async fn read_data<P: Pixel>(
         &self,
-        request: IpcChannelMessage,
+        mut request: IpcChannelMessage,
     ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
+        // Inject the current OpenTelemetry tracing context into the IPC message
+        // so the GDAL subprocess can attach its spans to the correct parent trace.
+        let current_cx = tracing::Span::current().context();
+        global::get_text_map_propagator(|propagator| {
+            propagator.inject_context(&current_cx, &mut request.0.span_context);
+        });
+
         let mut s = DefaultHasher::new();
         request.0.dataset_params.partial_hash(&mut s);
         let hash = s.finish();

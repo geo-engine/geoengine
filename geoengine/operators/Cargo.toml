@@ -34,6 +34,10 @@ itertools = { workspace = true }
 ipc-channel = { workspace = true }
 libloading = { workspace = true }
 tracing = { workspace = true }
+tracing-opentelemetry = { workspace = true }
+opentelemetry = { workspace = true }
+opentelemetry_sdk = { workspace = true, features = ["rt-tokio"] }
+opentelemetry-otlp = { workspace = true, features = ["grpc-tonic"] }
 lru = { workspace = true }
 lz4_flex = { workspace = true }
 ndarray = { workspace = true }

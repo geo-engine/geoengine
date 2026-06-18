@@ -150,6 +150,11 @@ pub async fn start_server(static_files_dir: Option<PathBuf>) -> Result<()> {
             "OpenTelemetry Tracing Endpoint: {}",
             open_telemetry.endpoint
         );
+        let otel_filter = open_telemetry
+            .tracing_log_spec
+            .as_deref()
+            .unwrap_or("info,geoengine=debug");
+        info!("OpenTelemetry Tracing Filter: {otel_filter}");
     } else {
         info!("OpenTelemetry Tracing: disabled");
     }

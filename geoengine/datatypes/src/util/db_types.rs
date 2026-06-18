@@ -80,7 +80,8 @@ impl<S: std::hash::BuildHasher + std::default::Default> From<HashMapTextTextDbTy
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+// TODO: instead of deriving Deserialize/Serialize here, use a wrapper?
+#[derive(PartialEq, Eq, Debug, Clone, serde::Deserialize, serde::Serialize)]
 pub struct StringPair((String, String));
 
 impl StringPair {
