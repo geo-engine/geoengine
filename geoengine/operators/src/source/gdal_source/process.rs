@@ -364,7 +364,6 @@ where
     }
 }
 
-
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum GdalErrorKind {
     FileNotFound,
@@ -569,14 +568,19 @@ pub fn spawn_ipc_server_process<S, R>()
 
     let exe_path = get_gdalsource_path();
 
-    let child = Command::new(exe_path)
-        .arg(token)
+    let mut cmd = Command::new(exe_path);
+
+    cmd.arg(token)
         .arg("debug") // FIXME: paste log level here!
-        .env_remove("LLVM_PROFILE_FILE")
-        .env_remove("LLVM_PROFILE_FILE_NAME")
-        .stderr(std::process::Stdio::inherit()) // This sends child logs to the parent's stderr
-        .spawn()
-        .map_err(IpcProcessError::from)?;
+        .stderr(std::process::Stdio::inherit()); // This sends child logs to the parent's stderr;
+
+    if cfg!(test) {
+        // llcov inserts these env params. We need to remove them from the gdal-processor processes. Otherwise the processes overwrite the main process data and the files become corrupt.
+        cmd.env_remove("LLVM_PROFILE_FILE")
+            .env_remove("LLVM_PROFILE_FILE_NAME");
+    }
+
+    let child = cmd.spawn().map_err(IpcProcessError::from)?;
 
     let (_rx, channels) = server.accept().map_err(IpcProcessError::from)?;
     Ok((ChildProcessGuard { child }, channels.0, channels.1))
