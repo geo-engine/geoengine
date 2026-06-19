@@ -4,7 +4,7 @@ use crate::engine::{
 };
 use crate::optimization::{OptimizableOperator, OptimizationError, SourcesMustNotUseOverviews};
 use crate::source::gdal_source::process::{
-    GdalDataVariant, GdalErrorKind, GdalIpcPayload, IpcChannelMessage, IpcChannelMessagePayload,
+    GdalDataGridVariant, GdalErrorKind, GdalIpcPayload, IpcChannelMessage, IpcChannelMessagePayload,
 };
 pub use crate::source::gdal_source::process_pool::{
     GdalPoolWorkerInstance, GdalProcessPool, GdalProcessPoolError,
@@ -732,7 +732,7 @@ impl GdalRasterLoader {
         read_window: &GdalReadWindow,
         out_shape: &D,
         dataset_params: &GdalDatasetParameters,
-    ) -> Result<GdalDataVariant<T>, GdalRasterLoaderError>
+    ) -> Result<GdalDataGridVariant<T>, GdalRasterLoaderError>
     where
         T: Pixel + GdalType + Default + FromPrimitive,
         D: Clone + GridSize + PartialEq,
@@ -751,7 +751,7 @@ impl GdalRasterLoader {
 
         if dataset_mask_flags.is_all_valid() {
             debug!("all pixels are valid --> skip no-data and mask handling.");
-            return Ok(GdalDataVariant::AllValid { data: buffer_data });
+            return Ok(GdalDataGridVariant::AllValid { data: buffer_data });
         }
 
         if dataset_mask_flags.is_nodata() {
@@ -761,12 +761,12 @@ impl GdalRasterLoader {
                 .or_else(|| rasterband.no_data_value());
 
             if let Some(no_data_value) = no_data_value {
-                return Ok(GdalDataVariant::WithNoData {
+                return Ok(GdalDataGridVariant::WithNoData {
                     data: buffer_data,
                     no_data_value,
                 });
             }
-            return Ok(GdalDataVariant::AllValid { data: buffer_data });
+            return Ok(GdalDataGridVariant::AllValid { data: buffer_data });
         }
 
         if dataset_mask_flags.is_alpha() {
@@ -786,7 +786,7 @@ impl GdalRasterLoader {
             None,                            // sampling mode
         )?;
         let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
-        Ok(GdalDataVariant::WithExplicitMask {
+        Ok(GdalDataGridVariant::WithExplicitMask {
             data: buffer_data,
             validity_mask: mask_buffer_data,
         })

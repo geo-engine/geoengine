@@ -85,7 +85,7 @@ pub type IpcProcessRasterResult = Result<GdalIpcBytePayload, IpcProcessError>;
 pub struct GdalIpcBytePayload {
     pub dimensions: GridBoundingBox2D,
     pub properties: GdalIpcRasterProperties,
-    pub data_variant: GdalDataByteVariant,
+    pub data_variant: GdalDataGridByteVariant,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -163,7 +163,7 @@ pub struct GdalIpcRasterPropertiesKey {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
-pub enum GdalDataByteVariant {
+pub enum GdalDataGridByteVariant {
     /// Represents an Empty Grid (zero allocation for pixels or masks)
     Empty,
 
@@ -195,11 +195,11 @@ pub enum GdalDataByteVariant {
 pub struct GdalIpcPayload<T> {
     pub dimensions: GridBoundingBox2D,
     pub properties: RasterProperties,
-    pub data_variant: GdalDataVariant<T>,
+    pub data_variant: GdalDataGridVariant<T>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum GdalDataVariant<T> {
+pub enum GdalDataGridVariant<T> {
     /// Represents an Empty Grid (zero allocation for pixels or masks)
     Empty,
     AllValid {
@@ -245,34 +245,36 @@ where
     }
 }
 
-impl<T> TryFrom<GdalDataVariant<T>> for GdalDataByteVariant
+impl<T> TryFrom<GdalDataGridVariant<T>> for GdalDataGridByteVariant
 where
     T: NoUninit,
 {
     type Error = bytemuck::PodCastError;
 
-    fn try_from(value: GdalDataVariant<T>) -> Result<Self, Self::Error> {
+    fn try_from(value: GdalDataGridVariant<T>) -> Result<Self, Self::Error> {
         match value {
-            GdalDataVariant::Empty => Ok(GdalDataByteVariant::Empty),
-            GdalDataVariant::AllValid { data } => {
-                bytemuck::try_cast_slice::<T, u8>(&data).map(|s| GdalDataByteVariant::AllValid {
-                    raw_bytes: s.to_vec(),
+            GdalDataGridVariant::Empty => Ok(GdalDataGridByteVariant::Empty),
+            GdalDataGridVariant::AllValid { data } => {
+                bytemuck::try_cast_slice::<T, u8>(&data).map(|s| {
+                    GdalDataGridByteVariant::AllValid {
+                        raw_bytes: s.to_vec(),
+                    }
                 })
             }
-            GdalDataVariant::WithNoData {
+            GdalDataGridVariant::WithNoData {
                 data,
                 no_data_value,
-            } => {
-                bytemuck::try_cast_slice::<T, u8>(&data).map(|s| GdalDataByteVariant::WithNoData {
+            } => bytemuck::try_cast_slice::<T, u8>(&data).map(|s| {
+                GdalDataGridByteVariant::WithNoData {
                     raw_bytes: s.to_vec(),
                     no_data_value,
-                })
-            }
-            GdalDataVariant::WithExplicitMask {
+                }
+            }),
+            GdalDataGridVariant::WithExplicitMask {
                 data,
                 validity_mask,
             } => bytemuck::try_cast_slice::<T, u8>(&data).map(|s| {
-                GdalDataByteVariant::WithExplicitMask {
+                GdalDataGridByteVariant::WithExplicitMask {
                     raw_bytes: s.to_vec(),
                     validity_mask,
                 }
@@ -281,27 +283,27 @@ where
     }
 }
 
-impl<T> From<GdalDataByteVariant> for GdalDataVariant<T>
+impl<T> From<GdalDataGridByteVariant> for GdalDataGridVariant<T>
 where
     T: AnyBitPattern,
 {
-    fn from(value: GdalDataByteVariant) -> Self {
+    fn from(value: GdalDataGridByteVariant) -> Self {
         match value {
-            GdalDataByteVariant::Empty => GdalDataVariant::Empty,
-            GdalDataByteVariant::AllValid { raw_bytes } => GdalDataVariant::AllValid {
+            GdalDataGridByteVariant::Empty => GdalDataGridVariant::Empty,
+            GdalDataGridByteVariant::AllValid { raw_bytes } => GdalDataGridVariant::AllValid {
                 data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
             },
-            GdalDataByteVariant::WithNoData {
+            GdalDataGridByteVariant::WithNoData {
                 raw_bytes,
                 no_data_value,
-            } => GdalDataVariant::WithNoData {
+            } => GdalDataGridVariant::WithNoData {
                 data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
                 no_data_value,
             },
-            GdalDataByteVariant::WithExplicitMask {
+            GdalDataGridByteVariant::WithExplicitMask {
                 raw_bytes,
                 validity_mask,
-            } => GdalDataVariant::WithExplicitMask {
+            } => GdalDataGridVariant::WithExplicitMask {
                 data: bytemuck::cast_slice::<u8, T>(&raw_bytes).to_vec(),
                 validity_mask,
             },
@@ -315,17 +317,17 @@ where
 {
     fn from(value: GdalIpcPayload<T>) -> Self {
         match value.data_variant {
-            GdalDataVariant::Empty => GridAndProperties {
+            GdalDataGridVariant::Empty => GridAndProperties {
                 grid: GridOrEmpty::new_empty_shape(value.dimensions),
                 properties: value.properties,
             },
-            GdalDataVariant::AllValid { data } => GridAndProperties {
+            GdalDataGridVariant::AllValid { data } => GridAndProperties {
                 grid: GridOrEmpty::new_grid(MaskedGrid::new_with_data(
                     Grid::new(value.dimensions, data).expect("shape and data match"),
                 )),
                 properties: value.properties,
             },
-            GdalDataVariant::WithNoData {
+            GdalDataGridVariant::WithNoData {
                 data,
                 no_data_value,
             } => {
@@ -341,7 +343,7 @@ where
                     properties: value.properties,
                 }
             }
-            GdalDataVariant::WithExplicitMask {
+            GdalDataGridVariant::WithExplicitMask {
                 data,
                 validity_mask,
             } => GridAndProperties {
@@ -362,10 +364,6 @@ where
     }
 }
 
-// [`IpcError`] does not implement the serde traits, and thus cant be send
-// via the ipc_channels
-
-// --- 1. STRONGLY TYPED SUB-CATEGORIES (Must be Serialize + Deserialize + Clone) ---
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
 pub enum GdalErrorKind {
@@ -385,8 +383,6 @@ pub enum IoErrorKind {
     UnexpectedEof,
     Other,
 }
-
-// --- 2. THE IPC TRANSFERRABLE ERROR ENUM ---
 
 #[derive(Debug, Snafu, Serialize, Deserialize, Clone, PartialEq)]
 #[snafu(visibility(pub))]
