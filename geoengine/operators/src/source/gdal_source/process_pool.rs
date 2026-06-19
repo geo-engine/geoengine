@@ -57,7 +57,7 @@ const SCORE_FRESH_WORKER_DEFAULT: f64 = 0.5;
 
 /// High-affinity immediate dispatch cutoff threshold. If a candidate worker's affinity score
 /// matches or exceeds this, we short-circuit the matrix evaluation instantly.
-const IMMEDIATE_DISPATCH_THRESHOLD: f64 = 11000.0;
+const IMMEDIATE_DISPATCH_THRESHOLD: f64 = SCORE_DATASET_MATCH + SCORE_BAND_MATCH;
 
 /// Max lookahead horizontal threshold for sweeps over unique datasets.
 const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
