@@ -296,18 +296,18 @@ impl GdalProcessPool {
     /// Returns an `Arc` to the initialized `GdalProcessPool`, which can be cloned and shared across the application for submitting read requests.
     ///
     /// # Parameters
-    /// - `max_total`: The total number of GDAL worker processes to spawn and maintain in the pool.
-    /// - `max_active_global`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
-    /// - `max_parallel_per_dataset`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
+    /// - `number_of_processes`: The total number of GDAL worker processes to spawn and maintain in the pool.
+    /// - `max_active_processes`: The maximum number of active (in-flight) requests allowed across all datasets at any given time.
+    /// - `max_dataset_processes`: The maximum number of active requests allowed concurrently for the same dataset, enforcing per-dataset concurrency limits.
     ///
     /// # Panics
     /// This function will panic if any of the worker processes fail to spawn successfully.
     /// It is designed to be called during application initialization, and assumes that the system has sufficient resources to spawn the specified number of worker processes.
     ///
     pub fn new(
-        max_total: usize,
-        max_active_global: usize,
-        max_parallel_per_dataset: usize,
+        number_of_processes: usize,
+        max_active_processes: usize,
+        max_dataset_processes: usize,
     ) -> Arc<Self> {
         let (broker_tx, broker_rx) = mpsc::channel(BROKER_QUEUE_CAPACITY);
         let b_tx_clone = broker_tx.clone();
@@ -315,8 +315,8 @@ impl GdalProcessPool {
         tokio::spawn(async move {
             let b_tx_clone_2 = b_tx_clone.clone();
             let workers = tokio::task::spawn_blocking(move || {
-                let mut w = Vec::with_capacity(max_total);
-                for id in 0..max_total {
+                let mut w = Vec::with_capacity(number_of_processes);
+                for id in 0..number_of_processes {
                     let (guard, tx, rx) =
                         spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
                             .expect("Error while spawning GDAL worker process");
@@ -347,8 +347,8 @@ impl GdalProcessPool {
             Self::broker_loop(
                 broker_rx,
                 workers,
-                max_active_global,
-                max_parallel_per_dataset,
+                max_active_processes,
+                max_dataset_processes,
                 b_tx_clone,
             )
             .await;
@@ -400,14 +400,14 @@ impl GdalProcessPool {
     async fn broker_loop(
         mut rx: mpsc::Receiver<BrokerCommand>,
         workers: Vec<WorkerProcess>,
-        max_active_global: usize,
-        max_parallel_per_dataset: usize,
+        max_active_processes: usize,
+        max_dataset_processes: usize,
         broker_tx: mpsc::Sender<BrokerCommand>,
     ) {
         let mut state = BrokerState::new(
             workers,
-            max_parallel_per_dataset,
-            max_active_global,
+            max_dataset_processes,
+            max_active_processes,
             Self::STRATEGY,
         );
 
@@ -512,16 +512,16 @@ struct BrokerState {
     dataset_registry: FastHashMap<u64, DatasetSlot>,
     active_datasets: VecDeque<u64>,
     global_active_count: usize,
-    max_parallel_per_dataset: usize,
-    max_active_global: usize,
+    max_dataset_processes: usize,
+    max_active_processes: usize,
     strategy: SchedulingStrategy,
 }
 
 impl BrokerState {
     pub fn new(
         workers: Vec<WorkerProcess>,
-        max_parallel_per_dataset: usize,
-        max_active_global: usize,
+        max_dataset_processes: usize,
+        max_active_processes: usize,
         strategy: SchedulingStrategy,
     ) -> Self {
         let idle_workers = (0..workers.len()).collect();
@@ -531,8 +531,8 @@ impl BrokerState {
             dataset_registry: FastHashMap::default(),
             active_datasets: VecDeque::new(),
             global_active_count: 0,
-            max_parallel_per_dataset,
-            max_active_global,
+            max_dataset_processes,
+            max_active_processes,
             strategy,
         }
     }
@@ -606,7 +606,7 @@ impl BrokerState {
         let now = Instant::now();
 
         while !self.idle_workers.is_empty() && !self.active_datasets.is_empty() {
-            if self.global_active_count >= self.max_active_global {
+            if self.global_active_count >= self.max_active_processes {
                 break;
             }
 
@@ -621,7 +621,7 @@ impl BrokerState {
                     .dataset_registry
                     .get(&hash)
                     .expect("Active dataset missing from registry - invariant broken");
-                if slot.active_count >= self.max_parallel_per_dataset {
+                if slot.active_count >= self.max_dataset_processes {
                     continue;
                 }
 

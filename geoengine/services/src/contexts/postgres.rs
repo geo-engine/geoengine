@@ -97,9 +97,9 @@ where
         );
 
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
-            gdal_process_pool_config.max_processes as usize,
-            gdal_process_pool_config.global_active_worker as usize,
-            gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
         );
 
         Ok(PostgresContext {
@@ -140,9 +140,9 @@ where
         );
 
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
-            gdal_process_pool_config.max_processes as usize,
-            gdal_process_pool_config.global_active_worker as usize,
-            gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
         );
 
         Ok(PostgresContext {
@@ -193,9 +193,9 @@ where
         );
 
         let gdal_process_pool: Arc<GdalProcessPool> = GdalProcessPool::new(
-            gdal_process_pool_config.max_processes as usize,
-            gdal_process_pool_config.global_active_worker as usize,
-            gdal_process_pool_config.worker_per_dataset as usize,
+            gdal_process_pool_config.number_of_processes as usize,
+            gdal_process_pool_config.max_active_processes as usize,
+            gdal_process_pool_config.max_dataset_processes as usize,
         );
 
         let app_ctx = PostgresContext {
