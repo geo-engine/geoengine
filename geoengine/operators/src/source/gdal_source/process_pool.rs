@@ -616,7 +616,6 @@ impl BrokerState {
             let mut best_dataset_active_idx = 0;
             let mut datasets_scanned = 0;
 
-            // Inlined, highly optimized single pass across eligible datasets
             for (idx, &hash) in self.active_datasets.iter().enumerate() {
                 let slot = self
                     .dataset_registry
