@@ -3,7 +3,7 @@ use std::{fmt::Display, str::FromStr};
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
 use geoengine_operators::source::{
-    GdalDatasetCache, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+    GdalDatasetHolder, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
     IpcProcessRasterResult,
     gdal_source::{GdalRasterLoader, process::GdalIpcBytePayload},
     setup_client,
@@ -70,7 +70,7 @@ fn main() {
 
 fn raster_type_dispatch(
     payload: IpcChannelMessagePayload,
-    dataset_cache: &mut GdalDatasetCache,
+    dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
     match payload.data_type {
@@ -117,7 +117,7 @@ fn run(token: Token) {
         Err(err) => exit_with_error(err),
     };
 
-    let mut dataset_cache = GdalDatasetCache::new();
+    let mut dataset_cache = GdalDatasetHolder::new();
 
     // Loop runs indefinitely, reusing the process and its GDAL dataset cache
     while let Ok(message) = receiver.recv() {
@@ -137,7 +137,7 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
         read_advise,
         data_type: _,
     }: IpcChannelMessagePayload,
-    dataset_cache: &mut GdalDatasetCache,
+    dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
     let gp = GdalRasterLoader::load_tile_data_with_dataset_retry::<T>(

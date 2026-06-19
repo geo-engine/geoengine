@@ -14,7 +14,7 @@ pub use self::gdal_source::{
     GdalRetryOptions, GdalSource, GdalSourceError, GdalSourceParameters, GdalSourceProcessor,
     GdalSourceTimePlaceholder, TimeReference,
     process::{
-        GdalDatasetCache, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+        GdalDatasetHolder, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
         IpcProcessRasterResult, setup_client,
     },
 };

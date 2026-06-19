@@ -9,7 +9,7 @@ use crate::source::gdal_source::process::{
 pub use crate::source::gdal_source::process_pool::{
     GdalPoolWorkerInstance, GdalProcessPool, GdalProcessPoolError,
 };
-use crate::source::{GdalDatasetCache, IpcProcessError};
+use crate::source::{GdalDatasetHolder, IpcProcessError};
 use crate::util::input::float_option_with_nan;
 use crate::util::retry::retry_sync;
 use crate::{
@@ -450,7 +450,7 @@ impl GdalRasterLoader {
     /// A method to load single tiles from a GDAL dataset.
     ///
     pub fn load_tile_data_with_dataset_retry<T: Pixel + GdalType + FromPrimitive>(
-        cache: &mut GdalDatasetCache,
+        cache: &mut GdalDatasetHolder,
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<GdalIpcPayload<T>, GdalRasterLoaderError> {
@@ -1981,7 +1981,7 @@ mod tests {
             retry: None,
         };
 
-        let mut gdc = GdalDatasetCache::new();
+        let mut gdc = GdalDatasetHolder::new();
         let dataset = gdc.get_or_open(&dataset_params).unwrap();
 
         let reader_payload =
@@ -2789,7 +2789,7 @@ mod tests {
 
         assert_eq!(gdal_read_advice, exp_gdal_read_advice);
 
-        let mut gdc = GdalDatasetCache::new();
+        let mut gdc = GdalDatasetHolder::new();
         let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
 
         let reader_payload =
@@ -2849,7 +2849,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetCache::new();
+        let mut gdc = GdalDatasetHolder::new();
         let dataset = gdc.get_or_open(&up_side_down_params).unwrap();
 
         let GridAndProperties { grid, properties } =
@@ -2924,7 +2924,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetCache::new();
+        let mut gdc = GdalDatasetHolder::new();
 
         let result = GdalRasterLoader::load_tile_data_with_dataset_retry::<u8>(
             &mut gdc,
@@ -3019,7 +3019,7 @@ mod tests {
             flip_y: false,
         };
 
-        let mut gdc = GdalDatasetCache::new();
+        let mut gdc = GdalDatasetHolder::new();
 
         let result = GdalRasterLoader::load_tile_data_with_dataset_retry::<u8>(
             &mut gdc,

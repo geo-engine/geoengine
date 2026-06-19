@@ -608,7 +608,7 @@ where
 
 /// A simple, single-entry cache for an open GDAL dataset tile.
 #[derive(Default)]
-pub struct GdalDatasetCache {
+pub struct GdalDatasetHolder {
     params: Option<GdalDatasetParameters>,
     dataset: Option<GdalDataset>,
     thread_local: Option<GdalConfigOptions>,
@@ -618,7 +618,7 @@ struct PrevDatasetOpt {
     _prev_dataset: Option<GdalDataset>,
 }
 
-impl GdalDatasetCache {
+impl GdalDatasetHolder {
     pub fn new() -> Self {
         Self {
             params: None,
@@ -663,16 +663,16 @@ impl GdalDatasetCache {
         }
     }
 
-    /// Retrieves the cached dataset if the parameters match, otherwise opens a new dataset with the given parameters, updates the cache, and returns it.
-    /// The previous dataset is kept alive until the new one is successfully opened to maintain GDAL's internal caching benefits.
-    /// This method ensures that only one dataset is open at a time, and that the cache is updated atomically to prevent stale data.
+    /// Retrieves the open dataset if the parameters match, otherwise opens a new dataset with the given parameters, updates the stored dataset, and returns it.
+    /// The current open dataset is kept alive until the new one is successfully opened to maintain GDAL's internal caching benefits.
+    /// This method ensures that only one dataset is open at a time, and that the state is updated atomically to prevent stale data.
     /// The caller is responsible for ensuring that the returned dataset is not used concurrently across threads, as GDAL datasets are generally not thread-safe.
     /// # Errors
-    /// Returns a `GdalError` if opening the new dataset fails. In this case, the cache remains unchanged and the previous dataset (if any) is still valid.
+    /// Returns a `GdalError` if opening the new dataset fails. In this case, the stored dataset remains unchanged and the previous dataset (if any) is still valid.
     ///
     /// # Panics
-    /// Panics if the dataset is unexpectedly missing after a cache hit, which should never happen if the cache logic is correct.
-    /// Panics if the thread local configuration options fail to apply, which should also not happen under normal circumstances.
+    /// Panics if the dataset is unexpectedly missing after a it was detected as open, which should never happen.
+    /// Panics if the configuration options fail to apply, which should also not happen under normal circumstances.
     /// Panics if the caller attempts to use the returned dataset concurrently across threads, which is not allowed due to GDAL's thread safety constraints.
     pub fn get_or_open(
         &mut self,
@@ -697,10 +697,10 @@ impl GdalDatasetCache {
 
     fn is_hit(params: Option<&GdalDatasetParameters>, other: &GdalDatasetParameters) -> bool {
         // TODO: we could optimize this by hashing the parameters and comparing the hash for a quick check before doing the full equality check, if it turns out to be a bottleneck.
-        if let Some(cached) = params {
-            cached.file_path == other.file_path
-                && cached.gdal_open_options == other.gdal_open_options
-                && cached.gdal_config_options == other.gdal_config_options
+        if let Some(current_ds_params) = params {
+            current_ds_params.file_path == other.file_path
+                && current_ds_params.gdal_open_options == other.gdal_open_options
+                && current_ds_params.gdal_config_options == other.gdal_config_options
         } else {
             false
         }
