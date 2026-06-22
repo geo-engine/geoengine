@@ -28,6 +28,7 @@ pub enum SimpleRasterStackerError {
 
     InputsNotTemporalAligned,
 
+    #[snafu(display("Failed to create source streams: {}", source))]
     CreateSourceStreams {
         source: Box<Error>,
     },

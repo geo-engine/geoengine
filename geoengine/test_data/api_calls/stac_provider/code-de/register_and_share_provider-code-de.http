@@ -1,0 +1,53 @@
+###
+
+# @name session
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/login
+Content-Type: application/json
+
+{
+    "email": "admin@localhost",
+    "password": "adminadmin"
+}
+
+###
+
+# @name provider
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/layerDb/providers
+Authorization: Bearer {{session.response.body.$.id}}
+Content-Type: application/json
+
+< ../../../provider_defs_api/stac_sentinel2.json
+
+###
+
+@providerId = b274275c-373d-4a3f-8b45-9b48e9614329
+@anonymousRoleId = fd8e87bf-515c-4f36-8da6-1a53702ff102
+@userRoleId = 4e8081b6-8aa6-4275-af0c-2fa2da557d28
+
+PUT https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/permissions
+Authorization: Bearer {{session.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "resource": {
+        "type": "provider",
+        "id": "{{providerId}}"
+    },
+    "roleId": "{{anonymousRoleId}}",
+    "permission": "Read"
+}
+
+###
+
+PUT https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/permissions
+Authorization: Bearer {{session.response.body.$.id}}
+Content-Type: application/json
+
+{
+    "resource": {
+        "type": "provider",
+        "id": "{{providerId}}"
+    },
+    "roleId": "{{userRoleId}}",
+    "permission": "Read"
+}

@@ -29,6 +29,7 @@ use num;
 use rayon::ThreadPool;
 use rayon::iter::{IndexedParallelIterator, ParallelIterator};
 use rayon::slice::{ParallelSlice, ParallelSliceMut};
+use tracing::{Instrument, Span, info_span};
 
 use super::{FoldTileAccu, FoldTileAccuMut, SubQueryTileAggregator};
 
@@ -109,10 +110,20 @@ where
         });
 
         if let Some(bounds) = valid_spatial_bounds {
+            let span = info_span!(
+                "reprojection.tile_query_rectangle",
+                out_tile_position = ?tile_info.global_tile_position,
+                out_srs = %self.out_srs,
+                in_srs = %self.in_srs,
+                duration_us = tracing::field::Empty,
+                result = tracing::field::Empty,
+            );
+            let start = std::time::Instant::now();
+            let _guard = span.entered();
             let proj = CoordinateProjector::from_known_srs(self.out_srs, self.in_srs)?;
             let projected_bounds = bounds.reproject(&proj);
 
-            match projected_bounds {
+            let result = match projected_bounds {
                 Ok(pb) => Ok(Some(RasterQueryRectangle::new(
                     self.state
                         .in_spatial_grid
@@ -125,7 +136,11 @@ where
                 // We ignore it since it contains no pixels.
                 Err(geoengine_datatypes::error::Error::OutputBboxEmpty { bbox: _ }) => Ok(None),
                 Err(e) => Err(e.into()),
-            }
+            };
+            let elapsed = start.elapsed();
+            Span::current().record("duration_us", elapsed.as_micros() as u64);
+            Span::current().record("result", &format!("{:?}", result.is_ok()));
+            result
         } else {
             // output query rectangle is not valid in source projection => produce empty tile
             Ok(None)
@@ -146,7 +161,19 @@ fn build_accu<T: Pixel>(
     in_srs: SpatialReference,
 ) -> impl Future<Output = Result<TileWithProjectionCoordinates<T>>> + use<T> {
     let time_interval = query_rect.time_interval();
+    let tile_position = tile_info.global_tile_position;
+    let tile_size = tile_info.tile_size_in_pixels;
+    let span = tracing::info_span!(
+        "reprojection.build_accu",
+        tile_position = ?tile_position,
+        tile_size_x = tile_size.axis_size_x(),
+        tile_size_y = tile_size.axis_size_y(),
+        out_srs = %out_srs,
+        in_srs = %in_srs,
+    );
+
     crate::util::spawn_blocking(move || {
+        let _guard = span.entered();
         let output_raster = EmptyGrid::new(tile_info.tile_size_in_pixels);
 
         let pool = pool.clone();
@@ -174,6 +201,7 @@ fn build_accu<T: Pixel>(
     })
     .map_err(From::from)
     .and_then(|x| async { x }) // flatten Ok(Ok())
+    .instrument(tracing::info_span!("reprojection.build_accu"))
 }
 
 fn projected_coordinate_grid_parallel(
@@ -191,78 +219,130 @@ fn projected_coordinate_grid_parallel(
     )
     .max(1);
 
-    let start = std::time::Instant::now();
+    let tile_position = tile_info.global_tile_position;
+    let tile_size = tile_info.tile_size_in_pixels;
 
     let parallelism = pool.current_num_threads();
     let par_chunk_split =
-        num::integer::div_ceil(tile_info.tile_size_in_pixels.axis_size_y(), parallelism)
-            .max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
-    let par_chunk_size = tile_info.tile_size_in_pixels.axis_size_x() * par_chunk_split;
+        num::integer::div_ceil(tile_size.axis_size_y(), parallelism).max(min_rows_in_par_chunk); // don't go below MIN_ROWS_IN_PAR_CHUNK lines per chunk.
+    let par_chunk_size = tile_size.axis_size_x() * par_chunk_split;
 
-    let res = pool.install(|| {
-        let mut in_coord_grid: Grid2D<Option<Coordinate2D>> =
-            Grid2D::new_filled(tile_info.tile_size_in_pixels, None);
+    let num_chunks = num::integer::div_ceil(tile_size.axis_size_y(), par_chunk_split);
 
-        let out_coords = tile_info
-            .spatial_grid_definition()
-            .generate_coord_grid_pixel_center();
+    let proj_create_ns = std::sync::atomic::AtomicU64::new(0);
+    let project_coords_ns = std::sync::atomic::AtomicU64::new(0);
 
-        in_coord_grid
-            .data
-            .par_chunks_mut(par_chunk_size)
-            .zip(out_coords.data.par_chunks(par_chunk_size))
-            .try_for_each(|(in_coord_slice, out_coord_slice)| {
-                debug_assert_eq!(
-                    in_coord_slice.len(),
-                    out_coord_slice.len(),
-                    "slices must be equal"
-                );
-                let chunk_bounds = BoundingBox2D::from_coord_ref_iter(out_coord_slice.iter());
-
-                if chunk_bounds.is_none() {
-                    tracing::trace!("reprojection early exit");
-                    return Ok(());
-                }
-
-                let chunk_bounds = chunk_bounds.expect("checked above");
-                let valid_out_area = valid_out_area.as_bbox();
-
-                let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
-
-                if valid_out_area.contains_bbox(&chunk_bounds) {
-                    tracing::trace!("reproject whole tile chunk");
-                    let in_coords = proj.project_coordinates(out_coord_slice)?;
-                    in_coord_slice
-                        .iter_mut()
-                        .zip(in_coords.into_iter())
-                        .for_each(|(a, b)| *a = Some(b));
-                } else if valid_out_area.intersects_bbox(&chunk_bounds) {
-                    tracing::trace!("reproject part of tile chunk");
-                    in_coord_slice
-                        .iter_mut()
-                        .zip(out_coord_slice.iter())
-                        .for_each(|(in_coord, out_coord)| {
-                            *in_coord = if valid_out_area.contains_coordinate(out_coord) {
-                                proj.project_coordinate(*out_coord).ok()
-                            } else {
-                                None
-                            };
-                        });
-                } else {
-                    // do nothing. Should be unreachable
-                }
-                Result::<(), crate::error::Error>::Ok(())
-            })?;
-        Ok(in_coord_grid)
-    });
-    tracing::trace!(
-        "projected_coordinate_grid_parallel {:?}, parallelism: threads={} par_chunk_split={} par_chunk_size={} took {} (ns) ",
-        &tile_info.global_tile_position,
-        pool.current_num_threads(),
-        par_chunk_split,
-        par_chunk_size,
-        start.elapsed().as_nanos()
+    let span = tracing::info_span!(
+        "reprojection.coordinate_grid",
+        tile_position = ?tile_position,
+        tile_size_x = tile_size.axis_size_x(),
+        tile_size_y = tile_size.axis_size_y(),
+        num_threads = parallelism,
+        num_chunks = num_chunks,
+        par_chunk_size = par_chunk_size,
+        proj_context_creation_us = tracing::field::Empty,
+        project_coordinates_us = tracing::field::Empty,
+        overhead_us = tracing::field::Empty,
     );
+
+    let res = span.in_scope(|| {
+        let start = std::time::Instant::now();
+
+        let result = pool.install(|| {
+            let mut in_coord_grid: Grid2D<Option<Coordinate2D>> =
+                Grid2D::new_filled(tile_size, None);
+
+            let out_coords = tile_info
+                .spatial_grid_definition()
+                .generate_coord_grid_pixel_center();
+
+            let valid_out_area_bbox = valid_out_area.as_bbox();
+
+            in_coord_grid
+                .data
+                .par_chunks_mut(par_chunk_size)
+                .zip(out_coords.data.par_chunks(par_chunk_size))
+                .try_for_each(|(in_coord_slice, out_coord_slice)| {
+                    debug_assert_eq!(
+                        in_coord_slice.len(),
+                        out_coord_slice.len(),
+                        "slices must be equal"
+                    );
+                    let chunk_bounds = BoundingBox2D::from_coord_ref_iter(out_coord_slice.iter());
+
+                    if chunk_bounds.is_none() {
+                        tracing::trace!("reprojection early exit");
+                        return Ok(());
+                    }
+
+                    let chunk_bounds = chunk_bounds.expect("checked above");
+
+                    // --- PROJ context creation ---
+                    let proj_start = std::time::Instant::now();
+                    let proj = CoordinateProjector::from_known_srs(out_srs, in_srs)?;
+                    proj_create_ns.fetch_add(
+                        proj_start.elapsed().as_nanos() as u64,
+                        std::sync::atomic::Ordering::Relaxed,
+                    );
+
+                    if valid_out_area_bbox.contains_bbox(&chunk_bounds) {
+                        tracing::trace!("reproject whole tile chunk");
+
+                        // --- actual pixel coordinate projection ---
+                        let project_start = std::time::Instant::now();
+                        let in_coords = proj.project_coordinates(out_coord_slice)?;
+                        project_coords_ns.fetch_add(
+                            project_start.elapsed().as_nanos() as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+
+                        in_coord_slice
+                            .iter_mut()
+                            .zip(in_coords.into_iter())
+                            .for_each(|(a, b)| *a = Some(b));
+                    } else if valid_out_area_bbox.intersects_bbox(&chunk_bounds) {
+                        tracing::trace!("reproject part of tile chunk");
+
+                        let project_start = std::time::Instant::now();
+                        in_coord_slice
+                            .iter_mut()
+                            .zip(out_coord_slice.iter())
+                            .for_each(|(in_coord, out_coord)| {
+                                *in_coord = if valid_out_area_bbox.contains_coordinate(out_coord) {
+                                    proj.project_coordinate(*out_coord).ok()
+                                } else {
+                                    None
+                                };
+                            });
+                        project_coords_ns.fetch_add(
+                            project_start.elapsed().as_nanos() as u64,
+                            std::sync::atomic::Ordering::Relaxed,
+                        );
+                    } else {
+                        // do nothing. Should be unreachable
+                    }
+                    Result::<(), crate::error::Error>::Ok(())
+                })?;
+            Ok(in_coord_grid)
+        });
+
+        let total_elapsed = start.elapsed();
+        let proj_create_total = proj_create_ns.load(std::sync::atomic::Ordering::Relaxed);
+        let project_coords_total = project_coords_ns.load(std::sync::atomic::Ordering::Relaxed);
+
+        tracing::Span::current().record("proj_context_creation_us", proj_create_total / 1000);
+        tracing::Span::current().record("project_coordinates_us", project_coords_total / 1000);
+        tracing::Span::current().record(
+            "overhead_us",
+            (total_elapsed
+                .as_nanos()
+                .saturating_sub(proj_create_total as u128 + project_coords_total as u128)
+                / 1000) as u64,
+        );
+
+        result
+    });
+
     res
 }
 
@@ -274,15 +354,30 @@ pub fn fold_by_coordinate_lookup_future<T>(
 where
     T: Pixel,
 {
-    //  println!("fold_by_coordinate_lookup_future {:?}", &tile.tile_position);
-    crate::util::spawn_blocking(|| fold_by_coordinate_lookup_impl(accu, tile)).then(
-        |x| async move {
-            match x {
-                Ok(r) => r,
-                Err(e) => Err(e.into()),
-            }
-        },
-    )
+    let source_tile_position = tile.tile_position;
+    let out_tile_position = accu.accu_tile.tile_position;
+    let source_tile_size = tile.tile_information().tile_size_in_pixels;
+    let out_tile_size = accu.accu_tile.tile_information().tile_size_in_pixels;
+    let span = info_span!(
+        "reprojection.fold",
+        source_tile_position = ?source_tile_position,
+        out_tile_position = ?out_tile_position,
+        source_tile_size_x = source_tile_size.axis_size_x(),
+        source_tile_size_y = source_tile_size.axis_size_y(),
+        out_tile_size_x = out_tile_size.axis_size_x(),
+        out_tile_size_y = out_tile_size.axis_size_y(),
+    );
+
+    crate::util::spawn_blocking(move || {
+        let _guard = span.entered();
+        fold_by_coordinate_lookup_impl(accu, tile)
+    })
+    .then(|x| async move {
+        match x {
+            Ok(r) => r,
+            Err(e) => Err(e.into()),
+        }
+    })
 }
 
 #[allow(clippy::type_complexity)]
@@ -304,11 +399,31 @@ where
         return Ok(accu);
     }
 
+    let tile_position = tile.tile_position;
+    let source_tile_position = tile.tile_position;
+    let out_tile_size = accu.accu_tile.tile_information().tile_size_in_pixels();
+
     let TileWithProjectionCoordinates {
         mut accu_tile,
         coords,
         pool,
     } = accu;
+
+    let non_empty_count: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    let span = tracing::info_span!(
+        "reprojection.sample_pixels",
+        source_tile_position = ?source_tile_position,
+        out_tile_position = ?tile_position,
+        out_tile_size_x = out_tile_size.axis_size_x(),
+        out_tile_size_y = out_tile_size.axis_size_y(),
+        duration_us = tracing::field::Empty,
+        sampled_pixels = tracing::field::Empty,
+    );
+
+    let _guard = span.clone().entered();
+
+    let start = std::time::Instant::now();
 
     pool.install(|| {
         let tile_bounding_box = tile.spatial_partition();
@@ -317,12 +432,23 @@ where
             let lookup_coord = coords.get_at_grid_index_unchecked(grid_idx);
             let lookup_value = lookup_coord
                 .filter(|coord| tile_bounding_box.contains_coordinate(coord))
-                .and_then(|coord| tile.pixel_value_at_coord_unchecked(coord));
+                .and_then(|coord| {
+                    non_empty_count.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                    tile.pixel_value_at_coord_unchecked(coord)
+                });
             lookup_value.or(accu_value)
         };
 
         accu_tile.update_indexed_elements_parallel(map_fn);
     });
+
+    let elapsed = start.elapsed();
+    span.record("duration_us", elapsed.as_micros() as u64);
+    span.record(
+        "sampled_pixels",
+        non_empty_count.load(std::sync::atomic::Ordering::Relaxed),
+    );
+    drop(_guard);
 
     Ok(TileWithProjectionCoordinates {
         accu_tile,

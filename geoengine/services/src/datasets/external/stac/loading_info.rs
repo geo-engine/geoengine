@@ -30,7 +30,147 @@ use std::str::FromStr;
 use std::time::Duration;
 use url::Url;
 
+/// Maximum number of characters to log from a failed STAC API response body.
+const STAC_RESPONSE_BODY_LOG_PREVIEW_LEN: usize = 1_000;
+
 const STAC_QUERY_TIMEOUT_SECS: u64 = 60;
+
+/// Maximum number of retry attempts for STAC API requests.
+const STAC_RETRY_MAX_ATTEMPTS: u32 = 5;
+
+/// Base delay in milliseconds for exponential backoff.
+const STAC_RETRY_BASE_DELAY_MS: u64 = 1_000;
+
+/// Maximum delay in milliseconds between retries.
+const STAC_RETRY_MAX_DELAY_MS: u64 = 30_000;
+
+/// Fraction of the current delay used as random jitter: delay += random(0, delay * JITTER_FRACTION)
+const STAC_RETRY_JITTER_FRACTION: f64 = 0.5;
+
+/// HTTP status codes for which the STAC API request should be retried.
+fn is_stac_retryable_status(status: reqwest::StatusCode) -> bool {
+    status == reqwest::StatusCode::TOO_MANY_REQUESTS // 429
+        || status.is_server_error()                    // 5xx
+}
+
+/// Determine the delay before the next retry, respecting the `Retry-After` header
+/// and falling back to exponential backoff with jitter.
+fn stac_retry_delay(
+    response: &reqwest::Response,
+    attempt: u32,
+) -> Duration {
+    // Prefer the Retry-After header
+    if let Some(retry_after) = response.headers().get(reqwest::header::RETRY_AFTER) {
+        if let Some(secs) = retry_after
+            .to_str()
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+        {
+            let delay = Duration::from_secs(secs);
+            // Cap at max delay
+            return if delay.as_millis() as u64 > STAC_RETRY_MAX_DELAY_MS {
+                Duration::from_millis(STAC_RETRY_MAX_DELAY_MS)
+            } else {
+                delay
+            };
+        }
+    }
+
+    // Exponential backoff: base_delay * 2^attempt + jitter
+    let delay_ms = STAC_RETRY_BASE_DELAY_MS.saturating_mul(1 << attempt);
+    let delay_ms = delay_ms.min(STAC_RETRY_MAX_DELAY_MS);
+
+    let jitter = (delay_ms as f64 * STAC_RETRY_JITTER_FRACTION * rand::random::<f64>()) as u64;
+
+    Duration::from_millis(delay_ms + jitter)
+}
+
+/// Perform a STAC API request with retry logic for transient failures.
+///
+/// Retries on HTTP 429, 5xx, and connection-level errors.
+/// Does **not** retry on JSON decode failures (the body was received successfully).
+async fn stac_request_with_retry(
+    client: &reqwest::Client,
+    build_request: impl Fn(&reqwest::Client) -> reqwest::RequestBuilder,
+) -> geoengine_operators::util::Result<(reqwest::StatusCode, String)> {
+    let mut last_error: Option<Box<dyn std::error::Error + Send + Sync>> = None;
+
+    for attempt in 1..=STAC_RETRY_MAX_ATTEMPTS {
+        // Build and send
+        let response_result = build_request(client).send().await;
+
+        let response = match response_result {
+            Ok(r) => r,
+            Err(e) => {
+                // Connection-level error — retryable
+                tracing::warn!(
+                    "STAC API send failed (attempt {attempt}/{STAC_RETRY_MAX_ATTEMPTS}): {e:?}"
+                );
+                last_error = Some(Box::new(e));
+                let delay = Duration::from_millis(STAC_RETRY_BASE_DELAY_MS);
+                tokio::time::sleep(delay).await;
+                continue;
+            }
+        };
+
+        let status = response.status();
+
+        if status.is_success() {
+            // Read body
+            let body = match response.text().await {
+                Ok(b) => b,
+                Err(e) => {
+                    tracing::warn!(
+                        "STAC API read body failed (attempt {attempt}/{STAC_RETRY_MAX_ATTEMPTS}): {e:?}"
+                    );
+                    last_error = Some(Box::new(e) as Box<dyn std::error::Error + Send + Sync>);
+                    let delay = Duration::from_millis(STAC_RETRY_BASE_DELAY_MS);
+                    tokio::time::sleep(delay).await;
+                    continue;
+                }
+            };
+
+            return Ok((status, body));
+        }
+
+        if is_stac_retryable_status(status) {
+            let delay = stac_retry_delay(&response, attempt);
+            tracing::warn!(
+                "STAC API returned {status} (attempt {attempt}/{STAC_RETRY_MAX_ATTEMPTS}), \
+                 retrying in {delay:?}"
+            );
+            last_error = Some(Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("HTTP {status}"),
+            )) as Box<dyn std::error::Error + Send + Sync>);
+            tokio::time::sleep(delay).await;
+            continue;
+        }
+
+        // Non-retryable error — read body for diagnostics and fail immediately
+        let body = response.text().await.unwrap_or_default();
+        let body_preview = &body[..body.len().min(STAC_RESPONSE_BODY_LOG_PREVIEW_LEN)];
+        tracing::warn!(
+            "STAC API returned non-retryable status {status}: body_preview={body_preview}"
+        );
+        return Err(geoengine_operators::error::Error::QueryingProcessorFailed {
+            source: Box::new(std::io::Error::new(
+                std::io::ErrorKind::Other,
+                format!("HTTP {status}"),
+            )),
+        });
+    }
+
+    Err(geoengine_operators::error::Error::QueryingProcessorFailed {
+        source: Box::new(std::io::Error::new(
+            std::io::ErrorKind::Other,
+            format!(
+                "STAC API request failed after {STAC_RETRY_MAX_ATTEMPTS} attempts: {:?}",
+                last_error
+            ),
+        )),
+    })
+}
 
 #[derive(Debug, Clone)]
 struct StacMultiBandMetaData {
@@ -72,23 +212,29 @@ async fn query_stac_item_collection(
 
             let item_collection: stac::ItemCollection = tracing::Instrument::instrument(
                 async {
-                    client
-                        .get(query_url.clone())
-                        .query(query_params)
-                        .send()
-                        .await
-                        .map_err(
-                            |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                                source: Box::new(e),
-                            },
-                        )?
-                        .json()
-                        .await
-                        .map_err(
-                            |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                                source: Box::new(e),
-                            },
-                        )
+                    let url = query_url.clone();
+                    let params = query_params.clone();
+
+                    let (status, body) = stac_request_with_retry(
+                        client,
+                        |c| c.get(url.clone()).query(&params),
+                    )
+                    .await?;
+
+                    serde_json::from_str::<stac::ItemCollection>(&body).map_err(|e| {
+                        tracing::warn!(
+                            "STAC API JSON decode failed for first page: \
+                             status={status}, \
+                             body_preview={}, \
+                             error={e:?}",
+                            &body[..body
+                                .len()
+                                .min(STAC_RESPONSE_BODY_LOG_PREVIEW_LEN)]
+                        );
+                        geoengine_operators::error::Error::QueryingProcessorFailed {
+                            source: Box::new(e),
+                        }
+                    })
                 },
                 span,
             )
@@ -113,22 +259,28 @@ async fn query_stac_item_collection(
 
             let item_collection: stac::ItemCollection = tracing::Instrument::instrument(
                 async {
-                    client
-                        .get(next_url.clone())
-                        .send()
-                        .await
-                        .map_err(
-                            |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                                source: Box::new(e),
-                            },
-                        )?
-                        .json()
-                        .await
-                        .map_err(
-                            |e| geoengine_operators::error::Error::QueryingProcessorFailed {
-                                source: Box::new(e),
-                            },
-                        )
+                    let url = next_url.clone();
+
+                    let (status, body) = stac_request_with_retry(
+                        client,
+                        |c| c.get(url.clone()),
+                    )
+                    .await?;
+
+                    serde_json::from_str::<stac::ItemCollection>(&body).map_err(|e| {
+                        tracing::warn!(
+                            "STAC API JSON decode failed for next page: \
+                             status={status}, \
+                             body_preview={}, \
+                             error={e:?}",
+                            &body[..body
+                                .len()
+                                .min(STAC_RESPONSE_BODY_LOG_PREVIEW_LEN)]
+                        );
+                        geoengine_operators::error::Error::QueryingProcessorFailed {
+                            source: Box::new(e),
+                        }
+                    })
                 },
                 span,
             )

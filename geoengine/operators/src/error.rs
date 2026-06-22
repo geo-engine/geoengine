@@ -417,6 +417,7 @@ pub enum Error {
         found: usize,
     },
 
+    #[snafu(display("QueryingProcessor failed: {}", source))]
     QueryingProcessorFailed {
         source: Box<dyn std::error::Error + Send + Sync>,
     },

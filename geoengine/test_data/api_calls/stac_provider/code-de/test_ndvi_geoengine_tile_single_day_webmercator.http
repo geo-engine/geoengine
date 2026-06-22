@@ -1,0 +1,89 @@
+###
+
+# @name anonymousSession
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/anonymous
+Content-Type: application/json
+
+###
+
+# Register single-day NDVI workflow (no temporal aggregation)
+# A: SCL (20m -> interpolated to 10m), B: NIR (B08), C: Red (B04)
+# @name workflow
+POST https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/workflow
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+Content-Type: application/json
+
+{
+  "type": "Raster",
+  "operator": {
+    "type": "Expression",
+    "params": {
+      "expression": "(A- B) / (A + B)",
+      "mapNoData": false,
+      "outputBand": {
+        "name": "NDVI",
+        "measurement": {
+          "type": "continuous",
+          "measurement": "NDVI",
+          "unit": "NDVI"
+        }
+      },
+      "outputType": "F32"
+    },
+    "sources": {
+      "raster": {
+        "type": "RasterStacker",
+        "params": {
+          "renameBands": {
+            "type": "default"
+          }
+        },
+        "sources": {
+          "rasters": [
+            {
+              "type": "BandFilter",
+              "params": {
+                "bands": [3, 4]
+              },
+              "sources": {
+                "raster": {
+                  "type": "MultiBandGdalSource",
+                  "params": {
+                    "data": "_:b274275c-373d-4a3f-8b45-9b48e9614329:`dataset/epsg32632_u16_10`"
+                  }
+                }
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}
+
+###
+
+# Trigger metadata loading for easier debugging
+GET https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/workflow/{{workflow.response.body.$.id}}/metadata
+Authorization: Bearer {{anonymousSession.response.body.$.id}}
+
+###
+
+@workflowId = {{workflow.response.body.$.id}}
+@crs = EPSG:3857
+@width = 512
+@height = 512
+@time = 2020-08-07T00:00:00.000000Z
+
+# Bounds reprojected from EPSG:32632 (399360, 5596160) -> (404480, 5601280)
+#   min corner: 399360 5596160 -> 843876.079 6534852.399
+#   max corner: 404480 5601280 -> 851765.744 6543064.238
+@minx = 843876.078901465
+@miny = 6534852.39908813
+@maxx = 851765.743911088
+@maxy = 6543064.23776343
+
+@styles = custom%3A%7B%22type%22%3A%22singleBand%22%2C%22band%22%3A0%2C%22bandColorizer%22%3A%7B%22type%22%3A%22linearGradient%22%2C%22breakpoints%22%3A%5B%7B%22value%22%3A-0.1%2C%22color%22%3A%5B0%2C0%2C0%2C255%5D%7D%2C%7B%22value%22%3A0.8%2C%22color%22%3A%5B0%2C255%2C0%2C255%5D%7D%5D%2C%22noDataColor%22%3A%5B0%2C0%2C0%2C0%5D%2C%22overColor%22%3A%5B246%2C250%2C254%2C255%5D%2C%22underColor%22%3A%5B247%2C251%2C255%2C255%5D%7D%7D
+
+GET https://edv.apps.gen-01.code-de-internal.cloudferro.com/api/wms/{{workflowId}}?REQUEST=GetMap&SERVICE=WMS&VERSION=1.3.0&FORMAT=image%2Fpng&STYLES={{styles}}&TRANSPARENT=true&layers={{workflowId}}&time={{time}}&EXCEPTIONS=application%2Fjson&WIDTH={{width}}&HEIGHT={{height}}&CRS={{crs}}&BBOX={{minx}}%2C{{miny}}%2C{{maxx}}%2C{{maxy}}
+Authorization: Bearer {{anonymousSession.response.body.$.id}}

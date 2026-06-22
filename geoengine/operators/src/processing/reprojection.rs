@@ -41,7 +41,7 @@ use geoengine_datatypes::{
     util::arrow::ArrowTyped,
 };
 use serde::{Deserialize, Serialize};
-use tracing::trace;
+use tracing::{info_span, trace};
 
 #[derive(Debug, Serialize, Deserialize, Clone, Copy)]
 #[serde(rename_all = "camelCase")]
@@ -415,13 +415,21 @@ where
         let rewritten_query = rewritten_spatial_query.map(|rwq| query.select_spatial_bounds(rwq));
 
         if let Some(rewritten_query) = rewritten_query {
+            let from = self.from;
+            let to = self.to;
             Ok(self
                 .source
                 .query(rewritten_query, ctx)
                 .await?
                 .map(move |collection_result| {
+                    let _span = tracing::info_span!(
+                        "reprojection.vector_reproject",
+                        from_srs = %from,
+                        to_srs = %to,
+                    )
+                    .entered();
                     collection_result.and_then(|collection| {
-                        CoordinateProjector::from_known_srs(self.from, self.to)
+                        CoordinateProjector::from_known_srs(from, to)
                             .and_then(|projector| collection.reproject(projector.as_ref()))
                             .map_err(Into::into)
                     })
@@ -774,11 +782,29 @@ where
         ctx: &'a dyn QueryContext,
     ) -> Result<BoxStream<'a, Result<Self::Output>>> {
         let state = self.state;
+        let from = self.from;
+        let to = self.to;
+
+        let _query_span = {
+            let gt = state.out_spatial_grid.geo_transform();
+            let origin = gt.origin_coordinate();
+            info_span!(
+                "reprojection.query",
+                spatial_bounds = %query.spatial_bounds(),
+                time_interval = %query.time_interval(),
+                source_srs = %from,
+                target_srs = %to,
+                out_grid_origin_x = %origin.x,
+                out_grid_origin_y = %origin.y,
+                out_grid_x_pixel_size = %gt.x_pixel_size(),
+                out_grid_y_pixel_size = %gt.y_pixel_size(),
+            )
+        };
 
         // setup the subquery
         let sub_query_spec = TileReprojectionSubQuery {
-            in_srs: self.from,
-            out_srs: self.to,
+            in_srs: from,
+            out_srs: to,
             fold_fn: fold_by_coordinate_lookup_future,
             state,
             _phantom_data: PhantomData,
