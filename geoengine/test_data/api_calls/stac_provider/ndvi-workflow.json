@@ -1,0 +1,97 @@
+{
+  "type": "Raster",
+  "operator": {
+    "params": {
+      "aggregation": {
+        "ignoreNoData": true,
+        "type": "first"
+      },
+      "window": {
+        "granularity": "months",
+        "step": 1
+      }
+    },
+    "sources": {
+      "raster": {
+        "params": {
+          "expression": "if (A == 3 || (A >= 7 && A <= 11)) { NODATA } else { (B - C) / (B + C) }",
+          "mapNoData": false,
+          "outputBand": {
+            "measurement": {
+              "measurement": "NDVI",
+              "type": "continuous",
+              "unit": "NDVI"
+            },
+            "name": "NDVI"
+          },
+          "outputType": "F32"
+        },
+        "sources": {
+          "raster": {
+            "params": {
+              "renameBands": {
+                "type": "default"
+              }
+            },
+            "sources": {
+              "rasters": [
+                {
+                  "params": {
+                    "outputDataType": "U16"
+                  },
+                  "sources": {
+                    "raster": {
+                      "params": {
+                        "interpolation": "nearestNeighbor",
+                        "outputResolution": {
+                          "type": "fraction",
+                          "x": 2.0,
+                          "y": 2.0
+                        }
+                      },
+                      "sources": {
+                        "raster": {
+                          "params": {
+                            "bands": [1]
+                          },
+                          "sources": {
+                            "raster": {
+                              "params": {
+                                "data": "_:b274275c-373d-4a3f-8b45-9b48e9614329:`dataset/epsg32632_u8_20`"
+                              },
+                              "type": "MultiBandGdalSource"
+                            }
+                          },
+                          "type": "BandFilter"
+                        }
+                      },
+                      "type": "Interpolation"
+                    }
+                  },
+                  "type": "RasterTypeConversion"
+                },
+                {
+                  "params": {
+                    "bands": [3, 4]
+                  },
+                  "sources": {
+                    "raster": {
+                      "params": {
+                        "data": "_:b274275c-373d-4a3f-8b45-9b48e9614329:`dataset/epsg32632_u16_10`"
+                      },
+                      "type": "MultiBandGdalSource"
+                    }
+                  },
+                  "type": "BandFilter"
+                }
+              ]
+            },
+            "type": "RasterStacker"
+          }
+        },
+        "type": "Expression"
+      }
+    },
+    "type": "TemporalRasterAggregation"
+  }
+}

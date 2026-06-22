@@ -27,7 +27,10 @@ use geoengine_operators::{
         VectorResultDescriptor,
     },
     mock::MockDatasetDataSourceLoadingInfo,
-    source::{GdalLoadingInfo, GdalSource, GdalSourceParameters, OgrSourceDataset},
+    source::{
+        GdalLoadingInfo, GdalSource, GdalSourceParameters, MultiBandGdalLoadingInfo,
+        MultiBandGdalLoadingInfoQueryRectangle, OgrSourceDataset,
+    },
 };
 use ordered_float::NotNan;
 use serde::{Deserialize, Serialize};
@@ -451,6 +454,31 @@ impl MetaDataProvider<GdalLoadingInfo, RasterResultDescriptor, RasterQueryRectan
                 Ok(self.sentinel2_meta_data(product_band, zone))
             }
         }
+    }
+}
+
+#[async_trait]
+impl
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for CopernicusDataspaceDataProvider
+{
+    async fn meta_data(
+        &self,
+        _id: &geoengine_datatypes::dataset::DataId,
+    ) -> Result<
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
+        geoengine_operators::error::Error,
+    > {
+        Err(geoengine_operators::error::Error::NotImplemented)
     }
 }
 

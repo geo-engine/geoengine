@@ -1,0 +1,75 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.0.0",
+      "stac_extensions": [
+        "https://stac-extensions.github.io/projection/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/raster/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/eo/v1.1.0/schema.json"
+      ],
+      "id": "S2B_32UMB_20260128_0_L2A",
+      "bbox": [8.766, 50.802, 8.767, 50.803],
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [8.766, 50.802],
+            [8.767, 50.802],
+            [8.767, 50.803],
+            [8.766, 50.803],
+            [8.766, 50.802]
+          ]
+        ]
+      },
+      "properties": {
+        "datetime": "2026-01-28T10:36:43.609000Z",
+        "updated": "2026-01-29T21:55:06.896Z",
+        "proj:epsg": 32632
+      },
+      "assets": {
+        "blue": {
+          "title": "Blue - 10m",
+          "type": "image/tiff; application=geotiff; profile=cloud-optimized",
+          "href": "https://sentinel-cogs.s3.us-west-2.amazonaws.com/sentinel-s2-l2a-cogs/32/U/MB/2026/1/S2B_32UMB_20260128_0_L2A/B02.tif",
+          "eo:bands": [
+            {
+              "name": "B02",
+              "common_name": "blue"
+            }
+          ],
+          "raster:bands": [
+            {
+              "data_type": "uint16"
+            }
+          ],
+          "proj:shape": [10980, 10980],
+          "proj:transform": [10, 0, 399960, 0, -10, 5700000]
+        },
+        "blue-jp2": {
+          "title": "Blue - 10m",
+          "type": "image/jp2",
+          "href": "s3://sentinel-s2-l2a/tiles/32/U/MB/2026/1/28/0/R10m/B02.jp2",
+          "eo:bands": [
+            {
+              "name": "B02",
+              "common_name": "blue"
+            }
+          ],
+          "raster:bands": [
+            {
+              "data_type": "uint16"
+            }
+          ],
+          "proj:shape": [10980, 10980],
+          "proj:transform": [10, 0, 399960, 0, -10, 5700000]
+        }
+      },
+      "links": []
+    }
+  ],
+  "links": [],
+  "numberReturned": 1,
+  "numberMatched": 1
+}
