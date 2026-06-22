@@ -3,6 +3,7 @@ use crate::contexts::GeoEngineDb;
 use crate::datasets::listing::ProvenanceOutput;
 use crate::layers::external::{DataProvider, DataProviderDefinition, TypedDataProviderDefinition};
 use async_trait::async_trait;
+use cache::StacQueryCache;
 use geoengine_datatypes::dataset::DataProviderId;
 use geoengine_datatypes::primitives::{SpatialResolution, TimeDimension};
 use geoengine_datatypes::raster::RasterDataType;
@@ -10,9 +11,13 @@ use geoengine_datatypes::spatial_reference::SpatialReference;
 use geoengine_operators::engine::SpatialGridDescriptor;
 use postgres_types::{FromSql, ToSql};
 use serde::{Deserialize, Serialize};
+use std::sync::Arc;
 
+mod cache;
 mod listing;
 mod loading_info;
+
+const STAC_QUERY_TIMEOUT_SECS: u64 = 60;
 
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, ToSql, FromSql)]
 #[postgres(name = "StacDataProviderDefinition")]
@@ -136,6 +141,11 @@ pub struct StacDataProvider {
     s3_config: Option<StacProviderS3Config>,
     time_dimension: TimeDimension,
     datasets: Vec<StacProviderDataset>,
+    /// Shared HTTP client, reused across all requests for this provider.
+    client: reqwest::Client,
+    /// In-memory cache for STAC query results (tile files), keyed by dataset
+    /// name and spatial/temporal query bounds.
+    query_cache: Arc<StacQueryCache>,
 }
 
 impl StacDataProvider {
@@ -150,6 +160,10 @@ impl StacDataProvider {
         time_dimension: TimeDimension,
         datasets: Vec<StacProviderDataset>,
     ) -> Self {
+        let client = reqwest::Client::builder()
+            .timeout(std::time::Duration::from_secs(STAC_QUERY_TIMEOUT_SECS))
+            .build()
+            .unwrap_or_default();
         Self {
             id,
             name,
@@ -159,6 +173,8 @@ impl StacDataProvider {
             s3_config,
             time_dimension,
             datasets,
+            client,
+            query_cache: Arc::new(StacQueryCache::default()),
         }
     }
 }
