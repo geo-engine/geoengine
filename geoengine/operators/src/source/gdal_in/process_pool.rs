@@ -10,10 +10,11 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
 
-use crate::source::gdal_source::GdalProcessPoolAccess;
-use crate::source::gdal_source::process::{GdalIpcPayload, spawn_ipc_server_process};
-use crate::source::{IpcChannelMessage, gdal_source::process::ChildProcessGuard};
-use crate::source::{IpcProcessError, IpcProcessRasterResult};
+use super::{
+    GdalProcessPoolAccess,
+    process_common::{GdalIpcPayload, IpcChannelMessage, IpcProcessError, IpcProcessRasterResult},
+    process_impl::{ChildProcessGuard, spawn_ipc_server_process},
+};
 
 // --- Core Structural Parameters & Tuning Constants ---
 

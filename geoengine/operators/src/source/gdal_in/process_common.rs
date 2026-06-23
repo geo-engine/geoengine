@@ -1,74 +1,65 @@
-use std::borrow::Cow;
-use std::env;
-use std::path::{Path, PathBuf};
-use std::process::Command;
-use std::sync::OnceLock;
-
 use bytemuck::{AnyBitPattern, NoUninit};
-use gdal::errors::GdalError;
-use gdal::{Dataset as GdalDataset, DatasetOptions, GdalOpenFlags};
-
 use geoengine_datatypes::raster::{
-    Grid, GridBoundingBox2D, GridOrEmpty, GridShape2D, MaskedGrid, NoDataValueGrid, Pixel,
-    RasterDataType, RasterProperties, RasterPropertiesEntry, RasterPropertiesKey,
+    Grid, GridBoundingBox2D, GridIdx2D, GridOrEmpty, GridShape2D, GridSize, MaskedGrid,
+    NoDataValueGrid, Pixel, RasterDataType, RasterProperties, RasterPropertiesEntry,
+    RasterPropertiesKey,
 };
-use ipc_channel::{
-    IpcError,
-    ipc::{self, IpcReceiver, IpcSender},
-};
+use ipc_channel::IpcError;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
+use std::borrow::Cow;
 
-use super::{GdalDatasetParameters, GdalReadAdvise};
-use crate::source::gdal_source::GdalRasterLoaderError;
-use crate::source::gdal_source::reader::GridAndProperties;
-use crate::util::GdalConfigOptions;
-use crate::util::gdal::gdal_open_ex_gdal_error;
+use super::{GdalDatasetParameters, GridAndProperties};
 
-/// Global storage for the detected path, initialized on first access.
-static GDALSOURCE_PROCESS_PATH: OnceLock<PathBuf> = OnceLock::new();
+/// This struct is used to advise the GDAL reader how to read the data from the dataset.
+/// The Workflow is as follows:
+/// 1. The `gdal_read_window` is the window in the pixel space of the dataset that should be read.
+/// 2. The `read_window_bounds` is the area in the target pixel space where the data should be placed.
+///    2.1 The data read in step one is read to the width and height of the `read_window_bounds`.
+///    2.2 if `flip_y` is true the data is flipped in the y direction. And should be unflipped after reading.
+/// 3. The `bounds_of_target` is the area in the target pixel space where the data should be placed.
+///    3.1 The `read_window_bounds` might be offset from the `bounds_of_target` or might have a different size.
+///    Then, the data needs to be placed in the target pixel space accordingly. Other parts of the target pixel space should be filled with nodata.
+#[allow(dead_code)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+pub struct GdalReadAdvise {
+    pub gdal_read_widow: GdalReadWindow,
+    pub read_window_bounds: GridBoundingBox2D,
+    pub bounds_of_target: GridBoundingBox2D,
+    pub flip_y: bool,
+}
 
-/// Returns a reference to the cached `gdalsource-process` path.
-/// The detection logic runs exactly once on the very first call.
-fn get_gdalsource_path() -> &'static Path {
-    GDALSOURCE_PROCESS_PATH.get_or_init(|| {
-        // 1. Try the environment variable path first
-        if let Ok(env_path) = env::var("GDALSOURCE_PROCESS_PATH")
-            && !env_path.is_empty()
-        {
-            let path = PathBuf::from(env_path);
-            if path.is_file() {
-                tracing::debug!(
-                    "Using gdalsource-process path from environment variable: {}",
-                    path.display()
-                );
-                return path;
-            }
+impl GdalReadAdvise {
+    pub fn direct_read(&self) -> bool {
+        self.read_window_bounds == self.bounds_of_target
+    }
+}
+
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct GdalReadWindow {
+    pub(crate) start_x: isize, // pixelspace origin
+    pub(crate) start_y: isize,
+    pub(crate) size_x: usize, // pixelspace size
+    pub(crate) size_y: usize,
+}
+
+impl GdalReadWindow {
+    pub fn new(start: GridIdx2D, size: GridShape2D) -> Self {
+        Self {
+            start_x: start.x(),
+            start_y: start.y(),
+            size_x: size.axis_size_x(),
+            size_y: size.axis_size_y(),
         }
+    }
 
-        // 2. Fallback detection logic
-        let mut exe_path = env::current_exe()
-            .unwrap_or_else(|_| env::current_dir().unwrap_or_else(|_| PathBuf::from(".")));
+    pub fn gdal_window_start(&self) -> (isize, isize) {
+        (self.start_x, self.start_y)
+    }
 
-        if exe_path.is_file() {
-            exe_path.pop();
-        }
-
-        if exe_path.file_name().is_some_and(|name| name == "deps") {
-            exe_path.pop();
-        }
-
-        let binary_name = if cfg!(windows) {
-            "gdalsource-process.exe"
-        } else {
-            "gdalsource-process"
-        };
-        exe_path.push(binary_name);
-
-        tracing::debug!("Detected gdalsource-process path: {}", exe_path.display());
-
-        exe_path
-    })
+    pub fn gdal_window_size(&self) -> (usize, usize) {
+        (self.size_x, self.size_y)
+    }
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, PartialEq)]
@@ -365,7 +356,7 @@ where
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
-pub enum GdalErrorKind {
+pub enum IpcProcessGdalErrorKind {
     FileNotFound,
     AccessDenied,
     InvalidDataset,
@@ -374,7 +365,7 @@ pub enum GdalErrorKind {
 }
 
 #[derive(Debug, serde::Serialize, serde::Deserialize, Clone, Copy, PartialEq, Eq)]
-pub enum IoErrorKind {
+pub enum IpcProcessIoErrorKind {
     NotFound,
     PermissionDenied,
     ConnectionRefused,
@@ -394,7 +385,10 @@ pub enum IpcProcessError {
     },
 
     #[snafu(display("IO error ({kind:?}): {context}"))]
-    Io { kind: IoErrorKind, context: String },
+    Io {
+        kind: IpcProcessIoErrorKind,
+        context: String,
+    },
 
     #[snafu(display("IPC channel disconnected"))]
     Disconnected,
@@ -404,7 +398,7 @@ pub enum IpcProcessError {
 
     #[snafu(display("GDAL operational error ({kind:?}): {details}"))]
     GdalError {
-        kind: GdalErrorKind,
+        kind: IpcProcessGdalErrorKind,
         details: String,
     },
 
@@ -422,6 +416,9 @@ pub enum IpcProcessError {
 
     #[snafu(display("Error casting data to bytes for IPC transmission: {error}"))]
     PocCastError { error: String },
+
+    #[snafu(display("The dataset uses alpha mask but its not allowed in dataset params"))]
+    AlphaBandAsMaskNotAllowed,
 }
 
 impl IpcProcessError {
@@ -430,10 +427,10 @@ impl IpcProcessError {
         matches!(
             self,
             Self::GdalError {
-                kind: GdalErrorKind::FileNotFound,
+                kind: IpcProcessGdalErrorKind::FileNotFound,
                 ..
             } | Self::Io {
-                kind: IoErrorKind::NotFound,
+                kind: IpcProcessIoErrorKind::NotFound,
                 ..
             }
         )
@@ -443,12 +440,12 @@ impl IpcProcessError {
 impl From<std::io::Error> for IpcProcessError {
     fn from(err: std::io::Error) -> Self {
         let kind = match err.kind() {
-            std::io::ErrorKind::NotFound => IoErrorKind::NotFound,
-            std::io::ErrorKind::PermissionDenied => IoErrorKind::PermissionDenied,
-            std::io::ErrorKind::ConnectionRefused => IoErrorKind::ConnectionRefused,
-            std::io::ErrorKind::ConnectionAborted => IoErrorKind::ConnectionAborted,
-            std::io::ErrorKind::UnexpectedEof => IoErrorKind::UnexpectedEof,
-            _ => IoErrorKind::Other,
+            std::io::ErrorKind::NotFound => IpcProcessIoErrorKind::NotFound,
+            std::io::ErrorKind::PermissionDenied => IpcProcessIoErrorKind::PermissionDenied,
+            std::io::ErrorKind::ConnectionRefused => IpcProcessIoErrorKind::ConnectionRefused,
+            std::io::ErrorKind::ConnectionAborted => IpcProcessIoErrorKind::ConnectionAborted,
+            std::io::ErrorKind::UnexpectedEof => IpcProcessIoErrorKind::UnexpectedEof,
+            _ => IpcProcessIoErrorKind::Other,
         };
         IpcProcessError::Io {
             kind,
@@ -465,18 +462,25 @@ impl From<gdal::errors::GdalError> for IpcProcessError {
 
         // Parse the error structural context cleanly
         let kind = match &err {
+            gdal::errors::GdalError::NullPointer { method_name, msg }
+                if *method_name == "GDALOpenEx"
+                    && (*msg == "HTTP response code: 404"
+                        || msg.ends_with("No such file or directory")) =>
+            {
+                IpcProcessGdalErrorKind::FileNotFound
+            }
             gdal::errors::GdalError::NullPointer { .. }
-            | gdal::errors::GdalError::OgrError { .. } => GdalErrorKind::InvalidDataset,
+            | gdal::errors::GdalError::OgrError { .. } => IpcProcessGdalErrorKind::InvalidDataset,
             _ if err_string.contains("No such file or directory") || err_string.contains("404") => {
-                GdalErrorKind::FileNotFound
+                IpcProcessGdalErrorKind::FileNotFound
             }
             _ if err_string.contains("Permission denied") || err_string.contains("403") => {
-                GdalErrorKind::AccessDenied
+                IpcProcessGdalErrorKind::AccessDenied
             }
             _ if err_string.contains("timeout") || err_string.contains("Connection timed out") => {
-                GdalErrorKind::ConnectionTimeout
+                IpcProcessGdalErrorKind::ConnectionTimeout
             }
-            _ => GdalErrorKind::Unknown,
+            _ => IpcProcessGdalErrorKind::Unknown,
         };
 
         IpcProcessError::GdalError {
@@ -501,23 +505,6 @@ impl From<IpcError> for IpcProcessError {
     }
 }
 
-impl From<GdalRasterLoaderError> for IpcProcessError {
-    fn from(value: GdalRasterLoaderError) -> Self {
-        match value {
-            GdalRasterLoaderError::GdalError { source } => IpcProcessError::from(source),
-            GdalRasterLoaderError::GdalFileNotFound { source } => IpcProcessError::GdalError {
-                kind: GdalErrorKind::FileNotFound,
-                details: source.to_string(),
-            },
-            GdalRasterLoaderError::ShapeBufferMissmatch {
-                shape: _,
-                buffer_len: _,
-            } => todo!(),
-            GdalRasterLoaderError::AlphaBandAsMaskNotAllowed => todo!(),
-        }
-    }
-}
-
 impl From<bytemuck::PodCastError> for IpcProcessError {
     fn from(error: bytemuck::PodCastError) -> Self {
         IpcProcessError::PocCastError {
@@ -532,209 +519,5 @@ pub struct IpcChannelMessage(pub IpcChannelMessagePayload);
 impl IpcChannelMessage {
     pub fn new_request_tile_message(data: IpcChannelMessagePayload) -> Self {
         Self(data)
-    }
-}
-
-pub struct ChildProcessGuard {
-    child: std::process::Child,
-}
-
-impl Drop for ChildProcessGuard {
-    fn drop(&mut self) {
-        // Forcefully kill the process when the guard is dropped
-        let _ = self.child.kill();
-        let _ = self.child.wait(); // Prevent zombie processes
-    }
-}
-
-/// Spawns the IPC server process and establishes the communication channels.
-///
-/// Returns a guard for the child process (which will automatically clean up on drop),
-/// as well as the sender and receiver for communication with the server.
-/// Assumes that the server executable is located at the path specified by the `GDAL_SOURCE_PROCESS_PATH` environment variable,
-/// or defaults to a sibling executable named `gdalsource-process` in the same directory as the current executable if the environment variable is not set.
-///
-/// # Errors
-/// Returns an `IpcProcessError` if the server process fails to start, or if the IPC channels fail to establish communication.
-///
-/// # Panics
-/// Panics if the current executable path cannot be determined, or if the executable has no parent directory, which should not happen under normal circumstances.
-pub fn spawn_ipc_server_process<S, R>()
--> Result<(ChildProcessGuard, IpcSender<S>, IpcReceiver<R>), IpcProcessError> {
-    let (server, token) = ipc::IpcOneShotServer::<(IpcSender<S>, IpcReceiver<R>)>::new()
-        .map_err(IpcProcessError::from)?;
-
-    tracing::debug!("spawn_ipc_server token: {}", token);
-
-    let exe_path = get_gdalsource_path();
-
-    let mut cmd = Command::new(exe_path);
-
-    cmd.arg(token)
-        .arg("debug") // FIXME: paste log level here!
-        .stderr(std::process::Stdio::inherit()); // This sends child logs to the parent's stderr;
-
-    if cfg!(test) {
-        // llcov inserts these env params. We need to remove them from the gdal-processor processes. Otherwise the processes overwrite the main process data and the files become corrupt.
-        cmd.env_remove("LLVM_PROFILE_FILE")
-            .env_remove("LLVM_PROFILE_FILE_NAME");
-    }
-
-    let child = cmd.spawn().map_err(IpcProcessError::from)?;
-
-    let (_rx, channels) = server.accept().map_err(IpcProcessError::from)?;
-    Ok((ChildProcessGuard { child }, channels.0, channels.1))
-}
-
-/// Creates channels and connects to the IPC server with the given token,
-/// sending the channels to the server, so that communication can be established.
-///
-/// Assumes that the server is already running and listening for connections.
-pub fn setup_client<S, C>(
-    token: String,
-) -> crate::util::Result<(IpcSender<C>, IpcReceiver<S>), IpcProcessError>
-where
-    S: for<'de> serde::Deserialize<'de> + serde::Serialize,
-    C: for<'de> serde::Deserialize<'de> + serde::Serialize,
-{
-    let (server_sender, client_reciever) = ipc::channel::<S>()?;
-    let (client_sender, server_reciever) = ipc::channel::<C>()?;
-
-    let sender = ipc::IpcSender::<(IpcSender<S>, IpcReceiver<C>)>::connect(token)?;
-
-    sender.send((server_sender, server_reciever))?;
-    Ok((client_sender, client_reciever))
-}
-
-/// A simple, single-entry cache for an open GDAL dataset tile.
-#[derive(Default)]
-pub struct GdalDatasetHolder {
-    params: Option<GdalDatasetParameters>,
-    dataset: Option<GdalDataset>,
-    thread_local: Option<GdalConfigOptions>,
-}
-
-struct PrevDatasetOpt {
-    _prev_dataset: Option<GdalDataset>,
-}
-
-impl GdalDatasetHolder {
-    pub fn new() -> Self {
-        Self {
-            params: None,
-            dataset: None,
-            thread_local: None,
-        }
-    }
-
-    fn open_ex(
-        dataset_params: &GdalDatasetParameters,
-    ) -> Result<(GdalDataset, Option<GdalConfigOptions>), GdalError> {
-        let options = dataset_params
-            .gdal_open_options
-            .as_ref()
-            .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
-
-        // reverts the thread local configs on drop
-        let thread_local_configs: Option<GdalConfigOptions> = dataset_params
-            .gdal_config_options
-            .as_ref()
-            .map(|config_options| GdalConfigOptions::new(config_options))
-            .transpose()
-            .expect("Thread local options must not fail");
-
-        let ds = gdal_open_ex_gdal_error(
-            &dataset_params.file_path,
-            DatasetOptions {
-                open_flags: GdalOpenFlags::GDAL_OF_RASTER,
-                open_options: options.as_deref(),
-                ..DatasetOptions::default()
-            },
-        )?;
-
-        Ok((ds, thread_local_configs))
-    }
-
-    pub fn get(&mut self, params: &GdalDatasetParameters) -> Option<&mut GdalDataset> {
-        if Self::is_hit(self.params.as_ref(), params) {
-            self.dataset.as_mut()
-        } else {
-            None
-        }
-    }
-
-    /// Retrieves the open dataset if the parameters match, otherwise opens a new dataset with the given parameters, updates the stored dataset, and returns it.
-    /// The current open dataset is kept alive until the new one is successfully opened to maintain GDAL's internal caching benefits.
-    /// This method ensures that only one dataset is open at a time, and that the state is updated atomically to prevent stale data.
-    /// The caller is responsible for ensuring that the returned dataset is not used concurrently across threads, as GDAL datasets are generally not thread-safe.
-    /// # Errors
-    /// Returns a `GdalError` if opening the new dataset fails. In this case, the stored dataset remains unchanged and the previous dataset (if any) is still valid.
-    ///
-    /// # Panics
-    /// Panics if the dataset is unexpectedly missing after a it was detected as open, which should never happen.
-    /// Panics if the configuration options fail to apply, which should also not happen under normal circumstances.
-    /// Panics if the caller attempts to use the returned dataset concurrently across threads, which is not allowed due to GDAL's thread safety constraints.
-    pub fn get_or_open(
-        &mut self,
-        params: &GdalDatasetParameters,
-    ) -> Result<&mut GdalDataset, GdalError> {
-        let hit = Self::is_hit(self.params.as_ref(), params);
-
-        if hit {
-            Ok(self.dataset.as_mut().expect("Dataset must be set"))
-        } else {
-            let _prev_dataset = self.clear(); // keep old dataset alive untill new one to keep Gdal internal cache alive
-
-            let (ds, tlo) = Self::open_ex(params)?;
-
-            self.params = Some(params.clone());
-            self.dataset = Some(ds);
-            self.thread_local = tlo;
-
-            Ok(self.dataset.as_mut().expect("Dataset must be set"))
-        }
-    }
-
-    fn is_hit(params: Option<&GdalDatasetParameters>, other: &GdalDatasetParameters) -> bool {
-        // TODO: we could optimize this by hashing the parameters and comparing the hash for a quick check before doing the full equality check, if it turns out to be a bottleneck.
-        if let Some(current_ds_params) = params {
-            current_ds_params.file_path == other.file_path
-                && current_ds_params.gdal_open_options == other.gdal_open_options
-                && current_ds_params.gdal_config_options == other.gdal_config_options
-        } else {
-            false
-        }
-    }
-
-    fn clear(&mut self) -> PrevDatasetOpt {
-        let prev = PrevDatasetOpt {
-            _prev_dataset: self.dataset.take(),
-        };
-        self.params = None;
-        self.thread_local = None;
-        prev
-    }
-
-    pub fn contains(&self, params: &GdalDatasetParameters) -> bool {
-        Self::is_hit(self.params.as_ref(), params)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn ipc_process_error_ipc_channel_roundtrip() {
-        let error = IpcProcessError::GdalError {
-            kind: GdalErrorKind::FileNotFound,
-            details: "not found".into(),
-        };
-
-        let (sender, receiver) = ipc::channel::<IpcProcessRasterResult>().unwrap();
-        sender.send(Err(error.clone())).unwrap();
-        let decoded = receiver.recv().unwrap();
-
-        assert_eq!(decoded, Err(error));
     }
 }

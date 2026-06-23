@@ -2,15 +2,15 @@ use std::{fmt::Display, str::FromStr};
 
 use gdal::raster::GdalType;
 use geoengine_datatypes::raster::Pixel;
-use geoengine_operators::source::{
-    GdalDatasetHolder, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
+use geoengine_operators::source::gdal_in::process_common::{
+    GdalIpcBytePayload, IpcChannelMessage, IpcChannelMessagePayload, IpcProcessError,
     IpcProcessRasterResult,
-    gdal_source::{GdalRasterLoader, process::GdalIpcBytePayload},
-    setup_client,
+};
+use geoengine_operators::source::gdal_in::process_impl::{
+    GdalDatasetHolder, GdalHandling, setup_client,
 };
 use ipc_channel::ipc::IpcSender;
 use num::FromPrimitive;
-
 use tracing::Level;
 
 fn exit_with_error(msg: impl Display) -> ! {
@@ -140,12 +140,11 @@ fn read_and_send<T: GdalType + Pixel + FromPrimitive>(
     dataset_cache: &mut GdalDatasetHolder,
     sender: &IpcSender<IpcProcessRasterResult>,
 ) -> Result<(), IpcProcessError> {
-    let gp = GdalRasterLoader::load_tile_data_with_dataset_retry::<T>(
+    let gp = GdalHandling::load_tile_data_with_dataset_retry::<T>(
         dataset_cache,
         &dataset_params,
         read_advise,
-    )
-    .map_err(IpcProcessError::from);
+    );
 
     let byte_payload = gp.and_then(|p| GdalIpcBytePayload::try_from(p).map_err(Into::into));
     // Propagate channel send errors directly up out of the handler

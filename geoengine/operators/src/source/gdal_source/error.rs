@@ -4,10 +4,7 @@ use geoengine_datatypes::raster::{GridBoundingBox2D, RasterDataType};
 use ipc_channel::IpcError;
 use snafu::Snafu;
 
-use crate::source::{
-    IpcProcessError,
-    gdal_source::{GdalProcessPoolError, GdalRasterLoaderError},
-};
+use crate::source::gdal_in::{GdalProcessPoolError, process_common::IpcProcessError};
 
 #[derive(Debug, Snafu)]
 #[snafu(visibility(pub(crate)))]
@@ -53,10 +50,6 @@ pub enum GdalSourceError {
         source: IpcProcessError,
     },
 
-    GdalRasterLoader {
-        source: GdalRasterLoaderError,
-    },
-
     PoolInitializationError,
 
     WorkerPanic,
@@ -64,12 +57,6 @@ pub enum GdalSourceError {
     GdalProcessPoolError {
         source: GdalProcessPoolError,
     },
-}
-
-impl From<GdalRasterLoaderError> for GdalSourceError {
-    fn from(source: GdalRasterLoaderError) -> Self {
-        GdalSourceError::GdalRasterLoader { source }
-    }
 }
 
 impl From<GdalProcessPoolError> for GdalSourceError {

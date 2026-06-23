@@ -42,6 +42,6 @@ size_in_mb = 1_000 # 1 GB
 landing_zone_ratio = 0.1 # 10% of total cache size
 
 [gdal_process_pool]
-max_processes = 6
-global_active_worker = 4
-worker_per_dataset = 2
+number_of_processes = 6
+max_active_processes = 4
+max_dataset_processes = 2

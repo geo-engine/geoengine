@@ -33,7 +33,7 @@ use geoengine_datatypes::util::test::TestDefault;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::meta::quota::QuotaChecker;
-use geoengine_operators::source::gdal_source::{GdalProcessPool, GdalProcessPoolAccess};
+use geoengine_operators::source::gdal_in::{GdalProcessPool, GdalProcessPoolAccess};
 use geoengine_operators::util::create_rayon_thread_pool;
 use rayon::ThreadPool;
 use snafu::ResultExt;
