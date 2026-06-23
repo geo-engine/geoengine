@@ -117,7 +117,7 @@ export class BoundingBox2D implements ToDict<BBoxDict> {
      * @returns - The OpenLayers extent.
      */
     public toOlExtent(): Extent {
-        return this.inner as Extent;
+        return this.inner;
     }
 
     /**

@@ -77,7 +77,7 @@ export class ColorTableEditorComponent {
         const measurement = this.measurement();
 
         if (measurement instanceof ClassificationMeasurement) {
-            return measurement as ColorAttributeInputHinter;
+            return measurement;
         }
 
         return undefined;

@@ -44,7 +44,10 @@ use geoengine_operators::util::gdal::gdal_open_dataset_ex;
 use geoengine_operators::{
     engine::{MetaData, MetaDataProvider, RasterResultDescriptor, VectorResultDescriptor},
     mock::MockDatasetDataSourceLoadingInfo,
-    source::{GdalLoadingInfo, OgrSourceDataset},
+    source::{
+        GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
+        OgrSourceDataset,
+    },
 };
 use serde::{Deserialize, Serialize};
 use snafu::ResultExt;
@@ -1524,6 +1527,31 @@ impl<D: GeoEngineDb>
         _id: &geoengine_datatypes::dataset::DataId,
     ) -> Result<
         Box<dyn MetaData<OgrSourceDataset, VectorResultDescriptor, VectorQueryRectangle>>,
+        geoengine_operators::error::Error,
+    > {
+        Err(geoengine_operators::error::Error::NotYetImplemented)
+    }
+}
+
+#[async_trait]
+impl<D: GeoEngineDb>
+    MetaDataProvider<
+        MultiBandGdalLoadingInfo,
+        RasterResultDescriptor,
+        MultiBandGdalLoadingInfoQueryRectangle,
+    > for NetCdfCfDataProvider<D>
+{
+    async fn meta_data(
+        &self,
+        _id: &geoengine_datatypes::dataset::DataId,
+    ) -> Result<
+        Box<
+            dyn MetaData<
+                    MultiBandGdalLoadingInfo,
+                    RasterResultDescriptor,
+                    MultiBandGdalLoadingInfoQueryRectangle,
+                >,
+        >,
         geoengine_operators::error::Error,
     > {
         Err(geoengine_operators::error::Error::NotYetImplemented)

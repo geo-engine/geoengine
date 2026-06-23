@@ -50,6 +50,7 @@ use snafu::{ResultExt, ensure};
 use std::ffi::CString;
 use std::marker::PhantomData;
 use std::path::Path;
+use std::time::Instant;
 use tracing::{debug, trace};
 
 mod error;
@@ -298,9 +299,22 @@ impl GdalRasterLoader {
             .as_ref()
             .map(|o| o.iter().map(String::as_str).collect::<Vec<_>>());
 
+        let config_options = if dataset_params.file_path.extension() == Some("jp2".as_ref()) {
+            // ensure that GDAL only uses a single thread for JP2 files because otherwise the thread local configs may not be used by all GDAL threads
+            // TODO: remove this workaround once raster loading is done via separate subprocesses
+            if let Some(config_options) = &dataset_params.gdal_config_options {
+                let mut options = config_options.clone();
+                options.push(("GDAL_NUM_THREADS".to_string(), "1".to_string()));
+                Some(options)
+            } else {
+                Some(vec![("GDAL_NUM_THREADS".to_string(), "1".to_string())])
+            }
+        } else {
+            dataset_params.gdal_config_options.clone()
+        };
+
         // reverts the thread local configs on drop
-        let _thread_local_configs = dataset_params
-            .gdal_config_options
+        let _thread_local_configs = config_options
             .as_ref()
             .map(|config_options| TemporaryGdalThreadLocalConfigOptions::new(config_options));
 
@@ -455,6 +469,7 @@ where
             }
         };
 
+        let loading_info_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
         let loading_info = self
             .meta_data
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
@@ -463,6 +478,10 @@ where
                 true,
             ))
             .await?;
+        if let Some(loading_info_start) = loading_info_start {
+            let loading_info_ms = loading_info_start.elapsed().as_millis();
+            trace!(loading_info_ms, "loading_info timing");
+        }
 
         let time_steps = loading_info.time_steps().to_vec();
         let bands = query.attributes().clone().as_vec();
@@ -882,12 +901,18 @@ where
 {
     let gdal_out_shape = (out_shape.axis_size_x(), out_shape.axis_size_y());
 
+    let raster_read_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
     let buffer = rasterband.read_as::<T>(
         read_window.gdal_window_start(), // pixelspace origin
         read_window.gdal_window_size(),  // pixelspace size
         gdal_out_shape,                  // requested raster size
         None,                            // sampling mode
     )?;
+    if let Some(raster_read_start) = raster_read_start {
+        let raster_band_read_s = raster_read_start.elapsed().as_secs_f64();
+        trace!(raster_band_read_s, "read raster band timing");
+    }
+
     let (_, buffer_data) = buffer.into_shape_and_vec();
     let data_grid = Grid::new(out_shape.clone(), buffer_data)?;
 
@@ -926,7 +951,7 @@ where
 
     let mask_band = rasterband.open_mask_band()?;
 
-    let start = std::time::Instant::now();
+    let mask_read_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
     let mask_buffer = mask_band.read_as::<u8>(
         read_window.gdal_window_start(), // pixelspace origin
         read_window.gdal_window_size(),  // pixelspace size
@@ -934,7 +959,10 @@ where
         None,                            // sampling mode
     )?;
 
-    debug!("read mask band in {:?} s", start.elapsed().as_secs_f64());
+    if let Some(mask_read_start) = mask_read_start {
+        let mask_band_read_s = mask_read_start.elapsed().as_secs_f64();
+        trace!(mask_band_read_s, "read mask band timing");
+    }
 
     let (_, mask_buffer_data) = mask_buffer.into_shape_and_vec();
     let mask_grid = Grid::new(out_shape, mask_buffer_data)?.map_elements(|p: u8| p > 0);

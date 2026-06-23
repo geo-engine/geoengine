@@ -291,7 +291,7 @@ pub struct UpdateLayerCollection {
     pub properties: Vec<Property>,
 }
 
-#[derive(Debug, Serialize, Deserialize, Clone, IntoParams, Validate)]
+#[derive(Debug, Serialize, Deserialize, Clone, Copy, IntoParams, Validate)]
 #[into_params(parameter_in = Query)]
 // TODO: validate user input
 pub struct LayerCollectionListOptions {

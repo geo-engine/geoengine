@@ -1,0 +1,1858 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "stac_version": "1.1.0",
+      "stac_extensions": [
+        "https://cs-si.github.io/eopf-stac-extension/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/alternate-assets/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/authentication/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/classification/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/eo/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/file/v2.1.0/schema.json",
+        "https://stac-extensions.github.io/grid/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/processing/v1.2.0/schema.json",
+        "https://stac-extensions.github.io/product/v1.0.0/schema.json",
+        "https://stac-extensions.github.io/projection/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/raster/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/sat/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/storage/v2.0.0/schema.json",
+        "https://stac-extensions.github.io/timestamps/v1.1.0/schema.json",
+        "https://stac-extensions.github.io/view/v1.1.0/schema.json"
+      ],
+      "id": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755",
+      "collection": "sentinel-2-l2a",
+      "geometry": {
+        "type": "Polygon",
+        "coordinates": [
+          [
+            [99.0537157026846, 81.29104718150722],
+            [99.3071609430051, 80.92925761838922],
+            [99.74923134449617, 80.93234050606884],
+            [99.39469658449919, 81.12757263766429],
+            [99.38157739570931, 81.12696360248792],
+            [99.38135193773752, 81.12707768805082],
+            [99.37823914450131, 81.12693341294806],
+            [99.0537157026846, 81.29104718150722]
+          ]
+        ]
+      },
+      "bbox": [
+        99.0537157026846, 80.92925761838922, 99.74923134449617,
+        81.29104718150722
+      ],
+      "properties": {
+        "datetime": "2026-03-19T08:45:59.024000Z",
+        "created": "2026-03-19T11:37:33Z",
+        "updated": "2026-03-19T12:25:24.103102Z",
+        "start_datetime": "2026-03-19T08:45:59.024000Z",
+        "end_datetime": "2026-03-19T08:45:59.024000Z",
+        "platform": "sentinel-2b",
+        "instruments": ["msi"],
+        "constellation": "sentinel-2",
+        "gsd": 10.0,
+        "published": "2026-03-19T11:52:28.296536Z",
+        "eopf:origin_datetime": "2026-03-19T11:37:33.000000Z",
+        "auth:schemes": {
+          "s3": { "type": "s3" },
+          "oidc-nsis": {
+            "type": "openIdConnect",
+            "openIdConnectUrl": "https://identity.nsiscloud.polsa.gov.pl/auth/realms/NSIS-CLOUD/.well-known/openid-configuration"
+          }
+        },
+        "storage:schemes": {
+          "s3-nsis": {
+            "type": "custom-s3",
+            "title": "NSIS S3",
+            "platform": "https://eodata.nsiscloud.polsa.gov.pl",
+            "description": "Earth Observation archive of the National Satellite Information System (NSIS) coordinated by the Polish Space Agency (POLSA).",
+            "requester_pays": false
+          }
+        },
+        "processing:level": "L2",
+        "processing:datetime": "2026-03-19T11:07:55.000000Z",
+        "product:type": "S2MSI2A",
+        "product:timeliness": "PT24H",
+        "product:timeliness_category": "NRT",
+        "eo:cloud_cover": 100.0,
+        "eo:snow_cover": 0.0,
+        "sat:orbit_state": "descending",
+        "sat:relative_orbit": 107,
+        "sat:absolute_orbit": 47180,
+        "sat:platform_international_designator": "2017-013A",
+        "grid:code": "MGRS-48XVR",
+        "view:sun_azimuth": 232.058873907605,
+        "view:sun_elevation": 4.780452252935305,
+        "eopf:datastrip_id": "S2B_OPER_MSI_L2A_DS_2BPS_20260319T110755_S20260319T084555_N05.12",
+        "eopf:datatake_id": "GS2B_20260319T084559_047180_N05.12",
+        "eopf:instrument_mode": "INS-NOBS",
+        "statistics": {
+          "nodata": 98.720229,
+          "saturated_defective": 0.0,
+          "dark_area": 0.0,
+          "cloud_shadow": 0.0,
+          "vegetation": 0.0,
+          "not_vegetated": 0.0,
+          "water": 0.0,
+          "unclassified": 0.0,
+          "medium_proba_clouds": 5.769654,
+          "high_proba_clouds": 94.230348,
+          "thin_cirrus": 0.0
+        },
+        "processing:version": "05.12",
+        "view:azimuth": 224.5716176529944,
+        "view:incidence_angle": 1.6426142459615778,
+        "processing:software": { "eometadatatool": "260316154030+dirty" },
+        "processing:facility": "ESA",
+        "expires": "2262-01-01T00:00:00.000000Z"
+      },
+      "links": [
+        {
+          "rel": "self",
+          "type": "application/geo+json",
+          "href": "https://stac.nsiscloud.polsa.gov.pl/v1/collections/sentinel-2-l2a/items/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755"
+        },
+        {
+          "rel": "parent",
+          "type": "application/json",
+          "href": "https://stac.nsiscloud.polsa.gov.pl/v1/collections/sentinel-2-l2a"
+        },
+        {
+          "rel": "collection",
+          "type": "application/json",
+          "href": "https://stac.nsiscloud.polsa.gov.pl/v1/collections/sentinel-2-l2a"
+        },
+        {
+          "rel": "root",
+          "type": "application/json",
+          "href": "https://stac.nsiscloud.polsa.gov.pl/v1/"
+        },
+        {
+          "href": "https://trace.dataspace.copernicus.eu/api/v1/traces/name/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE.zip",
+          "rel": "version-history",
+          "type": "application/json",
+          "title": "Product history record from the CDSE traceability service"
+        },
+        {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/",
+          "rel": "enclosure",
+          "type": "application/x-directory",
+          "title": "S3 path to source directory",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"]
+        }
+      ],
+      "assets": {
+        "safe_manifest": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/manifest.safe",
+          "type": "application/xml",
+          "title": "manifest.safe",
+          "roles": ["metadata"],
+          "file:checksum": "d501105a105ce6f70dce0e93ececdee0c47982",
+          "file:size": 68920,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/manifest.safe",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(manifest.safe)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "product_metadata": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/MTD_MSIL2A.xml",
+          "type": "application/xml",
+          "title": "MTD_MSIL2A.xml",
+          "roles": ["metadata"],
+          "file:checksum": "d50120bee20afb37e369df626ee41a60465ca17bc17797e505dda4acfcb914a0355b5c",
+          "file:size": 54531,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/MTD_MSIL2A.xml",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(MTD_MSIL2A.xml)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "granule_metadata": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/MTD_TL.xml",
+          "type": "application/xml",
+          "title": "MTD_TL.xml",
+          "roles": ["metadata"],
+          "file:checksum": "d50120342f7d089666f0851333705cd7cf7ff7e9e941d87948d2cd67b516d738448b81",
+          "file:size": 179307,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/MTD_TL.xml",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(MTD_TL.xml)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "inspire_metadata": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/INSPIRE.xml",
+          "type": "application/xml",
+          "title": "INSPIRE.xml",
+          "roles": ["metadata"],
+          "file:checksum": "d5012058dfd5f833975bdcc781374a92b744c3228bc23ba93d965d9f58ebe5eb428661",
+          "file:size": 18745,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/INSPIRE.xml",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(INSPIRE.xml)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "datastrip_metadata": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/DATASTRIP/DS_2BPS_20260319T110755_S20260319T084555/MTD_DS.xml",
+          "type": "application/xml",
+          "title": "MTD_DS.xml",
+          "roles": ["metadata"],
+          "file:checksum": "d5012012a0d9dadea77b3ca007433934d447f029f7c470489924b3234899943fb36309",
+          "file:size": 8417870,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/DATASTRIP/DS_2BPS_20260319T110755_S20260319T084555/MTD_DS.xml",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(DATASTRIP)/Nodes(DS_2BPS_20260319T110755_S20260319T084555)/Nodes(MTD_DS.xml)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "thumbnail": {
+          "href": "https://datahub.creodias.eu/odata/v1/Assets(58b8d589-02c2-40ba-b242-d6c08b181924)/$value",
+          "type": "image/jpeg",
+          "title": "Quicklook",
+          "roles": ["thumbnail", "overview"],
+          "data_type": "uint8",
+          "proj:code": null,
+          "proj:shape": [343, 343],
+          "file:checksum": "d501103df47e85991fd71b8fc9e376a320bff4",
+          "file:size": 2971,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755-ql.jpg",
+          "alternate:name": "HTTPS",
+          "alternate": {
+            "s3": {
+              "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755-ql.jpg",
+              "alternate:name": "S3",
+              "auth:refs": ["s3"],
+              "storage:refs": ["s3-nsis"]
+            }
+          }
+        },
+        "B01_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B01_20m.jp2",
+          "type": "image/jp2",
+          "title": "Coastal aerosol (band 1) - 20m",
+          "roles": ["data", "reflectance", "sampling:upsampled", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B01",
+              "description": "Coastal aerosol (band 1)",
+              "eo:center_wavelength": 0.443,
+              "eo:full_width_half_max": 0.228,
+              "eo:common_name": "coastal"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 220.985674320575,
+          "view:incidence_angle": 2.05201253076965,
+          "file:checksum": "1620d7879397d716ba117751fd94e7b4d5ee29039960129ea7966832d47ef7f89670",
+          "file:size": 332482,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B01_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B01_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B01_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B01_60m.jp2",
+          "type": "image/jp2",
+          "title": "Coastal aerosol (band 1) - 60m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B01",
+              "description": "Coastal aerosol (band 1)",
+              "eo:center_wavelength": 0.443,
+              "eo:full_width_half_max": 0.228,
+              "eo:common_name": "coastal"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 220.985674320575,
+          "view:incidence_angle": 2.05201253076965,
+          "file:checksum": "1620bd6b4b7086be3a657f3c47c8f3391c1aaebb4f07cbbc2c089500982bb0d31412",
+          "file:size": 78873,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B01_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B01_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B02_10m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_B02_10m.jp2",
+          "type": "image/jp2",
+          "title": "Blue (band 2) - 10m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:10m"],
+          "bands": [
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:center_wavelength": 0.493,
+              "eo:full_width_half_max": 0.267,
+              "eo:common_name": "blue"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 10,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [10980, 10980],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [10, 0, 399960, 0, -10, 9100020],
+          "view:azimuth": 234.00877302273,
+          "view:incidence_angle": 1.12037591704729,
+          "file:checksum": "1620bb0fe5de708223709aa8e25afa29f7a12b828f1746977ba66e404c73fc9be484",
+          "file:size": 1816247,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_B02_10m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R10m)/Nodes(T48XVR_20260319T084559_B02_10m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B02_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B02_20m.jp2",
+          "type": "image/jp2",
+          "title": "Blue (band 2) - 20m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:center_wavelength": 0.493,
+              "eo:full_width_half_max": 0.267,
+              "eo:common_name": "blue"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 234.00877302273,
+          "view:incidence_angle": 1.12037591704729,
+          "file:checksum": "162091706c6f7a61530d7b768d407dc3bc29f0b345460f2df67d6d6dfef5db4170b5",
+          "file:size": 512014,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B02_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B02_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B02_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B02_60m.jp2",
+          "type": "image/jp2",
+          "title": "Blue (band 2) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:center_wavelength": 0.493,
+              "eo:full_width_half_max": 0.267,
+              "eo:common_name": "blue"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 234.00877302273,
+          "view:incidence_angle": 1.12037591704729,
+          "file:checksum": "1620ea022572bb192b2d7485e034b262f37347d88b064c86cf4df4ca581e8ddd7b00",
+          "file:size": 81886,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B02_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B02_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B03_10m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_B03_10m.jp2",
+          "type": "image/jp2",
+          "title": "Green (band 3) - 10m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:10m"],
+          "bands": [
+            {
+              "name": "B03",
+              "description": "Green (band 3)",
+              "eo:center_wavelength": 0.56,
+              "eo:full_width_half_max": 0.291,
+              "eo:common_name": "green"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 10,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [10980, 10980],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [10, 0, 399960, 0, -10, 9100020],
+          "view:azimuth": 225.535583355159,
+          "view:incidence_angle": 1.3020815602771,
+          "file:checksum": "162019197233561651bc8f6f70e9235842877e95c4abc543251e28a593f1f1a4f84e",
+          "file:size": 1754691,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_B03_10m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R10m)/Nodes(T48XVR_20260319T084559_B03_10m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B03_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B03_20m.jp2",
+          "type": "image/jp2",
+          "title": "Green (band 3) - 20m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B03",
+              "description": "Green (band 3)",
+              "eo:center_wavelength": 0.56,
+              "eo:full_width_half_max": 0.291,
+              "eo:common_name": "green"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 225.535583355159,
+          "view:incidence_angle": 1.3020815602771,
+          "file:checksum": "162015b88723301765e8339a033370570a289511b6a1f200614f18154b6506b40246",
+          "file:size": 497075,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B03_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B03_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B03_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B03_60m.jp2",
+          "type": "image/jp2",
+          "title": "Green (band 3) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B03",
+              "description": "Green (band 3)",
+              "eo:center_wavelength": 0.56,
+              "eo:full_width_half_max": 0.291,
+              "eo:common_name": "green"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 225.535583355159,
+          "view:incidence_angle": 1.3020815602771,
+          "file:checksum": "162009cc3d911e8583eeb9f53dc9e65ae7c1d313d96709ce0f6c5a720f963a92ac32",
+          "file:size": 79952,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B03_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B03_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B04_10m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_B04_10m.jp2",
+          "type": "image/jp2",
+          "title": "Red (band 4) - 10m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:10m"],
+          "bands": [
+            {
+              "name": "B04",
+              "description": "Red (band 4)",
+              "eo:center_wavelength": 0.665,
+              "eo:full_width_half_max": 0.342,
+              "eo:common_name": "red"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 10,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [10980, 10980],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [10, 0, 399960, 0, -10, 9100020],
+          "view:azimuth": 227.105990090539,
+          "view:incidence_angle": 1.46098812343093,
+          "file:checksum": "1620855d325c4cbf1ad4e2c21fe323aa7d39fe2fa94f8bfe5bd4e7796c383711bc75",
+          "file:size": 1751572,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_B04_10m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R10m)/Nodes(T48XVR_20260319T084559_B04_10m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B04_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B04_20m.jp2",
+          "type": "image/jp2",
+          "title": "Red (band 4) - 20m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B04",
+              "description": "Red (band 4)",
+              "eo:center_wavelength": 0.665,
+              "eo:full_width_half_max": 0.342,
+              "eo:common_name": "red"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 227.105990090539,
+          "view:incidence_angle": 1.46098812343093,
+          "file:checksum": "162042e36a5ec65a69344cd69126e94f9e6e261d200a21985494fc346508894ead23",
+          "file:size": 498463,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B04_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B04_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B04_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B04_60m.jp2",
+          "type": "image/jp2",
+          "title": "Red (band 4) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B04",
+              "description": "Red (band 4)",
+              "eo:center_wavelength": 0.665,
+              "eo:full_width_half_max": 0.342,
+              "eo:common_name": "red"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 227.105990090539,
+          "view:incidence_angle": 1.46098812343093,
+          "file:checksum": "1620c064ca122384efab996c9726b0265cab9c08274a69c8d0911db5c36f9256481b",
+          "file:size": 80648,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B04_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B04_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B05_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B05_20m.jp2",
+          "type": "image/jp2",
+          "title": "Red edge 1 (band 5) - 20m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B05",
+              "description": "Red edge 1 (band 5)",
+              "eo:center_wavelength": 0.704,
+              "eo:full_width_half_max": 0.357,
+              "eo:common_name": "rededge071"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 224.546700714363,
+          "view:incidence_angle": 1.57474196734165,
+          "file:checksum": "16202ab8be543cb28893b555548c19eaf3ebf08f14b60d504930852266e36ee94f9a",
+          "file:size": 501239,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B05_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B05_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B05_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B05_60m.jp2",
+          "type": "image/jp2",
+          "title": "Red edge 1 (band 5) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B05",
+              "description": "Red edge 1 (band 5)",
+              "eo:center_wavelength": 0.704,
+              "eo:full_width_half_max": 0.357,
+              "eo:common_name": "rededge071"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 224.546700714363,
+          "view:incidence_angle": 1.57474196734165,
+          "file:checksum": "1620514853b96ede5ffc728881a163ace6849f215f9419e4b79d3c5f463a4fde2439",
+          "file:size": 81119,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B05_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B05_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B06_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B06_20m.jp2",
+          "type": "image/jp2",
+          "title": "Red edge 2 (band 6) - 20m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B06",
+              "description": "Red edge 2 (band 6)",
+              "eo:center_wavelength": 0.741,
+              "eo:full_width_half_max": 0.374,
+              "eo:common_name": "rededge075"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 222.322814148439,
+          "view:incidence_angle": 1.69167775673831,
+          "file:checksum": "1620a5037e99bb5e8128e25709b29100b0eba4767c392fefb91779cfa74d721c21a2",
+          "file:size": 508331,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B06_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B06_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B06_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B06_60m.jp2",
+          "type": "image/jp2",
+          "title": "Red edge 2 (band 6) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B06",
+              "description": "Red edge 2 (band 6)",
+              "eo:center_wavelength": 0.741,
+              "eo:full_width_half_max": 0.374,
+              "eo:common_name": "rededge075"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 222.322814148439,
+          "view:incidence_angle": 1.69167775673831,
+          "file:checksum": "1620d7c8662cd138f1763dfa80d5959bc9908bd7352a0fb103e31f192110f074c1b9",
+          "file:size": 81635,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B06_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B06_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B07_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B07_20m.jp2",
+          "type": "image/jp2",
+          "title": "Red edge 3 (band 7) - 20m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B07",
+              "description": "Red edge 3 (band 7)",
+              "eo:center_wavelength": 0.783,
+              "eo:full_width_half_max": 0.399,
+              "eo:common_name": "rededge078"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 220.359752366298,
+          "view:incidence_angle": 1.8120977137764,
+          "file:checksum": "1620e83a1abaac2822763a56b5d16fcf22f8f30d91bd8e9efe6c35355678b68119f6",
+          "file:size": 507793,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B07_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B07_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B07_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B07_60m.jp2",
+          "type": "image/jp2",
+          "title": "Red edge 3 (band 7) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B07",
+              "description": "Red edge 3 (band 7)",
+              "eo:center_wavelength": 0.783,
+              "eo:full_width_half_max": 0.399,
+              "eo:common_name": "rededge078"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 220.359752366298,
+          "view:incidence_angle": 1.8120977137764,
+          "file:checksum": "16206a7accaecff014f04dfbf23e7089cda696b7bdd6e5fff6499b4d5f6159e891a6",
+          "file:size": 81540,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B07_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B07_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B08_10m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_B08_10m.jp2",
+          "type": "image/jp2",
+          "title": "NIR 1 (band 8) - 10m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:10m"],
+          "bands": [
+            {
+              "name": "B08",
+              "description": "NIR 1 (band 8)",
+              "eo:center_wavelength": 0.833,
+              "eo:full_width_half_max": 0.454,
+              "eo:common_name": "nir"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 10,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [10980, 10980],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [10, 0, 399960, 0, -10, 9100020],
+          "view:azimuth": 229.454644128316,
+          "view:incidence_angle": 1.20702509227639,
+          "file:checksum": "16209dfbe755609f8e55c40d80a2caed9125d0c9e792d6d6d23c04d154e21fabae5e",
+          "file:size": 1791116,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_B08_10m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R10m)/Nodes(T48XVR_20260319T084559_B08_10m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B8A_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B8A_20m.jp2",
+          "type": "image/jp2",
+          "title": "NIR 2 (band 8A) - 20m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B8A",
+              "description": "NIR 2 (band 8A)",
+              "eo:center_wavelength": 0.865,
+              "eo:full_width_half_max": 0.441,
+              "eo:common_name": "nir08"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 218.635266070521,
+          "view:incidence_angle": 1.93450016938485,
+          "file:checksum": "16200de3f1e14660991d2b488e4db0ccde817b6daba3038019e86517000452fc929f",
+          "file:size": 516604,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B8A_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B8A_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B8A_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B8A_60m.jp2",
+          "type": "image/jp2",
+          "title": "NIR 2 (band 8A) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B8A",
+              "description": "NIR 2 (band 8A)",
+              "eo:center_wavelength": 0.865,
+              "eo:full_width_half_max": 0.441,
+              "eo:common_name": "nir08"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 218.635266070521,
+          "view:incidence_angle": 1.93450016938485,
+          "file:checksum": "1620a27280c00b0f792056067e7c4a67cf68cfcd77428c22bf2121e62d5c82c51ed5",
+          "file:size": 81846,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B8A_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B8A_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B09_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B09_60m.jp2",
+          "type": "image/jp2",
+          "title": "NIR 3 (band 9) - 60m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B09",
+              "description": "NIR 3 (band 9)",
+              "eo:center_wavelength": 0.945,
+              "eo:full_width_half_max": 0.479,
+              "eo:common_name": "nir09"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 215.652199613161,
+          "view:incidence_angle": 2.19263848829018,
+          "file:checksum": "16207c35dd03df5cdc531507af1db770305c9ed798a5ee44a062bd58ef5b4deecedd",
+          "file:size": 69998,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B09_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B09_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B11_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B11_20m.jp2",
+          "type": "image/jp2",
+          "title": "SWIR 1 (band 11) - 20m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B11",
+              "description": "SWIR 1 (band 11)",
+              "eo:center_wavelength": 1.614,
+              "eo:full_width_half_max": 0.841,
+              "eo:common_name": "swir16"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 226.407316072289,
+          "view:incidence_angle": 1.662802095303,
+          "file:checksum": "162084adf59b29e6dfb19cc4ff821e82f665656a0abc93f42121fa36d8b3e33cddec",
+          "file:size": 424877,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B11_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B11_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B11_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B11_60m.jp2",
+          "type": "image/jp2",
+          "title": "SWIR 1 (band 11) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B11",
+              "description": "SWIR 1 (band 11)",
+              "eo:center_wavelength": 1.614,
+              "eo:full_width_half_max": 0.841,
+              "eo:common_name": "swir16"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 226.407316072289,
+          "view:incidence_angle": 1.662802095303,
+          "file:checksum": "16206cfdcdf3cf2767166e68d2c3e532ada21d33b0dc6b013bd37dcac94283b5becc",
+          "file:size": 67973,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B11_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B11_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B12_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B12_20m.jp2",
+          "type": "image/jp2",
+          "title": "SWIR 2 (band 12) - 20m",
+          "roles": ["data", "reflectance", "sampling:original", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B12",
+              "description": "SWIR 2 (band 12)",
+              "eo:center_wavelength": 2.202,
+              "eo:full_width_half_max": 1.16,
+              "eo:common_name": "swir22"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "view:azimuth": 222.123283487889,
+          "view:incidence_angle": 1.95466182439327,
+          "file:checksum": "16200cad5bf8b84aba807a14c5f65964f376796f8cdfb5e57ea3b6115d9515e454df",
+          "file:size": 426621,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_B12_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_B12_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "B12_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B12_60m.jp2",
+          "type": "image/jp2",
+          "title": "SWIR 2 (band 12) - 60m",
+          "roles": ["data", "reflectance", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B12",
+              "description": "SWIR 2 (band 12)",
+              "eo:center_wavelength": 2.202,
+              "eo:full_width_half_max": 1.16,
+              "eo:common_name": "swir22"
+            }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.0001,
+          "raster:offset": -0.1,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "view:azimuth": 222.123283487889,
+          "view:incidence_angle": 1.95466182439327,
+          "file:checksum": "162006e71efd871dc7aefcfcb5c4d62d8ff3f8967858d34e2d58ee0a61f005473883",
+          "file:size": 68313,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_B12_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_B12_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "TCI_10m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_TCI_10m.jp2",
+          "type": "image/jp2",
+          "title": "True color image",
+          "roles": ["visual", "sampling:original", "gsd:10m"],
+          "bands": [
+            {
+              "name": "B04",
+              "description": "Red (band 4)",
+              "eo:center_wavelength": 0.665,
+              "eo:full_width_half_max": 0.342,
+              "eo:common_name": "red"
+            },
+            {
+              "name": "B03",
+              "description": "Green (band 3)",
+              "eo:center_wavelength": 0.56,
+              "eo:full_width_half_max": 0.291,
+              "eo:common_name": "green"
+            },
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:center_wavelength": 0.493,
+              "eo:full_width_half_max": 0.267,
+              "eo:common_name": "blue"
+            }
+          ],
+          "data_type": "uint8",
+          "nodata": 0,
+          "gsd": 10,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [10980, 10980],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [10, 0, 399960, 0, -10, 9100020],
+          "file:checksum": "1620e466290a5b8a1dfb49f65a44c383bc7b781a1f39a3070b4461fb6505fdb7376e",
+          "file:size": 71295,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_TCI_10m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R10m)/Nodes(T48XVR_20260319T084559_TCI_10m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "TCI_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_TCI_20m.jp2",
+          "type": "image/jp2",
+          "title": "True color image",
+          "roles": ["visual", "sampling:downsampled", "gsd:20m"],
+          "bands": [
+            {
+              "name": "B04",
+              "description": "Red (band 4)",
+              "eo:center_wavelength": 0.665,
+              "eo:full_width_half_max": 0.342,
+              "eo:common_name": "red"
+            },
+            {
+              "name": "B03",
+              "description": "Green (band 3)",
+              "eo:center_wavelength": 0.56,
+              "eo:full_width_half_max": 0.291,
+              "eo:common_name": "green"
+            },
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:center_wavelength": 0.493,
+              "eo:full_width_half_max": 0.267,
+              "eo:common_name": "blue"
+            }
+          ],
+          "data_type": "uint8",
+          "nodata": 0,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "file:checksum": "16207da5f35405a2a650d4091a216853a043de4be28eded04722245b01dfbf5e9a4d",
+          "file:size": 33790,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_TCI_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_TCI_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "TCI_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_TCI_60m.jp2",
+          "type": "image/jp2",
+          "title": "True color image",
+          "roles": ["visual", "sampling:downsampled", "gsd:60m"],
+          "bands": [
+            {
+              "name": "B04",
+              "description": "Red (band 4)",
+              "eo:center_wavelength": 0.665,
+              "eo:full_width_half_max": 0.342,
+              "eo:common_name": "red"
+            },
+            {
+              "name": "B03",
+              "description": "Green (band 3)",
+              "eo:center_wavelength": 0.56,
+              "eo:full_width_half_max": 0.291,
+              "eo:common_name": "green"
+            },
+            {
+              "name": "B02",
+              "description": "Blue (band 2)",
+              "eo:center_wavelength": 0.493,
+              "eo:full_width_half_max": 0.267,
+              "eo:common_name": "blue"
+            }
+          ],
+          "data_type": "uint8",
+          "nodata": 0,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "file:checksum": "16204f3830fc86684d14b312b93ecf4f49e291f58df8081c64ac6466b298ca5bcf1e",
+          "file:size": 21202,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_TCI_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_TCI_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "AOT_10m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_AOT_10m.jp2",
+          "type": "image/jp2",
+          "title": "Aerosol optical thickness (AOT) - 10m",
+          "roles": ["data", "gsd:10m"],
+          "bands": [
+            { "name": "AOT", "description": "Aerosol optical thickness" }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.001,
+          "raster:offset": 0.0,
+          "gsd": 10,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [10980, 10980],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [10, 0, 399960, 0, -10, 9100020],
+          "file:checksum": "162039f2c2e2273aa7d85baf1b40875cf5a9e7324602c40e2da23d567eec331a81ae",
+          "file:size": 41424,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_AOT_10m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R10m)/Nodes(T48XVR_20260319T084559_AOT_10m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "AOT_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_AOT_20m.jp2",
+          "type": "image/jp2",
+          "title": "Aerosol optical thickness (AOT) - 20m",
+          "roles": ["data", "gsd:20m"],
+          "bands": [
+            { "name": "AOT", "description": "Aerosol optical thickness" }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.001,
+          "raster:offset": 0.0,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "file:checksum": "1620fb28b8c1ed77b3a183f40cc66ddd3e05d785bb01f7814394ea84cb88dacef15c",
+          "file:size": 47070,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_AOT_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_AOT_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "AOT_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_AOT_60m.jp2",
+          "type": "image/jp2",
+          "title": "Aerosol optical thickness (AOT) - 60m",
+          "roles": ["data", "gsd:60m"],
+          "bands": [
+            { "name": "AOT", "description": "Aerosol optical thickness" }
+          ],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.001,
+          "raster:offset": 0.0,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "file:checksum": "1620096d3d2ce214f4ee3ce33448af3cb604b8b965719d7b2a9e1a564971229b4a24",
+          "file:size": 23088,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_AOT_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_AOT_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "SCL_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_SCL_20m.jp2",
+          "type": "image/jp2",
+          "title": "Scene classification map (SCL) - 20m",
+          "roles": ["data", "sampling:original", "gsd:20m"],
+          "data_type": "uint8",
+          "nodata": 0,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "classification:classes": [
+            {
+              "value": 0,
+              "name": "no_data",
+              "nodata": true,
+              "percentage": 98.720229
+            },
+            { "value": 1, "name": "saturated_or_defective", "percentage": 0.0 },
+            { "value": 2, "name": "dark_area_pixels", "percentage": 0.0 },
+            { "value": 3, "name": "cloud_shadows", "percentage": 0.0 },
+            { "value": 4, "name": "vegetation", "percentage": 0.0 },
+            { "value": 5, "name": "not_vegetated", "percentage": 0.0 },
+            { "value": 6, "name": "water", "percentage": 0.0 },
+            { "value": 7, "name": "unclassified", "percentage": 0.0 },
+            {
+              "value": 8,
+              "name": "cloud_medium_probability",
+              "percentage": 5.769654
+            },
+            {
+              "value": 9,
+              "name": "cloud_high_probability",
+              "percentage": 94.230348
+            },
+            { "value": 10, "name": "thin_cirrus", "percentage": 0.0 },
+            { "value": 11, "name": "snow", "percentage": 0.0 }
+          ],
+          "file:checksum": "1620bee4557a74c5de19e67f149808ff7a6de65501ecf0a6e2a253ee537e12d38b44",
+          "file:size": 40775,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_SCL_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_SCL_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "SCL_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_SCL_60m.jp2",
+          "type": "image/jp2",
+          "title": "Scene classification map (SCL) - 60m",
+          "roles": ["data", "sampling:downsampled", "gsd:60m"],
+          "data_type": "uint8",
+          "nodata": 0,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "classification:classes": [
+            { "value": 0, "name": "no_data", "nodata": true },
+            { "value": 1, "name": "saturated_or_defective" },
+            { "value": 2, "name": "dark_area_pixels" },
+            { "value": 3, "name": "cloud_shadows" },
+            { "value": 4, "name": "vegetation" },
+            { "value": 5, "name": "not_vegetated" },
+            { "value": 6, "name": "water" },
+            { "value": 7, "name": "unclassified" },
+            { "value": 8, "name": "cloud_medium_probability" },
+            { "value": 9, "name": "cloud_high_probability" },
+            { "value": 10, "name": "thin_cirrus" },
+            { "value": 11, "name": "snow" }
+          ],
+          "file:checksum": "162016c95a718c4a1a53e5e189cc044801e97060e3d60fa7d5dd4358ae54d6d00b48",
+          "file:size": 18262,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_SCL_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_SCL_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "WVP_10m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_WVP_10m.jp2",
+          "type": "image/jp2",
+          "title": "Water vapour (WVP) - 10m",
+          "roles": ["data", "gsd:10m"],
+          "bands": [{ "name": "WVP", "description": "Water vapour" }],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.001,
+          "raster:offset": 0.0,
+          "gsd": 10,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [10980, 10980],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [10, 0, 399960, 0, -10, 9100020],
+          "file:checksum": "1620da73a112b4a128420e95d8fecce34e4f863eb1ae2fc11f06f38f529f0a958daa",
+          "file:size": 12543,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R10m/T48XVR_20260319T084559_WVP_10m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R10m)/Nodes(T48XVR_20260319T084559_WVP_10m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "WVP_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_WVP_20m.jp2",
+          "type": "image/jp2",
+          "title": "Water vapour (WVP) - 20m",
+          "roles": ["data", "gsd:20m"],
+          "bands": [{ "name": "WVP", "description": "Water vapour" }],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.001,
+          "raster:offset": 0.0,
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "file:checksum": "16206efe7dcb3a5f317f21216e6e75ff676bfd1fb3731d97357c4f513748ebbe2328",
+          "file:size": 26777,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R20m/T48XVR_20260319T084559_WVP_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R20m)/Nodes(T48XVR_20260319T084559_WVP_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "WVP_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_WVP_60m.jp2",
+          "type": "image/jp2",
+          "title": "Water vapour (WVP) - 60m",
+          "roles": ["data", "gsd:60m"],
+          "bands": [{ "name": "WVP", "description": "Water vapour" }],
+          "data_type": "uint16",
+          "nodata": 0,
+          "raster:scale": 0.001,
+          "raster:offset": 0.0,
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "file:checksum": "1620a9b7ff03ce08bd320db1a1773b6e9e2b4ed9cabd3acef1aa18dedc268db816e8",
+          "file:size": 14879,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/IMG_DATA/R60m/T48XVR_20260319T084559_WVP_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(IMG_DATA)/Nodes(R60m)/Nodes(T48XVR_20260319T084559_WVP_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "SNW_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/QI_DATA/MSK_SNWPRB_20m.jp2",
+          "type": "image/jp2",
+          "title": "Snow probability (SNW) - 20m",
+          "roles": ["data", "gsd:20m"],
+          "bands": [{ "name": "SNW", "description": "Snow probability" }],
+          "data_type": "uint8",
+          "statistics": { "minimum": 0, "maximum": 100 },
+          "unit": "%",
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "file:checksum": "1620e21a64bc28edca4520dbae75a016ffa98878bb66f0d206b6730cc3888a51eefb",
+          "file:size": 24753,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/QI_DATA/MSK_SNWPRB_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(QI_DATA)/Nodes(MSK_SNWPRB_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "SNW_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/QI_DATA/MSK_SNWPRB_60m.jp2",
+          "type": "image/jp2",
+          "title": "Snow probability (SNW) - 60m",
+          "roles": ["data", "gsd:60m"],
+          "bands": [{ "name": "SNW", "description": "Snow probability" }],
+          "data_type": "uint8",
+          "statistics": { "minimum": 0, "maximum": 100 },
+          "unit": "%",
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "file:checksum": "1620929aa31218ae8ca9aa6d376642d40a5b6f236753eba040b060d124049b511d50",
+          "file:size": 13970,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/QI_DATA/MSK_SNWPRB_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(QI_DATA)/Nodes(MSK_SNWPRB_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "CLD_20m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/QI_DATA/MSK_CLDPRB_20m.jp2",
+          "type": "image/jp2",
+          "title": "Cloud probability (CLD) - 20m",
+          "roles": ["data", "gsd:20m"],
+          "bands": [{ "name": "CLD", "description": "Cloud probability" }],
+          "data_type": "uint8",
+          "statistics": { "minimum": 0, "maximum": 100 },
+          "unit": "%",
+          "gsd": 20,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [5490, 5490],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [20, 0, 399960, 0, -20, 9100020],
+          "file:checksum": "1620388b5d349073b004704da934138a472cb1206d83b029a741ca227e88104b4de2",
+          "file:size": 215790,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/QI_DATA/MSK_CLDPRB_20m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(QI_DATA)/Nodes(MSK_CLDPRB_20m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "CLD_60m": {
+          "href": "s3://eodata/Sentinel-2/MSI/L2A/2026/03/19/S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/QI_DATA/MSK_CLDPRB_60m.jp2",
+          "type": "image/jp2",
+          "title": "Cloud probability (CLD) - 60m",
+          "roles": ["data", "gsd:60m"],
+          "bands": [{ "name": "CLD", "description": "Cloud probability" }],
+          "data_type": "uint8",
+          "statistics": { "minimum": 0, "maximum": 100 },
+          "unit": "%",
+          "gsd": 60,
+          "proj:code": "EPSG:32648",
+          "proj:shape": [1830, 1830],
+          "proj:bbox": [399960, 8990220, 509760, 9100020],
+          "proj:transform": [60, 0, 399960, 0, -60, 9100020],
+          "file:checksum": "16204389a8930c96a28a9a34aed4ff6b228dbe40d3a4602afd694742d5547c5ee1c6",
+          "file:size": 41272,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE/GRANULE/L2A_T48XVR_A047180_20260319T084555/QI_DATA/MSK_CLDPRB_60m.jp2",
+          "alternate:name": "S3",
+          "auth:refs": ["s3"],
+          "storage:refs": ["s3-nsis"],
+          "alternate": {
+            "https": {
+              "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/Nodes(S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE)/Nodes(GRANULE)/Nodes(L2A_T48XVR_A047180_20260319T084555)/Nodes(QI_DATA)/Nodes(MSK_CLDPRB_60m.jp2)/$value",
+              "alternate:name": "HTTPS",
+              "auth:refs": ["oidc-nsis"],
+              "storage:refs": []
+            }
+          }
+        },
+        "Product": {
+          "href": "https://download.nsiscloud.polsa.gov.pl/odata/v1/Products(2ff73481-f8b1-46d0-b7bf-905a38827c3f)/$value",
+          "type": "application/zip",
+          "title": "Zipped product",
+          "roles": ["data", "metadata", "archive"],
+          "file:checksum": "d50110ded3296733bd83e445a1d242e78b50e9",
+          "file:size": 22964604,
+          "file:local_path": "S2B_MSIL2A_20260319T084559_N0512_R107_T48XVR_20260319T110755.SAFE.zip",
+          "auth:refs": ["oidc"]
+        }
+      }
+    }
+  ],
+  "links": [
+    {
+      "rel": "next",
+      "type": "application/json",
+      "method": "GET",
+      "href": "https://stac.nsiscloud.polsa.gov.pl/v1/collections/sentinel-2-l2a/items?limit=1&token=WzE3NzM5MDk5NTkwMjQwMDAwMDAsIlMyQl9NU0lMMkFfMjAyNjAzMTlUMDg0NTU5X04wNTEyX1IxMDdfVDQ4WFZSXzIwMjYwMzE5VDExMDc1NSIsInNlbnRpbmVsLTItbDJhIl0%3D"
+    },
+    {
+      "rel": "root",
+      "type": "application/json",
+      "href": "https://stac.nsiscloud.polsa.gov.pl/v1/"
+    },
+    {
+      "rel": "self",
+      "type": "application/json",
+      "href": "https://stac.nsiscloud.polsa.gov.pl/v1/collections/sentinel-2-l2a/items?limit=1"
+    },
+    {
+      "rel": "collection",
+      "type": "application/json",
+      "href": "https://stac.nsiscloud.polsa.gov.pl/v1/collections/sentinel-2-l2a"
+    },
+    {
+      "rel": "parent",
+      "type": "application/json",
+      "href": "https://stac.nsiscloud.polsa.gov.pl/v1/collections/sentinel-2-l2a"
+    }
+  ],
+  "numberReturned": 1,
+  "numberMatched": 75121804
+}

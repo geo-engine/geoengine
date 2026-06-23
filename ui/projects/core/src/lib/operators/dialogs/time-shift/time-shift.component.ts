@@ -179,13 +179,13 @@ export class TimeShiftComponent implements AfterViewInit {
             params = {
                 type,
                 timeInterval: time.toDict(),
-            } as AbsoluteTimeShiftDictParams;
+            };
         } else if (type === 'relative') {
             params = {
                 type,
                 granularity: this.form.controls['granularity'].value,
                 value: this.form.controls['value'].value,
-            } as RelativeTimeShiftDictParams;
+            };
         } else {
             // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
             throw Error(`Invalid time shift type ${type}`);

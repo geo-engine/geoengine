@@ -5,7 +5,6 @@ import {ProjectService} from '../../../project/project.service';
 import {map, mergeMap, tap} from 'rxjs/operators';
 import {
     NotificationService,
-    PieChartCountParams,
     PieChartDict,
     Plot,
     ResultTypes,
@@ -166,7 +165,7 @@ export class PieChartComponent implements AfterViewInit, OnDestroy {
                                 type: pieChartType,
                                 columnName,
                                 donut,
-                            } as PieChartCountParams,
+                            },
                             sources: {
                                 vector: inputWorkflow.operator,
                             },

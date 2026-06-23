@@ -21,7 +21,7 @@ const APP_CONFIG_DEFAULTS = mergeDeepOverrideLists(DEFAULT_CORE_CONFIG, {
         },
         FOCUS_EXTENT: [6.98865807458, 47.3024876979, 15.0169958839, 54.983104153],
     },
-}) as AppConfigStructure;
+});
 
 @Injectable()
 export class AppConfig extends CoreConfig {
