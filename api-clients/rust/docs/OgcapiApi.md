@@ -4,15 +4,15 @@ All URIs are relative to *https://geoengine.io/api*
 
 Method | HTTP request | Description
 ------------- | ------------- | -------------
-[**collection**](OgcapiApi.md#collection) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId} | OGC API Collection Metadata
-[**collection_tileset**](OgcapiApi.md#collection_tileset) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata
-[**collection_tilesets**](OgcapiApi.md#collection_tilesets) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles | OGC API Collection Tilesets List
-[**collections**](OgcapiApi.md#collections) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections | OGC API Collections List
-[**conformance**](OgcapiApi.md#conformance) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/conformance | OGC API Conformance Classes
-[**landing_page**](OgcapiApi.md#landing_page) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/ | OGC API Landing Page
-[**tile**](OgcapiApi.md#tile) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
-[**tile_matrix_set**](OgcapiApi.md#tile_matrix_set) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
-[**tile_matrix_sets**](OgcapiApi.md#tile_matrix_sets) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets | OGC API Tile Matrix Set List
+[**collection**](OgcapiApi.md#collection) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId} | OGC API Collection Metadata
+[**collection_tileset**](OgcapiApi.md#collection_tileset) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata
+[**collection_tilesets**](OgcapiApi.md#collection_tilesets) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles | OGC API Collection Tilesets List
+[**collections**](OgcapiApi.md#collections) | **GET** /ogc/{dataConnectorId}/{layerId}/collections | OGC API Collections List
+[**conformance**](OgcapiApi.md#conformance) | **GET** /ogc/{dataConnectorId}/{layerId}/conformance | OGC API Conformance Classes
+[**landing_page**](OgcapiApi.md#landing_page) | **GET** /ogc/{dataConnectorId}/{layerId}/ | OGC API Landing Page
+[**tile**](OgcapiApi.md#tile) | **GET** /ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
+[**tile_matrix_set**](OgcapiApi.md#tile_matrix_set) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
+[**tile_matrix_sets**](OgcapiApi.md#tile_matrix_sets) | **GET** /ogc/{dataConnectorId}/{layerId}/tileMatrixSets | OGC API Tile Matrix Set List
 
 
 

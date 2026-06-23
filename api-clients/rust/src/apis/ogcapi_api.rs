@@ -89,7 +89,7 @@ pub async fn collection(configuration: &configuration::Configuration, data_conne
     let p_path_data_connector_id = data_connector_id;
     let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/collections/{layerId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -131,7 +131,7 @@ pub async fn collection_tileset(configuration: &configuration::Configuration, da
     let p_path_layer_id = layer_id;
     let p_path_tile_matrix_set_id = tile_matrix_set_id;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string());
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string());
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -172,7 +172,7 @@ pub async fn collection_tilesets(configuration: &configuration::Configuration, d
     let p_path_data_connector_id = data_connector_id;
     let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -217,7 +217,7 @@ pub async fn collections(configuration: &configuration::Configuration, data_conn
     let p_query_limit = limit;
     let p_query_f = f;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/collections", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref param_value) = p_query_datetime {
@@ -270,7 +270,7 @@ pub async fn conformance(configuration: &configuration::Configuration, data_conn
     let p_path_data_connector_id = data_connector_id;
     let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/conformance", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/conformance", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -311,7 +311,7 @@ pub async fn landing_page(configuration: &configuration::Configuration, data_con
     let p_path_data_connector_id = data_connector_id;
     let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -357,7 +357,7 @@ pub async fn tile(configuration: &configuration::Configuration, data_connector_i
     let p_path_tile_col = tile_col;
     let p_query_datetime = datetime;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string(), tileMatrix=p_path_tile_matrix, tileRow=p_path_tile_row, tileCol=p_path_tile_col);
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string(), tileMatrix=p_path_tile_matrix, tileRow=p_path_tile_row, tileCol=p_path_tile_col);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref param_value) = p_query_datetime {
@@ -391,7 +391,7 @@ pub async fn tile_matrix_set(configuration: &configuration::Configuration, data_
     let p_path_layer_id = layer_id;
     let p_path_tile_matrix_set_id = tile_matrix_set_id;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string());
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string());
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -432,7 +432,7 @@ pub async fn tile_matrix_sets(configuration: &configuration::Configuration, data
     let p_path_data_connector_id = data_connector_id;
     let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
+    let uri_str = format!("{}/ogc/{dataConnectorId}/{layerId}/tileMatrixSets", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {

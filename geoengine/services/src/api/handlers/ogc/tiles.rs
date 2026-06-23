@@ -67,7 +67,7 @@ const TILESET_LIST_TITLE: &str = "Tiles in GeoEngine custom TMS";
 #[utoipa::path(
 	tag = "OGC API",
 	get,
-	path = "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles",
+	path = "/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles",
 	responses(
 		(status = 200, description = "OK", body = TileSets),
 		(status = 404, description = "Collection not found")
@@ -130,7 +130,7 @@ pub async fn collection_tilesets<C: ApplicationContext>(
 #[utoipa::path(
 	tag = "OGC API",
 	get,
-	path = "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}",
+	path = "/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}",
 	responses(
 		(status = 200, description = "OK", body = TileSet),
 		(status = 404, description = "Collection or tile matrix set not found")
@@ -310,7 +310,7 @@ impl TileQuery {
 #[utoipa::path(
 	tag = "OGC API",
 	get,
-	path = "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}",
+	path = "/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}",
 	responses(
 		(status = 200, response = crate::api::model::responses::PngResponse),
 		(status = 400, description = "Invalid tile coordinates or datetime"),

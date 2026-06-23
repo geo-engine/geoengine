@@ -49,7 +49,7 @@ const STANDARD_PIXEL_SIZE_METERS: f64 = 0.28e-3;
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{dataConnectorId}/{layerId}/tileMatrixSets",
+    path = "/{dataConnectorId}/{layerId}/tileMatrixSets",
     responses(
         (status = 200, description = "OK", body = TileMatrixSets)
     ),
@@ -93,7 +93,7 @@ pub async fn tile_matrix_sets<C: ApplicationContext>(
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}",
+    path = "/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}",
     responses(
         (status = 200, description = "OK", body = TileMatrixSet),
         (status = 404, description = "Tile matrix set not found")

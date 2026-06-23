@@ -51,7 +51,7 @@ const TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets";
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{dataConnectorId}/{layerId}/",
+    path = "/{dataConnectorId}/{layerId}/",
     responses(
         (status = 200, description = "OK", body = LandingPage,
             example = json!({
@@ -121,7 +121,7 @@ pub async fn landing_page<C: ApplicationContext>(
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{dataConnectorId}/{layerId}/conformance",
+    path = "/{dataConnectorId}/{layerId}/conformance",
     responses(
         (status = 200, description = "OK", body = Conformance,
             example = json!({
@@ -217,7 +217,7 @@ pub enum CollectionsResponseFormat {
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{dataConnectorId}/{layerId}/collections",
+    path = "/{dataConnectorId}/{layerId}/collections",
     responses(
         (status = 200, description = "OK", body = Collections)
     ),
@@ -292,7 +292,7 @@ pub struct CollectionQueryParams {
 #[utoipa::path(
     tag = "OGC API",
     get,
-    path = "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}",
+    path = "/{dataConnectorId}/{layerId}/collections/{layerId}",
     responses(
         (status = 200, description = "OK", body = Collection)
     ),

@@ -2472,7 +2472,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/": {
+    "/ogc/{dataConnectorId}/{layerId}/": {
       "get": {
         "tags": [
           "OGC API"
@@ -2545,7 +2545,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/collections": {
+    "/ogc/{dataConnectorId}/{layerId}/collections": {
       "get": {
         "tags": [
           "OGC API"
@@ -2644,7 +2644,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}": {
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}": {
       "get": {
         "tags": [
           "OGC API"
@@ -2691,7 +2691,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles": {
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles": {
       "get": {
         "tags": [
           "OGC API"
@@ -2741,7 +2741,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}": {
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}": {
       "get": {
         "tags": [
           "OGC API"
@@ -2800,7 +2800,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}": {
+    "/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}": {
       "get": {
         "tags": [
           "OGC API"
@@ -2898,7 +2898,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/conformance": {
+    "/ogc/{dataConnectorId}/{layerId}/conformance": {
       "get": {
         "tags": [
           "OGC API"
@@ -2961,7 +2961,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets": {
+    "/ogc/{dataConnectorId}/{layerId}/tileMatrixSets": {
       "get": {
         "tags": [
           "OGC API"
@@ -3008,7 +3008,7 @@
         ]
       }
     },
-    "/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}": {
+    "/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}": {
       "get": {
         "tags": [
           "OGC API"

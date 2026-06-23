@@ -306,7 +306,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/collections/{layerId}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -600,7 +600,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -879,7 +879,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -1223,7 +1223,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/collections',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -1499,7 +1499,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/conformance',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/conformance',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -1775,7 +1775,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -2134,7 +2134,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -2428,7 +2428,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -2704,7 +2704,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets',
+            resource_path='/ogc/{dataConnectorId}/{layerId}/tileMatrixSets',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
