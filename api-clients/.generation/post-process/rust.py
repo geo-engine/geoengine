@@ -19,6 +19,7 @@ def file_modifications() -> Generator[tuple[Path, FileModifier], None, None]:
     yield Path("src/apis/projects_api.rs"), projects_api_rs
     yield Path("src/apis/tasks_api.rs"), tasks_api_rs
     yield Path("src/models/default.rs"), default_rs
+    yield Path("src/models/geospatial_data_data_type.rs"), geospatial_data_data_type_rs
     yield Path("src/models/spatial_partition2_d.rs"), spatial_partition2_d_rs
     yield (
         Path("src/models/multiple_raster_or_single_vector_operator.rs"),
@@ -234,6 +235,22 @@ def default_rs(file_contents: list[str]) -> Generator[str, None, None]:
     for line in file_contents:
         if line.startswith("impl Default for Type {"):
             line = "impl std::default::Default for Type {\n"
+
+        yield line
+
+
+def geospatial_data_data_type_rs(
+    file_contents: list[str],
+) -> Generator[str, None, None]:
+    """Modify the geospatial_data_data_type.rs file."""
+    already_found_string = False
+    for line in file_contents:
+        dedented_line = dedent(line)
+
+        if dedented_line.startswith("String(String),"):
+            if already_found_string:
+                continue  # don't yield again
+            already_found_string = True
 
         yield line
 

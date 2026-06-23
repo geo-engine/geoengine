@@ -14,8 +14,6 @@ use serde::{Deserialize, Serialize};
 #[serde(untagged)]
 pub enum GeospatialDataDataType {
     String(String),
-    String(String),
-    String(String),
     GeospatialDataDataTypeOneOf(Box<models::GeospatialDataDataTypeOneOf>),
 }
 

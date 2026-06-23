@@ -1,0 +1,11 @@
+--- rust/src/models/geospatial_data_data_type.rs
++++ rust/src/models/geospatial_data_data_type.rs
+@@ -15,8 +15,6 @@
+ #[serde(untagged)]
+ pub enum GeospatialDataDataType {
+     String(String),
+-    String(String),
+-    String(String),
+     GeospatialDataDataTypeOneOf(Box<models::GeospatialDataDataTypeOneOf>),
+ }
+ 
