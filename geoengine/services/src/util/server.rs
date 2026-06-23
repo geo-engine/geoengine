@@ -5,7 +5,9 @@ use actix_http::body::{BoxBody, EitherBody, MessageBody};
 use actix_http::header::{HeaderName, HeaderValue};
 use actix_http::uri::PathAndQuery;
 use actix_http::{Extensions, HttpMessage, StatusCode};
-use actix_web::dev::{ServiceFactory, ServiceRequest, ServiceResponse};
+#[cfg(feature = "swagger-ui")]
+use actix_web::dev::ServiceFactory;
+use actix_web::dev::{ServiceRequest, ServiceResponse};
 use actix_web::error::{InternalError, JsonPayloadError, QueryPayloadError};
 use actix_web::{HttpRequest, HttpResponse, http, middleware, web};
 use futures::future::BoxFuture;
@@ -18,7 +20,9 @@ use tracing::debug;
 use tracing::info;
 use tracing_actix_web::{RequestId, RootSpanBuilder};
 use url::Url;
-use utoipa::{ToSchema, openapi::OpenApi};
+use utoipa::ToSchema;
+#[cfg(feature = "swagger-ui")]
+use utoipa::openapi::OpenApi;
 /// Custom root span for web requests that paste a request id to all logs.
 pub struct CustomRootSpanBuilder;
 
@@ -254,6 +258,7 @@ pub(crate) fn render_405(
 
 // this is a workaround to be able to serve swagger UI and the openapi.json behind a proxy (/api)
 // TODO: remove this when utoipa allows configuring the paths to serve the openapi.json and to include it in the swagger UI separately
+#[cfg(feature = "swagger-ui")]
 pub fn serve_openapi_json<
     T: ServiceFactory<ServiceRequest, Config = (), Error = actix_web::Error, InitError = ()>,
 >(
@@ -298,6 +303,7 @@ pub(crate) fn log_server_info() -> Result<()> {
 
     info!("External Address: {external_address} ");
 
+    #[cfg(feature = "swagger-ui")]
     info!(
         "API Documentation: {}",
         external_address.join("swagger-ui/")?
