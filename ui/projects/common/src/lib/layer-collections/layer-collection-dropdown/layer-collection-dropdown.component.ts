@@ -15,7 +15,6 @@ import {
     CollectionItem as LayerCollectionItemDict,
     ProviderLayerCollectionId as ProviderLayerCollectionIdDict,
     LayerListing as LayerCollectionLayerDict,
-    LayerCollectionListing as LayerCollectionListingDict,
 } from '@geoengine/api-client';
 import {BehaviorSubject, Observable, Subject, map} from 'rxjs';
 import {LayersService} from '../layers.service';
@@ -147,12 +146,12 @@ export class LayerCollectionDropdownComponent implements OnInit, OnChanges, OnDe
             newSelections.push(found);
 
             if (found.type === 'layer') {
-                this.layerSelected.emit(found as LayerCollectionLayerDict);
+                this.layerSelected.emit(found);
 
                 break;
             }
 
-            const collection = found as LayerCollectionListingDict;
+            const collection = found;
 
             const collectionItems = await this.layersService.getLayerCollectionItems(
                 collection.id.providerId,
@@ -175,11 +174,11 @@ export class LayerCollectionDropdownComponent implements OnInit, OnChanges, OnDe
 
     async selectItem(item: LayerCollectionItemDict, index: number): Promise<void> {
         if (item.type === 'layer') {
-            this.layerSelected.emit(item as LayerCollectionLayerDict);
+            this.layerSelected.emit(item);
             return;
         }
 
-        const collection = item as LayerCollectionListingDict;
+        const collection = item;
 
         this.layerSelected.emit(undefined);
 

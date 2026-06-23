@@ -89,13 +89,10 @@ export class AddLayerItemComponent {
             nonNullable: true,
             validators: [],
         }),
-        workflow: new FormControl(
-            JSON.stringify({type: 'Raster', operator: {type: 'GdalSource', params: {data: 'example'}}} as Workflow, null, ' '),
-            {
-                nonNullable: true,
-                validators: [],
-            },
-        ),
+        workflow: new FormControl(JSON.stringify({type: 'Raster', operator: {type: 'GdalSource', params: {data: 'example'}}}, null, ' '), {
+            nonNullable: true,
+            validators: [],
+        }),
     });
 
     constructor() {

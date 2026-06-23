@@ -165,7 +165,7 @@ export class BandNeighborhoodAggregateComponent {
                                 raster: inputWorkflow.operator,
                             },
                         } as BandNeighborhoodAggregateDict,
-                    } as WorkflowDict;
+                    };
 
                     return this.projectService.registerWorkflow(workflow);
                 }),

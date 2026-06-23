@@ -315,12 +315,12 @@ export class VectorExpressionComponent implements AfterViewInit, OnDestroy {
             outputColumn = {
                 type: 'column',
                 value: this.form.controls.outputColumnName.value,
-            } as ColumnOutputColumn;
+            };
         } else if (outputColumnType === 'geometry') {
             outputColumn = {
                 type: 'geometry',
                 value: outputGeometryType,
-            } as GeometryOutputColumn;
+            };
         }
 
         const expression = this.form.controls.expression.value;

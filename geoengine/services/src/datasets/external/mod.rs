@@ -7,12 +7,14 @@ pub mod gfbio_collections;
 pub mod netcdfcf;
 pub mod pangaea;
 pub mod sentinel_s2_l2a_cogs;
+pub mod stac;
 mod wildlive;
 
 pub use copernicus_dataspace::CopernicusDataspaceDataProviderDefinition;
 pub use sentinel_s2_l2a_cogs::{
     GdalRetries, SentinelS2L2ACogsProviderDefinition, StacApiRetries, StacQueryBuffer,
 };
+pub use stac::StacDataProviderDefinition;
 pub use wildlive::{
     WildliveDataConnectorAuth, WildliveDataConnectorDefinition, WildliveDbCache, WildliveError,
 };

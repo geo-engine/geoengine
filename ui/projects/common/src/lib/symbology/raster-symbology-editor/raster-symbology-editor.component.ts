@@ -21,7 +21,7 @@ import {Colorizer, ColorizerType, LinearGradient, LogarithmicGradient, PaletteCo
 import {BLACK, Color, TRANSPARENT, WHITE} from '../../colors/color';
 import {ColorBreakpoint} from '../../colors/color-breakpoint.model';
 import {BehaviorSubject} from 'rxjs';
-import {RasterBandDescriptor, TypedRasterResultDescriptor as RasterResultDescriptorDict} from '@geoengine/api-client';
+import {RasterBandDescriptor} from '@geoengine/api-client';
 import {WorkflowsService} from '../../workflows/workflows.service';
 import {FxLayoutDirective, FxFlexDirective} from '../../util/directives/flexbox-legacy.directive';
 import {MatCard, MatCardHeader, MatCardTitleGroup, MatCardTitle, MatCardSubtitle, MatCardContent} from '@angular/material/card';
@@ -309,7 +309,7 @@ export class RasterSymbologyEditorComponent {
             throw Error('expected raster result descriptor');
         }
 
-        const resultDescriptor = _resultDescriptor as RasterResultDescriptorDict;
+        const resultDescriptor = _resultDescriptor;
 
         let selectedBand = undefined;
         let selectedBand2 = undefined;

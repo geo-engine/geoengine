@@ -30,7 +30,7 @@ export class OidcPopupComponent implements AfterViewInit {
             const params = this.params();
             if (params.size === 0) return;
 
-            window.postMessage({oidcParams: Array.from(params.entries())} as OidcPopupMessage, '*');
+            window.postMessage({oidcParams: Array.from(params.entries())}, '*');
         });
     }
 

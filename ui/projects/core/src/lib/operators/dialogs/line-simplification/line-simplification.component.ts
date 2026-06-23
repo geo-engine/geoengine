@@ -126,7 +126,7 @@ export class LineSimplificationComponent implements OnInit {
                                 vector: sourceWorkflow.operator,
                             },
                         } as LineSimplificationDict,
-                    } as WorkflowDict;
+                    };
                     return this.projectService.registerWorkflow(workflow);
                 }),
                 mergeMap((workflowId) =>

@@ -10,15 +10,11 @@ import {
     RasterLayer,
     RasterLayerMetadata,
     RasterStackerDict,
-    RasterTypeConversionDict,
     ResultTypes,
     RenameBandsDict,
     geoengineValidators,
     NotificationService,
     SpatialGridDefinition,
-    ReprojectionDict,
-    InterpolationDict,
-    DownsamplingDict,
 } from '@geoengine/common';
 import {Coordinate2D, LegacyTypedOperatorOperator} from '@geoengine/api-client';
 import {SidenavHeaderComponent} from '../../../sidenav/sidenav-header/sidenav-header.component';
@@ -370,7 +366,7 @@ export class RasterStackerComponent implements AfterViewInit {
                             sources: {
                                 source: workflow.operator,
                             },
-                        } as ReprojectionDict;
+                        };
                     }
                 });
 
@@ -483,7 +479,7 @@ export class RasterStackerComponent implements AfterViewInit {
                         sources: {
                             source: processedOperator,
                         },
-                    } as ReprojectionDict;
+                    };
                 }
 
                 // Step 2: Regrid if needed
@@ -531,7 +527,7 @@ export class RasterStackerComponent implements AfterViewInit {
                             sources: {
                                 raster: processedOperator,
                             },
-                        } as InterpolationDict;
+                        };
                     } else {
                         // Use downsampling for finer → coarser
                         processedOperator = {
@@ -544,7 +540,7 @@ export class RasterStackerComponent implements AfterViewInit {
                             sources: {
                                 raster: processedOperator,
                             },
-                        } as DownsamplingDict;
+                        };
                     }
                 }
 
@@ -559,7 +555,7 @@ export class RasterStackerComponent implements AfterViewInit {
                         sources: {
                             raster: processedOperator,
                         },
-                    } as RasterTypeConversionDict;
+                    };
                 }
 
                 return processedOperator;

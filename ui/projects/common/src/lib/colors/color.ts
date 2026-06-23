@@ -63,7 +63,7 @@ export class Color implements IRgba, RgbaStruct {
     }
 
     rgbaStruct(): RgbaStruct {
-        return this as RgbaStruct;
+        return this;
     }
 
     rgbaTuple(): RgbaTuple {

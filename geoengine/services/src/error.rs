@@ -272,6 +272,8 @@ pub enum Error {
     },
     StacInvalidGeoTransform,
     StacInvalidBbox,
+    #[snafu(display("Irregular time dimensions are not supported by the STAC provider"))]
+    StacIrregularTimeDimensionNotSupported,
     #[snafu(display(
         "Failed to parse stac response from '{url}'. Error: {error}\nOriginal Response: {response}"
     ))]

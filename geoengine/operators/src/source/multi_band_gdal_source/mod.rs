@@ -34,7 +34,8 @@ use reader_mode::{GdalReaderMode, OverviewReaderState, ReaderState};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
 use std::marker::PhantomData;
-use tracing::debug;
+use std::time::Instant;
+use tracing::{debug, trace};
 
 mod error;
 mod loading_info;
@@ -211,6 +212,7 @@ where
             }
         };
 
+        let loading_info_start = tracing::enabled!(tracing::Level::TRACE).then(Instant::now);
         let loading_info = self
             .meta_data
             .loading_info(raster_query_rectangle_to_loading_info_query_rectangle(
@@ -219,6 +221,10 @@ where
                 true,
             ))
             .await?;
+        if let Some(loading_info_start) = loading_info_start {
+            let loading_info_ms = loading_info_start.elapsed().as_millis();
+            trace!(loading_info_ms, "loading_info timing");
+        }
 
         let gdal_worker = ctx.get_gdal_worker();
         let time_steps = loading_info.time_steps().to_vec();
@@ -642,7 +648,9 @@ mod tests {
     use geoengine_datatypes::primitives::{
         CacheHint, Measurement, SpatialPartition2D, TimeInstance,
     };
-    use geoengine_datatypes::raster::{GridBounds, GridIdx2D, GridSize};
+    use geoengine_datatypes::raster::{
+        GridBoundingBox2D, GridBounds, GridIdx2D, GridSize, RasterDataType,
+    };
     use geoengine_datatypes::raster::{RasterPropertiesEntryType, RasterPropertiesKey};
     use geoengine_datatypes::raster::{TileInformation, TilingStrategy};
     use geoengine_datatypes::spatial_reference::SpatialReference;

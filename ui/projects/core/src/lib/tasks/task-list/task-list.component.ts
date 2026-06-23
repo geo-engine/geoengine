@@ -177,7 +177,7 @@ export class TaskListComponent implements AfterViewInit, OnDestroy {
             pageIndex: paginator.pageIndex,
             pageSize: paginator.pageSize,
             length: paginator.length,
-        } as PageEvent);
+        });
     }
 
     refreshPage(): void {
@@ -185,7 +185,7 @@ export class TaskListComponent implements AfterViewInit, OnDestroy {
             pageIndex: this.paginator().pageIndex,
             pageSize: this.paginator().pageSize,
             length: this.paginator().length,
-        } as PageEvent);
+        });
     }
 
     abortTask(taskId: UUID): void {

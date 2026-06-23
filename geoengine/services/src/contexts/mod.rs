@@ -547,8 +547,15 @@ where
                     }
                 })
             }
-            DataId::External(_external) => {
-                Err(geoengine_operators::error::Error::NotYetImplemented)
+            DataId::External(external) => {
+                self.db
+                    .load_layer_provider(external.provider_id)
+                    .await
+                    .map_err(|e| geoengine_operators::error::Error::DatasetMetaData {
+                        source: Box::new(e),
+                    })?
+                    .meta_data(data_id)
+                    .await
             }
         }
     }
