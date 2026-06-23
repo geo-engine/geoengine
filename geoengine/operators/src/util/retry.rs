@@ -60,9 +60,10 @@ where
         std::thread::sleep(Duration::from_millis(sleep_delay as u64));
         result = f();
         if let Err(e) = &result
-            && break_early_f(e) {
-                break;
-            }
+            && break_early_f(e)
+        {
+            break;
+        }
         max_retries -= 1;
         sleep_delay *= exponential_backoff_factor;
         if let Some(max_delay_ms) = max_delay_ms {
