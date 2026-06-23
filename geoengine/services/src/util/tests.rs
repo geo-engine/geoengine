@@ -490,6 +490,49 @@ pub async fn add_file_definition_to_datasets<D: GeoEngineDb>(
     dataset
 }
 
+/// Add a definition from a file to the datasets.
+#[allow(clippy::missing_panics_doc)]
+pub async fn add_file_definition_to_datasets_and_return_layer<D: GeoEngineDb>(
+    db: &D,
+    definition: &Path,
+    symbology: Option<Symbology>,
+) -> (DataProviderId, LayerId) {
+    let dataset: DatasetIdAndName = add_file_definition_to_datasets(db, definition).await;
+    let layer_id = LayerId(dataset.id.to_string());
+
+    let root_collection_id = db.get_root_layer_collection_id().await.unwrap();
+
+    let dataset_metadata = db.load_dataset(&dataset.id).await.unwrap();
+
+    let operator = match dataset_metadata.source_operator.as_str() {
+        "GdalSource" => NewTypedOperator::Raster(NewRasterOperator::GdalSource(NewGdalSource {
+            r#type: Default::default(),
+            params: NewGdalSourceParameters {
+                data: dataset.name.to_string(),
+                overview_level: None,
+            },
+        })),
+        _ => panic!("Only GdalSource is supported in this helper function"),
+    };
+
+    db.add_layer_with_id(
+        &layer_id,
+        AddLayer {
+            name: dataset_metadata.display_name,
+            description: dataset_metadata.description,
+            workflow: Workflow::Typed { operator },
+            symbology,
+            properties: vec![],
+            metadata: Default::default(),
+        },
+        &root_collection_id,
+    )
+    .await
+    .unwrap();
+
+    (INTERNAL_PROVIDER_ID, layer_id)
+}
+
 /// Add a definition from a file to the datasets as admin.
 #[allow(clippy::missing_panics_doc)]
 pub async fn add_pro_file_definition_to_datasets_as_admin(
@@ -952,12 +995,23 @@ pub async fn add_ndvi_to_layers<C: ApplicationContext<Session = UserSession>>(
     (INTERNAL_PROVIDER_ID, layer_id)
 }
 
+pub fn ndvi_255_symbology() -> Symbology {
+    Symbology::Raster(RasterSymbology {
+        r#type: Default::default(),
+        opacity: 1.0,
+        raster_colorizer: RasterColorizer::SingleBand {
+            band: 0,
+            band_colorizer: ndvi_255_colorizer(),
+        },
+    })
+}
+
 #[allow(
     clippy::missing_panics_doc,
     clippy::too_many_lines,
     reason = "Test function"
 )]
-fn ndvi_255_colorizer() -> Colorizer {
+pub fn ndvi_255_colorizer() -> Colorizer {
     let breakpoints = [
         (0, [236, 224, 215, 0]),
         (1, [235, 223, 214, 255]),

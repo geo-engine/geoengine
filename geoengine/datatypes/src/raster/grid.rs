@@ -67,6 +67,11 @@ impl GridShape2D {
     pub fn y(&self) -> usize {
         self.shape_array[0]
     }
+
+    #[must_use]
+    pub fn div_ceil(&self, other: &Self) -> Self {
+        Self::new_2d(self.y().div_ceil(other.y()), self.x().div_ceil(other.x()))
+    }
 }
 
 impl GridShape3D {

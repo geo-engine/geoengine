@@ -5,7 +5,10 @@ use crate::{
         handlers::ogc::{
             OgcApiResult,
             error::{self, OgcApiError},
-            tms::CUSTOM_TILE_MATRIX_SET_ID,
+            tms::{
+                CUSTOM_TILE_MATRIX_SET_ID, calculate_number_of_zoom_levels,
+                calculate_tiles_at_zoom_level,
+            },
             util::{
                 crs_from_spatial_reference_option, link_creator, load_layer, parse_datetime_option,
                 raster_workflow_metadata,
@@ -27,8 +30,8 @@ use geoengine_datatypes::{
         AxisAlignedRectangle, BandSelection, RasterQueryRectangle, TimeInstance, TimeInterval,
     },
     raster::{
-        GridBoundingBox2D, GridBounds, GridIdx2D, GridShapeAccess, TilingSpatialGridDefinition,
-        TilingSpecification,
+        GridBoundingBox2D, GridBounds, GridIdx2D, GridShape2D, GridShapeAccess, GridSize,
+        TilingSpatialGridDefinition, TilingSpecification,
     },
     util::Identifier,
 };
@@ -51,6 +54,7 @@ use ogcapi_types::{
         TileSets, TilesCrs,
     },
 };
+use tracing::debug;
 use utoipa::IntoParams;
 use uuid::Uuid;
 
@@ -350,15 +354,20 @@ pub async fn tile<C: ApplicationContext>(
         get_initialized_raster_operator::<C::SessionContext>(&layer, &execution_context).await?;
     let tiling_specification = execution_context.tiling_specification();
 
-    let max_zoom_level = calculate_max_zoom_level(
+    let max_zoom_level = calculate_number_of_zoom_levels(
         initialized_operator.result_descriptor(),
         &tiling_specification,
-    );
-    let multiple_of_resolution =
-        2u32.pow(max_zoom_level.saturating_sub(u32::from(query.tile_matrix)));
-    dbg!(query.tile_matrix, max_zoom_level, multiple_of_resolution);
+    ) - 1;
+    let zoom_level = max_zoom_level.saturating_sub(u32::from(query.tile_matrix));
+    let multiple_of_resolution = 2u32.pow(zoom_level);
 
-    let multiple_of_resolution = 1; // TODO: implement in TMS first
+    let expected_number_of_tiles_at_zoom_level = {
+        calculate_tiles_at_zoom_level(
+            initialized_operator.result_descriptor(),
+            &tiling_specification,
+            zoom_level,
+        )
+    };
 
     #[cfg(debug_assertions)]
     let original_result_descriptor = initialized_operator.result_descriptor().clone();
@@ -374,6 +383,7 @@ pub async fn tile<C: ApplicationContext>(
     assert_multiple_of_original_resolution(
         &original_result_descriptor,
         initialized_operator.result_descriptor(),
+        multiple_of_resolution,
     );
 
     let (tile_width, tile_height) = (
@@ -381,11 +391,25 @@ pub async fn tile<C: ApplicationContext>(
         u32::try_from(tiling_specification.grid_shape().y()).unwrap_or(u32::MAX),
     );
 
-    let query_rect = calculate_query_rectangle(
+    let tiling_spatial_grid_definition = initialized_operator
+        .result_descriptor()
+        .spatial_grid
+        .tiling_grid_definition(tiling_specification);
+
+    let mut query_rect = calculate_query_rectangle(
         &query,
-        initialized_operator.result_descriptor(),
-        tiling_specification,
+        &tiling_spatial_grid_definition,
+        // initialized_operator.result_descriptor(),
+        // tiling_specification,
     )?;
+
+    adjust_tile_grid_bbox_if_more_tiles_than_expected(
+        query_rect.spatial_bounds_mut(),
+        expected_number_of_tiles_at_zoom_level,
+        &tiling_spatial_grid_definition,
+        &tiling_specification,
+        zoom_level,
+    );
 
     let (processor, query_ctx) =
         create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
@@ -422,17 +446,12 @@ pub async fn tile<C: ApplicationContext>(
 
 fn calculate_query_rectangle(
     query: &TileQuery,
-    result_descriptor: &RasterResultDescriptor,
-    tiling_specification: TilingSpecification,
+    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
 ) -> OgcApiResult<RasterQueryRectangle> {
-    let tiling_spatial_grid_definition = result_descriptor
-        .spatial_grid
-        .tiling_grid_definition(tiling_specification);
-
     Ok(RasterQueryRectangle::new(
         tile_grid_bbox(
             query.tile_matrix,
-            &tiling_spatial_grid_definition,
+            tiling_spatial_grid_definition,
             query.tile_row,
             query.tile_col,
         )?,
@@ -462,45 +481,104 @@ async fn raster_operator_in_fitting_resolution<C: SessionContext>(
         .boxed_context(error::InitializingProcessingGraph)
 }
 
+/// Adjusts the tile grid bounding box if the actual number of tiles at the requested zoom level is greater
+/// than the expected number of tiles at that zoom level.
+///
+/// This means, the data we are looking at is in between two zoom levels of the tiling scheme.
+/// In this case, we adjust the tile grid bounding box to lie in the center of the expected 2 (one axis)
+/// or 4 (two axes) tile grid.
+fn adjust_tile_grid_bbox_if_more_tiles_than_expected(
+    spatial_bounds: &mut GridBoundingBox2D,
+    expected_number_of_tiles_at_zoom_level: GridShape2D,
+    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+    tile_size: &TilingSpecification,
+    zoom_level: u32,
+) {
+    let actual_number_of_tiles_at_zoom_level =
+        calculate_actual_number_of_tiles_at_zoom_level(tiling_spatial_grid_definition);
+
+    let is_greater_on_x_axis =
+        actual_number_of_tiles_at_zoom_level.x() > expected_number_of_tiles_at_zoom_level.x();
+    let is_greater_on_y_axis =
+        actual_number_of_tiles_at_zoom_level.y() > expected_number_of_tiles_at_zoom_level.y();
+
+    if !is_greater_on_x_axis && !is_greater_on_y_axis {
+        return;
+    }
+
+    let shift = GridIdx2D::new([
+        if is_greater_on_y_axis {
+            tile_size.grid_shape().x() as isize / 2 // TODO: validate axis swap
+        } else {
+            0
+        },
+        if is_greater_on_x_axis {
+            tile_size.grid_shape().y() as isize / 2 // TODO: validate axis swap
+        } else {
+            0
+        },
+    ]);
+
+    *spatial_bounds = GridBoundingBox2D::new_unchecked(
+        spatial_bounds.min_index() + shift,
+        spatial_bounds.max_index() + shift,
+    );
+
+    debug!(
+        "Expected {expected_number_of_tiles_at_zoom_level:?} tiles, but got: {actual_number_of_tiles_at_zoom_level:?}. Adjusted tile grid bounding box to {spatial_bounds:?} to match expected number of tiles at zoom level {zoom_level}",
+    );
+}
+
+fn calculate_actual_number_of_tiles_at_zoom_level(
+    tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
+) -> GridShape2D {
+    let grid_bounds = tiling_spatial_grid_definition.tiling_grid_bounds();
+
+    let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
+    let tile_bounds = tiling_strategy.global_pixel_grid_bounds_to_tile_grid_bounds(grid_bounds);
+
+    GridShape2D::new(tile_bounds.axis_size())
+}
+
 #[cfg(debug_assertions)]
 fn assert_multiple_of_original_resolution(
     original_result_descriptor: &RasterResultDescriptor,
     new_result_descriptor: &RasterResultDescriptor,
+    multiple_of_resolution: u32,
 ) {
+    if multiple_of_resolution <= 1 {
+        return;
+    }
+
     let original_pixel_resolution = original_result_descriptor
         .spatial_grid_descriptor()
         .grid_shape();
     let new_pixel_resolution = new_result_descriptor.spatial_grid_descriptor().grid_shape();
 
-    debug_assert!(
-        original_pixel_resolution
-            .x()
-            .is_multiple_of(new_pixel_resolution.x()),
-        "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
-    );
-    debug_assert!(
-        original_pixel_resolution
+    // debug_assert!(
+    //     original_pixel_resolution
+    //         .x()
+    //         .is_multiple_of(new_pixel_resolution.x()),
+    //     "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
+    // );
+    // debug_assert!(
+    //     original_pixel_resolution
+    //         .y()
+    //         .is_multiple_of(new_pixel_resolution.y()),
+    //     "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
+    // );
+
+    if !original_pixel_resolution
+        .x()
+        .is_multiple_of(new_pixel_resolution.x())
+        || !original_pixel_resolution
             .y()
-            .is_multiple_of(new_pixel_resolution.y()),
-        "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}",
-    );
-}
-
-fn calculate_max_zoom_level(
-    result_descriptor: &RasterResultDescriptor,
-    tile_size: &TilingSpecification,
-) -> u32 {
-    let [x_size, y_size] = result_descriptor
-        .spatial_grid_descriptor()
-        .grid_shape()
-        .into_inner()
-        .map(|x| x as f64);
-    let [tile_size_x, tile_size_y] = tile_size.tile_size_in_pixels.into_inner().map(|x| x as f64);
-
-    let max_level_x = f64::log2(x_size / tile_size_x).ceil();
-    let max_level_y = f64::log2(y_size / tile_size_y).ceil();
-
-    max_level_x.max(max_level_y) as u32
+            .is_multiple_of(new_pixel_resolution.y())
+    {
+        tracing::error!(
+            "New resolution is not a multiple of the original resolution: original: {original_pixel_resolution:?}, new: {new_pixel_resolution:?}"
+        );
+    }
 }
 
 /// Computes the pixel bounds of a tile in the global pixel grid of the tiling scheme.
@@ -525,7 +603,7 @@ fn tile_grid_bbox(
             tiling_strategy.tile_size_in_pixels.x() as isize,
             tiling_strategy.tile_size_in_pixels.y() as isize,
         ])
-        - GridIdx2D::new([1, 1]); // inclusive bounds
+        - GridIdx2D::new([1, 1]); // inclusive bounds, e.g. we expect max-min to be 511 and not 512 for a 512 pixel tile
 
     GridBoundingBox2D::new(min_pixel_index, max_pixel_index).map_err(|_source| {
         OgcApiError::InvalidTileCoordinates {
@@ -656,8 +734,8 @@ mod tests {
         },
         ge_context,
         util::tests::{
-            add_ndvi_3857_to_layers, add_ndvi_to_layers, admin_login, read_body_json,
-            send_test_request,
+            add_file_definition_to_datasets_and_return_layer, add_ndvi_3857_to_layers,
+            add_ndvi_to_layers, admin_login, ndvi_255_symbology, read_body_json, send_test_request,
         },
     };
     use actix_web::{http::header, test};
@@ -666,7 +744,6 @@ mod tests {
         test_data,
         util::{assert_image_equals, test::save_test_bytes_if_not_exists},
     };
-    use ogcapi_types::tiles::{CornerOfOrigin, TileMatrix};
     use pretty_assertions::assert_eq;
     use tokio_postgres::NoTls;
 
@@ -690,6 +767,23 @@ mod tests {
 
         let session_id = ctx.session().id();
         let (data_connector_id, layer_id) = add_ndvi_3857_to_layers(app_ctx).await;
+
+        (session_id, data_connector_id.into(), layer_id.into())
+    }
+
+    async fn session_and_native_3857_layer_id(
+        app_ctx: &PostgresContext<NoTls>,
+    ) -> (SessionId, DataProviderId, LayerId) {
+        let session = admin_login(app_ctx).await;
+        let ctx = app_ctx.session_context(session.clone());
+
+        let session_id = ctx.session().id();
+        let (data_connector_id, layer_id) = add_file_definition_to_datasets_and_return_layer(
+            &ctx.db(),
+            test_data!("dataset_defs/ndvi (3587).json"),
+            Some(ndvi_255_symbology()),
+        )
+        .await;
 
         (session_id, data_connector_id.into(), layer_id.into())
     }
@@ -807,7 +901,7 @@ mod tests {
 
         let req = test::TestRequest::get()
 			.uri(&format!(
-				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/1/4?datetime=2014-04-01T00:00:00Z"
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/2/1/4?datetime=2014-04-01T00:00:00Z"
 			))
 			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
 
@@ -823,7 +917,94 @@ mod tests {
         assert_eq!(status, 200);
         assert_eq!(content_type.as_deref(), Some("image/png"));
 
-        let file_path = test_data!("ogc/tiles/ndvi_0_1_4.png").to_path_buf();
+        let file_path = test_data!("ogc/tiles/ndvi_2_1_4.png").to_path_buf();
+        save_test_bytes_if_not_exists(&image_bytes, &file_path);
+
+        assert_image_equals(&file_path, &image_bytes);
+    }
+
+    #[ge_context::test]
+    async fn it_renders_overview_tile_png_with_datetime(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
+
+        let req = test::TestRequest::get()
+			.uri(&format!(
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
+			))
+			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let content_type = res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(ToOwned::to_owned);
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        assert_eq!(status, 200);
+        assert_eq!(content_type.as_deref(), Some("image/png"));
+
+        let file_path = test_data!("ogc/tiles/ndvi_0_0_0.png").to_path_buf();
+        save_test_bytes_if_not_exists(&image_bytes, &file_path);
+
+        assert_image_equals(&file_path, &image_bytes);
+    }
+
+    #[ge_context::test]
+    async fn it_renders_3857_overview_tile_png_with_datetime(app_ctx: PostgresContext<NoTls>) {
+        let (session_id, data_connector_id, layer_id) = session_and_3857_layer_id(&app_ctx).await;
+
+        let req = test::TestRequest::get()
+			.uri(&format!(
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
+			))
+			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let content_type = res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(ToOwned::to_owned);
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        assert_eq!(status, 200);
+        assert_eq!(content_type.as_deref(), Some("image/png"));
+
+        let file_path = test_data!("ogc/tiles/ndvi_3857_0_0_0.png").to_path_buf();
+        save_test_bytes_if_not_exists(&image_bytes, &file_path);
+
+        assert_image_equals(&file_path, &image_bytes);
+    }
+
+    #[ge_context::test]
+    async fn it_renders_native_3857_overview_tile_png_with_datetime(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let (session_id, data_connector_id, layer_id) =
+            session_and_native_3857_layer_id(&app_ctx).await;
+
+        let req = test::TestRequest::get()
+			.uri(&format!(
+				"/ogc/{data_connector_id}/{layer_id}/collections/{layer_id}/map/tiles/{CUSTOM_TILE_MATRIX_SET_ID}/0/0/0?datetime=2014-04-01T00:00:00Z"
+			))
+			.append_header((header::AUTHORIZATION, Bearer::new(session_id.to_string())));
+
+        let res = send_test_request(req, app_ctx).await;
+        let status = res.status();
+        let content_type = res
+            .headers()
+            .get(header::CONTENT_TYPE)
+            .and_then(|v| v.to_str().ok())
+            .map(ToOwned::to_owned);
+        let image_bytes = actix_web::test::read_body(res).await;
+
+        assert_eq!(status, 200);
+        assert_eq!(content_type.as_deref(), Some("image/png"));
+
+        let file_path = test_data!("ogc/tiles/ndvi_native_3857_0_0_0.png").to_path_buf();
         save_test_bytes_if_not_exists(&image_bytes, &file_path);
 
         assert_image_equals(&file_path, &image_bytes);
@@ -848,22 +1029,6 @@ mod tests {
         .result_descriptor()
         .clone();
 
-        let tile_matrix = TileMatrix {
-            id: 0.to_string(),
-            title: None,
-            description: None,
-            keywords: vec![],
-            scale_denominator: f64::NAN, // unused
-            cell_size: f64::NAN,         // unused
-            corner_of_origin: CornerOfOrigin::TopLeft,
-            point_of_origin: [-21_890_660.358_935_43, 21_897_016.897_822_894],
-            tile_width: 512.try_into().unwrap(),
-            tile_height: 512.try_into().unwrap(),
-            matrix_width: 8.try_into().unwrap(),
-            matrix_height: 4.try_into().unwrap(),
-            variable_matrix_widths: vec![],
-        };
-
         let tiling_spatial_grid_definition =
             result_descriptor.tiling_grid_definition(tiling_specification);
         let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
@@ -872,21 +1037,27 @@ mod tests {
             tiling_spatial_grid_definition.tiling_grid_bounds(),
         );
 
-        let mut tile_row = 0;
-        let mut tile_col = 0;
+        let (matrix_width, matrix_height) = (8, 4);
+
+        let (mut tile_row, mut tile_col) = (0, 0);
+        let mut num_tiles = 0;
         for tile_info in tiling_iterator {
             assert_eq!(
-                tile_grid_bbox(0, &tiling_spatial_grid_definition, tile_row, tile_col,).unwrap(),
+                tile_grid_bbox(0, &tiling_spatial_grid_definition, tile_row, tile_col).unwrap(),
                 tile_info.global_pixel_bounds(),
-                "Tile row {tile_row}, tile col {tile_col}"
+                "Tile row {tile_row}, tile col {tile_col}: Expected {}",
+                tile_info.global_pixel_bounds()
             );
 
             tile_col += 1;
-            if tile_col >= tile_matrix.matrix_width.get() as u32 {
+            if tile_col >= matrix_width {
                 tile_col = 0;
                 tile_row += 1;
             }
+
+            num_tiles += 1;
         }
+        assert_eq!(num_tiles, matrix_width * matrix_height);
     }
 
     #[ge_context::test]
@@ -909,21 +1080,64 @@ mod tests {
         .result_descriptor()
         .clone();
 
-        let tile_matrix = TileMatrix {
-            id: 0.to_string(),
-            title: None,
-            description: None,
-            keywords: vec![],
-            scale_denominator: f64::NAN, // unused
-            cell_size: f64::NAN,         // unused
-            corner_of_origin: CornerOfOrigin::TopLeft,
-            point_of_origin: [-21_890_660.358_935_43, 21_897_016.897_822_894],
-            tile_width: 512.try_into().unwrap(),
-            tile_height: 512.try_into().unwrap(),
-            matrix_width: 6.try_into().unwrap(),
-            matrix_height: 6.try_into().unwrap(),
-            variable_matrix_widths: vec![],
-        };
+        let tiling_spatial_grid_definition =
+            result_descriptor.tiling_grid_definition(tiling_specification);
+        let tiling_strategy = tiling_spatial_grid_definition.generate_data_tiling_strategy();
+
+        let tiling_iterator = tiling_strategy.tile_information_iterator_from_pixel_bounds(
+            tiling_spatial_grid_definition.tiling_grid_bounds(),
+        );
+
+        let (matrix_width, matrix_height) = (6, 6);
+
+        let (mut tile_row, mut tile_col) = (0, 0);
+        let mut num_tiles = 0;
+        for tile_info in tiling_iterator {
+            assert_eq!(
+                tile_grid_bbox(0, &tiling_spatial_grid_definition, tile_row, tile_col).unwrap(),
+                tile_info.global_pixel_bounds(),
+                "Tile row {tile_row}, tile col {tile_col}: Expected {}",
+                tile_info.global_pixel_bounds()
+            );
+
+            tile_col += 1;
+            if tile_col >= matrix_width {
+                tile_col = 0;
+                tile_row += 1;
+            }
+
+            num_tiles += 1;
+        }
+
+        assert_eq!(num_tiles, matrix_width * matrix_height);
+    }
+
+    #[ge_context::test]
+    async fn it_calculates_correct_pixel_bounds_for_4326_overview_tiles(
+        app_ctx: PostgresContext<NoTls>,
+    ) {
+        let (session_id, data_connector_id, layer_id) = session_and_4326_layer_id(&app_ctx).await;
+
+        let ctx = app_ctx.session_context(app_ctx.session_by_id(session_id).await.unwrap());
+
+        let layer = load_layer::<PostgresContext<NoTls>>(&ctx, data_connector_id, layer_id.clone())
+            .await
+            .unwrap();
+        let tiling_specification = ctx.execution_context().unwrap().tiling_specification();
+        let mut initialized_operator = get_initialized_raster_operator::<
+            PostgresSessionContext<NoTls>,
+        >(&layer, &ctx.execution_context().unwrap())
+        .await
+        .unwrap();
+        initialized_operator =
+            raster_operator_in_fitting_resolution::<PostgresSessionContext<NoTls>>(
+                initialized_operator,
+                &ctx.execution_context().unwrap(),
+                4, // level 0/2
+            )
+            .await
+            .unwrap();
+        let result_descriptor = initialized_operator.result_descriptor();
 
         let tiling_spatial_grid_definition =
             result_descriptor.tiling_grid_definition(tiling_specification);
@@ -933,20 +1147,36 @@ mod tests {
             tiling_spatial_grid_definition.tiling_grid_bounds(),
         );
 
-        let mut tile_row = 0;
-        let mut tile_col = 0;
+        let (matrix_width, _matrix_height) = (2, 1);
+        // the y-area overlaps two tiles, so the output will merge the two tiles in the y-direction, resulting in 2x1 tiles
+        let (actual_width, actual_height) = (2, 2);
+        let actual_matrix_size =
+            calculate_actual_number_of_tiles_at_zoom_level(&tiling_spatial_grid_definition);
+
+        assert_eq!(
+            actual_matrix_size,
+            GridShape2D::new_2d(actual_height, actual_width)
+        );
+
+        let (mut tile_row, mut tile_col) = (0, 0);
+        let mut num_tiles = 0;
         for tile_info in tiling_iterator {
+            // this still holds, the y-bounds will be corrected afterwards
             assert_eq!(
-                tile_grid_bbox(0, &tiling_spatial_grid_definition, tile_row, tile_col,).unwrap(),
+                tile_grid_bbox(0, &tiling_spatial_grid_definition, tile_row, tile_col).unwrap(),
                 tile_info.global_pixel_bounds(),
                 "Tile row {tile_row}, tile col {tile_col}"
             );
 
             tile_col += 1;
-            if tile_col >= tile_matrix.matrix_width.get() as u32 {
+            if tile_col >= matrix_width {
                 tile_col = 0;
                 tile_row += 1;
             }
+
+            num_tiles += 1;
         }
+
+        assert_eq!(num_tiles, actual_width * actual_height);
     }
 }

@@ -52,6 +52,7 @@ async function addWgs84TileLayer(map) {
         context: {
           datetime: "2014-04-01T00:00:00Z",
         },
+        wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
       }),
     }),
   );
@@ -63,6 +64,7 @@ async function addWgs84TileLayer(map) {
           context: {
             datetime: "2014-04-01T00:00:00Z",
           },
+          wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
         }),
       }),
     }),
@@ -91,6 +93,7 @@ async function addWebMercatorTileLayer(map) {
         context: {
           datetime: "2014-04-01T00:00:00Z",
         },
+        wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
       }),
     }),
   );
@@ -102,6 +105,7 @@ async function addWebMercatorTileLayer(map) {
           context: {
             datetime: "2014-04-01T00:00:00Z",
           },
+          wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
         }),
       }),
     }),
@@ -183,6 +187,7 @@ const wgs84Map = new Map({
     extent: [-180, -85, 180, 85],
     zoom: 0,
     projection: "EPSG:4326",
+    showFullExtent: true,
   }),
 });
 
@@ -201,6 +206,7 @@ const webMercatorMap = new Map({
     ],
     zoom: 0,
     projection: "EPSG:3857",
+    showFullExtent: true,
   }),
 });
 

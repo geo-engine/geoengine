@@ -50,7 +50,7 @@ pub use loading_info::{
     GdalMetaDataList, GdalMetaDataRegular, GdalMetaDataStatic, GdalMetadataNetCdfCf,
 };
 use num::FromPrimitive;
-use num::integer::{div_ceil, div_floor};
+use num::integer::div_floor;
 use postgres_types::{FromSql, ToSql};
 use reader::{
     GdalReadAdvise, GdalReadWindow, GdalReaderMode, GridAndProperties, OverviewReaderState,
@@ -818,7 +818,7 @@ fn overview_level_spatial_grid(
                 source_spatial_grid.grid_bounds.y_min(),
                 overview_level as isize,
             ),
-            div_ceil(
+            div_floor(
                 source_spatial_grid.grid_bounds.y_max(),
                 overview_level as isize,
             ),
@@ -826,7 +826,7 @@ fn overview_level_spatial_grid(
                 source_spatial_grid.grid_bounds.x_min(),
                 overview_level as isize,
             ),
-            div_ceil(
+            div_floor(
                 source_spatial_grid.grid_bounds.x_max(),
                 overview_level as isize,
             ),
@@ -1345,7 +1345,9 @@ mod tests {
     use float_cmp::assert_approx_eq;
     use geoengine_datatypes::hashmap;
     use geoengine_datatypes::primitives::{AxisAlignedRectangle, SpatialPartition2D, TimeInstance};
-    use geoengine_datatypes::raster::{BoundedGrid, GridShape2D, SpatialGridDefinition};
+    use geoengine_datatypes::raster::{
+        BoundedGrid, GridBoundingBox, GridShape2D, SpatialGridDefinition,
+    };
     use geoengine_datatypes::raster::{
         EmptyGrid2D, GridBounds, GridIdx2D, TilesEqualIgnoringCacheHint,
     };
@@ -2549,5 +2551,46 @@ mod tests {
         );
 
         assert!(tile.unwrap().tiles_equal_ignoring_cache_hint(&expected));
+    }
+
+    #[test]
+    fn it_computes_spatial_grids_for_overviews() {
+        let spatial_grid_definition = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.1, -0.1),
+            GridBoundingBox::new([-900, -1800], [899, 1799]).unwrap(),
+        );
+
+        let spatial_grid_definition_2x =
+            overview_level_spatial_grid(spatial_grid_definition, 2).unwrap();
+        let expected_spatial_grid_definition_2x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.2, -0.2),
+            GridBoundingBox::new([-450, -900], [449, 899]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_2x,
+            expected_spatial_grid_definition_2x
+        );
+
+        let spatial_grid_definition_4x =
+            overview_level_spatial_grid(spatial_grid_definition, 4).unwrap();
+        let expected_spatial_grid_definition_4x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.4, -0.4),
+            GridBoundingBox::new([-225, -450], [224, 449]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_4x,
+            expected_spatial_grid_definition_4x
+        );
+
+        let spatial_grid_definition_8x =
+            overview_level_spatial_grid(spatial_grid_definition, 8).unwrap();
+        let expected_spatial_grid_definition_8x = SpatialGridDefinition::new(
+            GeoTransform::new(Coordinate2D::new(0., 0.), 0.8, -0.8),
+            GridBoundingBox::new([-113, -225], [112, 224]).unwrap(),
+        );
+        assert_eq!(
+            spatial_grid_definition_8x,
+            expected_spatial_grid_definition_8x
+        );
     }
 }
