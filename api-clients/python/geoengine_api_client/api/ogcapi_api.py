@@ -25,8 +25,8 @@ from geoengine_api_client.models.conformance import Conformance
 from geoengine_api_client.models.landing_page import LandingPage
 from geoengine_api_client.models.tile_matrix_set import TileMatrixSet
 from geoengine_api_client.models.tile_matrix_sets import TileMatrixSets
-from geoengine_api_client.models.tile_set_metadata_response import TileSetMetadataResponse
-from geoengine_api_client.models.tile_sets_response import TileSetsResponse
+from geoengine_api_client.models.tile_set import TileSet
+from geoengine_api_client.models.tile_sets import TileSets
 
 from geoengine_api_client.api_client import ApiClient, RequestSerialized
 from geoengine_api_client.api_response import ApiResponse
@@ -49,7 +49,8 @@ class OGCAPIApi:
     @validate_call
     def collection(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -67,8 +68,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -92,7 +95,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -116,7 +120,8 @@ class OGCAPIApi:
     @validate_call
     def collection_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -134,8 +139,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -159,7 +166,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -183,7 +191,8 @@ class OGCAPIApi:
     @validate_call
     def collection_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -201,8 +210,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -226,7 +237,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -245,7 +257,8 @@ class OGCAPIApi:
 
     def _collection_serialize(
         self,
-        processing_graph_id,
+        data_connector_id,
+        layer_id,
         _request_auth,
         _content_type,
         _headers,
@@ -267,8 +280,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         # process the query parameters
         # process the header parameters
         # process the form parameters
@@ -291,7 +306,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/collections/{processingGraphId}',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -310,9 +325,9 @@ class OGCAPIApi:
     @validate_call
     def collection_tileset(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -325,17 +340,17 @@ class OGCAPIApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> TileSetMetadataResponse:
+    ) -> TileSet:
         """OGC API Collection Tileset Metadata
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -359,8 +374,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_tileset_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -369,7 +384,7 @@ class OGCAPIApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "TileSetMetadataResponse",
+            '200': "TileSet",
             '404': None,
         }
         response_data = self.api_client.call_api(
@@ -386,9 +401,9 @@ class OGCAPIApi:
     @validate_call
     def collection_tileset_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -401,17 +416,17 @@ class OGCAPIApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[TileSetMetadataResponse]:
+    ) -> ApiResponse[TileSet]:
         """OGC API Collection Tileset Metadata
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -435,8 +450,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_tileset_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -445,7 +460,7 @@ class OGCAPIApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "TileSetMetadataResponse",
+            '200': "TileSet",
             '404': None,
         }
         response_data = self.api_client.call_api(
@@ -462,9 +477,9 @@ class OGCAPIApi:
     @validate_call
     def collection_tileset_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -482,12 +497,12 @@ class OGCAPIApi:
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -511,8 +526,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_tileset_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -521,7 +536,7 @@ class OGCAPIApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "TileSetMetadataResponse",
+            '200': "TileSet",
             '404': None,
         }
         response_data = self.api_client.call_api(
@@ -533,8 +548,8 @@ class OGCAPIApi:
 
     def _collection_tileset_serialize(
         self,
-        processing_graph_id,
-        collection_id,
+        data_connector_id,
+        layer_id,
         tile_matrix_set_id,
         _request_auth,
         _content_type,
@@ -557,10 +572,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
-        if collection_id is not None:
-            _path_params['collectionId'] = collection_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         if tile_matrix_set_id is not None:
             _path_params['tileMatrixSetId'] = tile_matrix_set_id
         # process the query parameters
@@ -585,7 +600,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -604,8 +619,8 @@ class OGCAPIApi:
     @validate_call
     def collection_tilesets(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -618,15 +633,15 @@ class OGCAPIApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> TileSetsResponse:
+    ) -> TileSets:
         """OGC API Collection Tilesets List
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -650,8 +665,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_tilesets_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -659,7 +674,7 @@ class OGCAPIApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "TileSetsResponse",
+            '200': "TileSets",
             '404': None,
         }
         response_data = self.api_client.call_api(
@@ -676,8 +691,8 @@ class OGCAPIApi:
     @validate_call
     def collection_tilesets_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -690,15 +705,15 @@ class OGCAPIApi:
         _content_type: Optional[StrictStr] = None,
         _headers: Optional[Dict[StrictStr, Any]] = None,
         _host_index: Annotated[StrictInt, Field(ge=0, le=0)] = 0,
-    ) -> ApiResponse[TileSetsResponse]:
+    ) -> ApiResponse[TileSets]:
         """OGC API Collection Tilesets List
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -722,8 +737,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_tilesets_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -731,7 +746,7 @@ class OGCAPIApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "TileSetsResponse",
+            '200': "TileSets",
             '404': None,
         }
         response_data = self.api_client.call_api(
@@ -748,8 +763,8 @@ class OGCAPIApi:
     @validate_call
     def collection_tilesets_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -767,10 +782,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -794,8 +809,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collection_tilesets_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -803,7 +818,7 @@ class OGCAPIApi:
         )
 
         _response_types_map: Dict[str, Optional[str]] = {
-            '200': "TileSetsResponse",
+            '200': "TileSets",
             '404': None,
         }
         response_data = self.api_client.call_api(
@@ -815,8 +830,8 @@ class OGCAPIApi:
 
     def _collection_tilesets_serialize(
         self,
-        processing_graph_id,
-        collection_id,
+        data_connector_id,
+        layer_id,
         _request_auth,
         _content_type,
         _headers,
@@ -838,10 +853,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
-        if collection_id is not None:
-            _path_params['collectionId'] = collection_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         # process the query parameters
         # process the header parameters
         # process the form parameters
@@ -864,7 +879,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -883,7 +898,8 @@ class OGCAPIApi:
     @validate_call
     def collections(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         datetime: Annotated[Optional[StrictStr], Field(description="Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).")] = None,
         bbox: Annotated[Optional[StrictStr], Field(description="Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).")] = None,
         limit: Annotated[Optional[Annotated[int, Field(strict=True, ge=0)]], Field(description="Optional limit for the number of first-level collections returned (minimum: 1, maximum: 10000, default: 10).")] = None,
@@ -905,8 +921,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param datetime: Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
         :type datetime: str
         :param bbox: Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).
@@ -938,7 +956,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collections_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             datetime=datetime,
             bbox=bbox,
             limit=limit,
@@ -966,7 +985,8 @@ class OGCAPIApi:
     @validate_call
     def collections_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         datetime: Annotated[Optional[StrictStr], Field(description="Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).")] = None,
         bbox: Annotated[Optional[StrictStr], Field(description="Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).")] = None,
         limit: Annotated[Optional[Annotated[int, Field(strict=True, ge=0)]], Field(description="Optional limit for the number of first-level collections returned (minimum: 1, maximum: 10000, default: 10).")] = None,
@@ -988,8 +1008,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param datetime: Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
         :type datetime: str
         :param bbox: Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).
@@ -1021,7 +1043,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collections_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             datetime=datetime,
             bbox=bbox,
             limit=limit,
@@ -1049,7 +1072,8 @@ class OGCAPIApi:
     @validate_call
     def collections_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         datetime: Annotated[Optional[StrictStr], Field(description="Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).")] = None,
         bbox: Annotated[Optional[StrictStr], Field(description="Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).")] = None,
         limit: Annotated[Optional[Annotated[int, Field(strict=True, ge=0)]], Field(description="Optional limit for the number of first-level collections returned (minimum: 1, maximum: 10000, default: 10).")] = None,
@@ -1071,8 +1095,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param datetime: Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`).
         :type datetime: str
         :param bbox: Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max).
@@ -1104,7 +1130,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._collections_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             datetime=datetime,
             bbox=bbox,
             limit=limit,
@@ -1127,7 +1154,8 @@ class OGCAPIApi:
 
     def _collections_serialize(
         self,
-        processing_graph_id,
+        data_connector_id,
+        layer_id,
         datetime,
         bbox,
         limit,
@@ -1153,8 +1181,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         # process the query parameters
         if datetime is not None:
             
@@ -1193,7 +1223,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/collections',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -1212,7 +1242,8 @@ class OGCAPIApi:
     @validate_call
     def conformance(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1230,8 +1261,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1255,7 +1288,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._conformance_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1279,7 +1313,8 @@ class OGCAPIApi:
     @validate_call
     def conformance_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1297,8 +1332,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1322,7 +1359,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._conformance_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1346,7 +1384,8 @@ class OGCAPIApi:
     @validate_call
     def conformance_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1364,8 +1403,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1389,7 +1430,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._conformance_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1408,7 +1450,8 @@ class OGCAPIApi:
 
     def _conformance_serialize(
         self,
-        processing_graph_id,
+        data_connector_id,
+        layer_id,
         _request_auth,
         _content_type,
         _headers,
@@ -1430,8 +1473,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         # process the query parameters
         # process the header parameters
         # process the form parameters
@@ -1454,7 +1499,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/conformance',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/conformance',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -1473,7 +1518,8 @@ class OGCAPIApi:
     @validate_call
     def landing_page(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1491,8 +1537,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1516,7 +1564,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._landing_page_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1540,7 +1589,8 @@ class OGCAPIApi:
     @validate_call
     def landing_page_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1558,8 +1608,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1583,7 +1635,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._landing_page_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1607,7 +1660,8 @@ class OGCAPIApi:
     @validate_call
     def landing_page_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -1625,8 +1679,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -1650,7 +1706,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._landing_page_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -1669,7 +1726,8 @@ class OGCAPIApi:
 
     def _landing_page_serialize(
         self,
-        processing_graph_id,
+        data_connector_id,
+        layer_id,
         _request_auth,
         _content_type,
         _headers,
@@ -1691,8 +1749,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         # process the query parameters
         # process the header parameters
         # process the form parameters
@@ -1715,7 +1775,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -1734,9 +1794,9 @@ class OGCAPIApi:
     @validate_call
     def tile(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         tile_matrix: Annotated[int, Field(strict=True, ge=0, description="Tile matrix level")],
         tile_row: Annotated[int, Field(strict=True, ge=0, description="Tile row")],
         tile_col: Annotated[int, Field(strict=True, ge=0, description="Tile column")],
@@ -1756,14 +1816,14 @@ class OGCAPIApi:
     ) -> bytearray:
         """OGC API Tile
 
-        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```  
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param tile_matrix: Tile matrix level (required)
         :type tile_matrix: int
         :param tile_row: Tile row (required)
@@ -1795,8 +1855,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             tile_matrix=tile_matrix,
             tile_row=tile_row,
@@ -1827,9 +1887,9 @@ class OGCAPIApi:
     @validate_call
     def tile_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         tile_matrix: Annotated[int, Field(strict=True, ge=0, description="Tile matrix level")],
         tile_row: Annotated[int, Field(strict=True, ge=0, description="Tile row")],
         tile_col: Annotated[int, Field(strict=True, ge=0, description="Tile column")],
@@ -1849,14 +1909,14 @@ class OGCAPIApi:
     ) -> ApiResponse[bytearray]:
         """OGC API Tile
 
-        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```  
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param tile_matrix: Tile matrix level (required)
         :type tile_matrix: int
         :param tile_row: Tile row (required)
@@ -1888,8 +1948,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             tile_matrix=tile_matrix,
             tile_row=tile_row,
@@ -1920,9 +1980,9 @@ class OGCAPIApi:
     @validate_call
     def tile_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        collection_id: Annotated[UUID, Field(description="Collection identifier")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         tile_matrix: Annotated[int, Field(strict=True, ge=0, description="Tile matrix level")],
         tile_row: Annotated[int, Field(strict=True, ge=0, description="Tile row")],
         tile_col: Annotated[int, Field(strict=True, ge=0, description="Tile column")],
@@ -1942,14 +2002,14 @@ class OGCAPIApi:
     ) -> RESTResponseType:
         """OGC API Tile
 
-        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+        Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```  
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
-        :param collection_id: Collection identifier (required)
-        :type collection_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param tile_matrix: Tile matrix level (required)
         :type tile_matrix: int
         :param tile_row: Tile row (required)
@@ -1981,8 +2041,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_serialize(
-            processing_graph_id=processing_graph_id,
-            collection_id=collection_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             tile_matrix=tile_matrix,
             tile_row=tile_row,
@@ -2008,8 +2068,8 @@ class OGCAPIApi:
 
     def _tile_serialize(
         self,
-        processing_graph_id,
-        collection_id,
+        data_connector_id,
+        layer_id,
         tile_matrix_set_id,
         tile_matrix,
         tile_row,
@@ -2036,10 +2096,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
-        if collection_id is not None:
-            _path_params['collectionId'] = collection_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         if tile_matrix_set_id is not None:
             _path_params['tileMatrixSetId'] = tile_matrix_set_id
         if tile_matrix is not None:
@@ -2074,7 +2134,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -2093,8 +2153,9 @@ class OGCAPIApi:
     @validate_call
     def tile_matrix_set(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2112,10 +2173,12 @@ class OGCAPIApi:
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html). Cf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2139,7 +2202,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_matrix_set_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -2165,8 +2229,9 @@ class OGCAPIApi:
     @validate_call
     def tile_matrix_set_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2184,10 +2249,12 @@ class OGCAPIApi:
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html). Cf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2211,7 +2278,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_matrix_set_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -2237,8 +2305,9 @@ class OGCAPIApi:
     @validate_call
     def tile_matrix_set_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
-        tile_matrix_set_id: Annotated[StrictStr, Field(description="Tile matrix set identifier")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
+        tile_matrix_set_id: Annotated[Any, Field(description="Tile matrix set identifier")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2256,10 +2325,12 @@ class OGCAPIApi:
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html). Cf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param tile_matrix_set_id: Tile matrix set identifier (required)
-        :type tile_matrix_set_id: str
+        :type tile_matrix_set_id: TileMatrixSetId
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2283,7 +2354,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_matrix_set_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             tile_matrix_set_id=tile_matrix_set_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
@@ -2304,7 +2376,8 @@ class OGCAPIApi:
 
     def _tile_matrix_set_serialize(
         self,
-        processing_graph_id,
+        data_connector_id,
+        layer_id,
         tile_matrix_set_id,
         _request_auth,
         _content_type,
@@ -2327,8 +2400,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         if tile_matrix_set_id is not None:
             _path_params['tileMatrixSetId'] = tile_matrix_set_id
         # process the query parameters
@@ -2353,7 +2428,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/tileMatrixSets/{tileMatrixSetId}',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,
@@ -2372,7 +2447,8 @@ class OGCAPIApi:
     @validate_call
     def tile_matrix_sets(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2390,8 +2466,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html). Cf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2415,7 +2493,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_matrix_sets_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2439,7 +2518,8 @@ class OGCAPIApi:
     @validate_call
     def tile_matrix_sets_with_http_info(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2457,8 +2537,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html). Cf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2482,7 +2564,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_matrix_sets_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2506,7 +2589,8 @@ class OGCAPIApi:
     @validate_call
     def tile_matrix_sets_without_preload_content(
         self,
-        processing_graph_id: Annotated[UUID, Field(description="ID of the processing graph, which is used as collection ID")],
+        data_connector_id: Annotated[UUID, Field(description="ID of the data connector")],
+        layer_id: Annotated[StrictStr, Field(description="ID of the layer, which is used as collection ID")],
         _request_timeout: Union[
             None,
             Annotated[StrictFloat, Field(gt=0)],
@@ -2524,8 +2608,10 @@ class OGCAPIApi:
 
         Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html). Cf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).
 
-        :param processing_graph_id: ID of the processing graph, which is used as collection ID (required)
-        :type processing_graph_id: UUID
+        :param data_connector_id: ID of the data connector (required)
+        :type data_connector_id: UUID
+        :param layer_id: ID of the layer, which is used as collection ID (required)
+        :type layer_id: str
         :param _request_timeout: timeout setting for this request. If one
                                  number provided, it will be total request
                                  timeout. It can also be a pair (tuple) of
@@ -2549,7 +2635,8 @@ class OGCAPIApi:
         """ # noqa: E501
 
         _param = self._tile_matrix_sets_serialize(
-            processing_graph_id=processing_graph_id,
+            data_connector_id=data_connector_id,
+            layer_id=layer_id,
             _request_auth=_request_auth,
             _content_type=_content_type,
             _headers=_headers,
@@ -2568,7 +2655,8 @@ class OGCAPIApi:
 
     def _tile_matrix_sets_serialize(
         self,
-        processing_graph_id,
+        data_connector_id,
+        layer_id,
         _request_auth,
         _content_type,
         _headers,
@@ -2590,8 +2678,10 @@ class OGCAPIApi:
         _body_params: Optional[bytes] = None
 
         # process the path parameters
-        if processing_graph_id is not None:
-            _path_params['processingGraphId'] = processing_graph_id
+        if data_connector_id is not None:
+            _path_params['dataConnectorId'] = data_connector_id
+        if layer_id is not None:
+            _path_params['layerId'] = layer_id
         # process the query parameters
         # process the header parameters
         # process the form parameters
@@ -2614,7 +2704,7 @@ class OGCAPIApi:
 
         return self.api_client.param_serialize(
             method='GET',
-            resource_path='/ogc/ogc/{processingGraphId}/tileMatrixSets',
+            resource_path='/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets',
             path_params=_path_params,
             query_params=_query_params,
             header_params=_header_params,

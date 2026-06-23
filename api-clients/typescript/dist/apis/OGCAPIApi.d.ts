@@ -9,47 +9,53 @@
  * Do not edit the class manually.
  */
 import * as runtime from '../runtime';
-import type { Collection, Collections, CollectionsResponseFormat, Conformance, LandingPage, TileMatrixSet, TileMatrixSets, TileSetMetadataResponse, TileSetsResponse } from '../models/index';
+import type { Collection, Collections, CollectionsResponseFormat, Conformance, LandingPage, TileMatrixSet, TileMatrixSetId, TileMatrixSets, TileSet, TileSets } from '../models/index';
 export interface CollectionRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 export interface CollectionTilesetRequest {
-    processingGraphId: string;
-    collectionId: string;
-    tileMatrixSetId: string;
+    dataConnectorId: string;
+    layerId: string;
+    tileMatrixSetId: TileMatrixSetId;
 }
 export interface CollectionTilesetsRequest {
-    processingGraphId: string;
-    collectionId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 export interface CollectionsRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
     datetime?: string;
     bbox?: string;
     limit?: number | null;
     f?: CollectionsResponseFormat | null;
 }
 export interface ConformanceRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 export interface LandingPageRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 export interface TileRequest {
-    processingGraphId: string;
-    collectionId: string;
-    tileMatrixSetId: string;
+    dataConnectorId: string;
+    layerId: string;
+    tileMatrixSetId: TileMatrixSetId;
     tileMatrix: number;
     tileRow: number;
     tileCol: number;
     datetime?: string;
 }
 export interface TileMatrixSetRequest {
-    processingGraphId: string;
-    tileMatrixSetId: string;
+    dataConnectorId: string;
+    layerId: string;
+    tileMatrixSetId: TileMatrixSetId;
 }
 export interface TileMatrixSetsRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 /**
  *
@@ -77,12 +83,12 @@ export declare class OGCAPIApi extends runtime.BaseAPI {
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
      * OGC API Collection Tileset Metadata
      */
-    collectionTilesetRaw(requestParameters: CollectionTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSetMetadataResponse>>;
+    collectionTilesetRaw(requestParameters: CollectionTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSet>>;
     /**
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
      * OGC API Collection Tileset Metadata
      */
-    collectionTileset(requestParameters: CollectionTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSetMetadataResponse>;
+    collectionTileset(requestParameters: CollectionTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSet>;
     /**
      * Creates request options for collectionTilesets without sending the request
      */
@@ -91,12 +97,12 @@ export declare class OGCAPIApi extends runtime.BaseAPI {
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
      * OGC API Collection Tilesets List
      */
-    collectionTilesetsRaw(requestParameters: CollectionTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSetsResponse>>;
+    collectionTilesetsRaw(requestParameters: CollectionTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSets>>;
     /**
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
      * OGC API Collection Tilesets List
      */
-    collectionTilesets(requestParameters: CollectionTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSetsResponse>;
+    collectionTilesets(requestParameters: CollectionTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSets>;
     /**
      * Creates request options for collections without sending the request
      */
@@ -144,12 +150,12 @@ export declare class OGCAPIApi extends runtime.BaseAPI {
      */
     tileRequestOpts(requestParameters: TileRequest): Promise<runtime.RequestOpts>;
     /**
-     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```
      * OGC API Tile
      */
     tileRaw(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>>;
     /**
-     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```
      * OGC API Tile
      */
     tile(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob>;

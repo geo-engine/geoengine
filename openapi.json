@@ -2472,7 +2472,7 @@
         ]
       }
     },
-    "/ogc/ogc/{processingGraphId}/": {
+    "/ogc/ogc/{dataConnectorId}/{layerId}/": {
       "get": {
         "tags": [
           "OGC API"
@@ -2482,12 +2482,21 @@
         "operationId": "landing_page",
         "parameters": [
           {
-            "name": "processingGraphId",
+            "name": "dataConnectorId",
             "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
+            "description": "ID of the data connector",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
             }
           }
         ],
@@ -2536,7 +2545,7 @@
         ]
       }
     },
-    "/ogc/ogc/{processingGraphId}/collections": {
+    "/ogc/ogc/{dataConnectorId}/{layerId}/collections": {
       "get": {
         "tags": [
           "OGC API"
@@ -2546,12 +2555,21 @@
         "operationId": "collections",
         "parameters": [
           {
-            "name": "processingGraphId",
+            "name": "dataConnectorId",
             "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
+            "description": "ID of the data connector",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
             }
           },
           {
@@ -2626,31 +2644,31 @@
         ]
       }
     },
-    "/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles": {
+    "/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}": {
       "get": {
         "tags": [
           "OGC API"
         ],
-        "summary": "OGC API Collection Tilesets List",
-        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).",
-        "operationId": "collection_tilesets",
+        "summary": "OGC API Collection Metadata",
+        "description": "Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).",
+        "operationId": "collection",
         "parameters": [
           {
-            "name": "processingGraphId",
+            "name": "dataConnectorId",
             "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
+            "description": "ID of the data connector",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/DataProviderId"
             }
           },
           {
-            "name": "collectionId",
+            "name": "layerId",
             "in": "path",
-            "description": "Collection identifier",
+            "description": "ID of the layer, which is used as collection ID",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/LayerId"
             }
           }
         ],
@@ -2660,7 +2678,54 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TileSetsResponse"
+                  "$ref": "#/components/schemas/Collection"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "session_token": []
+          }
+        ]
+      }
+    },
+    "/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles": {
+      "get": {
+        "tags": [
+          "OGC API"
+        ],
+        "summary": "OGC API Collection Tilesets List",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).",
+        "operationId": "collection_tilesets",
+        "parameters": [
+          {
+            "name": "dataConnectorId",
+            "in": "path",
+            "description": "ID of the data connector",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TileSets"
                 }
               }
             }
@@ -2676,7 +2741,7 @@
         ]
       }
     },
-    "/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}": {
+    "/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}": {
       "get": {
         "tags": [
           "OGC API"
@@ -2686,21 +2751,21 @@
         "operationId": "collection_tileset",
         "parameters": [
           {
-            "name": "processingGraphId",
+            "name": "dataConnectorId",
             "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
+            "description": "ID of the data connector",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/DataProviderId"
             }
           },
           {
-            "name": "collectionId",
+            "name": "layerId",
             "in": "path",
-            "description": "Collection identifier",
+            "description": "ID of the layer, which is used as collection ID",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/LayerId"
             }
           },
           {
@@ -2709,7 +2774,7 @@
             "description": "Tile matrix set identifier",
             "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/TileMatrixSetId"
             }
           }
         ],
@@ -2719,7 +2784,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/TileSetMetadataResponse"
+                  "$ref": "#/components/schemas/TileSet"
                 }
               }
             }
@@ -2735,31 +2800,31 @@
         ]
       }
     },
-    "/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}": {
+    "/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}": {
       "get": {
         "tags": [
           "OGC API"
         ],
         "summary": "OGC API Tile",
-        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).",
+        "description": "Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).\n\n## Sketch\n\n```text\npointOfOrigin (cornerOfOrigin=topLeft)\n\ntileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX\n       |                                                                            |\n       v                                                                            v\n       +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis\n       | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |\n       |                           |                           |     |                           |\n       +---------------------------+---------------------------+-----+---------------------------+\n       | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |\n       |                           |                           |     |                           |\n       +---------------------------+---------------------------+-----+---------------------------+\n       | ...                       | ...                       | ... | ...                       |\n       |                           |                           |     |                           |\n       +---------------------------+---------------------------+-----+---------------------------+\n       | 0,                        | 1,                        | ... | matrixWidth-1,            |\n v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight\ntileMatrixMinY                     |                           |     |                           |   | (in pixels)\n       +---------------------------+---------------------------+-----+---------------------------+ --+\n |                                                                   |<-       tileWidth       ->|\n v                                                                   |        (in pixels)        |\ntileRow axis\n```\n\n",
         "operationId": "tile",
         "parameters": [
           {
-            "name": "processingGraphId",
+            "name": "dataConnectorId",
             "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
+            "description": "ID of the data connector",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/DataProviderId"
             }
           },
           {
-            "name": "collectionId",
+            "name": "layerId",
             "in": "path",
-            "description": "Collection identifier",
+            "description": "ID of the layer, which is used as collection ID",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/LayerId"
             }
           },
           {
@@ -2768,7 +2833,7 @@
             "description": "Tile matrix set identifier",
             "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/TileMatrixSetId"
             }
           },
           {
@@ -2833,45 +2898,7 @@
         ]
       }
     },
-    "/ogc/ogc/{processingGraphId}/collections/{processingGraphId}": {
-      "get": {
-        "tags": [
-          "OGC API"
-        ],
-        "summary": "OGC API Collection Metadata",
-        "description": "Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).",
-        "operationId": "collection",
-        "parameters": [
-          {
-            "name": "processingGraphId",
-            "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
-            "required": true,
-            "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "OK",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Collection"
-                }
-              }
-            }
-          }
-        },
-        "security": [
-          {
-            "session_token": []
-          }
-        ]
-      }
-    },
-    "/ogc/ogc/{processingGraphId}/conformance": {
+    "/ogc/ogc/{dataConnectorId}/{layerId}/conformance": {
       "get": {
         "tags": [
           "OGC API"
@@ -2881,12 +2908,21 @@
         "operationId": "conformance",
         "parameters": [
           {
-            "name": "processingGraphId",
+            "name": "dataConnectorId",
             "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
+            "description": "ID of the data connector",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
             }
           }
         ],
@@ -2925,7 +2961,7 @@
         ]
       }
     },
-    "/ogc/ogc/{processingGraphId}/tileMatrixSets": {
+    "/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets": {
       "get": {
         "tags": [
           "OGC API"
@@ -2935,12 +2971,21 @@
         "operationId": "tile_matrix_sets",
         "parameters": [
           {
-            "name": "processingGraphId",
+            "name": "dataConnectorId",
             "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
+            "description": "ID of the data connector",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
             }
           }
         ],
@@ -2963,7 +3008,7 @@
         ]
       }
     },
-    "/ogc/ogc/{processingGraphId}/tileMatrixSets/{tileMatrixSetId}": {
+    "/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}": {
       "get": {
         "tags": [
           "OGC API"
@@ -2973,12 +3018,21 @@
         "operationId": "tile_matrix_set",
         "parameters": [
           {
-            "name": "processingGraphId",
+            "name": "dataConnectorId",
             "in": "path",
-            "description": "ID of the processing graph, which is used as collection ID",
+            "description": "ID of the data connector",
             "required": true,
             "schema": {
-              "$ref": "#/components/schemas/WorkflowId"
+              "$ref": "#/components/schemas/DataProviderId"
+            }
+          },
+          {
+            "name": "layerId",
+            "in": "path",
+            "description": "ID of the layer, which is used as collection ID",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/LayerId"
             }
           },
           {
@@ -2987,7 +3041,7 @@
             "description": "Tile matrix set identifier",
             "required": true,
             "schema": {
-              "type": "string"
+              "$ref": "#/components/schemas/TileMatrixSetId"
             }
           }
         ],
@@ -5740,6 +5794,17 @@
   },
   "components": {
     "schemas": {
+      "AccessConstraints": {
+        "type": "string",
+        "default": "unclassified",
+        "enum": [
+          "unclassified",
+          "restricted",
+          "confidential",
+          "secret",
+          "topSecret"
+        ]
+      },
       "AddDataset": {
         "type": "object",
         "required": [
@@ -8034,6 +8099,188 @@
           "yPixelSize": {
             "type": "number",
             "format": "double"
+          }
+        }
+      },
+      "GeometryDimension": {
+        "type": "integer",
+        "enum": [
+          0,
+          1,
+          2,
+          3
+        ]
+      },
+      "GeospatialData": {
+        "type": "object",
+        "required": [
+          "id",
+          "dataType"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier of the Layer."
+          },
+          "title": {
+            "type": "string",
+            "description": "Title for this layer"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief narrative description of this layer"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unordered list of one or more commonly used or formalized word(s) or\nphrase(s) used to describe this layer"
+          },
+          "dataType": {
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "map"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "vector"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "coverage"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "string"
+                    ],
+                    "properties": {
+                      "string": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "description": "Type of data represented in the layer"
+          },
+          "geometryDimension": {
+            "$ref": "#/components/schemas/GeometryDimension",
+            "description": "The geometry dimension of the features shown in this layer (0: points,\n1: curves, 2: surfaces, 3: solids), unspecified: mixed or unknown"
+          },
+          "featureType": {
+            "type": "string",
+            "description": "Feature type identifier. Only applicable to layers of datatype 'geometries'"
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Short reference to recognize the author or provider"
+          },
+          "license": {
+            "type": "string",
+            "description": "License applicable to the tiles"
+          },
+          "pointOfContact": {
+            "type": "string",
+            "description": "Useful information to contact the authors or custodians for the layer\n(e.g. e-mail address, a physical address,  phone numbers, etc)"
+          },
+          "publisher": {
+            "type": "string",
+            "description": "Organization or individual responsible for making the layer available"
+          },
+          "theme": {
+            "type": "string",
+            "description": "Category where the layer can be grouped"
+          },
+          "crs": {
+            "oneOf": [
+              {
+                "type": "null"
+              },
+              {
+                "$ref": "#/components/schemas/TilesCrs",
+                "description": "Coordinate Reference System (CRS)"
+              }
+            ]
+          },
+          "epoch": {
+            "type": "number",
+            "format": "double",
+            "description": "Epoch of the Coordinate Reference System (CRS)"
+          },
+          "minScaleDenominator": {
+            "type": "number",
+            "format": "double",
+            "description": "Minimum scale denominator for usage of the layer"
+          },
+          "maxScaleDenominator": {
+            "type": "number",
+            "format": "double",
+            "description": "aximum scale denominator for usage of the layer"
+          },
+          "minCellSize": {
+            "type": "number",
+            "format": "double",
+            "description": "Minimum cell size for usage of the layer"
+          },
+          "maxCellSize": {
+            "type": "number",
+            "format": "double",
+            "description": "Maximum cell size for usage of the layer"
+          },
+          "maxTileMatrix": {
+            "type": "string",
+            "description": "TileMatrix identifier associated with the minScaleDenominator"
+          },
+          "minTileMatrix": {
+            "type": "string",
+            "description": "TileMatrix identifier associated with the maxScaleDenominator"
+          },
+          "boundingBox": {
+            "$ref": "#/components/schemas/BoundingBox2D",
+            "description": "Minimum bounding rectangle surrounding the layer"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the layer was first produced"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last layer change/revision"
+          },
+          "style": {
+            "$ref": "#/components/schemas/Style",
+            "description": "Style used to generate the layer in the tileset"
+          },
+          "geoDataClasses": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "URI identifying a class of data contained in this layer (useful to\ndetermine compatibility with styles or processes)"
+          },
+          "propertiesSchema": {
+            "description": "Properties represented by the features in this layer. Can be the\nattributes of a feature dataset (datatype=geometries) or the rangeType\nof a coverage (datatype=coverage)"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links related to this layer. Possible link 'rel' values are:\n'geodata' for a URL pointing to the collection of geospatial data."
           }
         }
       },
@@ -11780,25 +12027,19 @@
           "datasets"
         ],
         "properties": {
-          "apiUrl": {
-            "type": "string"
+          "type": {
+            "type": "string",
+            "enum": [
+              "StacProviderDefinition"
+            ]
           },
-          "collectionName": {
-            "type": "string"
-          },
-          "datasets": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/StacProviderDataset"
-            }
-          },
-          "description": {
+          "name": {
             "type": "string"
           },
           "id": {
             "$ref": "#/components/schemas/DataProviderId"
           },
-          "name": {
+          "description": {
             "type": "string"
           },
           "priority": {
@@ -11807,6 +12048,12 @@
               "null"
             ],
             "format": "int32"
+          },
+          "apiUrl": {
+            "type": "string"
+          },
+          "collectionName": {
+            "type": "string"
           },
           "s3Config": {
             "oneOf": [
@@ -11821,11 +12068,11 @@
           "timeDimension": {
             "$ref": "#/components/schemas/TimeDimension"
           },
-          "type": {
-            "type": "string",
-            "enum": [
-              "StacProviderDefinition"
-            ]
+          "datasets": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/StacProviderDataset"
+            }
           }
         }
       },
@@ -11841,29 +12088,29 @@
           "bands"
         ],
         "properties": {
+          "name": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "dataType": {
+            "$ref": "#/components/schemas/RasterDataType"
+          },
+          "resolution": {
+            "$ref": "#/components/schemas/SpatialResolution"
+          },
+          "projection": {
+            "type": "string"
+          },
+          "spatialGrid": {
+            "$ref": "#/components/schemas/SpatialGridDescriptor"
+          },
           "bands": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/StacProviderDatasetBand"
             }
-          },
-          "dataType": {
-            "$ref": "#/components/schemas/RasterDataType"
-          },
-          "description": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "projection": {
-            "type": "string"
-          },
-          "resolution": {
-            "$ref": "#/components/schemas/SpatialResolution"
-          },
-          "spatialGrid": {
-            "$ref": "#/components/schemas/SpatialGridDescriptor"
           }
         }
       },
@@ -11890,6 +12137,9 @@
           "endpoint"
         ],
         "properties": {
+          "endpoint": {
+            "type": "string"
+          },
           "accessKey": {
             "oneOf": [
               {
@@ -11899,9 +12149,6 @@
                 "$ref": "#/components/schemas/Secret_String"
               }
             ]
-          },
-          "endpoint": {
-            "type": "string"
           },
           "secretKey": {
             "oneOf": [
@@ -12073,6 +12320,41 @@
           },
           "color": {
             "$ref": "#/components/schemas/ColorParam"
+          }
+        }
+      },
+      "Style": {
+        "type": "object",
+        "required": [
+          "id"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "An identifier for this style. Implementation of 'identifier'"
+          },
+          "title": {
+            "type": "string",
+            "description": "A title for this style"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief narrative description of this style"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Keywords about this style"
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links to style related resources. Possible link 'rel' values are:\n'style' for a URL pointing to the style description, 'styleSpec' for a\nURL pointing to the specification or standard used to define the style.",
+            "minItems": 1
           }
         }
       },
@@ -12281,29 +12563,6 @@
             }
           }
         ]
-      },
-      "TemplatedTileLink": {
-        "type": "object",
-        "required": [
-          "href",
-          "rel",
-          "type",
-          "templated"
-        ],
-        "properties": {
-          "href": {
-            "type": "string"
-          },
-          "rel": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string"
-          },
-          "templated": {
-            "type": "boolean"
-          }
-        }
       },
       "TemporalAggregationMethod": {
         "type": "string",
@@ -12548,6 +12807,42 @@
           }
         }
       },
+      "TileMatrixLimits": {
+        "type": "object",
+        "description": "A resource describing useful to create an array that describes the limits\nfor a tile set [super::TileMatrixSet] based on the OGC TileSet Metadata Standard",
+        "required": [
+          "tileMatrix",
+          "minTileRow",
+          "maxTileRow",
+          "minTileCol",
+          "maxTileCol"
+        ],
+        "properties": {
+          "tileMatrix": {
+            "type": "string"
+          },
+          "minTileRow": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "maxTileRow": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "minTileCol": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          },
+          "maxTileCol": {
+            "type": "integer",
+            "format": "int64",
+            "minimum": 0
+          }
+        }
+      },
       "TileMatrixSet": {
         "type": "object",
         "description": "A definition of a tile matrix set following the Tile Matrix Set standard.\nFor tileset metadata, such a description (in `tileMatrixSet` property) is\nonly required for offline use, as an alternative to a link with a\n`http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme` relation type.",
@@ -12677,59 +12972,258 @@
           }
         }
       },
-      "TileSetListItemResponse": {
+      "TilePoint": {
         "type": "object",
         "required": [
-          "title",
+          "coordinates"
+        ],
+        "properties": {
+          "coordinates": {
+            "type": "array",
+            "items": {
+              "type": "number",
+              "format": "double"
+            },
+            "maxItems": 2,
+            "minItems": 2
+          },
+          "crs": {
+            "$ref": "#/components/schemas/TilesCrs"
+          },
+          "tileMatrix": {
+            "type": "string",
+            "description": "TileMatrix identifier associated with the scaleDenominator"
+          },
+          "scaleDenominator": {
+            "type": "number",
+            "format": "double",
+            "description": "Scale denominator of the tile matrix selected"
+          },
+          "cellSize": {
+            "type": "number",
+            "format": "double",
+            "description": "Cell size of the tile matrix selected"
+          }
+        }
+      },
+      "TileSet": {
+        "type": "object",
+        "description": "A resource describing a tileset based on the OGC TileSet Metadata Standard.\nAt least one of the 'TileMatrixSet',  or a link with 'rel' tiling-scheme\"",
+        "required": [
           "dataType",
-          "tileMatrixSetId",
+          "crs",
           "links"
         ],
         "properties": {
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "A title for this tileset"
+          },
+          "description": {
+            "type": "string",
+            "description": "Brief narrative description of this tile set"
+          },
+          "keywords": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Unordered list of one or more commonly used or formalized word(s) or\nphrase(s) used to describe a TileSet"
           },
           "dataType": {
-            "type": "string"
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "map"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "vector"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "coverage"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "string"
+                    ],
+                    "properties": {
+                      "string": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "description": "Type of data represented in the tileset"
           },
-          "tileMatrixSetId": {
-            "type": "string"
+          "tileMatrixSetURI": {
+            "type": "string",
+            "format": "uri",
+            "description": "Reference to a Tile Matrix Set on the OGC NA definition server\n(<http://www.opengis.net/def/tms/>). Required if the tile matrix set is\nregistered on the definition server."
+          },
+          "tileMatrixSetLimits": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TileMatrixLimits"
+            },
+            "description": "Limits for the TileRow and TileCol values for each TileMatrix in the\nTileMatrixSet. If missing, there are no limits other that the ones\nimposed by the TileMatrixSet. If present the TileMatrices listed are\nlimited and the rest not available at all"
+          },
+          "crs": {
+            "$ref": "#/components/schemas/TilesCrs",
+            "description": "Coordinate Reference System (CRS)"
+          },
+          "epoch": {
+            "type": "number",
+            "format": "double",
+            "description": "Epoch of the Coordinate Reference System (CRS)"
           },
           "links": {
             "type": "array",
             "items": {
               "$ref": "#/components/schemas/Link"
-            }
+            },
+            "description": "Links to related resources. Possible link 'rel' values are: 'dataset'\nfor a URL pointing to the dataset, 'tiles' for a URL template to get\nthe tiles; 'alternate' for a URL pointing to another representation of\nthe TileSetMetadata (e.g a TileJSON file); 'tiling-scheme' for a\ndefinition of the TileMatrixSet"
+          },
+          "layers": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GeospatialData"
+            },
+            "minItems": 1
+          },
+          "boundingBox": {
+            "$ref": "#/components/schemas/BoundingBox2D",
+            "description": "Minimum bounding rectangle surrounding the tile matrix set, in the supported CRS"
+          },
+          "centerPoint": {
+            "$ref": "#/components/schemas/TilePoint",
+            "description": "Location of a tile that nicely represents the tileset. Implementations\nmay use this center value to set the default location or to present a\nrepresentative tile in a user interface"
+          },
+          "style": {
+            "$ref": "#/components/schemas/Style",
+            "description": "Style involving all layers used to generate the tileset"
+          },
+          "attribution": {
+            "type": "string",
+            "description": "Short reference to recognize the author or provider"
+          },
+          "license": {
+            "type": "string",
+            "description": "License applicable to the tiles"
+          },
+          "accessConstraints": {
+            "$ref": "#/components/schemas/AccessConstraints",
+            "description": "Restrictions on the availability of the Tile Set that the user needs to\nbe aware of before using or redistributing the Tile Set"
+          },
+          "version": {
+            "type": "string",
+            "description": "Version of the Tile Set. Changes if the data behind the tiles has been changed"
+          },
+          "created": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When the Tile Set was first produced"
+          },
+          "updated": {
+            "type": "string",
+            "format": "date-time",
+            "description": "Last Tile Set change/revision"
+          },
+          "pointOfContact": {
+            "type": "string",
+            "description": "Useful information to contact the authors or custodians for the Tile Set"
+          },
+          "mediaTypes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Media types available for the tiles"
           }
         }
       },
-      "TileSetMetadataResponse": {
+      "TileSetItem": {
         "type": "object",
+        "description": "A minimal tileset element for use within a list of tilesets linking to\nfull description of those tilesets.",
         "required": [
-          "title",
           "dataType",
-          "tileMatrixSetId",
+          "crs",
           "links"
         ],
         "properties": {
           "title": {
-            "type": "string"
+            "type": "string",
+            "description": "A title for this tileset"
           },
           "dataType": {
-            "type": "string"
+            "oneOf": [
+              {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "enum": [
+                      "map"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "vector"
+                    ]
+                  },
+                  {
+                    "type": "string",
+                    "enum": [
+                      "coverage"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "string"
+                    ],
+                    "properties": {
+                      "string": {
+                        "type": "string"
+                      }
+                    }
+                  }
+                ]
+              }
+            ],
+            "description": "Type of data represented in the tileset"
           },
-          "tileMatrixSetId": {
-            "type": "string"
+          "crs": {
+            "$ref": "#/components/schemas/TilesCrs",
+            "description": "Coordinate Reference System (CRS)"
+          },
+          "tileMatrixSetURI": {
+            "type": "string",
+            "format": "uri",
+            "description": "Reference to a Tile Matrix Set on an offical source for Tile Matrix Sets\nsuch as the OGC NA definition server (http://www.opengis.net/def/tms/).\nRequired if the tile matrix set is registered on an open official source."
           },
           "links": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TemplatedTileLink"
-            }
+              "$ref": "#/components/schemas/Link"
+            },
+            "description": "Links to related resources. A 'self' link to the tileset as well as a\n'http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme' link to a\ndefinition of the TileMatrixSet are required."
           }
         }
       },
-      "TileSetsResponse": {
+      "TileSets": {
         "type": "object",
         "required": [
           "tilesets"
@@ -12738,7 +13232,13 @@
           "tilesets": {
             "type": "array",
             "items": {
-              "$ref": "#/components/schemas/TileSetListItemResponse"
+              "$ref": "#/components/schemas/TileSetItem"
+            }
+          },
+          "links": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Link"
             }
           }
         }

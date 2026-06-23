@@ -98,15 +98,15 @@ All URIs are relative to *https://geoengine.io/api*
 *MLApi* | [**addMlModel**](docs/MLApi.md#addmlmodel) | **POST** /ml/models | Create a new ml model.
 *MLApi* | [**getMlModel**](docs/MLApi.md#getmlmodel) | **GET** /ml/models/{model_name} | Get ml model by name.
 *MLApi* | [**listMlModels**](docs/MLApi.md#listmlmodels) | **GET** /ml/models | List ml models.
-*OGCAPIApi* | [**collection**](docs/OGCAPIApi.md#collection) | **GET** /ogc/ogc/{processingGraphId}/collections/{processingGraphId} | OGC API Collection Metadata
-*OGCAPIApi* | [**collectionTileset**](docs/OGCAPIApi.md#collectiontileset) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata
-*OGCAPIApi* | [**collectionTilesets**](docs/OGCAPIApi.md#collectiontilesets) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles | OGC API Collection Tilesets List
-*OGCAPIApi* | [**collections**](docs/OGCAPIApi.md#collections) | **GET** /ogc/ogc/{processingGraphId}/collections | OGC API Collections List
-*OGCAPIApi* | [**conformance**](docs/OGCAPIApi.md#conformance) | **GET** /ogc/ogc/{processingGraphId}/conformance | OGC API Conformance Classes
-*OGCAPIApi* | [**landingPage**](docs/OGCAPIApi.md#landingpage) | **GET** /ogc/ogc/{processingGraphId}/ | OGC API Landing Page
-*OGCAPIApi* | [**tile**](docs/OGCAPIApi.md#tile) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
-*OGCAPIApi* | [**tileMatrixSet**](docs/OGCAPIApi.md#tilematrixset) | **GET** /ogc/ogc/{processingGraphId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
-*OGCAPIApi* | [**tileMatrixSets**](docs/OGCAPIApi.md#tilematrixsets) | **GET** /ogc/ogc/{processingGraphId}/tileMatrixSets | OGC API Tile Matrix Set List
+*OGCAPIApi* | [**collection**](docs/OGCAPIApi.md#collection) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId} | OGC API Collection Metadata
+*OGCAPIApi* | [**collectionTileset**](docs/OGCAPIApi.md#collectiontileset) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata
+*OGCAPIApi* | [**collectionTilesets**](docs/OGCAPIApi.md#collectiontilesets) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles | OGC API Collection Tilesets List
+*OGCAPIApi* | [**collections**](docs/OGCAPIApi.md#collections) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections | OGC API Collections List
+*OGCAPIApi* | [**conformance**](docs/OGCAPIApi.md#conformance) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/conformance | OGC API Conformance Classes
+*OGCAPIApi* | [**landingPage**](docs/OGCAPIApi.md#landingpage) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/ | OGC API Landing Page
+*OGCAPIApi* | [**tile**](docs/OGCAPIApi.md#tile) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile
+*OGCAPIApi* | [**tileMatrixSet**](docs/OGCAPIApi.md#tilematrixset) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition
+*OGCAPIApi* | [**tileMatrixSets**](docs/OGCAPIApi.md#tilematrixsets) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets | OGC API Tile Matrix Set List
 *OGCWCSApi* | [**wcsHandler**](docs/OGCWCSApi.md#wcshandler) | **GET** /wcs/{workflow} | OGC WCS endpoint
 *OGCWFSApi* | [**wfsHandler**](docs/OGCWFSApi.md#wfshandler) | **GET** /wfs/{workflow} | OGC WFS endpoint
 *OGCWMSApi* | [**wmsHandler**](docs/OGCWMSApi.md#wmshandler) | **GET** /wms/{workflow} | OGC WMS endpoint
@@ -161,6 +161,7 @@ All URIs are relative to *https://geoengine.io/api*
 
 ### Models
 
+- [AccessConstraints](docs/AccessConstraints.md)
 - [AddDataset](docs/AddDataset.md)
 - [AddLayer](docs/AddLayer.md)
 - [AddLayerCollection](docs/AddLayerCollection.md)
@@ -244,6 +245,10 @@ All URIs are relative to *https://geoengine.io/api*
 - [GdalSourceTimePlaceholder](docs/GdalSourceTimePlaceholder.md)
 - [GeoJson](docs/GeoJson.md)
 - [GeoTransform](docs/GeoTransform.md)
+- [GeometryDimension](docs/GeometryDimension.md)
+- [GeospatialData](docs/GeospatialData.md)
+- [GeospatialDataDataType](docs/GeospatialDataDataType.md)
+- [GeospatialDataDataTypeOneOf](docs/GeospatialDataDataTypeOneOf.md)
 - [GetCoverageFormat](docs/GetCoverageFormat.md)
 - [GetMapExceptionFormat](docs/GetMapExceptionFormat.md)
 - [GfbioAbcdDataProviderDefinition](docs/GfbioAbcdDataProviderDefinition.md)
@@ -417,6 +422,7 @@ All URIs are relative to *https://geoengine.io/api*
 - [Statistics](docs/Statistics.md)
 - [StatisticsParameters](docs/StatisticsParameters.md)
 - [StrokeParam](docs/StrokeParam.md)
+- [Style](docs/Style.md)
 - [Suffix](docs/Suffix.md)
 - [SuggestMetaData](docs/SuggestMetaData.md)
 - [SumAggregation](docs/SumAggregation.md)
@@ -429,21 +435,22 @@ All URIs are relative to *https://geoengine.io/api*
 - [TaskStatusFailed](docs/TaskStatusFailed.md)
 - [TaskStatusRunning](docs/TaskStatusRunning.md)
 - [TaskStatusWithId](docs/TaskStatusWithId.md)
-- [TemplatedTileLink](docs/TemplatedTileLink.md)
 - [TemporalAggregationMethod](docs/TemporalAggregationMethod.md)
 - [TemporalExtent](docs/TemporalExtent.md)
 - [TemporalRasterAggregation](docs/TemporalRasterAggregation.md)
 - [TemporalRasterAggregationParameters](docs/TemporalRasterAggregationParameters.md)
 - [TextSymbology](docs/TextSymbology.md)
 - [TileMatrix](docs/TileMatrix.md)
+- [TileMatrixLimits](docs/TileMatrixLimits.md)
 - [TileMatrixSet](docs/TileMatrixSet.md)
 - [TileMatrixSetId](docs/TileMatrixSetId.md)
 - [TileMatrixSetIdOneOf](docs/TileMatrixSetIdOneOf.md)
 - [TileMatrixSetItem](docs/TileMatrixSetItem.md)
 - [TileMatrixSets](docs/TileMatrixSets.md)
-- [TileSetListItemResponse](docs/TileSetListItemResponse.md)
-- [TileSetMetadataResponse](docs/TileSetMetadataResponse.md)
-- [TileSetsResponse](docs/TileSetsResponse.md)
+- [TilePoint](docs/TilePoint.md)
+- [TileSet](docs/TileSet.md)
+- [TileSetItem](docs/TileSetItem.md)
+- [TileSets](docs/TileSets.md)
 - [TilesCrs](docs/TilesCrs.md)
 - [TilesCrsOneOf](docs/TilesCrsOneOf.md)
 - [TilesCrsOneOf1](docs/TilesCrsOneOf1.md)

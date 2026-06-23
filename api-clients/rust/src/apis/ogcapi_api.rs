@@ -84,11 +84,12 @@ pub enum TileMatrixSetsError {
 
 
 /// Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
-pub async fn collection(configuration: &configuration::Configuration, processing_graph_id: &str) -> Result<models::Collection, Error<CollectionError>> {
+pub async fn collection(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str) -> Result<models::Collection, Error<CollectionError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/collections/{processingGraphId}", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id));
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -124,13 +125,13 @@ pub async fn collection(configuration: &configuration::Configuration, processing
 }
 
 /// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
-pub async fn collection_tileset(configuration: &configuration::Configuration, processing_graph_id: &str, collection_id: &str, tile_matrix_set_id: &str) -> Result<models::TileSetMetadataResponse, Error<CollectionTilesetError>> {
+pub async fn collection_tileset(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str, tile_matrix_set_id: &str) -> Result<models::TileSet, Error<CollectionTilesetError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
-    let p_path_collection_id = collection_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
     let p_path_tile_matrix_set_id = tile_matrix_set_id;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id), collectionId=crate::apis::urlencode(p_path_collection_id), tileMatrixSetId=crate::apis::urlencode(p_path_tile_matrix_set_id));
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string());
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -155,8 +156,8 @@ pub async fn collection_tileset(configuration: &configuration::Configuration, pr
         let content = resp.text().await?;
         match content_type {
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
-            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::TileSetMetadataResponse`"))),
-            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::TileSetMetadataResponse`")))),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::TileSet`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::TileSet`")))),
         }
     } else {
         let content = resp.text().await?;
@@ -166,12 +167,12 @@ pub async fn collection_tileset(configuration: &configuration::Configuration, pr
 }
 
 /// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
-pub async fn collection_tilesets(configuration: &configuration::Configuration, processing_graph_id: &str, collection_id: &str) -> Result<models::TileSetsResponse, Error<CollectionTilesetsError>> {
+pub async fn collection_tilesets(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str) -> Result<models::TileSets, Error<CollectionTilesetsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
-    let p_path_collection_id = collection_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id), collectionId=crate::apis::urlencode(p_path_collection_id));
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -196,8 +197,8 @@ pub async fn collection_tilesets(configuration: &configuration::Configuration, p
         let content = resp.text().await?;
         match content_type {
             ContentType::Json => serde_json::from_str(&content).map_err(Error::from),
-            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::TileSetsResponse`"))),
-            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::TileSetsResponse`")))),
+            ContentType::Text => return Err(Error::from(serde_json::Error::custom("Received `text/plain` content type response that cannot be converted to `models::TileSets`"))),
+            ContentType::Unsupported(unknown_type) => return Err(Error::from(serde_json::Error::custom(format!("Received `{unknown_type}` content type response that cannot be converted to `models::TileSets`")))),
         }
     } else {
         let content = resp.text().await?;
@@ -207,15 +208,16 @@ pub async fn collection_tilesets(configuration: &configuration::Configuration, p
 }
 
 /// Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
-pub async fn collections(configuration: &configuration::Configuration, processing_graph_id: &str, datetime: Option<&str>, bbox: Option<&str>, limit: Option<i32>, f: Option<&str>) -> Result<models::Collections, Error<CollectionsError>> {
+pub async fn collections(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str, datetime: Option<&str>, bbox: Option<&str>, limit: Option<i32>, f: Option<&str>) -> Result<models::Collections, Error<CollectionsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
     let p_query_datetime = datetime;
     let p_query_bbox = bbox;
     let p_query_limit = limit;
     let p_query_f = f;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/collections", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id));
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref param_value) = p_query_datetime {
@@ -263,11 +265,12 @@ pub async fn collections(configuration: &configuration::Configuration, processin
 }
 
 /// Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
-pub async fn conformance(configuration: &configuration::Configuration, processing_graph_id: &str) -> Result<models::Conformance, Error<ConformanceError>> {
+pub async fn conformance(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str) -> Result<models::Conformance, Error<ConformanceError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/conformance", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id));
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/conformance", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -303,11 +306,12 @@ pub async fn conformance(configuration: &configuration::Configuration, processin
 }
 
 /// Cf. [OGC API - Common - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
-pub async fn landing_page(configuration: &configuration::Configuration, processing_graph_id: &str) -> Result<models::LandingPage, Error<LandingPageError>> {
+pub async fn landing_page(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str) -> Result<models::LandingPage, Error<LandingPageError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id));
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -342,18 +346,18 @@ pub async fn landing_page(configuration: &configuration::Configuration, processi
     }
 }
 
-/// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
-pub async fn tile(configuration: &configuration::Configuration, processing_graph_id: &str, collection_id: &str, tile_matrix_set_id: &str, tile_matrix: i32, tile_row: i64, tile_col: i64, datetime: Option<&str>) -> Result<reqwest::Response, Error<TileError>> {
+/// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```  
+pub async fn tile(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str, tile_matrix_set_id: &str, tile_matrix: i32, tile_row: i64, tile_col: i64, datetime: Option<&str>) -> Result<reqwest::Response, Error<TileError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
-    let p_path_collection_id = collection_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
     let p_path_tile_matrix_set_id = tile_matrix_set_id;
     let p_path_tile_matrix = tile_matrix;
     let p_path_tile_row = tile_row;
     let p_path_tile_col = tile_col;
     let p_query_datetime = datetime;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id), collectionId=crate::apis::urlencode(p_path_collection_id), tileMatrixSetId=crate::apis::urlencode(p_path_tile_matrix_set_id), tileMatrix=p_path_tile_matrix, tileRow=p_path_tile_row, tileCol=p_path_tile_col);
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string(), tileMatrix=p_path_tile_matrix, tileRow=p_path_tile_row, tileCol=p_path_tile_col);
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref param_value) = p_query_datetime {
@@ -381,12 +385,13 @@ pub async fn tile(configuration: &configuration::Configuration, processing_graph
 }
 
 /// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html). Cf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).
-pub async fn tile_matrix_set(configuration: &configuration::Configuration, processing_graph_id: &str, tile_matrix_set_id: &str) -> Result<models::TileMatrixSet, Error<TileMatrixSetError>> {
+pub async fn tile_matrix_set(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str, tile_matrix_set_id: &str) -> Result<models::TileMatrixSet, Error<TileMatrixSetError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
     let p_path_tile_matrix_set_id = tile_matrix_set_id;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/tileMatrixSets/{tileMatrixSetId}", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id), tileMatrixSetId=crate::apis::urlencode(p_path_tile_matrix_set_id));
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id), tileMatrixSetId=p_path_tile_matrix_set_id.to_string());
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {
@@ -422,11 +427,12 @@ pub async fn tile_matrix_set(configuration: &configuration::Configuration, proce
 }
 
 /// Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html). Cf. [OGC Two Dimensional Tile Matrix Set and Tile Set Metadata](https://docs.ogc.org/is/17-083r4/17-083r4.html).
-pub async fn tile_matrix_sets(configuration: &configuration::Configuration, processing_graph_id: &str) -> Result<models::TileMatrixSets, Error<TileMatrixSetsError>> {
+pub async fn tile_matrix_sets(configuration: &configuration::Configuration, data_connector_id: &str, layer_id: &str) -> Result<models::TileMatrixSets, Error<TileMatrixSetsError>> {
     // add a prefix to parameters to efficiently prevent name collisions
-    let p_path_processing_graph_id = processing_graph_id;
+    let p_path_data_connector_id = data_connector_id;
+    let p_path_layer_id = layer_id;
 
-    let uri_str = format!("{}/ogc/ogc/{processingGraphId}/tileMatrixSets", configuration.base_path, processingGraphId=crate::apis::urlencode(p_path_processing_graph_id));
+    let uri_str = format!("{}/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets", configuration.base_path, dataConnectorId=crate::apis::urlencode(p_path_data_connector_id), layerId=crate::apis::urlencode(p_path_layer_id));
     let mut req_builder = configuration.client.request(reqwest::Method::GET, &uri_str);
 
     if let Some(ref user_agent) = configuration.user_agent {

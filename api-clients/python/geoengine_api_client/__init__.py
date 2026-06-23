@@ -44,6 +44,7 @@ __all__ = [
     "ApiKeyError",
     "ApiAttributeError",
     "ApiException",
+    "AccessConstraints",
     "AddDataset",
     "AddLayer",
     "AddLayerCollection",
@@ -127,6 +128,10 @@ __all__ = [
     "GdalSourceTimePlaceholder",
     "GeoJson",
     "GeoTransform",
+    "GeometryDimension",
+    "GeospatialData",
+    "GeospatialDataDataType",
+    "GeospatialDataDataTypeOneOf",
     "GetCoverageFormat",
     "GetMapExceptionFormat",
     "GfbioAbcdDataProviderDefinition",
@@ -300,6 +305,7 @@ __all__ = [
     "Statistics",
     "StatisticsParameters",
     "StrokeParam",
+    "Style",
     "Suffix",
     "SuggestMetaData",
     "SumAggregation",
@@ -312,21 +318,22 @@ __all__ = [
     "TaskStatusFailed",
     "TaskStatusRunning",
     "TaskStatusWithId",
-    "TemplatedTileLink",
     "TemporalAggregationMethod",
     "TemporalExtent",
     "TemporalRasterAggregation",
     "TemporalRasterAggregationParameters",
     "TextSymbology",
     "TileMatrix",
+    "TileMatrixLimits",
     "TileMatrixSet",
     "TileMatrixSetId",
     "TileMatrixSetIdOneOf",
     "TileMatrixSetItem",
     "TileMatrixSets",
-    "TileSetListItemResponse",
-    "TileSetMetadataResponse",
-    "TileSetsResponse",
+    "TilePoint",
+    "TileSet",
+    "TileSetItem",
+    "TileSets",
     "TilesCrs",
     "TilesCrsOneOf",
     "TilesCrsOneOf1",
@@ -419,6 +426,7 @@ from geoengine_api_client.exceptions import ApiAttributeError as ApiAttributeErr
 from geoengine_api_client.exceptions import ApiException as ApiException
 
 # import models into sdk package
+from geoengine_api_client.models.access_constraints import AccessConstraints as AccessConstraints
 from geoengine_api_client.models.add_dataset import AddDataset as AddDataset
 from geoengine_api_client.models.add_layer import AddLayer as AddLayer
 from geoengine_api_client.models.add_layer_collection import AddLayerCollection as AddLayerCollection
@@ -502,6 +510,10 @@ from geoengine_api_client.models.gdal_source_parameters import GdalSourceParamet
 from geoengine_api_client.models.gdal_source_time_placeholder import GdalSourceTimePlaceholder as GdalSourceTimePlaceholder
 from geoengine_api_client.models.geo_json import GeoJson as GeoJson
 from geoengine_api_client.models.geo_transform import GeoTransform as GeoTransform
+from geoengine_api_client.models.geometry_dimension import GeometryDimension as GeometryDimension
+from geoengine_api_client.models.geospatial_data import GeospatialData as GeospatialData
+from geoengine_api_client.models.geospatial_data_data_type import GeospatialDataDataType as GeospatialDataDataType
+from geoengine_api_client.models.geospatial_data_data_type_one_of import GeospatialDataDataTypeOneOf as GeospatialDataDataTypeOneOf
 from geoengine_api_client.models.get_coverage_format import GetCoverageFormat as GetCoverageFormat
 from geoengine_api_client.models.get_map_exception_format import GetMapExceptionFormat as GetMapExceptionFormat
 from geoengine_api_client.models.gfbio_abcd_data_provider_definition import GfbioAbcdDataProviderDefinition as GfbioAbcdDataProviderDefinition
@@ -675,6 +687,7 @@ from geoengine_api_client.models.static_number import StaticNumber as StaticNumb
 from geoengine_api_client.models.statistics import Statistics as Statistics
 from geoengine_api_client.models.statistics_parameters import StatisticsParameters as StatisticsParameters
 from geoengine_api_client.models.stroke_param import StrokeParam as StrokeParam
+from geoengine_api_client.models.style import Style as Style
 from geoengine_api_client.models.suffix import Suffix as Suffix
 from geoengine_api_client.models.suggest_meta_data import SuggestMetaData as SuggestMetaData
 from geoengine_api_client.models.sum_aggregation import SumAggregation as SumAggregation
@@ -687,21 +700,22 @@ from geoengine_api_client.models.task_status_completed import TaskStatusComplete
 from geoengine_api_client.models.task_status_failed import TaskStatusFailed as TaskStatusFailed
 from geoengine_api_client.models.task_status_running import TaskStatusRunning as TaskStatusRunning
 from geoengine_api_client.models.task_status_with_id import TaskStatusWithId as TaskStatusWithId
-from geoengine_api_client.models.templated_tile_link import TemplatedTileLink as TemplatedTileLink
 from geoengine_api_client.models.temporal_aggregation_method import TemporalAggregationMethod as TemporalAggregationMethod
 from geoengine_api_client.models.temporal_extent import TemporalExtent as TemporalExtent
 from geoengine_api_client.models.temporal_raster_aggregation import TemporalRasterAggregation as TemporalRasterAggregation
 from geoengine_api_client.models.temporal_raster_aggregation_parameters import TemporalRasterAggregationParameters as TemporalRasterAggregationParameters
 from geoengine_api_client.models.text_symbology import TextSymbology as TextSymbology
 from geoengine_api_client.models.tile_matrix import TileMatrix as TileMatrix
+from geoengine_api_client.models.tile_matrix_limits import TileMatrixLimits as TileMatrixLimits
 from geoengine_api_client.models.tile_matrix_set import TileMatrixSet as TileMatrixSet
 from geoengine_api_client.models.tile_matrix_set_id import TileMatrixSetId as TileMatrixSetId
 from geoengine_api_client.models.tile_matrix_set_id_one_of import TileMatrixSetIdOneOf as TileMatrixSetIdOneOf
 from geoengine_api_client.models.tile_matrix_set_item import TileMatrixSetItem as TileMatrixSetItem
 from geoengine_api_client.models.tile_matrix_sets import TileMatrixSets as TileMatrixSets
-from geoengine_api_client.models.tile_set_list_item_response import TileSetListItemResponse as TileSetListItemResponse
-from geoengine_api_client.models.tile_set_metadata_response import TileSetMetadataResponse as TileSetMetadataResponse
-from geoengine_api_client.models.tile_sets_response import TileSetsResponse as TileSetsResponse
+from geoengine_api_client.models.tile_point import TilePoint as TilePoint
+from geoengine_api_client.models.tile_set import TileSet as TileSet
+from geoengine_api_client.models.tile_set_item import TileSetItem as TileSetItem
+from geoengine_api_client.models.tile_sets import TileSets as TileSets
 from geoengine_api_client.models.tiles_crs import TilesCrs as TilesCrs
 from geoengine_api_client.models.tiles_crs_one_of import TilesCrsOneOf as TilesCrsOneOf
 from geoengine_api_client.models.tiles_crs_one_of1 import TilesCrsOneOf1 as TilesCrsOneOf1

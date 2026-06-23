@@ -20,24 +20,6 @@ import type { RasterDataType } from './RasterDataType';
 export interface StacProviderDataset {
     /**
      *
-     * @type {Array<StacProviderDatasetBand>}
-     * @memberof StacProviderDataset
-     */
-    bands: Array<StacProviderDatasetBand>;
-    /**
-     *
-     * @type {RasterDataType}
-     * @memberof StacProviderDataset
-     */
-    dataType: RasterDataType;
-    /**
-     *
-     * @type {string}
-     * @memberof StacProviderDataset
-     */
-    description: string;
-    /**
-     *
      * @type {string}
      * @memberof StacProviderDataset
      */
@@ -47,7 +29,13 @@ export interface StacProviderDataset {
      * @type {string}
      * @memberof StacProviderDataset
      */
-    projection: string;
+    description: string;
+    /**
+     *
+     * @type {RasterDataType}
+     * @memberof StacProviderDataset
+     */
+    dataType: RasterDataType;
     /**
      *
      * @type {SpatialResolution}
@@ -56,10 +44,22 @@ export interface StacProviderDataset {
     resolution: SpatialResolution;
     /**
      *
+     * @type {string}
+     * @memberof StacProviderDataset
+     */
+    projection: string;
+    /**
+     *
      * @type {SpatialGridDescriptor}
      * @memberof StacProviderDataset
      */
     spatialGrid: SpatialGridDescriptor;
+    /**
+     *
+     * @type {Array<StacProviderDatasetBand>}
+     * @memberof StacProviderDataset
+     */
+    bands: Array<StacProviderDatasetBand>;
 }
 /**
  * Check if a given object implements the StacProviderDataset interface.

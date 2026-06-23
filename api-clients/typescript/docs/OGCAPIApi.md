@@ -4,21 +4,21 @@ All URIs are relative to *https://geoengine.io/api*
 
 | Method | HTTP request | Description |
 |------------- | ------------- | -------------|
-| [**collection**](OGCAPIApi.md#collection) | **GET** /ogc/ogc/{processingGraphId}/collections/{processingGraphId} | OGC API Collection Metadata |
-| [**collectionTileset**](OGCAPIApi.md#collectiontileset) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata |
-| [**collectionTilesets**](OGCAPIApi.md#collectiontilesets) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles | OGC API Collection Tilesets List |
-| [**collections**](OGCAPIApi.md#collections) | **GET** /ogc/ogc/{processingGraphId}/collections | OGC API Collections List |
-| [**conformance**](OGCAPIApi.md#conformance) | **GET** /ogc/ogc/{processingGraphId}/conformance | OGC API Conformance Classes |
-| [**landingPage**](OGCAPIApi.md#landingpage) | **GET** /ogc/ogc/{processingGraphId}/ | OGC API Landing Page |
-| [**tile**](OGCAPIApi.md#tile) | **GET** /ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile |
-| [**tileMatrixSet**](OGCAPIApi.md#tilematrixset) | **GET** /ogc/ogc/{processingGraphId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition |
-| [**tileMatrixSets**](OGCAPIApi.md#tilematrixsets) | **GET** /ogc/ogc/{processingGraphId}/tileMatrixSets | OGC API Tile Matrix Set List |
+| [**collection**](OGCAPIApi.md#collection) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId} | OGC API Collection Metadata |
+| [**collectionTileset**](OGCAPIApi.md#collectiontileset) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId} | OGC API Collection Tileset Metadata |
+| [**collectionTilesets**](OGCAPIApi.md#collectiontilesets) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles | OGC API Collection Tilesets List |
+| [**collections**](OGCAPIApi.md#collections) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections | OGC API Collections List |
+| [**conformance**](OGCAPIApi.md#conformance) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/conformance | OGC API Conformance Classes |
+| [**landingPage**](OGCAPIApi.md#landingpage) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/ | OGC API Landing Page |
+| [**tile**](OGCAPIApi.md#tile) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol} | OGC API Tile |
+| [**tileMatrixSet**](OGCAPIApi.md#tilematrixset) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId} | OGC API Tile Matrix Set Definition |
+| [**tileMatrixSets**](OGCAPIApi.md#tilematrixsets) | **GET** /ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets | OGC API Tile Matrix Set List |
 
 
 
 ## collection
 
-> Collection collection(processingGraphId)
+> Collection collection(dataConnectorId, layerId)
 
 OGC API Collection Metadata
 
@@ -42,8 +42,10 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
   } satisfies CollectionRequest;
 
   try {
@@ -63,7 +65,8 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
 
 ### Return type
 
@@ -89,7 +92,7 @@ example().catch(console.error);
 
 ## collectionTileset
 
-> TileSetMetadataResponse collectionTileset(processingGraphId, collectionId, tileMatrixSetId)
+> TileSet collectionTileset(dataConnectorId, layerId, tileMatrixSetId)
 
 OGC API Collection Tileset Metadata
 
@@ -113,12 +116,12 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
-    // string | Collection identifier
-    collectionId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
-    // string | Tile matrix set identifier
-    tileMatrixSetId: tileMatrixSetId_example,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
+    // TileMatrixSetId | Tile matrix set identifier
+    tileMatrixSetId: ...,
   } satisfies CollectionTilesetRequest;
 
   try {
@@ -138,13 +141,13 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
-| **collectionId** | `string` | Collection identifier | [Defaults to `undefined`] |
-| **tileMatrixSetId** | `string` | Tile matrix set identifier | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
+| **tileMatrixSetId** | [](.md) | Tile matrix set identifier | [Defaults to `undefined`] |
 
 ### Return type
 
-[**TileSetMetadataResponse**](TileSetMetadataResponse.md)
+[**TileSet**](TileSet.md)
 
 ### Authorization
 
@@ -167,7 +170,7 @@ example().catch(console.error);
 
 ## collectionTilesets
 
-> TileSetsResponse collectionTilesets(processingGraphId, collectionId)
+> TileSets collectionTilesets(dataConnectorId, layerId)
 
 OGC API Collection Tilesets List
 
@@ -191,10 +194,10 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
-    // string | Collection identifier
-    collectionId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
   } satisfies CollectionTilesetsRequest;
 
   try {
@@ -214,12 +217,12 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
-| **collectionId** | `string` | Collection identifier | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
 
 ### Return type
 
-[**TileSetsResponse**](TileSetsResponse.md)
+[**TileSets**](TileSets.md)
 
 ### Authorization
 
@@ -242,7 +245,7 @@ example().catch(console.error);
 
 ## collections
 
-> Collections collections(processingGraphId, datetime, bbox, limit, f)
+> Collections collections(dataConnectorId, layerId, datetime, bbox, limit, f)
 
 OGC API Collections List
 
@@ -266,8 +269,10 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
     // string | Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (`..`). (optional)
     datetime: 2018-02-12T23:20:50Z,
     // string | Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max). (optional)
@@ -295,7 +300,8 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
 | **datetime** | `string` | Either a date-time or an interval, half-bounded or bounded. Date and time expressions adhere to RFC 3339. Half-bounded intervals use double dots (&#x60;..&#x60;). | [Optional] [Defaults to `undefined`] |
 | **bbox** | `string` | Only features with geometries intersecting the bounding box are selected. Provide four or six comma-separated numbers in CRS84 order: minLon,minLat,maxLon,maxLat (optionally with vertical min/max). | [Optional] [Defaults to `undefined`] |
 | **limit** | `number` | Optional limit for the number of first-level collections returned (minimum: 1, maximum: 10000, default: 10). | [Optional] [Defaults to `undefined`] |
@@ -325,7 +331,7 @@ example().catch(console.error);
 
 ## conformance
 
-> Conformance conformance(processingGraphId)
+> Conformance conformance(dataConnectorId, layerId)
 
 OGC API Conformance Classes
 
@@ -349,8 +355,10 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
   } satisfies ConformanceRequest;
 
   try {
@@ -370,7 +378,8 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
 
 ### Return type
 
@@ -396,7 +405,7 @@ example().catch(console.error);
 
 ## landingPage
 
-> LandingPage landingPage(processingGraphId)
+> LandingPage landingPage(dataConnectorId, layerId)
 
 OGC API Landing Page
 
@@ -420,8 +429,10 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
   } satisfies LandingPageRequest;
 
   try {
@@ -441,7 +452,8 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
 
 ### Return type
 
@@ -467,11 +479,11 @@ example().catch(console.error);
 
 ## tile
 
-> Blob tile(processingGraphId, collectionId, tileMatrixSetId, tileMatrix, tileRow, tileCol, datetime)
+> Blob tile(dataConnectorId, layerId, tileMatrixSetId, tileMatrix, tileRow, tileCol, datetime)
 
 OGC API Tile
 
-Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  &#x60;&#x60;&#x60;text pointOfOrigin (cornerOfOrigin&#x3D;topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---&gt; tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |&lt;-       tileWidth       -&gt;|  v                                                                   |        (in pixels)        | tileRow axis &#x60;&#x60;&#x60;  
 
 ### Example
 
@@ -491,12 +503,12 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
-    // string | Collection identifier
-    collectionId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
-    // string | Tile matrix set identifier
-    tileMatrixSetId: tileMatrixSetId_example,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
+    // TileMatrixSetId | Tile matrix set identifier
+    tileMatrixSetId: ...,
     // number | Tile matrix level
     tileMatrix: 56,
     // number | Tile row
@@ -524,9 +536,9 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
-| **collectionId** | `string` | Collection identifier | [Defaults to `undefined`] |
-| **tileMatrixSetId** | `string` | Tile matrix set identifier | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
+| **tileMatrixSetId** | [](.md) | Tile matrix set identifier | [Defaults to `undefined`] |
 | **tileMatrix** | `number` | Tile matrix level | [Defaults to `undefined`] |
 | **tileRow** | `number` | Tile row | [Defaults to `undefined`] |
 | **tileCol** | `number` | Tile column | [Defaults to `undefined`] |
@@ -558,7 +570,7 @@ example().catch(console.error);
 
 ## tileMatrixSet
 
-> TileMatrixSet tileMatrixSet(processingGraphId, tileMatrixSetId)
+> TileMatrixSet tileMatrixSet(dataConnectorId, layerId, tileMatrixSetId)
 
 OGC API Tile Matrix Set Definition
 
@@ -582,10 +594,12 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
-    // string | Tile matrix set identifier
-    tileMatrixSetId: tileMatrixSetId_example,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
+    // TileMatrixSetId | Tile matrix set identifier
+    tileMatrixSetId: ...,
   } satisfies TileMatrixSetRequest;
 
   try {
@@ -605,8 +619,9 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
-| **tileMatrixSetId** | `string` | Tile matrix set identifier | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
+| **tileMatrixSetId** | [](.md) | Tile matrix set identifier | [Defaults to `undefined`] |
 
 ### Return type
 
@@ -633,7 +648,7 @@ example().catch(console.error);
 
 ## tileMatrixSets
 
-> TileMatrixSets tileMatrixSets(processingGraphId)
+> TileMatrixSets tileMatrixSets(dataConnectorId, layerId)
 
 OGC API Tile Matrix Set List
 
@@ -657,8 +672,10 @@ async function example() {
   const api = new OGCAPIApi(config);
 
   const body = {
-    // string | ID of the processing graph, which is used as collection ID
-    processingGraphId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the data connector
+    dataConnectorId: 38400000-8cf0-11bd-b23e-10b96e4ef00d,
+    // string | ID of the layer, which is used as collection ID
+    layerId: layerId_example,
   } satisfies TileMatrixSetsRequest;
 
   try {
@@ -678,7 +695,8 @@ example().catch(console.error);
 
 | Name | Type | Description  | Notes |
 |------------- | ------------- | ------------- | -------------|
-| **processingGraphId** | `string` | ID of the processing graph, which is used as collection ID | [Defaults to `undefined`] |
+| **dataConnectorId** | `string` | ID of the data connector | [Defaults to `undefined`] |
+| **layerId** | `string` | ID of the layer, which is used as collection ID | [Defaults to `undefined`] |
 
 ### Return type
 

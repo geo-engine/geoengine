@@ -20,9 +20,10 @@ import type {
   Conformance,
   LandingPage,
   TileMatrixSet,
+  TileMatrixSetId,
   TileMatrixSets,
-  TileSetMetadataResponse,
-  TileSetsResponse,
+  TileSet,
+  TileSets,
 } from '../models/index';
 import {
     CollectionFromJSON,
@@ -37,31 +38,35 @@ import {
     LandingPageToJSON,
     TileMatrixSetFromJSON,
     TileMatrixSetToJSON,
+    TileMatrixSetIdFromJSON,
+    TileMatrixSetIdToJSON,
     TileMatrixSetsFromJSON,
     TileMatrixSetsToJSON,
-    TileSetMetadataResponseFromJSON,
-    TileSetMetadataResponseToJSON,
-    TileSetsResponseFromJSON,
-    TileSetsResponseToJSON,
+    TileSetFromJSON,
+    TileSetToJSON,
+    TileSetsFromJSON,
+    TileSetsToJSON,
 } from '../models/index';
 
 export interface CollectionRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 
 export interface CollectionTilesetRequest {
-    processingGraphId: string;
-    collectionId: string;
-    tileMatrixSetId: string;
+    dataConnectorId: string;
+    layerId: string;
+    tileMatrixSetId: TileMatrixSetId;
 }
 
 export interface CollectionTilesetsRequest {
-    processingGraphId: string;
-    collectionId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 
 export interface CollectionsRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
     datetime?: string;
     bbox?: string;
     limit?: number | null;
@@ -69,17 +74,19 @@ export interface CollectionsRequest {
 }
 
 export interface ConformanceRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 
 export interface LandingPageRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 
 export interface TileRequest {
-    processingGraphId: string;
-    collectionId: string;
-    tileMatrixSetId: string;
+    dataConnectorId: string;
+    layerId: string;
+    tileMatrixSetId: TileMatrixSetId;
     tileMatrix: number;
     tileRow: number;
     tileCol: number;
@@ -87,12 +94,14 @@ export interface TileRequest {
 }
 
 export interface TileMatrixSetRequest {
-    processingGraphId: string;
-    tileMatrixSetId: string;
+    dataConnectorId: string;
+    layerId: string;
+    tileMatrixSetId: TileMatrixSetId;
 }
 
 export interface TileMatrixSetsRequest {
-    processingGraphId: string;
+    dataConnectorId: string;
+    layerId: string;
 }
 
 /**
@@ -104,10 +113,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for collection without sending the request
      */
     async collectionRequestOpts(requestParameters: CollectionRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling collection().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling collection().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling collection().'
             );
         }
 
@@ -124,8 +140,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/collections/{processingGraphId}`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -159,17 +176,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for collectionTileset without sending the request
      */
     async collectionTilesetRequestOpts(requestParameters: CollectionTilesetRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling collectionTileset().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling collectionTileset().'
             );
         }
 
-        if (requestParameters['collectionId'] == null) {
+        if (requestParameters['layerId'] == null) {
             throw new runtime.RequiredError(
-                'collectionId',
-                'Required parameter "collectionId" was null or undefined when calling collectionTileset().'
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling collectionTileset().'
             );
         }
 
@@ -193,9 +210,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
-        urlPath = urlPath.replace(`{${"collectionId"}}`, encodeURIComponent(String(requestParameters['collectionId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
         urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
 
         return {
@@ -210,18 +227,18 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
      * OGC API Collection Tileset Metadata
      */
-    async collectionTilesetRaw(requestParameters: CollectionTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSetMetadataResponse>> {
+    async collectionTilesetRaw(requestParameters: CollectionTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSet>> {
         const requestOptions = await this.collectionTilesetRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) => TileSetMetadataResponseFromJSON(jsonValue));
+        return new runtime.JSONApiResponse(response, (jsonValue) => TileSetFromJSON(jsonValue));
     }
 
     /**
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
      * OGC API Collection Tileset Metadata
      */
-    async collectionTileset(requestParameters: CollectionTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSetMetadataResponse> {
+    async collectionTileset(requestParameters: CollectionTilesetRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSet> {
         const response = await this.collectionTilesetRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -230,17 +247,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for collectionTilesets without sending the request
      */
     async collectionTilesetsRequestOpts(requestParameters: CollectionTilesetsRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling collectionTilesets().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling collectionTilesets().'
             );
         }
 
-        if (requestParameters['collectionId'] == null) {
+        if (requestParameters['layerId'] == null) {
             throw new runtime.RequiredError(
-                'collectionId',
-                'Required parameter "collectionId" was null or undefined when calling collectionTilesets().'
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling collectionTilesets().'
             );
         }
 
@@ -257,9 +274,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
-        urlPath = urlPath.replace(`{${"collectionId"}}`, encodeURIComponent(String(requestParameters['collectionId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -273,18 +290,18 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
      * OGC API Collection Tilesets List
      */
-    async collectionTilesetsRaw(requestParameters: CollectionTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSetsResponse>> {
+    async collectionTilesetsRaw(requestParameters: CollectionTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<TileSets>> {
         const requestOptions = await this.collectionTilesetsRequestOpts(requestParameters);
         const response = await this.request(requestOptions, initOverrides);
 
-        return new runtime.JSONApiResponse(response, (jsonValue) => TileSetsResponseFromJSON(jsonValue));
+        return new runtime.JSONApiResponse(response, (jsonValue) => TileSetsFromJSON(jsonValue));
     }
 
     /**
      * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
      * OGC API Collection Tilesets List
      */
-    async collectionTilesets(requestParameters: CollectionTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSetsResponse> {
+    async collectionTilesets(requestParameters: CollectionTilesetsRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<TileSets> {
         const response = await this.collectionTilesetsRaw(requestParameters, initOverrides);
         return await response.value();
     }
@@ -293,10 +310,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for collections without sending the request
      */
     async collectionsRequestOpts(requestParameters: CollectionsRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling collections().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling collections().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling collections().'
             );
         }
 
@@ -329,8 +353,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/collections`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/collections`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -364,10 +389,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for conformance without sending the request
      */
     async conformanceRequestOpts(requestParameters: ConformanceRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling conformance().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling conformance().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling conformance().'
             );
         }
 
@@ -384,8 +416,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/conformance`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/conformance`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -419,10 +452,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for landingPage without sending the request
      */
     async landingPageRequestOpts(requestParameters: LandingPageRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling landingPage().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling landingPage().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling landingPage().'
             );
         }
 
@@ -439,8 +479,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
@@ -474,17 +515,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for tile without sending the request
      */
     async tileRequestOpts(requestParameters: TileRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling tile().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling tile().'
             );
         }
 
-        if (requestParameters['collectionId'] == null) {
+        if (requestParameters['layerId'] == null) {
             throw new runtime.RequiredError(
-                'collectionId',
-                'Required parameter "collectionId" was null or undefined when calling tile().'
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling tile().'
             );
         }
 
@@ -533,9 +574,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/collections/{collectionId}/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
-        urlPath = urlPath.replace(`{${"collectionId"}}`, encodeURIComponent(String(requestParameters['collectionId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/collections/{layerId}/map/tiles/{tileMatrixSetId}/{tileMatrix}/{tileRow}/{tileCol}`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
         urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
         urlPath = urlPath.replace(`{${"tileMatrix"}}`, encodeURIComponent(String(requestParameters['tileMatrix'])));
         urlPath = urlPath.replace(`{${"tileRow"}}`, encodeURIComponent(String(requestParameters['tileRow'])));
@@ -550,7 +591,7 @@ export class OGCAPIApi extends runtime.BaseAPI {
     }
 
     /**
-     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```  
      * OGC API Tile
      */
     async tileRaw(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<runtime.ApiResponse<Blob>> {
@@ -561,7 +602,7 @@ export class OGCAPIApi extends runtime.BaseAPI {
     }
 
     /**
-     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).
+     * Cf. [OGC API - Tiles - Part 1: Core](https://docs.ogc.org/is/19-072/19-072.html).  ## Sketch  ```text pointOfOrigin (cornerOfOrigin=topLeft)  tileMatrixMinX, tileMatrixMaxY                                               tileMatrixMaxX        |                                                                            |        v                                                                            v        +---------------------------+---------------------------+-----+---------------------------+ ---> tileCol axis        | 0,0                       | 1,0                       | ... | matrixWidth-1,0           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,1                       | 1,1                       | ... | matrixWidth-1,1           |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | ...                       | ...                       | ... | ...                       |        |                           |                           |     |                           |        +---------------------------+---------------------------+-----+---------------------------+        | 0,                        | 1,                        | ... | matrixWidth-1,            |  v     |   matrixHeight-1          |   matrixHeight-1          |     |   matrixHeight-1          | --+ tileHeight tileMatrixMinY                     |                           |     |                           |   | (in pixels)        +---------------------------+---------------------------+-----+---------------------------+ --+  |                                                                   |<-       tileWidth       ->|  v                                                                   |        (in pixels)        | tileRow axis ```  
      * OGC API Tile
      */
     async tile(requestParameters: TileRequest, initOverrides?: RequestInit | runtime.InitOverrideFunction): Promise<Blob> {
@@ -573,10 +614,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for tileMatrixSet without sending the request
      */
     async tileMatrixSetRequestOpts(requestParameters: TileMatrixSetRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling tileMatrixSet().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling tileMatrixSet().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling tileMatrixSet().'
             );
         }
 
@@ -600,8 +648,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/tileMatrixSets/{tileMatrixSetId}`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets/{tileMatrixSetId}`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
         urlPath = urlPath.replace(`{${"tileMatrixSetId"}}`, encodeURIComponent(String(requestParameters['tileMatrixSetId'])));
 
         return {
@@ -636,10 +685,17 @@ export class OGCAPIApi extends runtime.BaseAPI {
      * Creates request options for tileMatrixSets without sending the request
      */
     async tileMatrixSetsRequestOpts(requestParameters: TileMatrixSetsRequest): Promise<runtime.RequestOpts> {
-        if (requestParameters['processingGraphId'] == null) {
+        if (requestParameters['dataConnectorId'] == null) {
             throw new runtime.RequiredError(
-                'processingGraphId',
-                'Required parameter "processingGraphId" was null or undefined when calling tileMatrixSets().'
+                'dataConnectorId',
+                'Required parameter "dataConnectorId" was null or undefined when calling tileMatrixSets().'
+            );
+        }
+
+        if (requestParameters['layerId'] == null) {
+            throw new runtime.RequiredError(
+                'layerId',
+                'Required parameter "layerId" was null or undefined when calling tileMatrixSets().'
             );
         }
 
@@ -656,8 +712,9 @@ export class OGCAPIApi extends runtime.BaseAPI {
             }
         }
 
-        let urlPath = `/ogc/ogc/{processingGraphId}/tileMatrixSets`;
-        urlPath = urlPath.replace(`{${"processingGraphId"}}`, encodeURIComponent(String(requestParameters['processingGraphId'])));
+        let urlPath = `/ogc/ogc/{dataConnectorId}/{layerId}/tileMatrixSets`;
+        urlPath = urlPath.replace(`{${"dataConnectorId"}}`, encodeURIComponent(String(requestParameters['dataConnectorId'])));
+        urlPath = urlPath.replace(`{${"layerId"}}`, encodeURIComponent(String(requestParameters['layerId'])));
 
         return {
             path: urlPath,
