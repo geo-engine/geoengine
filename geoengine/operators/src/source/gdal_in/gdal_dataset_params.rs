@@ -72,7 +72,7 @@ impl GdalDatasetParameters {
         SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
     }
 
-    pub fn gdal_config_options_vsi_curl(&self) -> &'static [(&'static str, &'static str)] {
+    pub fn gdal_config_options_vsi_curl() -> &'static [(&'static str, &'static str)] {
         &[
             ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
             ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif,.tiff,.jp2,.ovr"),
@@ -91,11 +91,10 @@ impl GdalDatasetParameters {
             return self.gdal_config_options.clone();
         }
 
-        let mut opts = self.gdal_config_options.clone().unwrap_or(Vec::new());
+        let mut opts = self.gdal_config_options.clone().unwrap_or_default();
         let opt_keys: Vec<&str> = opts.iter().map(|(k, _)| k.as_ref()).collect();
 
-        let mut use_defaults: Vec<(String, String)> = self
-            .gdal_config_options_vsi_curl()
+        let mut use_defaults: Vec<(String, String)> = Self::gdal_config_options_vsi_curl()
             .iter()
             .filter(|(k, _)| !opt_keys.contains(k))
             .map(|(k, v)| (k.to_string(), v.to_string()))

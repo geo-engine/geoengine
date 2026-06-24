@@ -414,8 +414,8 @@ impl GdalProcessPool {
 
             let res = sender
                 .send(job.request)
-                .map_err(|e| GdalProcessPoolError::from(e))
-                .and_then(|()| receiver.recv().map_err(|e| GdalProcessPoolError::from(e)));
+                .map_err(GdalProcessPoolError::from)
+                .and_then(|()| receiver.recv().map_err(GdalProcessPoolError::from));
 
             let is_dead = res.is_err();
             let _ = job.respond_to.send(res);
@@ -810,6 +810,10 @@ impl GdalPoolWorkerInstance {
     }
 
     #[cfg(feature = "gdalpool_dedup_requests")]
+    /// Read gdal tiles with leader & follower feature.
+    ///
+    /// # Panics
+    /// This function will panic if watch channel fails    
     pub async fn read_data<P: Pixel>(
         &self,
         request: IpcChannelMessage,
@@ -852,13 +856,9 @@ impl GdalPoolWorkerInstance {
                     .expect("Watch channel must contain a value after changed() yields")
                     .clone();
 
-                let payload: GdalIpcPayload<P> = shared_res
-                    .as_ref()
-                    .clone()
-                    .map_err(GdalProcessPoolError::from)?
-                    .into();
+                let payload: GdalIpcPayload<P> = shared_res.as_ref().clone()?.into();
 
-                return Ok(payload);
+                Ok(payload)
             }
             TileReadRole::Leader(tx) => {
                 let _cleanup_guard = LeaderCleanupGuard {
@@ -889,8 +889,7 @@ impl GdalPoolWorkerInstance {
                         .await
                         .map_err(|_| GdalProcessPoolError::WorkerPanic)
                         .flatten()
-                        .map(|ipc_res| ipc_res.map_err(GdalProcessPoolError::from))
-                        .flatten()
+                        .and_then(|ipc_res| ipc_res.map_err(GdalProcessPoolError::from))
                 } else {
                     Err(GdalProcessPoolError::WorkerPanic)
                 };
