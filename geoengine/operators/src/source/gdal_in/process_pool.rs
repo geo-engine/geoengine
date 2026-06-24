@@ -318,24 +318,14 @@ impl GdalProcessPool {
             let workers = tokio::task::spawn_blocking(move || {
                 let mut w = Vec::with_capacity(number_of_processes);
                 for id in 0..number_of_processes {
-                    let (guard, tx, rx) =
-                        spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()
-                            .expect("Error while spawning GDAL worker process");
-
-                    let (job_tx, mut job_rx) = mpsc::unbounded_channel();
-                    let b_tx_worker = b_tx_clone_2.clone();
-
-                    std::thread::Builder::new()
-                        .name(format!("gdal-worker-companion-{id}"))
-                        .spawn(move || {
-                            Self::worker_companion_loop(id, &tx, &rx, &mut job_rx, &b_tx_worker);
-                        })
-                        .expect("Failed to spawn persistent GDAL companion thread");
+                    let (child_guard, _join_handle, job_tx) =
+                        Self::create_worker_with_id(id, b_tx_clone_2.clone())
+                            .expect("Failed to create worker");
 
                     w.push(WorkerProcess {
                         _id: id,
                         job_tx,
-                        child_guard: guard,
+                        child_guard,
                         affinity: None,
                     });
                     std::thread::sleep(Duration::from_millis(INITIAL_SPAWN_DELAY_MS));
@@ -356,6 +346,32 @@ impl GdalProcessPool {
         });
 
         Arc::new(Self { broker_tx })
+    }
+
+    fn create_worker_with_id(
+        worker_id: usize,
+        broker_tx: mpsc::Sender<BrokerCommand>,
+    ) -> Result<
+        (
+            ChildProcessGuard,
+            std::thread::JoinHandle<()>,
+            mpsc::UnboundedSender<WorkerJob>,
+        ),
+        GdalProcessPoolError,
+    > {
+        let (guard, tx, rx) =
+            spawn_ipc_server_process::<IpcChannelMessage, IpcProcessRasterResult>()?;
+
+        let (job_tx, mut job_rx) = mpsc::unbounded_channel();
+
+        let handle = std::thread::Builder::new()
+            .name(format!("gdal-worker-companion-{worker_id}"))
+            .spawn(move || {
+                Self::worker_companion_loop(worker_id, &tx, &rx, &mut job_rx, &broker_tx);
+            })
+            .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+
+        Ok((guard, handle, job_tx))
     }
 
     fn worker_companion_loop(
@@ -447,32 +463,15 @@ impl GdalProcessPool {
 
                         let b_tx = broker_tx.clone();
                         tokio::task::spawn_blocking(move || {
-                            if let Ok((guard, tx, rx)) = spawn_ipc_server_process::<
-                                IpcChannelMessage,
-                                IpcProcessRasterResult,
-                            >() {
-                                let (job_tx, mut job_rx) = mpsc::unbounded_channel();
-                                let b_tx_worker = b_tx.clone();
+                            let (child_guard, _join_handle, job_tx) =
+                                Self::create_worker_with_id(worker_id, b_tx.clone())
+                                    .expect("Failed to create worker");
 
-                                std::thread::Builder::new()
-                                    .name(format!("gdal-worker-recovered-{worker_id}"))
-                                    .spawn(move || {
-                                        Self::worker_companion_loop(
-                                            worker_id,
-                                            &tx,
-                                            &rx,
-                                            &mut job_rx,
-                                            &b_tx_worker,
-                                        );
-                                    })
-                                    .expect("Failed to spawn replacement companion thread");
-
-                                let _ = b_tx.blocking_send(BrokerCommand::WorkerReplaced {
-                                    worker_id,
-                                    child_guard: guard,
-                                    job_tx,
-                                });
-                            }
+                            let _ = b_tx.blocking_send(BrokerCommand::WorkerReplaced {
+                                worker_id,
+                                child_guard,
+                                job_tx,
+                            });
                         });
                     }
                     BrokerCommand::WorkerReplaced {
