@@ -150,6 +150,16 @@ impl SpatialReference {
     /// Computes the equatorial radius of the ellipsoid associated with this spatial reference in meters.
     /// This is a helper function for calculating the meters per unit for projections that use degrees as their unit of measurement.
     pub fn meters_per_unit(self) -> Result<f64> {
+        // hardcode some projections that are commonly
+        match (self.authority, self.code) {
+            (SpatialReferenceAuthority::Epsg, 4326) => return Ok(111_319.490_8), // WGS 84
+            (SpatialReferenceAuthority::Epsg, 3857 /* Web Mercator */ |  25832 /* ETRS89 / UTM zone 32N */)  => {
+                return Ok(1.0);
+            } 
+            
+            _ => {}
+        }
+
         if self.uses_meters()? {
             return Ok(1.0);
         }
@@ -215,6 +225,11 @@ impl SpatialReference {
     /// This is a heuristic check and may not be 100% accurate for all projections.
     pub fn uses_meters(self) -> Result<bool> {
         let proj_string = self.proj_string()?;
+
+        if proj_string.contains("+units=m") {
+            return Ok(true);
+        }
+
         let proj = Proj::new_known_crs("EPSG:4326", &proj_string, None).map_err(|_| {
             error::Error::InvalidProjDefinition {
                 proj_definition: proj_string.clone(),
@@ -688,6 +703,7 @@ mod tests {
             (4326, false), // WGS 84
             (3857, true),  // Web Mercator
             (25832, true), // ETRS89 / UTM zone 32N
+            (4258, false) // ETRS89
         ] {
             let spatial_ref = SpatialReference::new(SpatialReferenceAuthority::Epsg, *epsg);
             assert_eq!(
@@ -714,5 +730,14 @@ mod tests {
         );
 
         assert_approx_eq!(f64, web_mercator.meters_per_unit().unwrap(), 1.0);
+
+        assert_approx_eq!(
+            f64,
+            SpatialReference::new(SpatialReferenceAuthority::Epsg, 4258) // ETRS89
+                .meters_per_unit()
+                .unwrap(),
+            111_319.490_8,
+            epsilon = 0.000_1
+        );
     }
 }
