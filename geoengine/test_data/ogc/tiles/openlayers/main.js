@@ -260,7 +260,10 @@ const wgs84Map = new Map({
     center: [0, 0],
     extent: [-180, -85, 180, 85],
     zoom: 0,
+    minZoom: 0,
     projection: "EPSG:4326",
+    showFullExtent: true,
+    multiWorld: true,
     showFullExtent: true,
   }),
 });
@@ -279,7 +282,10 @@ const webMercatorMap = new Map({
       20037508.342789244,
     ],
     zoom: 0,
+    minZoom: 0,
     projection: "EPSG:3857",
+    showFullExtent: true,
+    multiWorld: true,
     showFullExtent: true,
   }),
 });
