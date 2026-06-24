@@ -2551,7 +2551,7 @@
           "OGC API"
         ],
         "summary": "OGC API Collections List",
-        "description": "Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).",
+        "description": "Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).\n\nInside Geo Engine, every [`Layer`] gets its own OGC API endpoint.\nInside this endpoint, this [`Layer`] is represented as a single [`Collection`](ogcapi_types::common::Collection).\nTherefore, the list of collections for a given layer will always contain exactly one collection,\nand the `collectionId` will always be the same as the [`LayerId`].\n\n",
         "operationId": "collections",
         "parameters": [
           {
