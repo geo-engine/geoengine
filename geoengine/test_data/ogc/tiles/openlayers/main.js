@@ -30,10 +30,46 @@ async function getSessionToken() {
   }
 }
 
-async function addWgs84TileLayer(map) {
+async function tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken) {
+  const tmsUrl = `${SERVER_URL}/api/ogc/${dataConnectorId}/${layerId}/collections/${layerId}/map/tiles/${tms}`;
+
+  return await urlToBlobUrl(tmsUrl, sessionToken, async (metadata) => {
+    for (const link of metadata.links) {
+      console.log("TMS link:", link.rel, link.href, link.type);
+      if (link.rel === "http://www.opengis.net/def/rel/ogc/1.0/tiling-scheme") {
+        link.href = await urlToBlobUrl(link.href, sessionToken);
+      }
+    }
+  });
+}
+
+async function urlToBlobUrl(url, sessionToken, interceptor) {
+  const response = await fetch(url, {
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+    },
+  });
+  const metadata = await response.json();
+
+  if (interceptor) {
+    await interceptor(metadata);
+  }
+
+  const blob = new Blob([JSON.stringify(metadata)], {
+    type: "application/json",
+  });
+  return URL.createObjectURL(blob);
+}
+
+async function addWgs84TileLayer(map, sessionToken) {
   const collections = await (
     await fetch(
       `${SERVER_URL}/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20`,
+      {
+        headers: {
+          Authorization: `Bearer ${sessionToken}`,
+        },
+      },
     )
   ).json();
   const collection = collections.items.find((c) => c.name === "NDVI");
@@ -48,11 +84,12 @@ async function addWgs84TileLayer(map) {
   map.addLayer(
     new TileLayer({
       source: new OGCMapTile({
-        url: tileUrl,
+        url: await tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken),
         context: {
           datetime: "2014-04-01T00:00:00Z",
         },
         wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
+        tileLoadFunction: tileLoadFunction(sessionToken),
       }),
     }),
   );
@@ -60,21 +97,27 @@ async function addWgs84TileLayer(map) {
     new TileLayer({
       source: new TileDebug({
         source: new OGCMapTile({
-          url: tileUrl,
+          url: await tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken),
           context: {
             datetime: "2014-04-01T00:00:00Z",
           },
           wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
+          tileLoadFunction: tileLoadFunction(sessionToken),
         }),
       }),
     }),
   );
 }
 
-async function addWebMercatorTileLayer(map) {
+async function addWebMercatorTileLayer(map, sessionToken) {
   const collections = await (
     await fetch(
       `${SERVER_URL}/api/layers/collections/cbb21ee3-d15d-45c5-a175-66964adf4e85/tags%3A%2A?offset=0&limit=20`,
+      {
+        headers: {
+          Authorization: `Bearer ${sessionToken}`,
+        },
+      },
     )
   ).json();
   const collection = collections.items.find((c) => c.name === "NDVI3857");
@@ -89,11 +132,12 @@ async function addWebMercatorTileLayer(map) {
   map.addLayer(
     new TileLayer({
       source: new OGCMapTile({
-        url: tileUrl,
+        url: await tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken),
         context: {
           datetime: "2014-04-01T00:00:00Z",
         },
         wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
+        tileLoadFunction: tileLoadFunction(sessionToken),
       }),
     }),
   );
@@ -101,15 +145,45 @@ async function addWebMercatorTileLayer(map) {
     new TileLayer({
       source: new TileDebug({
         source: new OGCMapTile({
-          url: tileUrl,
+          url: await tmsBlobUrl(dataConnectorId, layerId, tms, sessionToken),
           context: {
             datetime: "2014-04-01T00:00:00Z",
           },
           wrapX: false, // CRITICAL: Stops OpenLayers from forcing standard world-wrapping math
+          tileLoadFunction: tileLoadFunction(sessionToken),
         }),
       }),
     }),
   );
+}
+
+function tileLoadFunction(sessionToken) {
+  return async function (olTile, src) {
+    console.log("tileLoadFunction", olTile, src);
+
+    try {
+      const response = await fetch(src, {
+        headers: {
+          Authorization: `Bearer ${sessionToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`Tile fetch failed with status: ${response.status}`);
+      }
+
+      const blob = await response.blob();
+
+      // Successfully assign the object URL to the image element
+      olTile.getImage().src = URL.createObjectURL(blob);
+    } catch (error) {
+      console.error("Error loading OGC tile:", error);
+
+      // CRITICAL: You must explicitly catch errors and notify OpenLayers,
+      // otherwise the map will wait indefinitely for this tile to resolve.
+      olTile.setState(TileState.ERROR);
+    }
+  };
 }
 
 async function addCitiesLayer(map) {
@@ -212,7 +286,7 @@ const webMercatorMap = new Map({
 
 const sessionToken = await getSessionToken();
 await Promise.all([
-  addWgs84TileLayer(wgs84Map),
-  addWebMercatorTileLayer(webMercatorMap),
+  addWgs84TileLayer(wgs84Map, sessionToken),
+  addWebMercatorTileLayer(webMercatorMap, sessionToken),
 ]);
 await Promise.all([addCitiesLayer(wgs84Map), addCitiesLayer(webMercatorMap)]);
