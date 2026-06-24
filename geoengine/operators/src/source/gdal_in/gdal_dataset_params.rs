@@ -72,6 +72,40 @@ impl GdalDatasetParameters {
         SpatialGridDefinition::new(gdal_geo_transform, self.dataset_bounds())
     }
 
+    pub fn gdal_config_options_vsi_curl(&self) -> &'static [(&'static str, &'static str)] {
+        &[
+            ("GDAL_DISABLE_READDIR_ON_OPEN", "EMPTY_DIR"),
+            ("CPL_VSIL_CURL_ALLOWED_EXTENSIONS", ".tif,.tiff,.jp2,.ovr"),
+            ("CPL_VSIL_CURL_CHUNK_SIZE", "1048576"), // 1mb TODO: need to tune this!
+            ("VSI_CACHE", "TRUE"),
+            ("VSI_CACHE_SIZE", "67108864 "), // 64mb per worker! TODO: need to tune this!
+        ]
+    }
+
+    pub fn is_vis_curl(&self) -> bool {
+        self.file_path.starts_with("/vsicurl/") || self.file_path.starts_with("/vsis3/")
+    }
+
+    pub fn gdal_config_options_with_defaults(&self) -> Option<Vec<(String, String)>> {
+        if !self.is_vis_curl() {
+            return self.gdal_config_options.clone();
+        }
+
+        let mut opts = self.gdal_config_options.clone().unwrap_or(Vec::new());
+        let opt_keys: Vec<&str> = opts.iter().map(|(k, _)| k.as_ref()).collect();
+
+        let mut use_defaults: Vec<(String, String)> = self
+            .gdal_config_options_vsi_curl()
+            .iter()
+            .filter(|(k, _)| !opt_keys.contains(k))
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+
+        opts.append(&mut use_defaults);
+
+        if opts.is_empty() { None } else { Some(opts) }
+    }
+
     pub fn max_retries(&self) -> Option<usize> {
         self.retry.map(|r| r.max_retries)
     }

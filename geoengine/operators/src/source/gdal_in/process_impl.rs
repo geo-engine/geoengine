@@ -183,11 +183,11 @@ impl GdalDatasetHolder {
 
         // reverts the thread local configs on drop
         let thread_local_configs: Option<GdalConfigOptions> = dataset_params
-            .gdal_config_options
+            .gdal_config_options_with_defaults()
             .as_ref()
             .map(|config_options| GdalConfigOptions::new(config_options))
             .transpose()
-            .expect("Thread local options must not fail");
+            .expect("GdalConfigOptions must not fail");
 
         let ds = gdal_open_ex_gdal_error(
             &dataset_params.file_path,
@@ -296,7 +296,7 @@ impl GdalHandling {
         dataset_params: &GdalDatasetParameters,
         read_advise: GdalReadAdvise,
     ) -> Result<super::process_common::GdalIpcPayload<T>, IpcProcessError> {
-        let is_vsi_curl = dataset_params.file_path.starts_with("/vsicurl/");
+        let is_vsi_curl = dataset_params.is_vis_curl();
         let max_retries = dataset_params.max_retries().unwrap_or(0);
         let dp = &dataset_params;
 
