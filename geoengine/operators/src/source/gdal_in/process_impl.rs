@@ -120,7 +120,7 @@ pub fn spawn_ipc_server_process<S, R>()
         .arg("debug") // FIXME: paste log level here!
         .stderr(std::process::Stdio::inherit()); // This sends child logs to the parent's stderr;
 
-    if cfg!(test) {
+    if std::cfg!(debug_assertions) {
         // llcov inserts these env params. We need to remove them from the gdal-processor processes. Otherwise the processes overwrite the main process data and the files become corrupt.
         cmd.env_remove("LLVM_PROFILE_FILE")
             .env_remove("LLVM_PROFILE_FILE_NAME");
