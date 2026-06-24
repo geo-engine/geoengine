@@ -155,8 +155,7 @@ impl SpatialReference {
             (SpatialReferenceAuthority::Epsg, 4326) => return Ok(111_319.490_8), // WGS 84
             (SpatialReferenceAuthority::Epsg, 3857 /* Web Mercator */ |  25832 /* ETRS89 / UTM zone 32N */)  => {
                 return Ok(1.0);
-            } 
-            
+            },
             _ => {}
         }
 
@@ -703,7 +702,7 @@ mod tests {
             (4326, false), // WGS 84
             (3857, true),  // Web Mercator
             (25832, true), // ETRS89 / UTM zone 32N
-            (4258, false) // ETRS89
+            (4258, false), // ETRS89
         ] {
             let spatial_ref = SpatialReference::new(SpatialReferenceAuthority::Epsg, *epsg);
             assert_eq!(

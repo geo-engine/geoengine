@@ -54,6 +54,9 @@ pub enum OgcApiError {
     #[snafu(display("Missing spatial reference in result descriptor"))]
     MissingSpatialReference,
 
+    #[snafu(display("Missing time in query"))]
+    MissingTime,
+
     #[snafu(display("Unsupported spatial reference authority: {from}"))]
     UnsupportedSpatialReferenceAuthority { from: SpatialReferenceAuthority },
 
@@ -68,19 +71,20 @@ pub enum OgcApiError {
 impl OgcApiError {
     pub fn status_code(&self) -> StatusCode {
         match self {
-            OgcApiError::CollectionNotFound { .. }
-            | OgcApiError::LayerNotFound { .. }
-            | OgcApiError::TileMatrixSetNotFound { .. } => StatusCode::NOT_FOUND,
-            OgcApiError::ExpectedRaster { .. }
-            | OgcApiError::InvalidTileCoordinates { .. }
-            | OgcApiError::Unsupported3DBoundingBox { .. }
-            | OgcApiError::InvalidBoundingBox { .. }
-            | OgcApiError::MissingSpatialReference => StatusCode::BAD_REQUEST,
-            OgcApiError::Internal { .. }
-            | OgcApiError::InitializingProcessingGraph { .. }
-            | OgcApiError::UnsupportedSpatialReferenceAuthority { .. }
-            | OgcApiError::UnknownSpatialReferenceInfo { .. }
-            | OgcApiError::TileMatrixSetDefinitionNotAvailable { .. } => {
+            Self::CollectionNotFound { .. }
+            | Self::LayerNotFound { .. }
+            | Self::TileMatrixSetNotFound { .. } => StatusCode::NOT_FOUND,
+            Self::ExpectedRaster { .. }
+            | Self::InvalidBoundingBox { .. }
+            | Self::InvalidTileCoordinates { .. }
+            | Self::MissingSpatialReference
+            | Self::MissingTime
+            | Self::Unsupported3DBoundingBox { .. } => StatusCode::BAD_REQUEST,
+            Self::Internal { .. }
+            | Self::InitializingProcessingGraph { .. }
+            | Self::TileMatrixSetDefinitionNotAvailable { .. }
+            | Self::UnknownSpatialReferenceInfo { .. }
+            | Self::UnsupportedSpatialReferenceAuthority { .. } => {
                 StatusCode::INTERNAL_SERVER_ERROR
             }
         }
@@ -88,25 +92,24 @@ impl OgcApiError {
 
     pub fn title(&self) -> &str {
         match self {
-            OgcApiError::Internal { .. } => "An internal error occurred",
-            OgcApiError::ExpectedRaster { .. } => "Invalid processing graph",
-            OgcApiError::CollectionNotFound { .. } => "Collection not found",
-            OgcApiError::LayerNotFound { .. } => "Layer not found",
-            OgcApiError::TileMatrixSetNotFound { .. } => "Tile matrix set not found",
-            OgcApiError::InvalidTileCoordinates { .. } => "Invalid tile coordinates",
-            OgcApiError::Unsupported3DBoundingBox { .. } => "Unsupported 3D bounding box",
-            OgcApiError::InvalidBoundingBox { .. } => "Invalid bounding box",
-            OgcApiError::InitializingProcessingGraph { .. } => {
-                "Error while initializing processing graph"
-            }
-            OgcApiError::MissingSpatialReference => "Missing spatial reference",
-            OgcApiError::UnsupportedSpatialReferenceAuthority { .. } => {
-                "Unsupported spatial reference authority"
-            }
-            OgcApiError::TileMatrixSetDefinitionNotAvailable { .. } => {
+            Self::CollectionNotFound { .. } => "Collection not found",
+            Self::ExpectedRaster { .. } => "Invalid processing graph",
+            Self::InitializingProcessingGraph { .. } => "Error while initializing processing graph",
+            Self::Internal { .. } => "An internal error occurred",
+            Self::InvalidBoundingBox { .. } => "Invalid bounding box",
+            Self::InvalidTileCoordinates { .. } => "Invalid tile coordinates",
+            Self::LayerNotFound { .. } => "Layer not found",
+            Self::MissingSpatialReference => "Missing spatial reference",
+            Self::MissingTime => "Missing time",
+            Self::TileMatrixSetDefinitionNotAvailable { .. } => {
                 "Tile matrix set definition not available"
             }
-            OgcApiError::UnknownSpatialReferenceInfo { .. } => "Unknown spatial reference info",
+            Self::TileMatrixSetNotFound { .. } => "Tile matrix set not found",
+            Self::UnknownSpatialReferenceInfo { .. } => "Unknown spatial reference info",
+            Self::Unsupported3DBoundingBox { .. } => "Unsupported 3D bounding box",
+            Self::UnsupportedSpatialReferenceAuthority { .. } => {
+                "Unsupported spatial reference authority"
+            }
         }
     }
 }

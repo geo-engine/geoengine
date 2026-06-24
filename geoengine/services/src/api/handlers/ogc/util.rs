@@ -20,10 +20,6 @@ use geoengine_datatypes::{
     spatial_reference::{SpatialReferenceAuthority, SpatialReferenceOption},
 };
 use geoengine_operators::engine::{RasterResultDescriptor, TypedResultDescriptor};
-// use geoengine_datatypes::{
-//     error::BoxedResultExt,
-//     primitives::{BoundingBox2D, Coordinate2D},
-// };
 use ogcapi_types::common::{Authority, Bbox as OgcBbox, Crs, Datetime as OgcDatetime, Link};
 use serde::{Deserialize, de::Error as _};
 use snafu::ResultExt;

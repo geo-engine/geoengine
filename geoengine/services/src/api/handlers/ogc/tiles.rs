@@ -16,7 +16,7 @@ use crate::{
         },
         model::datatypes::{DataProviderId, LayerId},
     },
-    config,
+    config::{self},
     contexts::{ApplicationContext, SessionContext},
     layers::layer::Layer,
     projects::Symbology,
@@ -274,6 +274,35 @@ impl TileQuery {
             tile_col,
         })
     }
+
+    fn invalid_tile_coordinates_error(&self) -> OgcApiError {
+        OgcApiError::InvalidTileCoordinates {
+            matrix: self.tile_matrix.to_string(),
+            row: self.tile_row,
+            col: self.tile_col,
+        }
+    }
+
+    fn zoom_level(&self, max_zoom_level: u32) -> OgcApiResult<u32> {
+        let Some(zoom_level) = max_zoom_level.checked_sub(u32::from(self.tile_matrix)) else {
+            return Err(self.invalid_tile_coordinates_error());
+        };
+        Ok(zoom_level)
+    }
+
+    fn check_inside_bounds(
+        &self,
+        expected_number_of_tiles_at_zoom_level: GridShape2D,
+    ) -> OgcApiResult<()> {
+        let (tile_row, tile_col) = (self.tile_row as usize, self.tile_col as usize);
+        if tile_row >= expected_number_of_tiles_at_zoom_level.y()
+            || tile_col >= expected_number_of_tiles_at_zoom_level.x()
+        {
+            return Err(self.invalid_tile_coordinates_error());
+        }
+
+        Ok(())
+    }
 }
 
 /// OGC API Tile
@@ -358,7 +387,7 @@ pub async fn tile<C: ApplicationContext>(
         initialized_operator.result_descriptor(),
         &tiling_specification,
     ) - 1;
-    let zoom_level = max_zoom_level.saturating_sub(u32::from(query.tile_matrix));
+    let zoom_level = query.zoom_level(max_zoom_level)?;
     let multiple_of_resolution = 2u32.pow(zoom_level);
 
     let expected_number_of_tiles_at_zoom_level = {
@@ -368,6 +397,8 @@ pub async fn tile<C: ApplicationContext>(
             zoom_level,
         )
     };
+
+    query.check_inside_bounds(expected_number_of_tiles_at_zoom_level)?;
 
     #[cfg(debug_assertions)]
     let original_result_descriptor = initialized_operator.result_descriptor().clone();
@@ -409,7 +440,7 @@ pub async fn tile<C: ApplicationContext>(
         &tiling_spatial_grid_definition,
         &tiling_specification,
         zoom_level,
-    );
+    )?;
 
     let (processor, query_ctx) =
         create_query_processor_and_query_context(&layer, &initialized_operator, &ctx).await?;
@@ -493,7 +524,7 @@ fn adjust_tile_grid_bbox_if_more_tiles_than_expected(
     tiling_spatial_grid_definition: &TilingSpatialGridDefinition,
     tile_size: &TilingSpecification,
     zoom_level: u32,
-) {
+) -> OgcApiResult<()> {
     let actual_number_of_tiles_at_zoom_level =
         calculate_actual_number_of_tiles_at_zoom_level(tiling_spatial_grid_definition);
 
@@ -503,7 +534,7 @@ fn adjust_tile_grid_bbox_if_more_tiles_than_expected(
         actual_number_of_tiles_at_zoom_level.y() > expected_number_of_tiles_at_zoom_level.y();
 
     if !is_greater_on_x_axis && !is_greater_on_y_axis {
-        return;
+        return Ok(());
     }
 
     let shift = GridIdx2D::new([
@@ -519,14 +550,17 @@ fn adjust_tile_grid_bbox_if_more_tiles_than_expected(
         },
     ]);
 
-    *spatial_bounds = GridBoundingBox2D::new_unchecked(
+    *spatial_bounds = GridBoundingBox2D::new(
         spatial_bounds.min_index() + shift,
         spatial_bounds.max_index() + shift,
-    );
+    )
+    .map_err(crate::error::Error::from)?;
 
     debug!(
         "Expected {expected_number_of_tiles_at_zoom_level:?} tiles, but got: {actual_number_of_tiles_at_zoom_level:?}. Adjusted tile grid bounding box to {spatial_bounds:?} to match expected number of tiles at zoom level {zoom_level}",
     );
+
+    Ok(())
 }
 
 fn calculate_actual_number_of_tiles_at_zoom_level(
@@ -648,7 +682,7 @@ fn query_time_from_datetime(datetime: Option<OgcDatetime>) -> OgcApiResult<TimeI
                 source: source.into(),
             })
         }
-        None => Ok(default_time_from_config()),
+        None => Err(OgcApiError::MissingTime),
     }
 }
 
@@ -668,21 +702,6 @@ fn interval_end_to_time_instance(endpoint: &IntervalDatetime) -> TimeInstance {
         }
         IntervalDatetime::Open => TimeInstance::MAX,
     }
-}
-
-fn default_time_from_config() -> TimeInterval {
-    config::get_config_element::<crate::config::Ogc>()
-        .ok()
-        .and_then(|ogc| ogc.default_time)
-        .map_or_else(
-            || {
-                geoengine_datatypes::primitives::TimeInterval::new_instant(
-                    geoengine_datatypes::primitives::TimeInstance::now(),
-                )
-                .expect("current system time should be valid")
-            },
-            |time| time.time_interval(),
-        )
 }
 
 async fn get_initialized_raster_operator<C: SessionContext>(

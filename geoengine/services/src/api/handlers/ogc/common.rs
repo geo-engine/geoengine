@@ -39,11 +39,29 @@ use ogcapi_types::common::{
     media_type::JSON,
 };
 use std::collections::HashSet;
+use tracing::warn;
 use utoipa::{IntoParams, ToSchema};
 use uuid::Uuid;
 
 // TODO: add to [`ogcapi_types::common::link_rel`] and use from there
 const TILESETS_REL: &str = "http://www.opengis.net/def/rel/ogc/1.0/tilesets";
+
+const MAX_NUMBER_OF_TIME_INTERVALS: usize = 256;
+
+// TODO: add to [`ogcapi_types::common`] and use from there
+#[derive(Debug, Clone, Copy)]
+enum CollectionItemType {
+    Tile,
+}
+
+impl std::fmt::Display for CollectionItemType {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let value = match self {
+            CollectionItemType::Tile => "tile",
+        };
+        write!(f, "{value}")
+    }
+}
 
 /// OGC API Landing Page
 ///
@@ -214,6 +232,12 @@ pub enum CollectionsResponseFormat {
 /// OGC API Collections List
 ///
 /// Cf. [OGC API - Common - Part 2: Collections](https://docs.ogc.org/DRAFTS/20-024.html).
+///
+/// Inside Geo Engine, every [`Layer`] gets its own OGC API endpoint.
+/// Inside this endpoint, this [`Layer`] is represented as a single [`Collection`](ogcapi_types::common::Collection).
+/// Therefore, the list of collections for a given layer will always contain exactly one collection,
+/// and the `collectionId` will always be the same as the [`LayerId`].
+///
 #[utoipa::path(
     tag = "OGC API",
     get,
@@ -408,6 +432,13 @@ async fn time_intervals_from_stream(
 
     while let Some(interval) = stream.next().await {
         intervals.push(ogc_interval(interval?));
+
+        if intervals.len() >= MAX_NUMBER_OF_TIME_INTERVALS {
+            warn!(
+                "Stopped at returning {MAX_NUMBER_OF_TIME_INTERVALS} time intervals for OGC API Collection"
+            );
+            break;
+        }
     }
 
     Ok(Some(intervals))
@@ -444,7 +475,7 @@ async fn build_collection(
         description: Some(format!(
             "Raster collection generated from layer `{collection_id}`"
         )),
-        item_type: "tile".to_string(), // TODO: investigate appropriate item type
+        item_type: CollectionItemType::Tile.to_string(),
         links: vec![
             create_link(&format!("collections/{collection_id}"), SELF, JSON)?,
             create_link(
