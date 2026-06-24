@@ -5,6 +5,7 @@ use super::{
 use crate::{error, raster::GridIdx2D, util::Result};
 use serde::{Deserialize, Serialize};
 use snafu::ensure;
+use std::hash::Hash;
 use std::ops::Add;
 
 #[derive(Debug, Ord, PartialOrd, Eq, PartialEq, Clone, Copy, Serialize, Deserialize)]
@@ -550,6 +551,13 @@ where
     B: GridBounds<IndexArray = [isize; 2]>,
 {
     GridIdx2DIter::new(bounds)
+}
+
+impl Hash for GridBoundingBox2D {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.min.hash(state);
+        self.max.hash(state);
+    }
 }
 
 #[cfg(test)]

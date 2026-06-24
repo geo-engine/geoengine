@@ -1,7 +1,9 @@
 use snafu::Snafu;
 use std::collections::VecDeque;
-use std::hash::{BuildHasherDefault, DefaultHasher, Hasher};
+use std::hash::{BuildHasherDefault, Hasher};
 use std::sync::Arc;
+#[cfg(feature = "gdalpool_dedup_requests")]
+use std::sync::Mutex;
 use std::time::Instant;
 use tokio::sync::{mpsc, oneshot};
 use tokio::time::Duration;
@@ -9,6 +11,9 @@ use tokio::time::Duration;
 use geoengine_datatypes::raster::{GridBoundingBox2D, GridBounds, Pixel};
 use ipc_channel::ipc::{IpcReceiver, IpcSender};
 use rustc_hash::FxHasher;
+
+#[cfg(feature = "gdalpool_dedup_requests")]
+use crate::source::gdal_in::process_common::GdalIpcBytePayload;
 
 use super::{
     GdalProcessPoolAccess,
@@ -65,12 +70,17 @@ const MAX_ELIGIBLE_SCAN_DEPTH: usize = 16;
 
 type FastHashMap<K, V> = std::collections::HashMap<K, V, BuildHasherDefault<FxHasher>>;
 
-#[derive(Debug, Snafu)]
+#[derive(Debug, Snafu, Clone)]
 #[snafu(visibility(pub))]
 pub enum GdalProcessPoolError {
-    IpcProcessError { source: IpcProcessError },
+    IpcProcessError {
+        source: IpcProcessError,
+    },
 
-    IpcError { source: ipc_channel::IpcError },
+    #[snafu(display("IpcError caused by: {error_str}"))]
+    IpcError {
+        error_str: String,
+    },
 
     WorkerPanic,
 }
@@ -83,7 +93,9 @@ impl From<IpcProcessError> for GdalProcessPoolError {
 
 impl From<ipc_channel::IpcError> for GdalProcessPoolError {
     fn from(source: ipc_channel::IpcError) -> Self {
-        GdalProcessPoolError::IpcError { source }
+        GdalProcessPoolError::IpcError {
+            error_str: source.to_string(),
+        }
     }
 }
 
@@ -218,8 +230,14 @@ enum BrokerCommand {
     },
 }
 
+#[cfg(feature = "gdalpool_dedup_requests")]
+type SharedResult = Option<Arc<Result<GdalIpcBytePayload, GdalProcessPoolError>>>;
+
 pub struct GdalProcessPool {
     broker_tx: mpsc::Sender<BrokerCommand>,
+
+    #[cfg(feature = "gdalpool_dedup_requests")]
+    in_flight_tiles: Mutex<FastHashMap<u64, tokio::sync::watch::Receiver<SharedResult>>>,
 }
 
 impl GdalProcessPool {
@@ -287,7 +305,11 @@ impl GdalProcessPool {
             .await;
         });
 
-        Arc::new(Self { broker_tx })
+        Arc::new(Self {
+            broker_tx,
+            #[cfg(feature = "gdalpool_dedup_requests")]
+            in_flight_tiles: Mutex::new(FastHashMap::default()),
+        })
     }
 
     /// Initializes the GDAL process pool and spawns the broker loop in a dedicated Tokio task.
@@ -345,7 +367,11 @@ impl GdalProcessPool {
             .await;
         });
 
-        Arc::new(Self { broker_tx })
+        Arc::new(Self {
+            broker_tx,
+            #[cfg(feature = "gdalpool_dedup_requests")]
+            in_flight_tiles: Mutex::new(FastHashMap::default()),
+        })
     }
 
     fn create_worker_with_id(
@@ -388,12 +414,8 @@ impl GdalProcessPool {
 
             let res = sender
                 .send(job.request)
-                .map_err(|e| GdalProcessPoolError::IpcError { source: e })
-                .and_then(|()| {
-                    receiver
-                        .recv()
-                        .map_err(|e| GdalProcessPoolError::IpcError { source: e })
-                });
+                .map_err(|e| GdalProcessPoolError::from(e))
+                .and_then(|()| receiver.recv().map_err(|e| GdalProcessPoolError::from(e)));
 
             let is_dead = res.is_err();
             let _ = job.respond_to.send(res);
@@ -728,11 +750,35 @@ pub struct GdalPoolWorkerInstance {
     pool: Arc<GdalProcessPool>,
 }
 
+#[cfg(feature = "gdalpool_dedup_requests")]
+enum TileReadRole {
+    Follower(tokio::sync::watch::Receiver<SharedResult>),
+    Leader(tokio::sync::watch::Sender<SharedResult>),
+}
+
+#[cfg(feature = "gdalpool_dedup_requests")]
+struct LeaderCleanupGuard {
+    pool: std::sync::Arc<GdalProcessPool>,
+    tile_key: u64,
+}
+
+#[cfg(feature = "gdalpool_dedup_requests")]
+impl Drop for LeaderCleanupGuard {
+    fn drop(&mut self) {
+        // This is guaranteed to run whether the function succeeds, errors,
+        // panics, or is abruptly cancelled by Tokio.
+        if let Ok(mut lock) = self.pool.in_flight_tiles.lock() {
+            lock.remove(&self.tile_key);
+        }
+    }
+}
+
 impl GdalPoolWorkerInstance {
     pub fn new(pool: Arc<GdalProcessPool>) -> Self {
         Self { pool }
     }
 
+    #[cfg(not(feature = "gdalpool_dedup_requests"))]
     pub async fn read_data<P: Pixel>(
         &self,
         request: IpcChannelMessage,
@@ -756,11 +802,109 @@ impl GdalPoolWorkerInstance {
         let res = rx
             .await
             .map_err(|_| GdalProcessPoolError::WorkerPanic)??
-            .map_err(|e| GdalProcessPoolError::IpcProcessError { source: e })
+            .map_err(|e| GdalProcessPoolError::from(e))
             .inspect_err(|e| tracing::error!("Ipc response error: {e}"))?;
 
         let payload: GdalIpcPayload<P> = res.into();
         Ok(payload)
+    }
+
+    #[cfg(feature = "gdalpool_dedup_requests")]
+    pub async fn read_data<P: Pixel>(
+        &self,
+        request: IpcChannelMessage,
+    ) -> Result<GdalIpcPayload<P>, GdalProcessPoolError> {
+        let mut s = rustc_hash::FxHasher::default();
+        request.full_hash(&mut s);
+        let tile_key = s.finish();
+
+        // 1. STRICT LEXICAL SCOPE: The lock cannot escape this block.
+        let role = {
+            let mut lock = self
+                .pool
+                .in_flight_tiles
+                .lock()
+                .map_err(|_| GdalProcessPoolError::WorkerPanic)?;
+
+            if let Some(rx) = lock.get(&tile_key) {
+                TileReadRole::Follower(rx.clone())
+            } else {
+                let (tx, rx) = tokio::sync::watch::channel(None);
+                lock.insert(tile_key, rx);
+                TileReadRole::Leader(tx)
+            }
+        };
+
+        match role {
+            TileReadRole::Follower(mut rx) => {
+                tracing::debug!("Follower: {tile_key}");
+
+                // We can now safely .await; the compiler knows we hold no locks.
+                while rx.borrow().is_none() {
+                    if rx.changed().await.is_err() {
+                        return Err(GdalProcessPoolError::WorkerPanic);
+                    }
+                }
+
+                let shared_res = rx
+                    .borrow()
+                    .as_ref()
+                    .expect("Watch channel must contain a value after changed() yields")
+                    .clone();
+
+                let payload: GdalIpcPayload<P> = shared_res
+                    .as_ref()
+                    .clone()
+                    .map_err(GdalProcessPoolError::from)?
+                    .into();
+
+                return Ok(payload);
+            }
+            TileReadRole::Leader(tx) => {
+                let _cleanup_guard = LeaderCleanupGuard {
+                    pool: self.pool.clone(),
+                    tile_key,
+                };
+
+                tracing::debug!("Leader: {tile_key}");
+
+                let mut s_routing = rustc_hash::FxHasher::default();
+                request.0.dataset_params.partial_hash(&mut s_routing);
+                let routing_hash = s_routing.finish();
+
+                let (oneshot_tx, oneshot_rx) = tokio::sync::oneshot::channel();
+
+                let dispatched = self
+                    .pool
+                    .broker_tx
+                    .send(BrokerCommand::Read(Box::new(QueuedRequest {
+                        dataset_hash: routing_hash,
+                        request,
+                        respond_to: oneshot_tx,
+                    })))
+                    .await;
+
+                let leader_res = if dispatched.is_ok() {
+                    oneshot_rx
+                        .await
+                        .map_err(|_| GdalProcessPoolError::WorkerPanic)
+                        .flatten()
+                        .map(|ipc_res| ipc_res.map_err(GdalProcessPoolError::from))
+                        .flatten()
+                } else {
+                    Err(GdalProcessPoolError::WorkerPanic)
+                };
+
+                // Cleanup is done by the guard
+
+                // Fan-out to followers
+                let broadcast_res = leader_res.clone();
+                let _ = tx.send(Some(Arc::new(broadcast_res)));
+
+                let payload: GdalIpcPayload<P> = leader_res?.into();
+                Ok(payload)
+            }
+        }
     }
 }
 

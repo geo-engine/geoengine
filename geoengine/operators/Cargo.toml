@@ -8,6 +8,10 @@ license-file.workspace = true
 documentation.workspace = true
 repository.workspace = true
 
+[features]
+default = ["gdalpool_dedup_requests"]
+gdalpool_dedup_requests = []
+
 [lib]
 bench = false
 

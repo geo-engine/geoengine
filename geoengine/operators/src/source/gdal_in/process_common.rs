@@ -7,7 +7,10 @@ use geoengine_datatypes::raster::{
 use ipc_channel::IpcError;
 use serde::{Deserialize, Serialize};
 use snafu::Snafu;
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    hash::{Hash, Hasher},
+};
 
 use super::{GdalDatasetParameters, GridAndProperties};
 
@@ -21,7 +24,7 @@ use super::{GdalDatasetParameters, GridAndProperties};
 ///    3.1 The `read_window_bounds` might be offset from the `bounds_of_target` or might have a different size.
 ///    Then, the data needs to be placed in the target pixel space accordingly. Other parts of the target pixel space should be filled with nodata.
 #[allow(dead_code)]
-#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Serialize, Deserialize, Hash)]
 pub struct GdalReadAdvise {
     pub gdal_read_widow: GdalReadWindow,
     pub read_window_bounds: GridBoundingBox2D,
@@ -35,7 +38,7 @@ impl GdalReadAdvise {
     }
 }
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize, Hash)]
 pub struct GdalReadWindow {
     pub(crate) start_x: isize, // pixelspace origin
     pub(crate) start_y: isize,
@@ -519,5 +522,12 @@ pub struct IpcChannelMessage(pub IpcChannelMessagePayload);
 impl IpcChannelMessage {
     pub fn new_request_tile_message(data: IpcChannelMessagePayload) -> Self {
         Self(data)
+    }
+
+    pub fn full_hash<H: Hasher>(&self, state: &mut H) {
+        self.0.dataset_params.partial_hash(state);
+
+        // Hash read advise
+        self.0.read_advise.hash(state);
     }
 }
