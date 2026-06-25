@@ -52,17 +52,23 @@ tokio-postgres = { workspace = true }
 typetag = { workspace = true }
 uuid = { workspace = true }
 strum = { workspace = true }
+ge = "0.2.0"
+lazy_static = "1.5.0"
 
 [dev-dependencies]
 async-stream = { workspace = true }
 approx = { workspace = true }
-criterion = { workspace = true }
 httptest = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["json"] }
 rand = { workspace = true }
+criterion = { version = "0.8.2", features = ["html_reports", "plotters", "cargo_bench_support", "async_tokio"], default-features = false }
 
 [[bench]]
 name = "ci_operators"
+harness = false
+
+[[bench]]
+name = "new_raster_cache"
 harness = false
 
 [lints]

@@ -17,6 +17,7 @@ use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::primitives::{RasterQueryRectangle, VectorQueryRectangle};
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_operators::cache::cache_operator::InitializedCacheOperator;
+use geoengine_operators::cache::new_raster_cache::{NewRasterCacheEnum, RasterCacheOperator};
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::{
     ChunkByteSize, CreateSpan, ExecutionContext, InitializedPlotOperator,
@@ -31,19 +32,18 @@ use geoengine_operators::source::{
     GdalLoadingInfo, MultiBandGdalLoadingInfo, MultiBandGdalLoadingInfoQueryRectangle,
     OgrSourceDataset,
 };
-use rayon::ThreadPool;
-use std::str::FromStr;
-use std::sync::Arc;
-use tokio::sync::RwLock;
-use uuid::Uuid;
-
 pub use migrations::{
     CurrentSchemaMigration, DatabaseVersion, Migration, MigrationResult, initialize_database,
     migrate_database,
 };
 pub use postgres::PostgresDb;
 pub use postgres::{PostgresContext, PostgresSessionContext};
+use rayon::ThreadPool;
 pub use session::{Session, SessionId};
+use std::str::FromStr;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use uuid::Uuid;
 
 mod db_types;
 pub(crate) mod migrations;
@@ -121,6 +121,7 @@ pub struct QueryContextImpl {
     tiling_specification: TilingSpecification,
     thread_pool: Arc<ThreadPool>,
     cache: Option<Arc<SharedCache>>,
+    new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
     quota_tracking: Option<QuotaTracking>,
     quota_checker: Option<QuotaChecker>,
     abort_registration: QueryAbortRegistration,
@@ -139,6 +140,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             cache: None,
+            new_raster_cache: None,
             quota_tracking: None,
             quota_checker: None,
             abort_registration,
@@ -151,6 +153,7 @@ impl QueryContextImpl {
         tiling_specification: TilingSpecification,
         thread_pool: Arc<ThreadPool>,
         cache: Option<Arc<SharedCache>>,
+        new_raster_cache: Option<Arc<NewRasterCacheEnum>>,
         quota_tracking: Option<QuotaTracking>,
         quota_checker: Option<QuotaChecker>,
     ) -> Self {
@@ -160,6 +163,7 @@ impl QueryContextImpl {
             tiling_specification,
             thread_pool,
             cache,
+            new_raster_cache,
             quota_checker,
             quota_tracking,
             abort_registration,
@@ -202,6 +206,10 @@ impl QueryContext for QueryContextImpl {
 
     fn cache(&self) -> Option<Arc<geoengine_operators::cache::shared_cache::SharedCache>> {
         self.cache.clone()
+    }
+
+    fn new_raster_cache(&self) -> Option<Arc<NewRasterCacheEnum>> {
+        self.new_raster_cache.clone()
     }
 }
 
@@ -270,7 +278,8 @@ where
             )
             .enabled
         {
-            return Box::new(InitializedCacheOperator::new(wrapped));
+            return Box::new(RasterCacheOperator::wrap_operator(wrapped));
+            //return Box::new(InitializedCacheOperator::new(wrapped));
         }
 
         wrapped

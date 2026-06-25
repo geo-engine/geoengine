@@ -30,6 +30,7 @@ use bb8_postgres::{
 use geoengine_datatypes::machine_learning::MlModelName;
 use geoengine_datatypes::raster::TilingSpecification;
 use geoengine_datatypes::util::test::TestDefault;
+use geoengine_operators::cache::new_raster_cache::NewRasterCacheEnum;
 use geoengine_operators::cache::shared_cache::SharedCache;
 use geoengine_operators::engine::ChunkByteSize;
 use geoengine_operators::meta::quota::QuotaChecker;
@@ -41,7 +42,6 @@ use std::sync::Arc;
 use tokio_postgres::error::SqlState;
 use tracing::info;
 use uuid::Uuid;
-
 // TODO: do not report postgres error details to user
 
 /// A contex with references to Postgres backends of the dbs. Automatically migrates schema on instantiation
@@ -62,6 +62,7 @@ where
     pub(crate) pool: Pool<PostgresConnectionManager<Tls>>,
     volumes: Volumes,
     tile_cache: Arc<SharedCache>,
+    new_raster_cache: Arc<NewRasterCacheEnum>,
 }
 
 impl<Tls> PostgresContext<Tls>
@@ -103,6 +104,7 @@ where
             pool,
             volumes: Default::default(),
             tile_cache: Arc::new(SharedCache::test_default()),
+            new_raster_cache: Arc::new(NewRasterCacheEnum::test_default()),
         })
     }
 
@@ -141,6 +143,7 @@ where
                 SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
                     .expect("tile cache creation should work because the config is valid"),
             ),
+            new_raster_cache: Arc::new(NewRasterCacheEnum::test_default()),
         })
     }
 
@@ -186,6 +189,7 @@ where
                 SharedCache::new(cache_config.size_in_mb, cache_config.landing_zone_ratio)
                     .expect("tile cache creation should work because the config is valid"),
             ),
+            new_raster_cache: Arc::new(NewRasterCacheEnum::test_default()),
         };
 
         if created_schema {
@@ -357,6 +361,7 @@ where
             self.context.exe_ctx_tiling_spec,
             self.context.thread_pool.clone(),
             Some(self.context.tile_cache.clone()),
+            Some(self.context.new_raster_cache.clone()),
             Some(
                 self.context
                     .quota
