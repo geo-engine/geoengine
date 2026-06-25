@@ -1,5 +1,6 @@
 #![allow(clippy::unwrap_used, clippy::print_stdout, clippy::print_stderr)] // okay in benchmarks
 
+use crate::CacheVariant::{NewCache, NoCache, OldCache};
 use criterion::{Criterion, criterion_group, criterion_main};
 use futures::StreamExt;
 use geoengine_datatypes::primitives::TimeInstance;
@@ -116,7 +117,7 @@ async fn main_f() {
     assert!(tiles.tiles_equal_ignoring_cache_hint(&tiles_from_cache));
 }
 
-async fn setup(cache: bool) -> (Arc<BoxRasterQueryProcessor<u8>>, MockQueryContext) {
+async fn setup(cache: CacheVariant) -> (Arc<BoxRasterQueryProcessor<u8>>, MockQueryContext) {
     let exe_ctx = EXE_CTX.get_or_init(|| {
         println!("Initializing OnceLock");
         Mutex::new(MockExecutionContext::test_default())
@@ -144,38 +145,62 @@ async fn setup(cache: bool) -> (Arc<BoxRasterQueryProcessor<u8>>, MockQueryConte
     .await
     .unwrap();
 
-    if cache {
-        let cached_op = RasterCacheOperator::wrap_operator(operator);
+    match cache {
+        NewCache => {
+            let cached_op = RasterCacheOperator::wrap_operator(operator);
 
-        let tile_cache = Arc::new(NewRasterCacheEnum::test_default());
+            let tile_cache = Arc::new(NewRasterCacheEnum::test_default());
 
-        let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
-            ChunkByteSize::test_default(),
-            None,
-            Some(tile_cache),
-            None,
-            None,
-        );
+            let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
+                ChunkByteSize::test_default(),
+                None,
+                Some(tile_cache),
+                None,
+                None,
+            );
 
-        let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
+            let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
 
-        let processor = Arc::new(processor);
+            let processor = Arc::new(processor);
 
-        query(processor.clone(), &query_ctx).await;
+            query(processor.clone(), &query_ctx).await;
 
-        return (processor, query_ctx);
+            return (processor, query_ctx);
+        }
+        OldCache => {
+            let cached_op = InitializedCacheOperator::new(operator);
+
+            let tile_cache = Arc::new(SharedCache::test_default());
+
+            let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
+                ChunkByteSize::test_default(),
+                Some(tile_cache),
+                None,
+                None,
+                None,
+            );
+
+            let processor = cached_op.query_processor().unwrap().get_u8().unwrap();
+
+            let processor = Arc::new(processor);
+
+            query(processor.clone(), &query_ctx).await;
+
+            return (processor, query_ctx);
+        }
+        NoCache => {
+            let processor = operator.query_processor().unwrap().get_u8().unwrap();
+
+            let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
+                ChunkByteSize::test_default(),
+                None,
+                None,
+                None,
+                None,
+            );
+            (Arc::new(processor), query_ctx)
+        }
     }
-
-    let processor = operator.query_processor().unwrap().get_u8().unwrap();
-
-    let query_ctx = exe_ctx.mock_query_context_with_query_extensions(
-        ChunkByteSize::test_default(),
-        None,
-        None,
-        None,
-        None,
-    );
-    (Arc::new(processor), query_ctx)
 }
 
 async fn query(processor: Arc<BoxRasterQueryProcessor<u8>>, query_ctx: &MockQueryContext) {
@@ -210,6 +235,12 @@ fn criterion_benchmark(c: &mut Criterion) {
 
 static EXE_CTX: OnceLock<Mutex<MockExecutionContext>> = OnceLock::new();
 
+enum CacheVariant {
+    NoCache,
+    OldCache,
+    NewCache,
+}
+
 fn benchmark_both(c: &mut Criterion) {
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -220,7 +251,7 @@ fn benchmark_both(c: &mut Criterion) {
     g.sample_size(10);
 
     // uncached
-    let (uncached_processor, uncached_query_ctx) = runtime.block_on(async { setup(false).await });
+    let (uncached_processor, uncached_query_ctx) = runtime.block_on(async { setup(NoCache).await });
     let uncached_query_ctx = Arc::new(uncached_query_ctx);
     g.bench_function("without_cache", |b| {
         let proc = uncached_processor.clone();
@@ -235,10 +266,25 @@ fn benchmark_both(c: &mut Criterion) {
         })
     });
 
-    // cached
-    let (cached_processor, cached_query_ctx) = runtime.block_on(async { setup(true).await });
+    // new cache
+    let (cached_processor, cached_query_ctx) = runtime.block_on(async { setup(NewCache).await });
     let cached_query_ctx = Arc::new(cached_query_ctx);
-    g.bench_function("with_cache", |b| {
+    g.bench_function("with_new_cache", |b| {
+        let proc = cached_processor.clone();
+        let ctx = cached_query_ctx.clone();
+        b.to_async(&runtime).iter(|| {
+            let proc = proc.clone();
+            let ctx = ctx.clone();
+            async move {
+                query(proc, &*ctx).await;
+            }
+        })
+    });
+
+    // old cache
+    let (cached_processor, cached_query_ctx) = runtime.block_on(async { setup(OldCache).await });
+    let cached_query_ctx = Arc::new(cached_query_ctx);
+    g.bench_function("with_old_cache", |b| {
         let proc = cached_processor.clone();
         let ctx = cached_query_ctx.clone();
         b.to_async(&runtime).iter(|| {
