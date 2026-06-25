@@ -1,11 +1,5 @@
 [workspace]
-members = [
-    "datatypes",
-    "expression",
-    "macros",
-    "operators",
-    "services",
-]
+members = ["crs-bounds","datatypes", "expression", "macros", "operators", "services"]
 exclude = [
     "expression/deps-workspace", # Buggy, cf. https://github.com/rust-lang/cargo/issues/6745
     ".scripts",
@@ -122,6 +116,8 @@ gdal-sys = "0.12"
 geo = "0.33.1"
 geo-types = "0.7.19"                                      # important for compatibility when linking expressions
 geojson = { version = "0.24", features = ["geo-types"] }
+geodesy = {version = "0.15"}
+crs-definitions = { version = "0.4.0", features = ["proj4"] }
 httptest = "0.16"
 ipc-channel = "0.22.0"
 image = "0.25"
